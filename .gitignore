@@ -1,0 +1,80 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Git Ignore — CRM Platform
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Environment files (NEVER commit these) ──────────────────────────────────
+.env
+.env.local
+.env.development
+.env.staging
+backend/.env
+frontend/.env
+# Exception: example files are committed
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+# Production env is safe (no secrets)
+!frontend/.env.production
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# ── Node.js / Frontend ───────────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/build/
+*.npm
+.eslintcache
+
+# ── Uploads (user data — not in Git) ────────────────────────────────────────
+backend/uploads/
+uploads/
+
+# ── Docker ───────────────────────────────────────────────────────────────────
+# Docker volumes managed by Docker, not Git
+
+# ── Editor ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+
+# ── OS files ─────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+
+# ── Deployment artifacts ─────────────────────────────────────────────────────
+*.zip
+*.tar.gz
+backend-deploy.zip

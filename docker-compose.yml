@@ -1,0 +1,105 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LOCAL DEVELOPMENT — Full stack: MongoDB + Redis + Backend + Frontend
+#
+# Usage:
+#   docker-compose up --build          Start all services
+#   docker-compose up backend redis    Backend + Redis only
+#   docker-compose logs -f backend     Stream backend logs
+#   docker-compose down -v             Stop and delete volumes
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── MongoDB ──────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7.0
+    container_name: crm_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: crm_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ── FastAPI Backend ───────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: crm_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override to use Docker service names instead of localhost
+      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/?authSource=admin
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - uploads_data:/app/uploads
+      # Hot reload in dev — remove this line for staging/prod builds
+      - ./backend:/app
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── React Frontend ────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: crm_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
+  mongo_config:
+  redis_data:
+  uploads_data:

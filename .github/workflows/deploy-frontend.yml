@@ -1,0 +1,82 @@
+name: Deploy Frontend
+
+# Triggers: push to main branch when frontend files change
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:   # Allow manual trigger from GitHub UI
+
+env:
+  AWS_REGION: ap-south-1
+
+jobs:
+  # ── Job 1: Build & Deploy to S3 ─────────────────────────────────────────────
+  build-and-deploy:
+    name: Build React & Deploy to S3
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build React app
+        run: |
+          cd frontend
+          npm run build
+        env:
+          # Production API URL — your EC2 backend
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_RAZORPAY_KEY_ID: ${{ secrets.VITE_RAZORPAY_KEY_ID }}
+          VITE_APP_NAME: CRM Platform
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload to S3
+        run: |
+          # Sync build output to S3 bucket
+          aws s3 sync frontend/dist/ s3://${{ secrets.S3_BUCKET }} \
+            --delete \
+            --cache-control "no-cache" \
+            --exclude "*.js" \
+            --exclude "*.css"
+
+          # Upload JS/CSS with long cache (content-hashed filenames by Vite)
+          aws s3 sync frontend/dist/ s3://${{ secrets.S3_BUCKET }} \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "*" \
+            --include "*.js" \
+            --include "*.css"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
+
+      - name: Deployment summary
+        run: |
+          echo "✅ Frontend deployed successfully"
+          echo "S3 Bucket: ${{ secrets.S3_BUCKET }}"
+          echo "CloudFront: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}"
+          echo "Commit: ${{ github.sha }}"

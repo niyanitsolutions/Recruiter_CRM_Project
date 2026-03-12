@@ -1,0 +1,56 @@
+################################################################################
+# terraform.tfvars.example
+#
+# Copy this file to terraform.tfvars and fill in real values.
+# NEVER commit terraform.tfvars — it is in .gitignore.
+################################################################################
+
+# ── AWS Settings ──────────────────────────────────────────────────────────────
+aws_region = "ap-south-1"        # Mumbai — closest to Indian users
+
+# ── Project Naming ────────────────────────────────────────────────────────────
+project = "crm"                  # used as prefix for all AWS resource names
+env     = "prod"                 # prod | staging | dev
+
+# ── Domain ────────────────────────────────────────────────────────────────────
+# ACM certificate will be issued for this domain + *.domain
+domain_name = "yourcompany.com"
+
+# ── VPC Networking ────────────────────────────────────────────────────────────
+vpc_cidr             = "10.0.0.0/16"
+public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.3.0/24", "10.0.4.0/24"]
+
+# ── ECR ───────────────────────────────────────────────────────────────────────
+ecr_repository_name = "crm-backend"
+
+# ── ECS Task Resources ────────────────────────────────────────────────────────
+# Fargate pricing: 0.5 vCPU / 1 GB = ~$15/mo per task
+# Upgrade to 1024/2048 for production workloads
+task_cpu    = 512
+task_memory = 1024
+
+# ── Auto Scaling ──────────────────────────────────────────────────────────────
+ecs_min_tasks           = 1     # keep at least 1 task running always
+ecs_max_tasks           = 6     # never exceed this many tasks
+autoscaling_cpu_target  = 70    # scale out when average CPU > 70 %
+
+# ── Redis / ElastiCache ───────────────────────────────────────────────────────
+# cache.t3.micro = ~$13/mo  |  cache.t3.small = ~$26/mo
+redis_node_type = "cache.t3.micro"
+
+# ── Secrets Manager ───────────────────────────────────────────────────────────
+# Create the secret first, then paste the ARN here.
+#
+# AWS Console → Secrets Manager → Store a new secret → Other type of secret
+# Add keys:
+#   MONGODB_URI          mongodb+srv://user:pass@cluster.mongodb.net/
+#   MASTER_DB_NAME       master_db
+#   JWT_SECRET_KEY       <random 64-char string>
+#   RAZORPAY_KEY_ID      rzp_live_...
+#   RAZORPAY_KEY_SECRET  <secret>
+#   REDIS_URL            redis://<elasticache-endpoint>:6379/0
+#   SMTP_USER            noreply@yourcompany.com
+#   SMTP_PASSWORD        <smtp password>
+#
+app_secrets_arn = "arn:aws:secretsmanager:ap-south-1:123456789012:secret:crm-prod-secrets-XXXXXX"

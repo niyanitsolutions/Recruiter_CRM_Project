@@ -1,0 +1,46 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+.eggs/
+dist/
+build/
+
+# Environment files (never in image)
+.env
+.env.*
+!.env.example
+
+# Uploads (mounted as volume)
+uploads/
+
+# Tests and dev tools
+tests/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Docs
+*.md
+docs/
+
+# OS files
+.DS_Store
+Thumbs.db
