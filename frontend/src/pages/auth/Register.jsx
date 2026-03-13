@@ -91,9 +91,16 @@ const Register = () => {
     const fetchPlans = async () => {
       try {
         const response = await planService.getPlans()
-        setPlans(response.data.plans)
+        // Deduplicate by id — the DB may contain multiple trial documents
+        const seen = new Set()
+        const unique = (response.data.plans || []).filter(p => {
+          if (seen.has(p.id)) return false
+          seen.add(p.id)
+          return true
+        })
+        setPlans(unique)
         // Select trial plan by default
-        const trialPlan = response.data.plans.find(p => p.is_trial)
+        const trialPlan = unique.find(p => p.is_trial)
         if (trialPlan) setSelectedPlan(trialPlan)
       } catch (error) {
         toast.error('Failed to load plans')

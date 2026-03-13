@@ -2,10 +2,12 @@ import api from './api'
 
 const planService = {
   /**
-   * Get all available plans
+   * Get all available plans.
+   * Uses /auth/plans — the public endpoint that returns per-user pricing fields
+   * (price_per_user_monthly / price_per_user_yearly) expected by the plan UI.
    */
-  getPlans: (includeTrial = true) => {
-    return api.get('/plans/', { params: { include_trial: includeTrial } })
+  getPlans: () => {
+    return api.get('/auth/plans')
   },
 
   /**
