@@ -197,8 +197,9 @@ class TenantService:
             "plan_expiry": plan_expiry,
             "is_trial": is_trial,
             "has_used_trial": is_trial,   # persists even after upgrade
-            # Email verification — self-registered tenants start unverified
-            "email_verified": False,
+            # TEMPORARY: Email verification disabled until SMTP is configured.
+            # Change back to False and re-enable the email block below to restore.
+            "email_verified": True,
             "email_verification_token": None,
             "email_verification_expiry": None,
             "status": TenantStatus.ACTIVE,
@@ -250,27 +251,29 @@ class TenantService:
         
         logger.info(f"✅ Company registered: {company_name} (ID: {company_id})")
 
-        # Send verification email and store token
-        import secrets
-        from app.core.config import settings as _settings
-        token = secrets.token_urlsafe(32)
-        expiry = datetime.now(timezone.utc) + timedelta(
-            hours=_settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS
-        )
-        await master_db.tenants.update_one(
-            {"_id": tenant_id},
-            {"$set": {"email_verification_token": token, "email_verification_expiry": expiry}}
-        )
-        try:
-            from app.services.email_service import EmailService
-            await EmailService.send_verification_email(
-                to_email=owner_email,
-                full_name=owner_name,
-                token=token,
-                account_type="tenant",
-            )
-        except Exception:
-            pass  # Email failure must not block registration
+        # TEMPORARY: Email verification disabled until SMTP is configured.
+        # To re-enable: uncomment the block below and set email_verified=False above.
+        #
+        # import secrets
+        # from app.core.config import settings as _settings
+        # token = secrets.token_urlsafe(32)
+        # expiry = datetime.now(timezone.utc) + timedelta(
+        #     hours=_settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS
+        # )
+        # await master_db.tenants.update_one(
+        #     {"_id": tenant_id},
+        #     {"$set": {"email_verification_token": token, "email_verification_expiry": expiry}}
+        # )
+        # try:
+        #     from app.services.email_service import EmailService
+        #     await EmailService.send_verification_email(
+        #         to_email=owner_email,
+        #         full_name=owner_name,
+        #         token=token,
+        #         account_type="tenant",
+        #     )
+        # except Exception:
+        #     pass  # Email failure must not block registration
 
         # Return result
         requires_payment = not is_trial and plan.get("price_per_user_monthly", plan.get("price_monthly", 0)) > 0

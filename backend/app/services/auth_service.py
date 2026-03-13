@@ -132,13 +132,12 @@ class AuthService:
         if user.get("status") == UserStatus.INACTIVE:
             return None, "Your account is inactive. Please contact your administrator."
 
-        # ── Email verification check ──────────────────────────────────────────
-        # Only block login if email_verified is explicitly False.
-        # Existing tenants without the field (default None/missing) are let through
-        # for backwards compatibility.
-        if tenant.get("email_verified") is False:
-            owner_email = tenant.get("owner", {}).get("email", "")
-            return None, f"EMAIL_NOT_VERIFIED|{owner_email}|Please verify your email before logging in. Check your inbox for the verification link."
+        # TEMPORARY: Email verification disabled until SMTP is configured.
+        # To re-enable: uncomment the block below.
+        #
+        # if tenant.get("email_verified") is False:
+        #     owner_email = tenant.get("owner", {}).get("email", "")
+        #     return None, f"EMAIL_NOT_VERIFIED|{owner_email}|Please verify your email before logging in. Check your inbox for the verification link."
 
         # ── Subscription expiry check ─────────────────────────────────────────
         # plan_expiry is stored permanently at purchase time and never recalculated.
