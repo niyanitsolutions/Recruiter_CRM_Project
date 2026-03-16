@@ -286,6 +286,8 @@ const UserForm = () => {
         else if (!/[a-z]/.test(formData.password)) newErrors.password = 'Must contain at least one lowercase letter'
         else if (!/\d/.test(formData.password))    newErrors.password = 'Must contain at least one number'
       }
+      // Permissions override is required on create
+      if (!useCustomPermissions) newErrors.permissions = 'Required: enable permission override and select permissions before creating a user.'
     }
     setErrors(newErrors)
     if (Object.keys(newErrors).length > 0) return
@@ -713,27 +715,49 @@ const UserForm = () => {
         )}
 
         {/* ── Permissions ───────────────────────────────────────────────── */}
-        <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-6">
+        <div className={`bg-white rounded-xl shadow-sm border p-6 ${!isEdit && errors.permissions ? 'border-red-400' : 'border-surface-100'}`}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-accent-600" />
-              <h2 className="text-lg font-semibold">Permissions</h2>
+              <h2 className="text-lg font-semibold">
+                Permissions
+                {!isEdit && <span className="text-red-500 ml-1">*</span>}
+              </h2>
             </div>
             <label className="flex items-center gap-2 text-sm text-surface-700 cursor-pointer select-none">
               <input type="checkbox" checked={useCustomPermissions}
                 onChange={e => {
                   setUseCustomPermissions(e.target.checked)
                   if (!e.target.checked) setCustomPermissions(new Set())
+                  if (errors.permissions) setErrors(prev => ({ ...prev, permissions: null }))
                 }}
-                className="rounded border-surface-300 text-accent-600 focus:ring-accent-500" />
-              <span>Override role permissions for this user</span>
+                className={`rounded text-accent-600 focus:ring-accent-500 ${!isEdit && errors.permissions ? 'border-red-500' : 'border-surface-300'}`} />
+              <span className={!isEdit && errors.permissions ? 'text-red-600 font-medium' : ''}>
+                Override role permissions for this user
+              </span>
             </label>
           </div>
 
-          <p className="text-sm text-surface-500 mb-4">
-            By default, this user inherits the permissions assigned to their role.
-            Enable the toggle above to grant or restrict specific permissions for this user only.
-          </p>
+          {/* Informational note */}
+          <div className="mb-4 rounded-lg bg-blue-50 border border-blue-100 px-4 py-3">
+            <p className="text-sm text-blue-800 font-medium mb-1">What is Permission Override?</p>
+            <p className="text-sm text-blue-700">
+              Every user inherits a default set of permissions based on their <strong>role</strong> (e.g. Admin, Candidate Coordinator).
+              When you enable <em>Override role permissions</em>, those role defaults are <strong>replaced</strong> by the exact permissions
+              you select below — giving you full control over what this specific user can see and do.
+              Use this when a user needs more or fewer permissions than their role normally provides.
+            </p>
+          </div>
+
+          {/* Required validation error */}
+          {!isEdit && errors.permissions && (
+            <div className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+              <svg className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              <p className="text-sm text-red-700 font-medium">{errors.permissions}</p>
+            </div>
+          )}
 
           {useCustomPermissions && (
             <div className="space-y-4">

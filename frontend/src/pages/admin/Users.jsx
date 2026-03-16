@@ -563,7 +563,7 @@ const Users = () => {
                     <td className="px-6 py-4 text-right">
                       <UserActions
                         user={user}
-                        onEdit={(u) => window.location.href = `/users/${u.id}/edit`}
+                        onEdit={(u) => navigate(`/users/${u.id}/edit`)}
                         onDelete={(u) => setDeleteDialog({ open: true, user: u })}
                         onStatusChange={(u, status) => setStatusDialog({ open: true, user: u, status })}
                         onResetPassword={(u) => setResetPasswordDialog({ open: true, user: u })}

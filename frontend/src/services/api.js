@@ -48,6 +48,14 @@ api.interceptors.response.use(
 
     // ── 401 Unauthorized ──────────────────────────────────────────────────────
     if (error.response?.status === 401 && !originalRequest._retry) {
+      // A 401 on the login endpoint itself just means wrong credentials —
+      // do NOT treat it as an expired session or call _logout().
+      const isAuthEndpoint = originalRequest.url?.includes('/auth/login') ||
+                             originalRequest.url?.includes('/auth/register')
+      if (isAuthEndpoint) {
+        return Promise.reject(error)
+      }
+
       const storedRefresh = localStorage.getItem('refresh_token')
 
       // No refresh token — logout immediately

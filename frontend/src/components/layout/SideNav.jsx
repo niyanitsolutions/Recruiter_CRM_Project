@@ -23,6 +23,7 @@ import {
   ClipboardList,
   UserPlus,
   UserCheck,
+  UserMinus,
   DollarSign,
   FileCheck,
   BarChart2,
@@ -60,7 +61,9 @@ const PERMISSION_NAV_MAP = [
     path: '/onboards',     icon: UserCheck,     label: 'Onboarding',      section: 'Onboarding' },
   // User Management
   { permissions: ['users:view'],
-    path: '/users',        icon: Users,         label: 'Users',           section: 'User Management' },
+    path: '/users',          icon: Users,      label: 'Users',           section: 'User Management' },
+  { permissions: ['users:view'],
+    path: '/users/inactive', icon: UserMinus,  label: 'Inactive Users',  section: 'User Management' },
   { permissions: ['partners:view'],
     path: '/partners',     icon: Link2,         label: 'Partners',        section: 'User Management' },
   { permissions: ['departments:view'],

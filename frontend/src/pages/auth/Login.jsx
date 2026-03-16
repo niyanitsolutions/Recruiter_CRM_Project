@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
-import { Mail, Lock, ArrowRight, AlertCircle, Calendar, XCircle, RefreshCw, CheckCircle } from 'lucide-react'
+import { Mail, Lock, ArrowRight, AlertCircle, Calendar, XCircle, RefreshCw, CheckCircle, UserX } from 'lucide-react'
 import { login, clearError, selectAuth, selectSubscriptionExpired } from '../../store/authSlice'
 import { Button, Input } from '../../components/common'
 import { formatDateTime } from '../../utils/format'
@@ -12,17 +12,19 @@ import authService from '../../services/authService'
 const Login = () => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
-  const { isLoading, error } = useSelector(selectAuth)
+  const { isLoading } = useSelector(selectAuth)
   const subscriptionExpired = useSelector(selectSubscriptionExpired)
-  const [inlineError, setInlineError] = useState('')
 
-  // "Account Not Found" modal — shown when credentials are invalid
-  const [showNotFoundModal, setShowNotFoundModal] = useState(false)
+  // "Account Not Found" full-screen state — stores the error message
+  const [loginFailed, setLoginFailed] = useState(null)
 
   // Email not verified state
   const [emailNotVerified, setEmailNotVerified] = useState(null)  // { email, message }
   const [resendLoading, setResendLoading] = useState(false)
   const [resendSent, setResendSent] = useState(false)
+
+  // Inline error for sessionStorage-sourced messages (e.g. api.js interceptor)
+  const [inlineError, setInlineError] = useState('')
 
   const {
     register,
@@ -41,35 +43,32 @@ const Login = () => {
     }
   }, [])
 
-  // Show error as toast AND inline banner; open "Account Not Found" modal for
-  // credential failures so the user can't miss the "Register" call-to-action.
-  useEffect(() => {
-    if (error) {
-      const msg = typeof error === 'string' ? error : 'Login failed. Please try again.'
-      toast.error(msg)
-      setInlineError(msg)
-      // "Invalid credentials" = wrong username/password or account doesn't exist
-      if (msg.toLowerCase().includes('invalid credential')) {
-        setShowNotFoundModal(true)
-      }
-      dispatch(clearError())
-    }
-  }, [error, dispatch])
-
   const onSubmit = async (data) => {
-    setInlineError('')
+    setLoginFailed(null)
     setEmailNotVerified(null)
     setResendSent(false)
-    setShowNotFoundModal(false)   // reset so it re-appears on every failed attempt
+    setInlineError('')
     const result = await dispatch(login(data))
 
     if (login.fulfilled.match(result)) {
       toast.success('Login successful!')
     } else if (login.rejected.match(result)) {
-      // Check if the error payload is the email_not_verified 403 detail
       const payload = result.payload
+
       if (payload && typeof payload === 'object' && payload.email_not_verified) {
+        // Email-not-verified has its own dedicated screen
         setEmailNotVerified({ email: payload.email, message: payload.message })
+
+      } else if (payload && typeof payload === 'object' && payload.type === 'SUBSCRIPTION_EXPIRED') {
+        // Redux already set subscriptionExpired — the if(subscriptionExpired) block below handles it
+        // Nothing extra needed here
+
+      } else {
+        // User not found, invalid credentials, company not found, etc.
+        // Show the persistent "Account Not Found" screen — NOT a toast or modal
+        const msg = typeof payload === 'string' ? payload : 'Login failed. Please try again.'
+        setLoginFailed(msg)
+        dispatch(clearError())  // clear Redux error so it doesn't re-trigger anything
       }
     }
   }
@@ -86,6 +85,43 @@ const Login = () => {
     } finally {
       setResendLoading(false)
     }
+  }
+
+  // ── Account Not Found screen ──────────────────────────────────────────────
+  if (loginFailed) {
+    return (
+      <div className="animate-fade-in space-y-5">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+            <UserX className="w-8 h-8 text-red-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-surface-900">Account Not Found</h2>
+          <p className="text-surface-500 mt-2 text-sm">
+            We couldn't find an account matching your details.
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-800">
+          <p className="font-semibold mb-1">{loginFailed}</p>
+          <p className="text-red-700">
+            Double-check your username / email / mobile and password, or create a new account to get started.
+          </p>
+        </div>
+
+        <Link to="/register">
+          <button className="w-full py-3 bg-accent-600 hover:bg-accent-700 text-white font-semibold rounded-xl transition-colors">
+            Create New Account
+          </button>
+        </Link>
+
+        <button
+          onClick={() => setLoginFailed(null)}
+          className="w-full px-4 py-3 text-sm text-surface-600 hover:text-surface-800 font-medium transition-colors"
+        >
+          ← Back to Login
+        </button>
+      </div>
+    )
   }
 
   // ── Email not verified screen ─────────────────────────────────────────────
@@ -244,39 +280,9 @@ const Login = () => {
     )
   }
 
+  // ── Login form (default) ──────────────────────────────────────────────────
   return (
     <div className="animate-fade-in">
-
-      {/* ── Account Not Found Modal ──────────────────────────────────────────── */}
-      {showNotFoundModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm animate-fade-in">
-            <div className="text-center mb-5">
-              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-3">
-                <AlertCircle className="w-7 h-7 text-red-500" />
-              </div>
-              <h3 className="text-lg font-bold text-surface-900">Account Not Found</h3>
-              <p className="text-sm text-surface-500 mt-2 leading-relaxed">
-                You don't have an account yet, or the credentials are incorrect.
-                Please register first to access the CRM system.
-              </p>
-            </div>
-            <div className="flex flex-col gap-3">
-              <Link to="/register" onClick={() => setShowNotFoundModal(false)}>
-                <button className="w-full py-2.5 bg-accent-600 hover:bg-accent-700 text-white font-semibold rounded-xl transition-colors">
-                  Register
-                </button>
-              </Link>
-              <button
-                onClick={() => setShowNotFoundModal(false)}
-                className="w-full py-2.5 border border-surface-300 text-surface-700 font-medium rounded-xl hover:bg-surface-50 transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Header */}
       <div className="text-center mb-8">
@@ -284,7 +290,7 @@ const Login = () => {
         <p className="text-surface-500 mt-2">Sign in to your account to continue</p>
       </div>
 
-      {/* Inline error banner */}
+      {/* Inline error banner (sessionStorage-sourced only) */}
       {inlineError && (
         <div className="mb-5 flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
           <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
