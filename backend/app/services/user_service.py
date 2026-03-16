@@ -57,23 +57,27 @@ class UserService:
                                 f"SEAT_LIMIT_REACHED|{total_seats}|{current_count}|{remaining}"
                             ), None
 
-            # Check for duplicates
-            existing = await self.collection.find_one({
-                "$or": [
-                    {"username": user_data.username.lower()},
-                    {"email": user_data.email.lower()},
-                    {"mobile": user_data.mobile}
-                ],
-                "is_deleted": False
-            })
-            
-            if existing:
-                if existing.get("username") == user_data.username.lower():
-                    return False, "Username already exists", None
-                if existing.get("email") == user_data.email.lower():
-                    return False, "Email already exists", None
-                if existing.get("mobile") == user_data.mobile:
-                    return False, "Mobile number already exists", None
+            # Check for duplicates (skipped when admin explicitly overrides)
+            if not getattr(user_data, "override_duplicate", False):
+                existing = await self.collection.find_one({
+                    "$or": [
+                        {"username": user_data.username.lower()},
+                        {"email": user_data.email.lower()},
+                        {"mobile": user_data.mobile}
+                    ],
+                    "is_deleted": False
+                })
+
+                if existing:
+                    # Collect ALL duplicate fields so frontend can show them all at once
+                    dupes = []
+                    if existing.get("username") == user_data.username.lower():
+                        dupes.append(f"username:{user_data.username}")
+                    if existing.get("email") == user_data.email.lower():
+                        dupes.append(f"email:{user_data.email}")
+                    if existing.get("mobile") == user_data.mobile:
+                        dupes.append(f"mobile:{user_data.mobile}")
+                    return False, "DUPLICATE|" + "|".join(dupes), None
             
             # Hash password
             password_hash = bcrypt.hashpw(

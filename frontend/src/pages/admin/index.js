@@ -3,6 +3,7 @@ export { default as AdminDashboard } from './AdminDashboard'
 
 // User Management
 export { default as Users } from './Users'
+export { default as InactiveUsers } from './InactiveUsers'
 export { default as UserForm } from './UserForm'
 export { default as UserDetails } from './UserDetails'
 

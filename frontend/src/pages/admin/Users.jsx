@@ -20,6 +20,7 @@ import userService from '../../services/userService'
 import departmentService from '../../services/departmentService'
 import subscriptionService from '../../services/subscriptionService'
 import SeatLimitModal from '../../components/subscription/SeatLimitModal'
+import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 import SubscriptionBanner from '../../components/subscription/SubscriptionBanner'
 
 // Status Badge Component
@@ -214,8 +215,9 @@ const Users = () => {
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 })
 
   // Seat / subscription state
-  const [seatStatus, setSeatStatus] = useState(null)
-  const [seatModalOpen, setSeatModalOpen] = useState(false)
+  const [seatStatus,       setSeatStatus]       = useState(null)
+  const [seatModalOpen,    setSeatModalOpen]    = useState(false)
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
 
   // Filters
   const [search, setSearch] = useState(searchParams.get('search') || '')
@@ -362,14 +364,21 @@ const Users = () => {
       {/* Subscription banner (expiry warning + seat summary) */}
       <SubscriptionBanner
         seatStatus={seatStatus}
-        onUpgrade={() => navigate('/upgrade-plan')}
+        onUpgrade={() => setUpgradeModalOpen(true)}
       />
 
       {/* Seat limit modal */}
       <SeatLimitModal
         isOpen={seatModalOpen}
         onClose={() => setSeatModalOpen(false)}
-        onUpgrade={() => { setSeatModalOpen(false); navigate('/upgrade-plan') }}
+        onUpgrade={() => { setSeatModalOpen(false); setUpgradeModalOpen(true) }}
+        seatStatus={seatStatus}
+      />
+
+      {/* Upgrade seats modal */}
+      <UpgradeSeatsModal
+        isOpen={upgradeModalOpen}
+        onClose={() => setUpgradeModalOpen(false)}
         seatStatus={seatStatus}
       />
 

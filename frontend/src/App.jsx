@@ -29,6 +29,7 @@ import {
 import {
   AdminDashboard,
   Users,
+  InactiveUsers,
   UserForm,
   UserDetails,
   Partners,
@@ -400,6 +401,8 @@ function App() {
         {/* ── User Management ── */}
         <Route path="/users"
           element={<PermissionRoute permission="users:view"><Users /></PermissionRoute>} />
+        <Route path="/users/inactive"
+          element={<PermissionRoute permission="users:view"><InactiveUsers /></PermissionRoute>} />
         <Route path="/users/new"
           element={<PermissionRoute permission="users:create"><UserForm /></PermissionRoute>} />
         <Route path="/users/:id"

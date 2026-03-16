@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Loader2, Shield, GitBranch, ChevronDown } from 'lucide-react'
@@ -120,6 +120,17 @@ const UserForm = () => {
   const [loading, setLoading]   = useState(false)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState(null)
+
+  // Duplicate user modal state
+  const [duplicateModal, setDuplicateModal] = useState({
+    show: false,
+    fields: {},          // e.g. { username: "john", email: "j@x.com" }
+    overrideChecked: false,
+    overrideTouched: false,  // tracks if user tried to submit without checking
+  })
+  // Holds the fully-built payload from the last submit attempt so we can
+  // resend it with override_duplicate=true without rebuilding everything.
+  const pendingSubmitData = useRef(null)
 
   const [formData, setFormData] = useState({
     username: '', email: '', full_name: '', mobile: '', password: '',
@@ -391,14 +402,42 @@ const UserForm = () => {
 
       navigate('/users')
     } catch (err) {
+      const status = err.response?.status
       const detail = err.response?.data?.detail
+
+      // 409 = structured duplicate response from backend
+      if (status === 409 && detail?.duplicate) {
+        pendingSubmitData.current = submitData
+        setDuplicateModal({ show: true, fields: detail.fields || {}, overrideChecked: false, overrideTouched: false })
+        return
+      }
+
       if (Array.isArray(detail)) {
         setError(detail.map(d => d.msg?.replace('Value error, ', '') || d.msg).join('; '))
       } else {
-        setError(detail || 'Failed to save')
+        setError(typeof detail === 'string' ? detail : 'Failed to save')
       }
     } finally { setSaving(false) }
   }
+
+  // ── Override submit (called from the duplicate modal) ────────────────────
+  const handleOverrideSubmit = useCallback(async () => {
+    if (!duplicateModal.overrideChecked) {
+      setDuplicateModal(prev => ({ ...prev, overrideTouched: true }))
+      return
+    }
+    if (!pendingSubmitData.current) return
+    try {
+      setSaving(true)
+      await userService.createUser({ ...pendingSubmitData.current, override_duplicate: true })
+      setDuplicateModal({ show: false, fields: {}, overrideChecked: false, overrideTouched: false })
+      navigate('/users')
+    } catch (err) {
+      const detail = err.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Failed to create user')
+      setDuplicateModal({ show: false, fields: {}, overrideChecked: false, overrideTouched: false })
+    } finally { setSaving(false) }
+  }, [duplicateModal.overrideChecked, navigate])
 
   if (loading) return (
     <div className="p-6 flex justify-center">
@@ -415,6 +454,88 @@ const UserForm = () => {
       <h1 className="text-2xl font-bold text-surface-900 mb-6">{isEdit ? 'Edit User' : 'Add New User'}</h1>
 
       {error && <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg">{error}</div>}
+
+      {/* ── Duplicate User Modal ──────────────────────────────────────────── */}
+      {duplicateModal.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md animate-fade-in">
+
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-surface-900">Duplicate User Detected</h3>
+                <p className="text-sm text-surface-500">The following data already exists in the system.</p>
+              </div>
+            </div>
+
+            {/* Duplicate fields */}
+            <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-1.5">
+              {Object.entries(duplicateModal.fields).map(([field, value]) => (
+                <div key={field} className="flex items-center gap-2 text-sm">
+                  <span className="font-semibold text-amber-800 capitalize w-20">{field}:</span>
+                  <span className="text-amber-700 font-mono">{value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Override section */}
+            <div className="mb-5 rounded-xl border border-surface-200 bg-surface-50 px-4 py-4">
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={duplicateModal.overrideChecked}
+                  onChange={e =>
+                    setDuplicateModal(prev => ({ ...prev, overrideChecked: e.target.checked, overrideTouched: true }))
+                  }
+                  className="mt-0.5 w-4 h-4 rounded border-surface-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
+                />
+                <span className="text-sm text-surface-700">
+                  <span className="font-semibold">Override and create user anyway</span>
+                  <br />
+                  <span className="text-surface-500">
+                    Enable only if this user requires special permissions or belongs to a different role.
+                  </span>
+                </span>
+              </label>
+              {duplicateModal.overrideTouched && !duplicateModal.overrideChecked && (
+                <p className="mt-2 text-xs text-red-600 font-medium">
+                  You must check this box to proceed with creating the duplicate user.
+                </p>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setDuplicateModal({ show: false, fields: {}, overrideChecked: false, overrideTouched: false })}
+                className="px-4 py-2 border border-surface-300 text-surface-700 text-sm font-medium rounded-xl hover:bg-surface-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleOverrideSubmit}
+                disabled={saving}
+                className={`px-4 py-2 text-sm font-semibold rounded-xl transition-colors flex items-center gap-2
+                  ${duplicateModal.overrideChecked
+                    ? 'bg-accent-600 hover:bg-accent-700 text-white'
+                    : 'bg-surface-200 text-surface-400 cursor-not-allowed'}`}
+              >
+                {saving && <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
+                Create User
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
 

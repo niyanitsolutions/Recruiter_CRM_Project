@@ -16,6 +16,9 @@ const Login = () => {
   const subscriptionExpired = useSelector(selectSubscriptionExpired)
   const [inlineError, setInlineError] = useState('')
 
+  // "Account Not Found" modal — shown when credentials are invalid
+  const [showNotFoundModal, setShowNotFoundModal] = useState(false)
+
   // Email not verified state
   const [emailNotVerified, setEmailNotVerified] = useState(null)  // { email, message }
   const [resendLoading, setResendLoading] = useState(false)
@@ -38,12 +41,17 @@ const Login = () => {
     }
   }, [])
 
-  // Show error as toast AND inline banner so it can't be missed
+  // Show error as toast AND inline banner; open "Account Not Found" modal for
+  // credential failures so the user can't miss the "Register" call-to-action.
   useEffect(() => {
     if (error) {
       const msg = typeof error === 'string' ? error : 'Login failed. Please try again.'
       toast.error(msg)
       setInlineError(msg)
+      // "Invalid credentials" = wrong username/password or account doesn't exist
+      if (msg.toLowerCase().includes('invalid credential')) {
+        setShowNotFoundModal(true)
+      }
       dispatch(clearError())
     }
   }, [error, dispatch])
@@ -52,6 +60,7 @@ const Login = () => {
     setInlineError('')
     setEmailNotVerified(null)
     setResendSent(false)
+    setShowNotFoundModal(false)   // reset so it re-appears on every failed attempt
     const result = await dispatch(login(data))
 
     if (login.fulfilled.match(result)) {
@@ -237,6 +246,38 @@ const Login = () => {
 
   return (
     <div className="animate-fade-in">
+
+      {/* ── Account Not Found Modal ──────────────────────────────────────────── */}
+      {showNotFoundModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm animate-fade-in">
+            <div className="text-center mb-5">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-3">
+                <AlertCircle className="w-7 h-7 text-red-500" />
+              </div>
+              <h3 className="text-lg font-bold text-surface-900">Account Not Found</h3>
+              <p className="text-sm text-surface-500 mt-2 leading-relaxed">
+                You don't have an account yet, or the credentials are incorrect.
+                Please register first to access the CRM system.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <Link to="/register" onClick={() => setShowNotFoundModal(false)}>
+                <button className="w-full py-2.5 bg-accent-600 hover:bg-accent-700 text-white font-semibold rounded-xl transition-colors">
+                  Register
+                </button>
+              </Link>
+              <button
+                onClick={() => setShowNotFoundModal(false)}
+                className="w-full py-2.5 border border-surface-300 text-surface-700 font-medium rounded-xl hover:bg-surface-50 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold text-surface-900">Welcome back</h2>

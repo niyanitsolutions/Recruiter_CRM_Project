@@ -200,6 +200,23 @@ async def create_user(
                     "remaining_seats": remaining,
                 }
             )
+        # Duplicate-field error: return structured data so the frontend can show
+        # the exact duplicate fields without string-parsing heuristics.
+        if message.startswith("DUPLICATE|"):
+            parts = message.split("|")[1:]   # e.g. ["username:john", "email:j@x.com"]
+            fields = {}
+            for part in parts:
+                if ":" in part:
+                    k, v = part.split(":", 1)
+                    fields[k] = v
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "duplicate": True,
+                    "fields": fields,   # {"username": "john", "email": "j@x.com"}
+                    "message": "A user with these details already exists.",
+                }
+            )
         raise HTTPException(status_code=400, detail=message)
 
     return {

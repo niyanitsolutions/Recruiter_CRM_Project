@@ -128,6 +128,9 @@ class UserCreate(BaseModel):
     status: Optional[str] = Field(default=UserStatus.ACTIVE.value)
     send_welcome_email: bool = Field(default=True)
 
+    # When True, skip the username/email/mobile uniqueness check (admin override)
+    override_duplicate: bool = Field(default=False)
+
     @field_validator('username')
     @classmethod
     def validate_username(cls, v):

@@ -26,9 +26,9 @@ const UpgradePlan = () => {
   const [loadingPlans, setLoadingPlans] = useState(true)
   const [success,      setSuccess]      = useState(null)
 
-  // Redirect missing context away
+  // Redirect missing context away — but skip if navigated from the in-app upgrade modal
   useEffect(() => {
-    if (!expiredInfo.tenantId) {
+    if (!expiredInfo.tenantId && !expiredInfo.fromDashboard) {
       navigate('/login', { replace: true })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps

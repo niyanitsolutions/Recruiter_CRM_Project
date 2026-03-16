@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import {
   Users,
@@ -24,6 +24,7 @@ import { selectUser, selectUserPermissions } from '../../store/authSlice'
 import adminDashboardService from '../../services/adminDashboardService'
 import subscriptionService from '../../services/subscriptionService'
 import SubscriptionBanner from '../../components/subscription/SubscriptionBanner'
+import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 
 // ── Stat Card ─────────────────────────────────────────────────────────────────
 const StatCard = ({ title, value, icon: Icon, color, linkTo }) => {
@@ -85,15 +86,15 @@ const ActivityItem = ({ activity }) => {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 const AdminDashboard = () => {
-  const navigate    = useNavigate()
   const user        = useSelector(selectUser)
   const permissions = useSelector(selectUserPermissions)
   const perms       = new Set(permissions)
 
-  const [loading,       setLoading]       = useState(true)
-  const [dashboardData, setDashboardData] = useState(null)
-  const [error,         setError]         = useState(null)
-  const [seatStatus,    setSeatStatus]    = useState(null)
+  const [loading,           setLoading]           = useState(true)
+  const [dashboardData,     setDashboardData]     = useState(null)
+  const [error,             setError]             = useState(null)
+  const [seatStatus,        setSeatStatus]        = useState(null)
+  const [showUpgradeModal,  setShowUpgradeModal]  = useState(false)
 
   const has = (...p) => p.some(x => perms.has(x))
 
@@ -154,7 +155,7 @@ const AdminDashboard = () => {
       <StatCard key="active-users"   title="Active Users"    value={user_stats?.active_users}   icon={UserCheck} color="green" />
     ),
     has('users:view') && (
-      <StatCard key="inactive-users" title="Inactive Users"  value={user_stats?.inactive_users} icon={UserMinus} color="yellow" />
+      <StatCard key="inactive-users" title="Inactive Users"  value={user_stats?.inactive_users} icon={UserMinus} color="yellow" linkTo="/users/inactive" />
     ),
     has('users:view') && (
       <StatCard key="logged-today"   title="Logged In Today" value={user_stats?.logged_in_today} icon={Activity} color="purple" />
@@ -220,7 +221,7 @@ const AdminDashboard = () => {
       {/* Subscription expiry / seat banner */}
       <SubscriptionBanner
         seatStatus={seatStatus}
-        onUpgrade={() => navigate('/upgrade-plan')}
+        onUpgrade={() => setShowUpgradeModal(true)}
       />
 
       {/* Subscription info card */}
@@ -261,7 +262,7 @@ const AdminDashboard = () => {
               </div>
             </div>
             <button
-              onClick={() => navigate('/upgrade-plan')}
+              onClick={() => setShowUpgradeModal(true)}
               className="text-xs font-semibold text-accent-600 hover:text-accent-700 border border-accent-200 hover:border-accent-400 px-3 py-1.5 rounded-lg transition-colors"
             >
               Upgrade / Add Seats
@@ -334,6 +335,13 @@ const AdminDashboard = () => {
           )}
         </div>
       )}
+
+      {/* Upgrade Seats Modal */}
+      <UpgradeSeatsModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        seatStatus={seatStatus}
+      />
 
       {/* Activity Overview */}
       {has('audit:view') && activity_stats && (
