@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -21,7 +21,7 @@ import {
   Smartphone,
   AlertCircle,
 } from 'lucide-react'
-import { Button, Input, Select, Card } from '../../components/common'
+import { Button, Input } from '../../components/common'
 import authService from '../../services/authService'
 import planService from '../../services/planService'
 import { formatCurrency } from '../../utils/format'
@@ -41,18 +41,6 @@ const STEPS = [
   { id: 4, title: 'Finish',        icon: CheckCircle },
 ]
 
-const INDUSTRIES = [
-  { value: 'it_services',  label: 'IT Services' },
-  { value: 'healthcare',   label: 'Healthcare' },
-  { value: 'finance',      label: 'Finance' },
-  { value: 'manufacturing',label: 'Manufacturing' },
-  { value: 'retail',       label: 'Retail' },
-  { value: 'education',    label: 'Education' },
-  { value: 'real_estate',  label: 'Real Estate' },
-  { value: 'consulting',   label: 'Consulting' },
-  { value: 'staffing',     label: 'Staffing' },
-  { value: 'other',        label: 'Other' },
-]
 
 const Register = () => {
   const navigate = useNavigate()
@@ -71,11 +59,6 @@ const Register = () => {
   // ─── Phone country codes ──────────────────────────────────────────────────
   const [companyPhoneCode, setCompanyPhoneCode] = useState('+91') // Step 1 phone
   const [ownerMobileCode, setOwnerMobileCode]   = useState('+91') // Step 2 mobile
-
-  // ─── Website checkbox ─────────────────────────────────────────────────────
-  const [noWebsite, setNoWebsite] = useState(false)
-  // Ref keeps the latest value accessible inside react-hook-form validate closure
-  const noWebsiteRef = useRef(false)
 
   // ─── Location (address) dropdowns ─────────────────────────────────────────
   const [selectedCountry,  setSelectedCountry]  = useState('India')
@@ -96,14 +79,11 @@ const Register = () => {
     handleSubmit,
     watch,
     trigger,
-    setValue,
-    clearErrors,
     formState: { errors },
   } = useForm({
     mode: 'onChange',
     defaultValues: {
       company_name:      '',
-      industry:          'other',
       website:           '',
       gst_number:        '',
       phone:             '',
@@ -144,15 +124,6 @@ const Register = () => {
     fetchPlans()
   }, [])
 
-  // ─── Sync noWebsite ref with state ───────────────────────────────────────
-  useEffect(() => {
-    noWebsiteRef.current = noWebsite
-    if (noWebsite) {
-      setValue('website', '')
-      clearErrors('website')
-    }
-  }, [noWebsite, setValue, clearErrors])
-
   // ─── Location change handlers ──────────────────────────────────────────────
   const handleCountryChange = (e) => {
     setSelectedCountry(e.target.value)
@@ -172,8 +143,7 @@ const Register = () => {
   const validateStep = async (step) => {
     switch (step) {
       case 1: {
-        const fields = ['company_name', 'phone', 'city', 'zip_code']
-        if (!noWebsite) fields.push('website')
+        const fields = ['company_name', 'website', 'phone', 'city', 'zip_code']
         const formValid = await trigger(fields)
 
         // Validate location dropdowns (not tracked by RHF)
@@ -218,8 +188,7 @@ const Register = () => {
         country:  selectedCountry,
         state:    selectedState,
         district: selectedDistrict || undefined,
-        // Website: clear if user checked "no website"
-        website: noWebsite ? '' : data.website,
+        website: data.website,
         // Plan
         plan_id:      selectedPlan.id,
         billing_cycle: billingCycle,
@@ -409,54 +378,31 @@ const Register = () => {
                   })}
                 />
 
-                {/* Industry + Phone (with country code) */}
-                <div className="grid grid-cols-2 gap-4">
-                  <Select
-                    label="Industry"
-                    options={INDUSTRIES}
-                    error={errors.industry?.message}
-                    {...register('industry')}
-                  />
-                  {/* Phone combo: country code + digits */}
-                  <PhoneComboInput
-                    fieldName="phone"
-                    label="Company Phone"
-                    codeValue={companyPhoneCode}
-                    onCodeChange={setCompanyPhoneCode}
-                    placeholder="98765 43210"
-                  />
-                </div>
+                {/* Phone with country code */}
+                <PhoneComboInput
+                  fieldName="phone"
+                  label="Company Phone"
+                  codeValue={companyPhoneCode}
+                  onCodeChange={setCompanyPhoneCode}
+                  placeholder="98765 43210"
+                />
 
-                {/* Website + "I don't have a website" checkbox */}
-                <div>
-                  <Input
-                    label="Website"
-                    placeholder="www.company.com"
-                    leftIcon={<Globe className="w-4 h-4" />}
-                    error={errors.website?.message}
-                    disabled={noWebsite}
-                    {...register('website', {
-                      validate: value => {
-                        // Skip validation when user has no website
-                        if (noWebsiteRef.current) return true
-                        if (!value || !value.trim()) return 'Website URL is required'
-                        const urlPattern =
-                          /^(https?:\/\/)?(www\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/
-                        return urlPattern.test(value) || 'Enter a valid URL (e.g. www.example.com)'
-                      },
-                    })}
-                  />
-                  {/* Checkbox: no website */}
-                  <label className="mt-2 flex items-center gap-2 cursor-pointer w-fit">
-                    <input
-                      type="checkbox"
-                      checked={noWebsite}
-                      onChange={e => setNoWebsite(e.target.checked)}
-                      className="w-4 h-4 rounded border-surface-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
-                    />
-                    <span className="text-sm text-surface-600">I don't have a website</span>
-                  </label>
-                </div>
+                {/* Website (required) */}
+                <Input
+                  label="Website"
+                  placeholder="www.company.com"
+                  leftIcon={<Globe className="w-4 h-4" />}
+                  error={errors.website?.message}
+                  required
+                  {...register('website', {
+                    required: 'Website URL is required',
+                    validate: value => {
+                      const urlPattern =
+                        /^(https?:\/\/)?(www\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/
+                      return urlPattern.test(value.trim()) || 'Enter a valid URL (e.g. www.example.com)'
+                    },
+                  })}
+                />
 
                 {/* GST Number (optional) */}
                 <Input
