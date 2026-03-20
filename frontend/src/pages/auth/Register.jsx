@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -60,6 +60,11 @@ const Register = () => {
   const [companyPhoneCode, setCompanyPhoneCode] = useState('+91') // Step 1 phone
   const [ownerMobileCode, setOwnerMobileCode]   = useState('+91') // Step 2 mobile
 
+  // ─── "I don't have a website" checkbox ───────────────────────────────────
+  const [noWebsite, setNoWebsite] = useState(false)
+  // Ref so the RHF validate closure always reads the latest value (avoids stale closure)
+  const noWebsiteRef = useRef(false)
+
   // ─── Location (address) dropdowns ─────────────────────────────────────────
   const [selectedCountry,  setSelectedCountry]  = useState('India')
   const [selectedState,    setSelectedState]    = useState('')
@@ -79,6 +84,8 @@ const Register = () => {
     handleSubmit,
     watch,
     trigger,
+    setValue,
+    clearErrors,
     formState: { errors },
   } = useForm({
     mode: 'onChange',
@@ -124,6 +131,18 @@ const Register = () => {
     fetchPlans()
   }, [])
 
+  // ─── "No website" checkbox handler ───────────────────────────────────────
+  const handleNoWebsiteChange = (checked) => {
+    noWebsiteRef.current = checked
+    setNoWebsite(checked)
+    if (checked) {
+      setValue('website', '')
+      clearErrors('website')
+    } else {
+      trigger('website')
+    }
+  }
+
   // ─── Location change handlers ──────────────────────────────────────────────
   const handleCountryChange = (e) => {
     setSelectedCountry(e.target.value)
@@ -143,6 +162,7 @@ const Register = () => {
   const validateStep = async (step) => {
     switch (step) {
       case 1: {
+        // Always trigger website — its validate fn decides valid/invalid based on checkbox state
         const fields = ['company_name', 'website', 'phone', 'city', 'zip_code']
         const formValid = await trigger(fields)
 
@@ -188,7 +208,7 @@ const Register = () => {
         country:  selectedCountry,
         state:    selectedState,
         district: selectedDistrict || undefined,
-        website: data.website,
+        website: noWebsite ? '' : data.website,
         // Plan
         plan_id:      selectedPlan.id,
         billing_cycle: billingCycle,
@@ -387,22 +407,43 @@ const Register = () => {
                   placeholder="98765 43210"
                 />
 
-                {/* Website (required) */}
-                <Input
-                  label="Website"
-                  placeholder="www.company.com"
-                  leftIcon={<Globe className="w-4 h-4" />}
-                  error={errors.website?.message}
-                  required
-                  {...register('website', {
-                    required: 'Website URL is required',
-                    validate: value => {
-                      const urlPattern =
-                        /^(https?:\/\/)?(www\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/
-                      return urlPattern.test(value.trim()) || 'Enter a valid URL (e.g. www.example.com)'
-                    },
-                  })}
-                />
+                {/* Website — required unless "I don't have a website" is checked */}
+                <div>
+                  <Input
+                    label="Website"
+                    placeholder="https://www.company.com"
+                    leftIcon={<Globe className="w-4 h-4" />}
+                    error={errors.website?.message}
+                    disabled={noWebsite}
+                    {...register('website', {
+                      validate: value => {
+                        // Checkbox checked → always valid
+                        if (noWebsiteRef.current) return true
+                        // Value provided → validate URL format
+                        if (value && value.trim()) {
+                          const urlPattern =
+                            /^(https?:\/\/)?(www\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/
+                          return (
+                            urlPattern.test(value.trim()) ||
+                            'Enter a valid URL (e.g. https://www.example.com)'
+                          )
+                        }
+                        // Empty + no checkbox → error
+                        return "Please enter a website or select 'I don't have a website'"
+                      },
+                    })}
+                  />
+                  {/* "I don't have a website" checkbox */}
+                  <label className="mt-2 inline-flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={noWebsite}
+                      onChange={e => handleNoWebsiteChange(e.target.checked)}
+                      className="w-4 h-4 rounded border-surface-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
+                    />
+                    <span className="text-sm text-surface-600">I don't have a website</span>
+                  </label>
+                </div>
 
                 {/* GST Number (optional) */}
                 <Input
