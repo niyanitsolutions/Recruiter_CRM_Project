@@ -145,6 +145,7 @@ const UserForm = () => {
   const [departments,  setDepartments]  = useState([])
   const [designations, setDesignations] = useState([])
   const [users,        setUsers]        = useState([])
+  const [roles,        setRoles]        = useState([])
   const [errors,       setErrors]       = useState({})
   const [deptCustom,   setDeptCustom]   = useState('')
   const [desigCustom,  setDesigCustom]  = useState('')
@@ -170,19 +171,23 @@ const UserForm = () => {
   // ── Permission override state ────────────────────────────────────────────
   const [useCustomPermissions, setUseCustomPermissions] = useState(false)
   const [customPermissions,    setCustomPermissions]    = useState(new Set())
+  // Ref used to scroll the permissions card into view when validation fails
+  const permissionsSectionRef = useRef(null)
 
   // ── Load reference data ──────────────────────────────────────────────────
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptsRes, desigsRes, usersRes] = await Promise.all([
+        const [deptsRes, desigsRes, usersRes, rolesRes] = await Promise.all([
           departmentService.getDepartments(),
           designationService.getDesignations(),
           userService.getUsers({ page_size: 100 }),
+          userService.getAvailableRoles(),
         ])
         setDepartments(deptsRes.data || [])
         setDesignations(desigsRes.data || [])
         setUsers(usersRes.data || [])
+        setRoles(rolesRes.data || [])
       } catch (err) { console.error(err) }
     }
     fetchData()
@@ -286,11 +291,19 @@ const UserForm = () => {
         else if (!/[a-z]/.test(formData.password)) newErrors.password = 'Must contain at least one lowercase letter'
         else if (!/\d/.test(formData.password))    newErrors.password = 'Must contain at least one number'
       }
-      // Permissions override is required on create
-      if (!useCustomPermissions) newErrors.permissions = 'Required: enable permission override and select permissions before creating a user.'
+      // Override permissions is mandatory on create
+      if (!useCustomPermissions) {
+        newErrors.permissions = 'Please enable "Override role permissions" and select at least the required permissions before creating a user.'
+      }
     }
     setErrors(newErrors)
-    if (Object.keys(newErrors).length > 0) return
+    if (Object.keys(newErrors).length > 0) {
+      // Scroll to the permissions section if that is the only / last error
+      if (newErrors.permissions) {
+        setTimeout(() => permissionsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
+      }
+      return
+    }
 
     try {
       setSaving(true)
@@ -407,17 +420,21 @@ const UserForm = () => {
       const status = err.response?.status
       const detail = err.response?.data?.detail
 
-      // 409 = structured duplicate response from backend
+      // 409 — duplicate user: show the override modal
       if (status === 409 && detail?.duplicate) {
         pendingSubmitData.current = submitData
         setDuplicateModal({ show: true, fields: detail.fields || {}, overrideChecked: false, overrideTouched: false })
         return
       }
 
-      if (Array.isArray(detail)) {
+      // 402 — seat limit reached
+      if (status === 402 && detail?.seat_limit_reached) {
+        setError(`User seat limit reached. You have used ${detail.current_active_users} of ${detail.total_user_seats} seats. Please upgrade your plan to add more users.`)
+      } else if (Array.isArray(detail)) {
+        // 422 Pydantic validation errors
         setError(detail.map(d => d.msg?.replace('Value error, ', '') || d.msg).join('; '))
       } else {
-        setError(typeof detail === 'string' ? detail : 'Failed to save')
+        setError(typeof detail === 'string' ? detail : 'Failed to save user. Please try again.')
       }
     } finally { setSaving(false) }
   }
@@ -610,6 +627,19 @@ const UserForm = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">
+                Role <span className="text-red-500">*</span>
+              </label>
+              <select name="role" value={formData.role} onChange={handleChange}
+                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500">
+                {roles.length > 0
+                  ? roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)
+                  : <option value={formData.role}>{formData.role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
+                }
+              </select>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">User Type</label>
               <select name="user_type" value={formData.user_type} onChange={handleChange}
                 className="w-full px-3 py-2 border border-surface-300 rounded-lg">
@@ -715,7 +745,10 @@ const UserForm = () => {
         )}
 
         {/* ── Permissions ───────────────────────────────────────────────── */}
-        <div className={`bg-white rounded-xl shadow-sm border p-6 ${!isEdit && errors.permissions ? 'border-red-400' : 'border-surface-100'}`}>
+        <div
+          ref={permissionsSectionRef}
+          className={`bg-white rounded-xl shadow-sm border p-6 ${!isEdit && errors.permissions ? 'border-red-400' : 'border-surface-100'}`}
+        >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-accent-600" />
@@ -738,6 +771,16 @@ const UserForm = () => {
             </label>
           </div>
 
+          {/* Permissions required error banner */}
+          {!isEdit && errors.permissions && (
+            <div className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+              <svg className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              <p className="text-sm text-red-700 font-medium">{errors.permissions}</p>
+            </div>
+          )}
+
           {/* Informational note */}
           <div className="mb-4 rounded-lg bg-blue-50 border border-blue-100 px-4 py-3">
             <p className="text-sm text-blue-800 font-medium mb-1">What is Permission Override?</p>
@@ -748,16 +791,6 @@ const UserForm = () => {
               Use this when a user needs more or fewer permissions than their role normally provides.
             </p>
           </div>
-
-          {/* Required validation error */}
-          {!isEdit && errors.permissions && (
-            <div className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
-              <svg className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-              </svg>
-              <p className="text-sm text-red-700 font-medium">{errors.permissions}</p>
-            </div>
-          )}
 
           {useCustomPermissions && (
             <div className="space-y-4">
