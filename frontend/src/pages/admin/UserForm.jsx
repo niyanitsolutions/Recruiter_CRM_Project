@@ -173,6 +173,9 @@ const [errors,       setErrors]       = useState({})
   // Ref used to scroll the permissions card into view when validation fails
   const permissionsSectionRef = useRef(null)
 
+  // Derived: partner users don't use the override permissions section at all
+  const isPartner = formData.user_type === 'partner'
+
   // ── Load reference data ──────────────────────────────────────────────────
   useEffect(() => {
     const fetchData = async () => {
@@ -288,8 +291,9 @@ const [errors,       setErrors]       = useState({})
         else if (!/[a-z]/.test(formData.password)) newErrors.password = 'Must contain at least one lowercase letter'
         else if (!/\d/.test(formData.password))    newErrors.password = 'Must contain at least one number'
       }
-      // Override permissions is mandatory on create
-      if (!useCustomPermissions) {
+      // Override permissions is mandatory on create — but not for partner users
+      // (partner users have their own fixed permission set, no override needed)
+      if (!isPartner && !useCustomPermissions) {
         newErrors.permissions = 'Please enable "Override role permissions" and select at least the required permissions before creating a user.'
       }
     }
@@ -376,7 +380,8 @@ const [errors,       setErrors]       = useState({})
         submitData.joining_date = submitData.joining_date + 'T00:00:00'
       }
 
-      if (useCustomPermissions) {
+      // Partner users never send override permissions — the section is hidden
+      if (!isPartner && useCustomPermissions) {
         submitData.permissions          = Array.from(customPermissions)
         submitData.override_permissions = true
       } else {
@@ -729,7 +734,8 @@ const [errors,       setErrors]       = useState({})
         )}
 
         {/* ── Permissions ───────────────────────────────────────────────── */}
-        <div
+        {/* Hidden entirely for partner users — they use a fixed permission set */}
+        {!isPartner && <div
           ref={permissionsSectionRef}
           className={`bg-white rounded-xl shadow-sm border p-6 ${!isEdit && errors.permissions ? 'border-red-400' : 'border-surface-100'}`}
         >
@@ -792,8 +798,9 @@ const [errors,       setErrors]       = useState({})
               </div>
 
               {/* ── 3-level hierarchical permission matrix ──────────────── */}
+              {/* 'Partner' section is excluded for internal users */}
               <div className="space-y-3">
-                {PERMISSION_SECTIONS.map(sec => {
+                {PERMISSION_SECTIONS.filter(sec => sec.section !== 'Partner').map(sec => {
                   const secPerms = getSectionPerms(sec)
                   const secState = getCheckState(secPerms, customPermissions)
                   return (
@@ -863,7 +870,7 @@ const [errors,       setErrors]       = useState({})
               </div>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* ── Actions ──────────────────────────────────────────────────── */}
         <div className="flex justify-end gap-4">
