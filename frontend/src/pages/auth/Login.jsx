@@ -287,7 +287,7 @@ const Login = () => {
       {/* Header */}
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold text-surface-900">Welcome back</h2>
-        <p className="text-surface-500 mt-2">Sign in to your account to continue</p>
+        <p className="text-surface-500 mt-2">Sign in to access your recruitment CRM dashboard.</p>
       </div>
 
       {/* Inline error banner (sessionStorage-sourced only) */}
@@ -347,18 +347,10 @@ const Login = () => {
       </div>
 
       <Link to="/register">
-        <Button variant="outline" className="w-full">Create a new account</Button>
+        <Button variant="outline" className="w-full">Create Your Company Profile</Button>
       </Link>
 
-      {/* Demo Credentials */}
-      <div className="mt-8 p-4 bg-surface-50 rounded-xl border border-surface-200">
-        <p className="text-xs font-medium text-surface-500 mb-2">Demo Credentials</p>
-        <div className="space-y-1 text-sm">
-          <p className="text-surface-600">
-            <span className="font-medium">SuperAdmin:</span> superadmin / SuperAdmin@123
-          </p>
-        </div>
-      </div>
+      
     </div>
   )
 }
