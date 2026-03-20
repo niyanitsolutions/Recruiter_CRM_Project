@@ -145,8 +145,7 @@ const UserForm = () => {
   const [departments,  setDepartments]  = useState([])
   const [designations, setDesignations] = useState([])
   const [users,        setUsers]        = useState([])
-  const [roles,        setRoles]        = useState([])
-  const [errors,       setErrors]       = useState({})
+const [errors,       setErrors]       = useState({})
   const [deptCustom,   setDeptCustom]   = useState('')
   const [desigCustom,  setDesigCustom]  = useState('')
 
@@ -178,16 +177,14 @@ const UserForm = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptsRes, desigsRes, usersRes, rolesRes] = await Promise.all([
+        const [deptsRes, desigsRes, usersRes] = await Promise.all([
           departmentService.getDepartments(),
           designationService.getDesignations(),
           userService.getUsers({ page_size: 100 }),
-          userService.getAvailableRoles(),
         ])
         setDepartments(deptsRes.data || [])
         setDesignations(desigsRes.data || [])
         setUsers(usersRes.data || [])
-        setRoles(rolesRes.data || [])
       } catch (err) { console.error(err) }
     }
     fetchData()
@@ -625,19 +622,6 @@ const UserForm = () => {
         <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-6">
           <h2 className="text-lg font-semibold mb-4">Organization</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Role <span className="text-red-500">*</span>
-              </label>
-              <select name="role" value={formData.role} onChange={handleChange}
-                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500">
-                {roles.length > 0
-                  ? roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)
-                  : <option value={formData.role}>{formData.role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
-                }
-              </select>
-            </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">User Type</label>
