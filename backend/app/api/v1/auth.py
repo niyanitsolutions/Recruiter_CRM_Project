@@ -388,7 +388,7 @@ async def create_renewal_order(data: RenewalOrderRequest):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
 
     result, error = await payment_service.create_razorpay_order(
-        data.tenant_id, data.plan_id, data.billing_cycle, data.user_count
+        tenant["_id"], data.plan_id, data.billing_cycle, data.user_count
     )
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)

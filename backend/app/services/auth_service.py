@@ -47,7 +47,10 @@ def _resolve_effective_permissions(user: dict, role_doc: Optional[dict]) -> list
         else:
             base_perms = set(ROLE_PERMISSIONS.get(role_name, []))
         override_perms = set(user.get("permissions") or [])
-        return list(base_perms | override_perms)
+        perms = base_perms | override_perms
+        # Dashboard is always accessible for any internal user regardless of overrides
+        perms.add("dashboard:view")
+        return list(perms)
 
     if role_doc and role_doc.get("permissions"):
         return list(role_doc["permissions"])
