@@ -214,11 +214,19 @@ class CandidateService:
                 if search_params:
                     search_params.partner_id = None
             elif not is_admin and role == "candidate_coordinator":
-                # Candidate coordinators see candidates assigned to themselves or their subordinates
+                # Candidate coordinators see:
+                #   1. Candidates assigned to themselves or their subordinates
+                #   2. Candidates not yet assigned to anyone (unassigned / newly created)
+                # Without #2, coordinators can't see candidates they just created
+                # because new candidates have no assigned_to value.
                 from app.services.user_service import UserService
                 user_svc = UserService(db)
                 accessible_ids = await user_svc.get_all_subordinates(user_id)
-                query["assigned_to"] = {"$in": accessible_ids}
+                query["$or"] = [
+                    {"assigned_to": {"$in": accessible_ids}},
+                    {"assigned_to": None},
+                    {"assigned_to": {"$exists": False}},
+                ]
                 # Clear any passed assigned_to filter to avoid conflict
                 if search_params:
                     search_params.assigned_to = None

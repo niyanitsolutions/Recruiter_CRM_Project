@@ -632,12 +632,17 @@ const Register = () => {
                       },
                     })}
                   />
-                  <Input
-                    label="Designation"
-                    placeholder="Manager"
-                    leftIcon={<Briefcase className="w-4 h-4" />}
-                    {...register('owner_designation')}
-                  />
+                  {/* Designation controls post-login navigation scope */}
+                  <div>
+                    <label className="input-label">Designation</label>
+                    <select
+                      className="input appearance-none cursor-pointer"
+                      {...register('owner_designation')}
+                    >
+                      <option value="Owner">Owner</option>
+                      <option value="Admin">Admin</option>
+                    </select>
+                  </div>
                 </div>
 
                 <Input

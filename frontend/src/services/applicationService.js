@@ -41,9 +41,10 @@ const applicationService = {
 
   // Bulk apply candidates to job
   bulkApply: async (jobId, candidateIds) => {
-    const response = await api.post('/applications/bulk-apply', null, {
-      params: { job_id: jobId, candidate_ids: candidateIds }
-    })
+    const params = new URLSearchParams()
+    params.append('job_id', jobId)
+    candidateIds.forEach(id => params.append('candidate_ids', id))
+    const response = await api.post(`/applications/bulk-apply?${params.toString()}`)
     return response.data
   },
 

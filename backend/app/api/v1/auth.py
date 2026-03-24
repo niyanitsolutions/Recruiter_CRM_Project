@@ -5,7 +5,6 @@ Login, registration, and token management
 
 from fastapi import APIRouter, HTTPException, status, Depends, Request
 from typing import Optional
-from datetime import datetime, timezone
 from pydantic import BaseModel
 import logging
 import re
@@ -384,25 +383,9 @@ async def create_renewal_order(data: RenewalOrderRequest):
     master_db = get_master_db()
     tenant = await master_db.tenants.find_one({"_id": data.tenant_id, "is_deleted": {"$ne": True}})
     if not tenant:
+        tenant = await master_db.tenants.find_one({"company_id": data.tenant_id, "is_deleted": {"$ne": True}})
+    if not tenant:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
-
-    # Confirm subscription is actually expired (security check)
-    now = datetime.now(timezone.utc)
-    tenant_status = tenant.get("status", "")
-    plan_expiry = tenant.get("plan_expiry")
-    is_expired = tenant_status == "trial_expired"
-
-    if not is_expired and plan_expiry:
-        if plan_expiry.tzinfo is None:
-            plan_expiry = plan_expiry.replace(tzinfo=timezone.utc)
-        if plan_expiry < now:
-            is_expired = True
-
-    if not is_expired:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Subscription is not expired. Please log in normally."
-        )
 
     result, error = await payment_service.create_razorpay_order(
         data.tenant_id, data.plan_id, data.billing_cycle, data.user_count

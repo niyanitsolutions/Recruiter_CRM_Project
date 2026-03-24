@@ -28,24 +28,30 @@ def _resolve_effective_permissions(user: dict, role_doc: Optional[dict]) -> list
     Single source of truth for computing effective permissions.
 
     Priority order:
-      1. If override_permissions is truthy → use user's own permissions list (even if empty).
-      2. If a role document exists in DB   → use role document's permissions.
+      1. If override_permissions is truthy → MERGE user's override list with role
+         base permissions (additive).  Dashboard and other base items are never
+         removed — override only adds extra permissions on top.
+      2. If a role document exists in DB → use role document's permissions.
       3. Fallback to the hardcoded ROLE_PERMISSIONS map.
 
     This function is used at both login and token-refresh time so the logic
     is always consistent.
     """
+    role_name = user.get("role", "")
+
     if bool(user.get("override_permissions")):
-        # Respect the override even if the list is empty.
-        # (An empty override means the admin intentionally removed all access.)
-        # Use bool() rather than `is True` so that truthy non-boolean values
-        # stored in older documents (e.g. integer 1) are also honoured.
-        return list(user.get("permissions") or [])
+        # Base permissions come from the role doc (DB) or the hardcoded fallback.
+        # Override permissions are ADDED ON TOP — they never remove existing access.
+        if role_doc and role_doc.get("permissions"):
+            base_perms = set(role_doc["permissions"])
+        else:
+            base_perms = set(ROLE_PERMISSIONS.get(role_name, []))
+        override_perms = set(user.get("permissions") or [])
+        return list(base_perms | override_perms)
 
     if role_doc and role_doc.get("permissions"):
         return list(role_doc["permissions"])
 
-    role_name = user.get("role", "")
     return list(ROLE_PERMISSIONS.get(role_name, []))
 
 
@@ -158,12 +164,10 @@ class AuthService:
         company_db = get_company_db(company_id)
         role_name = user.get("role", "admin")
 
-        # Fetch role document only when needed (skip for override users)
-        role_doc = None
-        if not user.get("override_permissions"):
-            role_doc = await company_db.roles.find_one(
-                {"name": role_name, "is_deleted": False}
-            )
+        # Always fetch role doc — needed to merge base+override permissions correctly
+        role_doc = await company_db.roles.find_one(
+            {"name": role_name, "is_deleted": False}
+        )
 
         effective_perms = _resolve_effective_permissions(user, role_doc)
 
@@ -184,6 +188,7 @@ class AuthService:
             "is_owner": user.get("is_owner", False),
             "username": user.get("username", ""),
             "full_name": user.get("full_name", ""),
+            "designation": user.get("designation", ""),
             "department_id": user.get("department_id"),
             "reporting_to": user.get("reporting_to"),
         }
@@ -221,6 +226,7 @@ class AuthService:
             "company_name": tenant.get("company_name"),
             "is_super_admin": False,
             "is_owner": user.get("is_owner", False),
+            "designation": user.get("designation", ""),
             "department_id": user.get("department_id"),
             "reporting_to": user.get("reporting_to"),
             # Subscription info for the frontend dashboard
@@ -647,12 +653,10 @@ class AuthService:
 
             role_name = user.get("role", "admin")
 
-            # Recompute effective permissions from DB — same logic as login
-            role_doc = None
-            if not user.get("override_permissions"):
-                role_doc = await company_db.roles.find_one(
-                    {"name": role_name, "is_deleted": False}
-                )
+            # Always fetch role doc — needed to merge base+override permissions correctly
+            role_doc = await company_db.roles.find_one(
+                {"name": role_name, "is_deleted": False}
+            )
 
             effective_perms = _resolve_effective_permissions(user, role_doc)
 
@@ -667,6 +671,7 @@ class AuthService:
                 "is_owner": user.get("is_owner", False),
                 "username": user.get("username", ""),
                 "full_name": user.get("full_name", ""),
+                "designation": user.get("designation", ""),
                 "department_id": user.get("department_id"),
                 "reporting_to": user.get("reporting_to"),
             }

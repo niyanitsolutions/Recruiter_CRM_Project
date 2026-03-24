@@ -175,6 +175,21 @@ const SideNav = ({ isCollapsed, onToggle }) => {
       }
     }
 
+    // Designation == "Admin": restrict to User Management only
+    // This applies when the owner registered with "Admin" designation, limiting their nav scope.
+    if (user?.designation === 'Admin') {
+      const adminPerms = new Set(user?.permissions || [])
+      const adminItems = PERMISSION_NAV_MAP.filter(
+        item => item.section === 'User Management' && item.permissions.some(p => adminPerms.has(p))
+      )
+      return {
+        flat: [],
+        sections: adminItems.length > 0
+          ? [{ section: 'User Management', items: adminItems }]
+          : [{ section: 'User Management', items: [{ path: '/users', icon: Users, label: 'Users' }] }],
+      }
+    }
+
     // All non-super-admin, non-partner roles (including admin): strictly permission-driven
     const sections = buildPermissionMenu(user?.permissions)
     return {
