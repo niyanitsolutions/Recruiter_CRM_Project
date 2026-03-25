@@ -155,6 +155,8 @@ async def register(request: CompleteRegistration):
         gst_number=request.gst_number,
         street=request.street,
         country=request.country,
+        location=request.location,
+        company_email=request.company_email,
         # Owner details
         owner_name=request.owner_name,
         owner_email=request.owner_email,

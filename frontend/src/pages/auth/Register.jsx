@@ -102,6 +102,8 @@ const Register = () => {
     mode: 'onChange',
     defaultValues: {
       company_name:      '',
+      company_email:     '',
+      location:          '',
       website:           '',
       gst_number:        '',
       phone:             '',
@@ -182,7 +184,11 @@ const Register = () => {
   const validateStep = async (step) => {
     switch (step) {
       case 1: {
-        // Always trigger website — its validate fn decides valid/invalid based on checkbox state
+        if (isTrial) {
+          // Trial: simplified fields only
+          return trigger(['company_name', 'company_email', 'phone', 'location', 'website'])
+        }
+        // Subscription: full address fields
         const fields = ['company_name', 'website', 'phone', 'city', 'zip_code']
         const formValid = await trigger(fields)
 
@@ -220,21 +226,41 @@ const Register = () => {
   const onSubmit = async (data) => {
     setIsLoading(true)
     try {
-      const payload = {
-        ...data,
-        // Combine country code + digits for phone numbers
-        phone:        `${companyPhoneCode}${data.phone.replace(/\D/g, '')}`,
-        owner_mobile: `${ownerMobileCode}${data.owner_mobile.replace(/\D/g, '')}`,
-        // Location from local state
-        country:  selectedCountry,
-        state:    selectedState,
-        district: selectedDistrict || undefined,
-        website: noWebsite ? '' : data.website,
-        // Plan
-        plan_id:      selectedPlan.id,
-        billing_cycle: billingCycle,
-        user_count:    selectedPlan.is_trial ? 3 : Math.max(userCount, 1),
-      }
+      const phone        = `${companyPhoneCode}${data.phone.replace(/\D/g, '')}`
+      const owner_mobile = `${ownerMobileCode}${data.owner_mobile.replace(/\D/g, '')}`
+      const website      = noWebsite ? '' : data.website
+
+      const payload = isTrial
+        ? {
+            // Trial: simplified company fields only
+            company_name:      data.company_name,
+            company_email:     data.company_email,
+            phone,
+            location:          data.location,
+            website,
+            owner_name:        data.owner_name,
+            owner_email:       data.owner_email,
+            owner_mobile,
+            owner_username:    data.owner_username,
+            owner_designation: data.owner_designation,
+            owner_password:    data.owner_password,
+            plan_id:           selectedPlan.id,
+            billing_cycle:     billingCycle,
+            user_count:        3,
+          }
+        : {
+            // Subscription: full address payload
+            ...data,
+            phone,
+            owner_mobile,
+            country:  selectedCountry,
+            state:    selectedState,
+            district: selectedDistrict || undefined,
+            website,
+            plan_id:      selectedPlan.id,
+            billing_cycle: billingCycle,
+            user_count:    Math.max(userCount, 1),
+          }
 
       const response = await authService.register(payload)
       setRegistrationResult(response.data)
@@ -413,9 +439,101 @@ const Register = () => {
           <form onSubmit={handleSubmit(onSubmit)}>
 
             {/* ═══════════════════════════════════════════════════════════════
-                STEP 1 — Company Setup
+                STEP 1 — Company Setup (trial: simplified / subscription: full)
             ═══════════════════════════════════════════════════════════════ */}
-            {currentStep === 1 && (
+            {currentStep === 1 && isTrial && (
+              <div className="space-y-5 animate-slide-up">
+                <div className="text-center mb-6">
+                  <h2 className="text-xl font-bold text-surface-900">Company Information</h2>
+                  <p className="text-surface-500 text-sm">Tell us about your organization</p>
+                </div>
+
+                {/* Company Name */}
+                <Input
+                  label="Company Name"
+                  placeholder="Enter company name"
+                  leftIcon={<Building2 className="w-4 h-4" />}
+                  error={errors.company_name?.message}
+                  required
+                  {...register('company_name', {
+                    required: 'Company name is required',
+                    minLength: { value: 2, message: 'Minimum 2 characters' },
+                  })}
+                />
+
+                {/* Company Email */}
+                <Input
+                  label="Company Email"
+                  type="email"
+                  placeholder="contact@company.com"
+                  leftIcon={<Mail className="w-4 h-4" />}
+                  error={errors.company_email?.message}
+                  required
+                  {...register('company_email', {
+                    required: 'Company email is required',
+                    pattern: {
+                      value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                      message: 'Invalid email address',
+                    },
+                  })}
+                />
+
+                {/* Company Phone */}
+                <PhoneComboInput
+                  fieldName="phone"
+                  label="Company Contact"
+                  codeValue={companyPhoneCode}
+                  onCodeChange={setCompanyPhoneCode}
+                  placeholder="98765 43210"
+                />
+
+                {/* Location — free text */}
+                <Input
+                  label="Location"
+                  placeholder="e.g. Bangalore, India"
+                  leftIcon={<MapPin className="w-4 h-4" />}
+                  error={errors.location?.message}
+                  required
+                  {...register('location', { required: 'Location is required' })}
+                />
+
+                {/* Website */}
+                <div>
+                  <Input
+                    label="Website"
+                    placeholder="https://www.company.com"
+                    leftIcon={<Globe className="w-4 h-4" />}
+                    error={errors.website?.message}
+                    disabled={noWebsite}
+                    {...register('website', {
+                      validate: value => {
+                        if (noWebsiteRef.current) return true
+                        if (value && value.trim()) {
+                          const urlPattern =
+                            /^(https?:\/\/)?(www\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/
+                          return (
+                            urlPattern.test(value.trim()) ||
+                            'Enter a valid URL (e.g. https://www.example.com)'
+                          )
+                        }
+                        return true   // website is optional in trial
+                      },
+                    })}
+                  />
+                  <label className="mt-2 inline-flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={noWebsite}
+                      onChange={e => handleNoWebsiteChange(e.target.checked)}
+                      className="w-4 h-4 rounded border-surface-300 text-accent-600 focus:ring-accent-500 cursor-pointer"
+                    />
+                    <span className="text-sm text-surface-600">I don't have a website</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {currentStep === 1 && !isTrial && (
               <div className="space-y-5 animate-slide-up">
                 <div className="text-center mb-6">
                   <h2 className="text-xl font-bold text-surface-900">Company Information</h2>

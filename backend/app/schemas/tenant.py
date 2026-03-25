@@ -107,10 +107,14 @@ class CompleteRegistration(BaseModel):
     website: Optional[str] = None
     gst_number: Optional[str] = None
     phone: str = Field(..., min_length=10)
+    company_email: Optional[EmailStr] = None
+    # Free-text location (trial flow)
+    location: Optional[str] = None
+    # Structured address (subscription flow) — optional when location is used
     street: str = Field(default="")
-    city: str = Field(..., min_length=2, max_length=100)
-    state: str = Field(..., min_length=2, max_length=100)
-    zip_code: str = Field(..., min_length=4, max_length=20)
+    city: str = Field(default="")
+    state: str = Field(default="")
+    zip_code: str = Field(default="")
     country: str = Field(default="India")
     
     # Step 2

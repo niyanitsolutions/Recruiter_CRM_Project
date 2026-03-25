@@ -93,9 +93,6 @@ class TenantService:
         company_name: str,
         industry: str,
         phone: str,
-        city: str,
-        state: str,
-        zip_code: str,
         # Owner details
         owner_name: str,
         owner_email: str,
@@ -106,12 +103,19 @@ class TenantService:
         plan_id: str,
         billing_cycle: str = "monthly",
         user_count: int = 3,
-        # Optional
+        # Optional address (subscription flow)
+        city: str = "",
+        state: str = "",
+        zip_code: str = "",
+        # Optional fields
         website: str = None,
         gst_number: str = None,
         street: str = "",
         country: str = "India",
-        owner_designation: str = "Owner"
+        owner_designation: str = "Owner",
+        # Trial flow: free-text location + company email
+        location: str = None,
+        company_email: str = None,
     ) -> Tuple[Optional[dict], str]:
         """
         Register a new company
@@ -172,6 +176,8 @@ class TenantService:
             "website": website,
             "gst_number": gst_number,
             "phone": phone,
+            "email": company_email,
+            "location": location,
             "address": {
                 "street": street,
                 "city": city,
