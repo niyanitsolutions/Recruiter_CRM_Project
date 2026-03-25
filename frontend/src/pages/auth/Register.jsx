@@ -33,6 +33,57 @@ import {
   DISTRICTS_BY_STATE,
 } from '../../data/locationData'
 
+// ─── PhoneComboInput — defined OUTSIDE Register so its identity is stable ─────
+// If defined inside Register, React remounts it on every parent re-render
+// (new function reference = new component type), which destroys the input value.
+const PhoneComboInput = ({ fieldName, label, codeValue, onCodeChange, register, errors, placeholder = '98765 43210', required = true }) => {
+  const expectedLen = PHONE_LENGTHS[codeValue]
+  return (
+    <div className="w-full">
+      <label className="input-label">
+        {label}
+        {required && <span className="text-danger-500 ml-1">*</span>}
+      </label>
+      <div
+        className={clsx(
+          'flex rounded-lg border transition-colors focus-within:ring-2 focus-within:ring-accent-500/20 focus-within:border-accent-400',
+          errors[fieldName] ? 'border-danger-500' : 'border-surface-300'
+        )}
+      >
+        <select
+          value={codeValue}
+          onChange={e => onCodeChange(e.target.value)}
+          className="shrink-0 bg-surface-50 border-r border-surface-200 pl-2 pr-1 py-2.5 text-sm text-surface-700 focus:outline-none cursor-pointer rounded-l-lg"
+        >
+          {COUNTRY_CODES.map(c => (
+            <option key={c.code} value={c.code}>{c.label} — {c.country}</option>
+          ))}
+        </select>
+        <input
+          type="tel"
+          placeholder={placeholder}
+          className="flex-1 px-3 py-2.5 text-sm text-surface-900 placeholder:text-surface-400 focus:outline-none bg-white rounded-r-lg"
+          {...register(fieldName, {
+            required: `${label} is required`,
+            pattern: {
+              value: /^\d{7,15}$/,
+              message: expectedLen
+                ? `Enter ${expectedLen} digits for ${codeValue}`
+                : 'Enter 7–15 digits (no spaces)',
+            },
+          })}
+        />
+      </div>
+      {errors[fieldName] && (
+        <p className="input-error-text flex items-center gap-1 mt-1">
+          <AlertCircle className="w-3 h-3" />
+          {errors[fieldName].message}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ─── Step definitions ─────────────────────────────────────────────────────────
 const TRIAL_STEPS = [
   { id: 1, title: 'Company Setup', icon: Building2 },
@@ -304,70 +355,6 @@ const Register = () => {
     return billingCycle === 'yearly' ? ppu * users * 12 : ppu * users
   }
 
-  // ─── Phone / Mobile combined input ────────────────────────────────────────
-  // Renders a country-code select fused with a digits input.
-  // Used for both company phone (Step 1) and owner mobile (Step 2).
-  const PhoneComboInput = ({
-    fieldName,
-    label,
-    codeValue,
-    onCodeChange,
-    placeholder = '98765 43210',
-    required = true,
-  }) => {
-    const expectedLen = PHONE_LENGTHS[codeValue]
-    return (
-      <div className="w-full">
-        <label className="input-label">
-          {label}
-          {required && <span className="text-danger-500 ml-1">*</span>}
-        </label>
-        {/* Fused select + input */}
-        <div
-          className={clsx(
-            'flex rounded-lg border transition-colors focus-within:ring-2 focus-within:ring-accent-500/20 focus-within:border-accent-400',
-            errors[fieldName] ? 'border-danger-500' : 'border-surface-300'
-          )}
-        >
-          {/* Country code selector */}
-          <select
-            value={codeValue}
-            onChange={e => onCodeChange(e.target.value)}
-            className="shrink-0 bg-surface-50 border-r border-surface-200 pl-2 pr-1 py-2.5 text-sm text-surface-700 focus:outline-none cursor-pointer rounded-l-lg"
-          >
-            {COUNTRY_CODES.map(c => (
-              <option key={c.code} value={c.code}>
-                {c.label} — {c.country}
-              </option>
-            ))}
-          </select>
-
-          {/* Phone digits input */}
-          <input
-            type="tel"
-            placeholder={placeholder}
-            className="flex-1 px-3 py-2.5 text-sm text-surface-900 placeholder:text-surface-400 focus:outline-none bg-white rounded-r-lg"
-            {...register(fieldName, {
-              required: `${label} is required`,
-              pattern: {
-                value: /^\d{7,15}$/,
-                message: expectedLen
-                  ? `Enter ${expectedLen} digits for ${codeValue}`
-                  : 'Enter 7–15 digits (no spaces)',
-              },
-            })}
-          />
-        </div>
-        {errors[fieldName] && (
-          <p className="input-error-text flex items-center gap-1 mt-1">
-            <AlertCircle className="w-3 h-3" />
-            {errors[fieldName].message}
-          </p>
-        )}
-      </div>
-    )
-  }
-
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-surface-50">
@@ -485,6 +472,8 @@ const Register = () => {
                   codeValue={companyPhoneCode}
                   onCodeChange={setCompanyPhoneCode}
                   placeholder="98765 43210"
+                  register={register}
+                  errors={errors}
                 />
 
                 {/* Location — free text */}
@@ -560,6 +549,8 @@ const Register = () => {
                   codeValue={companyPhoneCode}
                   onCodeChange={setCompanyPhoneCode}
                   placeholder="98765 43210"
+                  register={register}
+                  errors={errors}
                 />
 
                 {/* Website — required unless "I don't have a website" is checked */}
@@ -770,6 +761,8 @@ const Register = () => {
                   codeValue={ownerMobileCode}
                   onCodeChange={setOwnerMobileCode}
                   placeholder="98765 43210"
+                  register={register}
+                  errors={errors}
                 />
 
                 <div className="grid grid-cols-2 gap-4">
