@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -33,8 +33,14 @@ import {
   DISTRICTS_BY_STATE,
 } from '../../data/locationData'
 
-// ─── Step definitions (renamed per requirements) ──────────────────────────────
-const STEPS = [
+// ─── Step definitions ─────────────────────────────────────────────────────────
+const TRIAL_STEPS = [
+  { id: 1, title: 'Company Setup', icon: Building2 },
+  { id: 2, title: 'Admin Setup',   icon: User },
+  { id: 3, title: 'Finish',        icon: CheckCircle },
+]
+
+const SUBSCRIPTION_STEPS = [
   { id: 1, title: 'Company Setup', icon: Building2 },
   { id: 2, title: 'Admin Setup',   icon: User },
   { id: 3, title: 'Subscription',  icon: CreditCard },
@@ -44,6 +50,11 @@ const STEPS = [
 
 const Register = () => {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const isTrial = searchParams.get('mode') === 'trial'
+  const steps = isTrial ? TRIAL_STEPS : SUBSCRIPTION_STEPS
+  // Last step that has a form (before the Finish screen)
+  const maxFormStep = steps.length - 1
 
   // ─── Multi-step state ──────────────────────────────────────────────────────
   const [currentStep, setCurrentStep] = useState(1)
@@ -121,9 +132,18 @@ const Register = () => {
           seen.add(p.id)
           return true
         })
-        setPlans(unique)
-        const trialPlan = unique.find(p => p.is_trial)
-        if (trialPlan) setSelectedPlan(trialPlan)
+        if (isTrial) {
+          // Trial flow: auto-select the trial plan, no need to show plan list
+          const trialPlan = unique.find(p => p.is_trial)
+          if (trialPlan) setSelectedPlan(trialPlan)
+          setPlans(unique)
+        } else {
+          // Subscription flow: only show paid plans
+          const paidPlans = unique.filter(p => !p.is_trial)
+          setPlans(paidPlans)
+          const popular = paidPlans.find(p => p.is_popular) || paidPlans[0]
+          if (popular) setSelectedPlan(popular)
+        }
       } catch {
         toast.error('Failed to load plans')
       }
@@ -181,6 +201,7 @@ const Register = () => {
           'owner_username', 'owner_password', 'confirm_password',
         ])
       case 3:
+        if (isTrial) return true   // trial has no plan selection step
         if (!selectedPlan) { toast.error('Please select a plan'); return false }
         return true
       default:
@@ -190,7 +211,7 @@ const Register = () => {
 
   const nextStep = async () => {
     const isValid = await validateStep(currentStep)
-    if (isValid) setCurrentStep(prev => Math.min(prev + 1, 4))
+    if (isValid) setCurrentStep(prev => Math.min(prev + 1, steps.length))
   }
 
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1))
@@ -217,12 +238,24 @@ const Register = () => {
 
       const response = await authService.register(payload)
       setRegistrationResult(response.data)
-      setCurrentStep(4)
-      toast.success('Registration successful!')
 
-      if (response.data.requires_payment) {
-        toast.info('Please complete payment to activate your account')
+      if (!isTrial && response.data.requires_payment) {
+        // Subscription flow: redirect to payment page
+        toast.success('Account created! Complete payment to activate.')
+        navigate('/upgrade-plan', {
+          state: {
+            tenantId:        response.data.company_id,
+            fromRegistration: true,
+            planId:          selectedPlan?.id,
+            billingCycle:    billingCycle,
+            userCount:       Math.max(userCount, 1),
+          },
+        })
+        return
       }
+
+      setCurrentStep(steps.length)
+      toast.success(isTrial ? 'Account created successfully. Trial activated.' : 'Registration successful!')
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Registration failed')
     } finally {
@@ -332,14 +365,18 @@ const Register = () => {
       <div className="flex justify-center py-10 px-4">
         <div className="w-full max-w-3xl bg-white rounded-2xl shadow-sm border border-surface-200 p-8 animate-fade-in">
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-surface-900">Create your Company Profile</h2>
-            <p className="text-surface-500 text-sm mt-1">Set up your company on CRM Platform</p>
+            <h2 className="text-2xl font-bold text-surface-900">
+              {isTrial ? 'Start Your Free Trial' : 'Subscribe to CRM Platform'}
+            </h2>
+            <p className="text-surface-500 text-sm mt-1">
+              {isTrial ? 'Get started free — no payment required' : 'Set up your company and choose a plan'}
+            </p>
           </div>
 
           {/* ── Progress Stepper ─────────────────────────────────────────── */}
           <div className="mb-8">
             <div className="flex items-center justify-between">
-              {STEPS.map((step, index) => (
+              {steps.map((step, index) => (
                 <React.Fragment key={step.id}>
                   <div className="flex flex-col items-center">
                     <div
@@ -362,7 +399,7 @@ const Register = () => {
                       {step.title}
                     </span>
                   </div>
-                  {index < STEPS.length - 1 && (
+                  {index < steps.length - 1 && (
                     <div className={clsx(
                       'flex-1 h-0.5 mx-2',
                       currentStep > step.id ? 'bg-accent-500' : 'bg-surface-200'
@@ -678,9 +715,9 @@ const Register = () => {
             )}
 
             {/* ═══════════════════════════════════════════════════════════════
-                STEP 3 — Subscription
+                STEP 3 — Subscription (subscription mode only)
             ═══════════════════════════════════════════════════════════════ */}
-            {currentStep === 3 && (
+            {currentStep === 3 && !isTrial && (
               <div className="animate-slide-up">
                 <div className="text-center mb-6">
                   <h2 className="text-xl font-bold text-surface-900">Choose Your Plan</h2>
@@ -862,13 +899,13 @@ const Register = () => {
             {/* ═══════════════════════════════════════════════════════════════
                 STEP 4 — Finish
             ═══════════════════════════════════════════════════════════════ */}
-            {currentStep === 4 && (
+            {currentStep === steps.length && (
               <div className="text-center animate-slide-up">
                 <div className="w-20 h-20 bg-success-50 rounded-full flex items-center justify-center mx-auto mb-6">
                   <CheckCircle className="w-10 h-10 text-success-500" />
                 </div>
                 <h2 className="text-2xl font-bold text-surface-900 mb-2">
-                  Registration Successful!
+                  {isTrial ? 'Trial Activated!' : 'Registration Successful!'}
                 </h2>
                 <p className="text-surface-500 mb-6">
                   Your company{' '}
@@ -876,19 +913,13 @@ const Register = () => {
                   has been registered.
                 </p>
 
-                {registrationResult?.is_trial ? (
-                  <div className="bg-accent-50 p-4 rounded-xl mb-6">
-                    <p className="text-accent-800">
-                      Your 30-day free trial has started. Explore all features!
-                    </p>
-                  </div>
-                ) : (
-                  <div className="bg-warning-50 p-4 rounded-xl mb-6">
-                    <p className="text-warning-800">
-                      Please complete payment to activate your account.
-                    </p>
-                  </div>
-                )}
+                <div className="bg-accent-50 p-4 rounded-xl mb-6">
+                  <p className="text-accent-800">
+                    {isTrial
+                      ? 'Account created successfully. Trial activated. Explore all features free!'
+                      : 'Subscription activated successfully. You can now sign in.'}
+                  </p>
+                </div>
 
                 <Button onClick={() => navigate('/login')} className="w-full">
                   Go to Login
@@ -897,7 +928,7 @@ const Register = () => {
             )}
 
             {/* ── Navigation Buttons ────────────────────────────────────────── */}
-            {currentStep < 4 && (
+            {currentStep < steps.length && (
               <div className="flex justify-between mt-8">
                 {currentStep > 1 ? (
                   <Button
@@ -916,7 +947,7 @@ const Register = () => {
                   </Link>
                 )}
 
-                {currentStep < 3 ? (
+                {currentStep < maxFormStep ? (
                   <Button
                     type="button"
                     onClick={nextStep}
@@ -930,7 +961,7 @@ const Register = () => {
                     isLoading={isLoading}
                     rightIcon={<CheckCircle className="w-4 h-4" />}
                   >
-                    Complete Registration
+                    {isTrial ? 'Finish' : 'Proceed to Payment'}
                   </Button>
                 )}
               </div>

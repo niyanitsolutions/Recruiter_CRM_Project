@@ -135,6 +135,8 @@ class RegistrationResponse(BaseModel):
     company_id: str
     company_name: str
     
+    is_trial: bool = False
+
     # Payment Info (for non-trial plans)
     requires_payment: bool = False
     razorpay_order_id: Optional[str] = None

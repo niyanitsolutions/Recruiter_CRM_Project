@@ -346,9 +346,18 @@ const Login = () => {
         </div>
       </div>
 
-      <Link to="/register">
-        <Button variant="outline" className="w-full">Create Your Company Profile</Button>
-      </Link>
+      <div className="flex flex-col gap-3">
+        <Link to="/register?mode=trial">
+          <Button className="w-full" rightIcon={<ArrowRight className="w-4 h-4" />}>
+            Start Free Trial
+          </Button>
+        </Link>
+        <Link to="/register?mode=subscription">
+          <Button variant="outline" className="w-full">
+            Subscription / Buy Plan
+          </Button>
+        </Link>
+      </div>
 
       
     </div>
