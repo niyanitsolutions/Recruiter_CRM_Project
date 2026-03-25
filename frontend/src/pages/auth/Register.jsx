@@ -151,6 +151,7 @@ const Register = () => {
     formState: { errors },
   } = useForm({
     mode: 'onBlur',
+    reValidateMode: 'onBlur',
     defaultValues: {
       company_name:      '',
       company_email:     '',
@@ -268,10 +269,16 @@ const Register = () => {
 
   const nextStep = async () => {
     const isValid = await validateStep(currentStep)
-    if (isValid) setCurrentStep(prev => Math.min(prev + 1, steps.length))
+    if (isValid) {
+      clearErrors()   // wipe all error state before rendering the next step
+      setCurrentStep(prev => Math.min(prev + 1, steps.length))
+    }
   }
 
-  const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1))
+  const prevStep = () => {
+    clearErrors()
+    setCurrentStep(prev => Math.max(prev - 1, 1))
+  }
 
   // ─── Form submission ──────────────────────────────────────────────────────
   const onSubmit = async (data) => {
