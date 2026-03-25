@@ -175,12 +175,12 @@ const SideNav = ({ isCollapsed, onToggle }) => {
       }
     }
 
-    // Designation == "Admin": restrict to User Management only
-    // This applies when the owner registered with "Admin" designation, limiting their nav scope.
+    // Designation == "Admin": restrict to exactly Users, Partners, Departments, Designations
     if (user?.designation === 'Admin') {
-      const adminPerms = new Set(user?.permissions || [])
+      const perms = new Set(user?.permissions || [])
+      const allowed = ['/users', '/partners', '/departments', '/designations']
       const adminItems = PERMISSION_NAV_MAP.filter(
-        item => item.section === 'User Management' && item.permissions.some(p => adminPerms.has(p))
+        item => allowed.includes(item.path) && item.permissions.some(p => perms.has(p))
       )
       return {
         flat: [],

@@ -99,7 +99,7 @@ const Register = () => {
     clearErrors,
     formState: { errors },
   } = useForm({
-    mode: 'onChange',
+    mode: 'onBlur',
     defaultValues: {
       company_name:      '',
       company_email:     '',
