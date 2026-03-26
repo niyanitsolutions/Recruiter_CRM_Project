@@ -52,7 +52,6 @@ class UserModel(BaseModel):
     employee_id: Optional[str] = None  # Company's internal employee ID
     role: str = Field(default=UserRole.CANDIDATE_COORDINATOR.value)
     role_id: Optional[str] = None  # Reference to custom role if any
-    # When override_permissions is True, permissions are treated as user-specific override
     permissions: List[str] = Field(default_factory=list)
     designation: Optional[str] = None
     designation_id: Optional[str] = None
@@ -67,7 +66,6 @@ class UserModel(BaseModel):
     # Status
     status: str = Field(default=UserStatus.ACTIVE.value)
     is_owner: bool = Field(default=False)  # Company owner flag
-    override_permissions: bool = Field(default=False)  # Use user-specific permissions instead of role
     
     # Login Info
     last_login: Optional[datetime] = None
@@ -114,8 +112,7 @@ class UserCreate(BaseModel):
     # Employment
     role: str = Field(default=UserRole.CANDIDATE_COORDINATOR.value)
     role_id: Optional[str] = None
-    permissions: Optional[List[str]] = None  # If set, overrides role default permissions
-    override_permissions: bool = Field(default=False)
+    permissions: Optional[List[str]] = None  # Pre-computed permissions list
     user_type: Optional[str] = Field(default="internal")  # internal | partner
     designation: Optional[str] = None
     designation_id: Optional[str] = None
@@ -178,9 +175,7 @@ class UserUpdate(BaseModel):
     employee_id: Optional[str] = None
     role: Optional[str] = None
     role_id: Optional[str] = None
-    # Optional per-user permission override; if provided, replaces role defaults
-    permissions: Optional[List[str]] = None
-    override_permissions: Optional[bool] = None
+    permissions: Optional[List[str]] = None  # Pre-computed permissions list
     user_type: Optional[str] = None  # internal | partner
     designation: Optional[str] = None
     designation_id: Optional[str] = None
@@ -249,7 +244,6 @@ class UserResponse(BaseModel):
     role: str
     role_name: str = ""  # Human readable role name
     permissions: List[str]
-    override_permissions: bool = False
     user_type: str = "internal"
     designation: Optional[str]
     designation_id: Optional[str]

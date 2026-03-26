@@ -28,34 +28,28 @@ def _resolve_effective_permissions(user: dict, role_doc: Optional[dict]) -> list
     Single source of truth for computing effective permissions.
 
     Priority order:
-      1. If override_permissions is truthy → MERGE user's override list with role
-         base permissions (additive).  Dashboard and other base items are never
-         removed — override only adds extra permissions on top.
+      1. If user has a stored permissions list → use it directly (pre-computed by frontend).
       2. If a role document exists in DB → use role document's permissions.
       3. Fallback to the hardcoded ROLE_PERMISSIONS map.
 
-    This function is used at both login and token-refresh time so the logic
-    is always consistent.
+    dashboard:view is always added to ensure navigation is always accessible.
+    This function is used at both login and token-refresh time.
     """
-    role_name = user.get("role", "")
-
-    if bool(user.get("override_permissions")):
-        # Base permissions come from the role doc (DB) or the hardcoded fallback.
-        # Override permissions are ADDED ON TOP — they never remove existing access.
-        if role_doc and role_doc.get("permissions"):
-            base_perms = set(role_doc["permissions"])
-        else:
-            base_perms = set(ROLE_PERMISSIONS.get(role_name, []))
-        override_perms = set(user.get("permissions") or [])
-        perms = base_perms | override_perms
-        # Dashboard is always accessible for any internal user regardless of overrides
+    stored_perms = user.get("permissions")
+    if stored_perms:
+        perms = set(stored_perms)
         perms.add("dashboard:view")
         return list(perms)
 
     if role_doc and role_doc.get("permissions"):
-        return list(role_doc["permissions"])
+        perms = set(role_doc["permissions"])
+        perms.add("dashboard:view")
+        return list(perms)
 
-    return list(ROLE_PERMISSIONS.get(role_name, []))
+    role_name = user.get("role", "")
+    perms = set(ROLE_PERMISSIONS.get(role_name, []))
+    perms.add("dashboard:view")
+    return list(perms)
 
 
 class AuthService:
@@ -77,7 +71,7 @@ class AuthService:
         Supports login with: username / email / mobile / full name.
 
         Permission resolution order:
-          1. override_permissions == True  → user's stored permissions list.
+          1. User's stored permissions list (pre-computed by frontend).
           2. Role document in company DB   → role's current permissions.
           3. Hardcoded ROLE_PERMISSIONS    → last-resort defaults.
 
@@ -718,11 +712,9 @@ class AuthService:
             return None, "User not found"
 
         role_name = user.get("role", "admin")
-        role_doc = None
-        if not user.get("override_permissions"):
-            role_doc = await company_db.roles.find_one(
-                {"name": role_name, "is_deleted": False}
-            )
+        role_doc = await company_db.roles.find_one(
+            {"name": role_name, "is_deleted": False}
+        )
 
         return _resolve_effective_permissions(user, role_doc), ""
 

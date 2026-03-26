@@ -86,11 +86,10 @@ class UserService:
             ).decode('utf-8')
             
             # Determine permissions:
-            # 1. override_permissions=True AND permissions list provided → use that list
-            #    (even if empty — empty override = admin intentionally stripped all access)
+            # 1. If permissions list provided by caller → use it directly (pre-computed by frontend)
             # 2. Else fetch the role's current permissions from the roles collection
             # 3. Fall back to hardcoded defaults only if the role isn't in the DB yet
-            if user_data.override_permissions and user_data.permissions is not None:
+            if user_data.permissions is not None:
                 role_permissions = list(user_data.permissions)
             else:
                 role_doc = await self.db.roles.find_one(
@@ -134,10 +133,6 @@ class UserService:
                 "joining_date": user_data.joining_date,
                 "status": user_data.status or UserStatus.ACTIVE.value,
                 "is_owner": False,
-                # override_permissions is stored exactly as the caller sent it.
-                # An admin can set override_permissions=True with an empty list
-                # to lock down a user (no access). Do NOT gate on bool(permissions).
-                "override_permissions": bool(user_data.override_permissions),
                 "last_login": None,
                 "last_login_ip": None,
                 "login_count": 0,
@@ -360,7 +355,7 @@ class UserService:
             for field, value in update_data.model_dump(exclude_unset=True).items():
                 if value is not None:
                     update_dict[field] = value
-                # Special case: allow False booleans through (e.g. override_permissions=False)
+                # Special case: allow False booleans through (e.g. is_owner=False)
                 elif isinstance(value, bool):
                     update_dict[field] = value
 
@@ -369,43 +364,15 @@ class UserService:
                 current_user = await self.get_user(user_id)
                 return True, "No changes made", current_user
 
-            # ── Permission override handling ────────────────────────────────────
-            # Case A: caller explicitly sends override_permissions=True (with or without permissions)
-            if update_dict.get("override_permissions") is True:
-                # Sanitize any permissions list that was also sent
-                if "permissions" in update_dict:
-                    valid_permissions = {p.value for p in Permission}
-                    update_dict["permissions"] = [
-                        p for p in update_dict["permissions"] if p in valid_permissions
-                    ]
-                # If no permissions list was sent but override was turned ON, keep existing perms
-
-            # Case B: caller explicitly sends permissions list without an override flag
-            elif "permissions" in update_dict and "override_permissions" not in update_dict:
+            # ── Permission handling ─────────────────────────────────────────────
+            # If permissions list is provided, use it directly (pre-computed by frontend)
+            if "permissions" in update_dict:
                 valid_permissions = {p.value for p in Permission}
                 update_dict["permissions"] = [
                     p for p in update_dict["permissions"] if p in valid_permissions
                 ]
-                # Treat as an implicit override
-                update_dict["override_permissions"] = True
-
-            # Case C: override_permissions being turned OFF → recompute from role
-            if update_dict.get("override_permissions") is False:
-                role_name = update_dict.get("role", existing.get("role"))
-                role_doc = await self.db.roles.find_one(
-                    {"name": role_name, "is_deleted": False}
-                )
-                if role_doc and role_doc.get("permissions"):
-                    update_dict["permissions"] = list(role_doc["permissions"])
-                else:
-                    role_enum = SystemRole(role_name) if role_name in [r.value for r in SystemRole] else None
-                    update_dict["permissions"] = [
-                        p.value for p in ROLE_DEFAULT_PERMISSIONS.get(role_enum, [])
-                    ] if role_enum else []
-
-            # Case D: role changed but override is OFF — refresh role permissions
-            elif "role" in update_dict and not existing.get("override_permissions") \
-                    and update_dict.get("override_permissions") is not True:
+            # If role changed and no permissions provided, refresh from role
+            elif "role" in update_dict:
                 role_name = update_dict["role"]
                 role_doc = await self.db.roles.find_one(
                     {"name": role_name, "is_deleted": False}
@@ -417,6 +384,9 @@ class UserService:
                     update_dict["permissions"] = [
                         p.value for p in ROLE_DEFAULT_PERMISSIONS.get(role_enum, [])
                     ] if role_enum else []
+
+            # Remove override_permissions if sent (field no longer used)
+            update_dict.pop("override_permissions", None)
 
             # Auto-derive user_type when role changes (if not explicitly set)
             if "role" in update_dict and "user_type" not in update_dict:

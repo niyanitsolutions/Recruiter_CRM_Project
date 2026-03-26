@@ -159,7 +159,6 @@ async def create_partner(
         designation    = partner_data.designation,
         designation_id = partner_data.designation_id,
         status         = partner_data.status or "active",
-        override_permissions = False,
         send_welcome_email   = False,
     )
 

@@ -283,7 +283,7 @@ async def get_my_effective_permissions(auth: AuthContext = Depends(get_current_u
     """
     if auth.is_super_admin or auth.is_owner:
         # Owners / super-admins bypass the DB lookup
-        return {"permissions": auth.permissions, "override_permissions": False}
+        return {"permissions": auth.permissions}
 
     perms, error = await auth_service.get_effective_permissions(
         auth.user_id, auth.company_id
@@ -293,7 +293,7 @@ async def get_my_effective_permissions(auth: AuthContext = Depends(get_current_u
             status_code=status.HTTP_404_NOT_FOUND,
             detail=error
         )
-    return {"permissions": perms, "override_permissions": True}
+    return {"permissions": perms}
 
 
 @router.post("/validate-field")

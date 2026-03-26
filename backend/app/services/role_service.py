@@ -241,18 +241,10 @@ class RoleService:
             updated_role = await self.get_role(role_id)
 
             # Cascade permission changes to all users with this role
-            # BUT do not overwrite users that have override_permissions = True
             if "permissions" in update_dict:
                 role_name = existing.get("name", "")
                 await self.users_collection.update_many(
-                    {
-                        "role": role_name,
-                        "is_deleted": False,
-                        "$or": [
-                            {"override_permissions": {"$exists": False}},
-                            {"override_permissions": False},
-                        ],
-                    },
+                    {"role": role_name, "is_deleted": False},
                     {"$set": {"permissions": update_dict["permissions"]}}
                 )
 
@@ -409,7 +401,6 @@ class RoleService:
                         "role": role_name,
                         "role_id": role.get("id"),
                         "permissions": permissions,
-                        "override_permissions": False,
                         "updated_by": assigned_by_id,
                         "updated_at": datetime.utcnow()
                     }

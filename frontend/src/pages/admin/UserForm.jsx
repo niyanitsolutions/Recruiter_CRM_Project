@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Loader2, Shield, GitBranch, ChevronDown } from 'lucide-react'
@@ -7,104 +7,116 @@ import departmentService from '../../services/departmentService'
 import designationService from '../../services/designationService'
 import OrgTree from '../../components/OrgTree'
 
-// ── Hierarchical permission sections ─────────────────────────────────────────
-const PERMISSION_SECTIONS = [
-  {
-    section: 'Admin Management',
-    modules: [
-      { label: 'Users',        perms: ['users:view','users:create','users:edit','users:delete'] },
-      { label: 'Partners',     perms: ['partners:view','partners:create','partners:edit','partners:delete'] },
-      { label: 'Departments',  perms: ['departments:view','departments:create','departments:edit','departments:delete'] },
-      { label: 'Designations', perms: ['designations:view','designations:create','designations:edit','designations:delete'] },
-    ],
-  },
-  {
-    section: 'Client Management',
-    modules: [
-      { label: 'Clients',            perms: ['clients:view','clients:create','clients:edit','clients:delete'] },
-      { label: 'Jobs',               perms: ['jobs:view','jobs:create','jobs:edit','jobs:delete'] },
-      { label: 'Interviews',         perms: ['interviews:view','interviews:schedule','interviews:update_status'] },
-      { label: 'Interview Settings', perms: ['interview_settings:view','interview_settings:create','interview_settings:edit','interview_settings:delete'] },
-      { label: 'Onboards',           perms: ['onboards:view','onboards:create','onboards:edit'] },
-    ],
-  },
-  {
-    section: 'Candidate Management',
-    modules: [
-      { label: 'Candidates', perms: ['candidates:view','candidates:create','candidates:edit','candidates:delete','candidates:assign'] },
-      { label: 'Interviews', perms: ['interviews:view','interviews:schedule','interviews:update_status'] },
-      { label: 'Jobs',       perms: ['jobs:view','jobs:create','jobs:edit','jobs:delete'] },
-    ],
-  },
-  {
-    section: 'HR Management',
-    modules: [
-      { label: 'Users',      perms: ['users:view','users:create','users:edit','users:delete'] },
-      { label: 'Candidates', perms: ['candidates:view','candidates:create','candidates:edit','candidates:delete','candidates:assign'] },
-      { label: 'Onboards',   perms: ['onboards:view','onboards:create','onboards:edit'] },
-    ],
-  },
-  {
-    section: 'Accounts Management',
-    modules: [
-      { label: 'Accounts', perms: ['accounts:view','accounts:invoices','accounts:payouts'] },
-      { label: 'Partners', perms: ['partners:view','partners:create','partners:edit','partners:delete'] },
-    ],
-  },
-  {
-    section: 'Partner',
-    modules: [
-      { label: 'Candidates', perms: ['candidates:view','candidates:create'] },
-      { label: 'Jobs',       perms: ['jobs:view'] },
-      { label: 'Interviews', perms: ['interviews:view'] },
-      { label: 'Payouts',    perms: ['payouts:view','payouts:edit'] },
-    ],
-  },
-  {
-    section: 'Others',
-    modules: [
-      { label: 'Payouts',       perms: ['payouts:view','payouts:edit'] },
-      { label: 'Invoices',      perms: ['invoices:view','invoices:approve'] },
-      { label: 'Imports',       perms: ['imports:view','imports:create'] },
-      { label: 'Exports',       perms: ['exports:view','exports:create'] },
-      { label: 'Targets',       perms: ['targets:view','targets:create','targets:edit','targets:delete','targets:admin'] },
-      { label: 'Analytics',     perms: ['analytics:view','analytics:edit'] },
-      { label: 'Reports',       perms: ['reports:view','reports:export'] },
-      { label: 'CRM Settings',  perms: ['crm_settings:view','crm_settings:edit'] },
-      { label: 'Audit',         perms: ['audit:view','audit:sessions','audit:alerts','audit:admin'] },
-      { label: 'Notifications', perms: ['notifications:create'] },
-    ],
-  },
-]
+// ── Department-based permission system ───────────────────────────────────────
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const getSectionPerms = (sec) => [...new Set(sec.modules.flatMap(m => m.perms))]
-
-// Returns 'checked' | 'indeterminate' | 'unchecked'
-const getCheckState = (perms, selectedSet) => {
-  if (perms.length === 0) return 'unchecked'
-  const n = perms.filter(p => selectedSet.has(p)).length
-  if (n === 0) return 'unchecked'
-  if (n === perms.length) return 'checked'
-  return 'indeterminate'
+const MODULE_PERMS = {
+  users:              ['users:view','users:create','users:edit','users:delete'],
+  partners:           ['partners:view','partners:create','partners:edit','partners:delete'],
+  departments:        ['departments:view','departments:create','departments:edit','departments:delete'],
+  designations:       ['designations:view','designations:create','designations:edit','designations:delete'],
+  clients:            ['clients:view','clients:create','clients:edit','clients:delete'],
+  jobs:               ['jobs:view','jobs:create','jobs:edit','jobs:delete'],
+  interviews:         ['interviews:view','interviews:schedule','interviews:update_status'],
+  interview_settings: ['interview_settings:view','interview_settings:create','interview_settings:edit','interview_settings:delete'],
+  onboards:           ['onboards:view','onboards:create','onboards:edit'],
+  candidates:         ['candidates:view','candidates:create','candidates:edit','candidates:delete','candidates:assign'],
+  accounts:           ['accounts:view','accounts:invoices','accounts:payouts'],
+  payouts:            ['payouts:view','payouts:edit'],
+  invoices:           ['invoices:view','invoices:approve'],
+  imports:            ['imports:view','imports:create'],
+  exports:            ['exports:view','exports:create'],
+  targets:            ['targets:view','targets:create','targets:edit','targets:delete','targets:admin'],
+  analytics:          ['analytics:view','analytics:edit'],
+  reports:            ['reports:view','reports:export'],
+  crm_settings:       ['crm_settings:view','crm_settings:edit'],
+  audit:              ['audit:view','audit:sessions','audit:alerts','audit:admin'],
 }
 
-// Checkbox that supports indeterminate state via a DOM ref
-const TriCheckbox = ({ state, onChange, className = '' }) => {
-  const ref = useRef(null)
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = state === 'indeterminate'
-  }, [state])
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={state === 'checked'}
-      onChange={onChange}
-      className={`w-4 h-4 rounded border-surface-300 text-accent-600 focus:ring-accent-500 cursor-pointer ${className}`}
-    />
-  )
+const MODULE_LABELS = {
+  users: 'Users', partners: 'Partners', departments: 'Departments',
+  designations: 'Designations', clients: 'Clients', jobs: 'Jobs',
+  interviews: 'Interviews', interview_settings: 'Interview Settings',
+  onboards: 'Onboards', candidates: 'Candidates', accounts: 'Accounts',
+  payouts: 'Payouts', invoices: 'Invoices', imports: 'Imports',
+  exports: 'Exports', targets: 'Targets', analytics: 'Analytics',
+  reports: 'Reports', crm_settings: 'CRM Settings', audit: 'Audit',
+}
+
+const DEPT_MODULES = {
+  owner:                { full: Object.keys(MODULE_PERMS), view_only: [] },
+  admin:                { full: ['users','partners','departments','designations','clients','jobs','interviews','interview_settings','candidates','onboards','imports','exports','targets','analytics','crm_settings','audit'], view_only: ['reports'] },
+  client_coordinator:   { full: ['clients','jobs','interviews','interview_settings','onboards'], view_only: ['candidates','reports'] },
+  candidate_coordinator:{ full: ['candidates','interviews','interview_settings'], view_only: ['jobs','clients','onboards','reports'] },
+  recruiter:            { full: ['candidates','interviews','clients','jobs'], view_only: ['onboards','reports'] },
+  hr:                   { full: ['users','candidates','onboards'], view_only: ['reports'] },
+  accounts:             { full: ['accounts','payouts','invoices','imports','exports'], view_only: ['clients','partners','reports'] },
+  partner:              { full: ['candidates'], view_only: ['jobs','interviews'] },
+}
+
+const PERM_DEPT_OPTIONS = [
+  { value: 'owner',                 label: 'Owner' },
+  { value: 'admin',                 label: 'Admin' },
+  { value: 'client_coordinator',    label: 'Client Coordinator' },
+  { value: 'candidate_coordinator', label: 'Candidate Coordinator' },
+  { value: 'recruiter',             label: 'Recruiter' },
+  { value: 'hr',                    label: 'HR' },
+  { value: 'accounts',              label: 'Accounts' },
+  { value: 'partner',               label: 'Partner' },
+]
+
+const DEPT_TO_ROLE = {
+  owner:                'admin',
+  admin:                'admin',
+  client_coordinator:   'client_coordinator',
+  candidate_coordinator:'candidate_coordinator',
+  recruiter:            'candidate_coordinator',
+  hr:                   'hr',
+  accounts:             'accounts',
+  partner:              'partner',
+}
+
+const ROLE_TO_DEPT = {
+  admin:                'admin',
+  client_coordinator:   'client_coordinator',
+  candidate_coordinator:'candidate_coordinator',
+  hr:                   'hr',
+  accounts:             'accounts',
+  partner:              'partner',
+}
+
+function computePermissions(dept, level, restrictedMods, additionalDepts) {
+  if (!dept) return ['dashboard:view']
+  const cfg = DEPT_MODULES[dept]
+  if (!cfg) return ['dashboard:view']
+
+  const fullMods  = new Set(cfg.full)
+  const viewMods  = new Set(cfg.view_only)
+
+  ;(additionalDepts || []).forEach(d => {
+    const addCfg = DEPT_MODULES[d]
+    if (!addCfg) return
+    addCfg.full.forEach(m => fullMods.add(m))
+    addCfg.view_only.forEach(m => viewMods.add(m))
+  })
+
+  const perms = new Set(['dashboard:view'])
+
+  fullMods.forEach(mod => {
+    ;(MODULE_PERMS[mod] || []).forEach(p => {
+      if (level === 'executive' && p.endsWith(':delete')) return
+      perms.add(p)
+    })
+  })
+
+  viewMods.forEach(mod => {
+    ;(MODULE_PERMS[mod] || []).filter(p => p.endsWith(':view')).forEach(p => perms.add(p))
+  })
+
+  ;(restrictedMods || []).forEach(mod => {
+    ;(MODULE_PERMS[mod] || []).forEach(p => perms.delete(p))
+  })
+
+  return [...perms]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -167,14 +179,19 @@ const [errors,       setErrors]       = useState({})
     }
   }
 
-  // ── Permission override state ────────────────────────────────────────────
-  const [useCustomPermissions, setUseCustomPermissions] = useState(false)
-  const [customPermissions,    setCustomPermissions]    = useState(new Set())
-  // Ref used to scroll the permissions card into view when validation fails
+  // ── Permission system state ──────────────────────────────────────────────
+  const [permDept,     setPermDept]     = useState('')
+  const [permLevel,    setPermLevel]    = useState('executive')
+  const [restrictOn,   setRestrictOn]   = useState(false)
+  const [restrictMods, setRestrictMods] = useState([])
+  const [addDeptsOn,   setAddDeptsOn]   = useState(false)
+  const [addDepts,     setAddDepts]     = useState([])
   const permissionsSectionRef = useRef(null)
 
-  // Derived: partner users don't use the override permissions section at all
-  const isPartner = formData.user_type === 'partner'
+  const computedPermissions = useMemo(
+    () => computePermissions(permDept, permLevel, restrictOn ? restrictMods : [], addDeptsOn ? addDepts : []),
+    [permDept, permLevel, restrictOn, restrictMods, addDeptsOn, addDepts]
+  )
 
   // ── Load reference data ──────────────────────────────────────────────────
   useEffect(() => {
@@ -216,10 +233,12 @@ const [errors,       setErrors]       = useState({})
           joining_date:  user.joining_date?.split('T')[0] || '',
           status:        user.status         || 'active',
         })
-        if (user.override_permissions) {
-          setUseCustomPermissions(true)
-          setCustomPermissions(new Set(user.permissions || []))
-        }
+        // Derive permission dept from role (Owner designation → 'owner', else by role)
+        const editDept = user.designation === 'Owner' ? 'owner' : (ROLE_TO_DEPT[user.role] || 'admin')
+        setPermDept(editDept)
+        // Derive level: if user has any :delete permissions → manager, else executive
+        const hasDelete = (user.permissions || []).some(p => p.endsWith(':delete'))
+        setPermLevel(hasDelete ? 'manager' : 'executive')
       } catch (err) { setError('Failed to load user') }
       finally { setLoading(false) }
     }
@@ -231,43 +250,6 @@ const [errors,       setErrors]       = useState({})
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }))
-  }
-
-  // ── Permission toggle helpers ─────────────────────────────────────────────
-
-  const togglePermission = (perm) => {
-    setCustomPermissions(prev => {
-      const next = new Set(prev)
-      next.has(perm) ? next.delete(perm) : next.add(perm)
-      return next
-    })
-  }
-
-  const toggleModule = (mod) => {
-    setCustomPermissions(prev => {
-      const state = getCheckState(mod.perms, prev)
-      const next  = new Set(prev)
-      if (state === 'checked' || state === 'indeterminate') {
-        mod.perms.forEach(p => next.delete(p))
-      } else {
-        mod.perms.forEach(p => next.add(p))
-      }
-      return next
-    })
-  }
-
-  const toggleSection = (sec) => {
-    const allPerms = getSectionPerms(sec)
-    setCustomPermissions(prev => {
-      const state = getCheckState(allPerms, prev)
-      const next  = new Set(prev)
-      if (state === 'checked' || state === 'indeterminate') {
-        allPerms.forEach(p => next.delete(p))
-      } else {
-        allPerms.forEach(p => next.add(p))
-      }
-      return next
-    })
   }
 
   // ── Validation & submit ──────────────────────────────────────────────────
@@ -291,10 +273,8 @@ const [errors,       setErrors]       = useState({})
         else if (!/[a-z]/.test(formData.password)) newErrors.password = 'Must contain at least one lowercase letter'
         else if (!/\d/.test(formData.password))    newErrors.password = 'Must contain at least one number'
       }
-      // Override permissions is mandatory on create — but not for partner users
-      // (partner users have their own fixed permission set, no override needed)
-      if (!isPartner && !useCustomPermissions) {
-        newErrors.permissions = 'Please enable "Override role permissions" and select at least the required permissions before creating a user.'
+      if (!permDept) {
+        newErrors.permissions = 'Please select a Department to assign permissions.'
       }
     }
     setErrors(newErrors)
@@ -380,13 +360,11 @@ const [errors,       setErrors]       = useState({})
         submitData.joining_date = submitData.joining_date + 'T00:00:00'
       }
 
-      // Partner users never send override permissions — the section is hidden
-      if (!isPartner && useCustomPermissions) {
-        submitData.permissions          = Array.from(customPermissions)
-        submitData.override_permissions = true
-      } else {
-        delete submitData.permissions
-        submitData.override_permissions = false
+      // Assign computed permissions, role, and user_type from dept selection
+      if (permDept) {
+        submitData.permissions = computedPermissions
+        submitData.role        = DEPT_TO_ROLE[permDept] || submitData.role
+        submitData.user_type   = permDept === 'partner' ? 'partner' : 'internal'
       }
 
       // ── API call ──────────────────────────────────────────────────────
@@ -629,15 +607,6 @@ const [errors,       setErrors]       = useState({})
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">User Type</label>
-              <select name="user_type" value={formData.user_type} onChange={handleChange}
-                className="w-full px-3 py-2 border border-surface-300 rounded-lg">
-                <option value="internal">Internal Employee</option>
-                <option value="partner">Partner</option>
-              </select>
-            </div>
-
-            <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">Department</label>
               <select name="department_id" value={formData.department_id}
                 onChange={e => { handleChange(e); if (e.target.value !== 'custom') setDeptCustom('') }}
@@ -734,143 +703,131 @@ const [errors,       setErrors]       = useState({})
         )}
 
         {/* ── Permissions ───────────────────────────────────────────────── */}
-        {/* Hidden entirely for partner users — they use a fixed permission set */}
-        {!isPartner && <div
+        <div
           ref={permissionsSectionRef}
           className={`bg-white rounded-xl shadow-sm border p-6 ${!isEdit && errors.permissions ? 'border-red-400' : 'border-surface-100'}`}
         >
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-accent-600" />
-              <h2 className="text-lg font-semibold">
-                Permissions
-                {!isEdit && <span className="text-red-500 ml-1">*</span>}
-              </h2>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-surface-700 cursor-pointer select-none">
-              <input type="checkbox" checked={useCustomPermissions}
-                onChange={e => {
-                  setUseCustomPermissions(e.target.checked)
-                  if (!e.target.checked) setCustomPermissions(new Set())
-                  if (errors.permissions) setErrors(prev => ({ ...prev, permissions: null }))
-                }}
-                className={`rounded text-accent-600 focus:ring-accent-500 ${!isEdit && errors.permissions ? 'border-red-500' : 'border-surface-300'}`} />
-              <span className={!isEdit && errors.permissions ? 'text-red-600 font-medium' : ''}>
-                Override role permissions for this user
-              </span>
-            </label>
+          <div className="flex items-center gap-2 mb-4">
+            <Shield className="w-5 h-5 text-accent-600" />
+            <h2 className="text-lg font-semibold">
+              Permissions
+              {!isEdit && <span className="text-red-500 ml-1">*</span>}
+            </h2>
           </div>
 
-          {/* Permissions required error banner */}
           {!isEdit && errors.permissions && (
             <div className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
-              <svg className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-              </svg>
               <p className="text-sm text-red-700 font-medium">{errors.permissions}</p>
             </div>
           )}
 
-          {/* Informational note */}
-          <div className="mb-4 rounded-lg bg-blue-50 border border-blue-100 px-4 py-3">
-            <p className="text-sm text-blue-800 font-medium mb-1">What is Permission Override?</p>
-            <p className="text-sm text-blue-700">
-              Every user inherits a default set of permissions based on their <strong>role</strong> (e.g. Admin, Candidate Coordinator).
-              When you enable <em>Override role permissions</em>, those role defaults are <strong>replaced</strong> by the exact permissions
-              you select below — giving you full control over what this specific user can see and do.
-              Use this when a user needs more or fewer permissions than their role normally provides.
-            </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* A: Department */}
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">
+                Department <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={permDept}
+                onChange={e => {
+                  setPermDept(e.target.value)
+                  setRestrictMods([])
+                  setAddDepts([])
+                  if (errors.permissions) setErrors(prev => ({ ...prev, permissions: null }))
+                }}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-accent-500 ${!isEdit && errors.permissions ? 'border-red-500' : 'border-surface-300'}`}
+              >
+                <option value="">Select department…</option>
+                {PERM_DEPT_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* B: Level */}
+            {permDept && permDept !== 'owner' && (
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">Level</label>
+                <select
+                  value={permLevel}
+                  onChange={e => setPermLevel(e.target.value)}
+                  className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500"
+                >
+                  <option value="executive">Executive (view / create / modify)</option>
+                  <option value="manager">Manager (view / create / modify / delete)</option>
+                </select>
+              </div>
+            )}
           </div>
 
-          {useCustomPermissions && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-surface-600">
-                  <span className="inline-flex items-center justify-center w-5 h-5 bg-accent-600 text-white text-xs rounded-full mr-1.5">
-                    {customPermissions.size}
-                  </span>
-                  permission{customPermissions.size !== 1 ? 's' : ''} selected
-                </p>
-                <button type="button" onClick={() => setCustomPermissions(new Set())}
-                  className="text-xs text-surface-400 hover:text-red-500 underline">
-                  Clear all
-                </button>
+          {permDept && (
+            <div className="mt-4 space-y-3">
+              {/* C: Restrict Modules */}
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-surface-700 cursor-pointer select-none">
+                  <input type="checkbox" checked={restrictOn}
+                    onChange={e => { setRestrictOn(e.target.checked); setRestrictMods([]) }}
+                    className="rounded border-surface-300 text-accent-600 focus:ring-accent-500" />
+                  Restrict Modules
+                </label>
+                {restrictOn && (
+                  <div className="mt-2 pl-6 flex flex-wrap gap-3">
+                    {[...(DEPT_MODULES[permDept]?.full || []), ...(DEPT_MODULES[permDept]?.view_only || [])].map(mod => (
+                      <label key={mod} className="flex items-center gap-1.5 text-sm text-surface-700 cursor-pointer">
+                        <input type="checkbox"
+                          checked={restrictMods.includes(mod)}
+                          onChange={() => setRestrictMods(prev =>
+                            prev.includes(mod) ? prev.filter(m => m !== mod) : [...prev, mod]
+                          )}
+                          className="rounded border-surface-300 text-red-500 focus:ring-red-400" />
+                        {MODULE_LABELS[mod]}
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* ── 3-level hierarchical permission matrix ──────────────── */}
-              {/* 'Partner' section is excluded for internal users */}
-              <div className="space-y-3">
-                {PERMISSION_SECTIONS.filter(sec => sec.section !== 'Partner').map(sec => {
-                  const secPerms = getSectionPerms(sec)
-                  const secState = getCheckState(secPerms, customPermissions)
-                  return (
-                    <div key={sec.section} className="border border-surface-200 rounded-xl overflow-hidden shadow-md">
+              {/* D: Assign Other Departments */}
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-surface-700 cursor-pointer select-none">
+                  <input type="checkbox" checked={addDeptsOn}
+                    onChange={e => { setAddDeptsOn(e.target.checked); setAddDepts([]) }}
+                    className="rounded border-surface-300 text-accent-600 focus:ring-accent-500" />
+                  Assign Other Departments
+                </label>
+                {addDeptsOn && (
+                  <div className="mt-2 pl-6 flex flex-wrap gap-3">
+                    {PERM_DEPT_OPTIONS.filter(o => o.value !== permDept && o.value !== 'owner').map(opt => (
+                      <label key={opt.value} className="flex items-center gap-1.5 text-sm text-surface-700 cursor-pointer">
+                        <input type="checkbox"
+                          checked={addDepts.includes(opt.value)}
+                          onChange={() => setAddDepts(prev =>
+                            prev.includes(opt.value) ? prev.filter(d => d !== opt.value) : [...prev, opt.value]
+                          )}
+                          className="rounded border-surface-300 text-accent-600 focus:ring-accent-500" />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-                      {/* LEVEL 1 – Section header */}
-                      <div
-                        style={{ background: 'linear-gradient(135deg, #0F0C29 0%, #1C1A4A 100%)' }}
-                        className={`flex items-center gap-3 px-4 py-3 border-b border-white/10 border-l-4 transition-all duration-300 hover:brightness-125 ${
-                          secState === 'checked'       ? 'border-l-accent-400' :
-                          secState === 'indeterminate' ? 'border-l-blue-400'   :
-                                                         'border-l-white/20'
-                        }`}
-                      >
-                        <TriCheckbox state={secState} onChange={() => toggleSection(sec)} />
-                        <span className={`text-sm font-bold uppercase tracking-widest ${
-                          secState === 'checked'       ? 'text-white'    :
-                          secState === 'indeterminate' ? 'text-white/80' : 'text-white/60'
-                        }`}>
-                          {sec.section}
-                        </span>
-                      </div>
-
-                      {/* LEVEL 2 + 3 – Module rows */}
-                      <div className="divide-y divide-surface-100 bg-white">
-                        {sec.modules.map(mod => {
-                          const modState = getCheckState(mod.perms, customPermissions)
-                          return (
-                            <div key={`${sec.section}-${mod.label}`}
-                              className="flex items-center gap-4 px-4 py-2.5 hover:bg-surface-50">
-
-                              {/* LEVEL 2 – Module checkbox */}
-                              <TriCheckbox state={modState} onChange={() => toggleModule(mod)} />
-                              <span className="w-40 text-sm font-medium text-surface-800 shrink-0">
-                                {mod.label}
-                              </span>
-
-                              {/* LEVEL 3 – Individual permission chips */}
-                              <div className="flex flex-wrap gap-1.5">
-                                {mod.perms.map(perm => {
-                                  const on = customPermissions.has(perm)
-                                  const action = perm.split(':')[1].replace(/_/g, ' ')
-                                  return (
-                                    <button
-                                      key={perm}
-                                      type="button"
-                                      onClick={() => togglePermission(perm)}
-                                      title={perm}
-                                      className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition-all ${
-                                        on
-                                          ? 'bg-accent-600 text-white border-accent-600'
-                                          : 'bg-white text-surface-500 border-surface-300 hover:border-accent-400 hover:text-accent-600'
-                                      }`}
-                                    >
-                                      {action}
-                                    </button>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })}
+              {/* Permission Preview */}
+              <div className="rounded-lg bg-surface-50 border border-surface-200 px-4 py-3">
+                <p className="text-xs font-semibold text-surface-600 mb-2">
+                  {computedPermissions.length} permissions will be assigned
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {[...computedPermissions].sort().map(p => (
+                    <span key={p} className="px-2 py-0.5 bg-accent-100 text-accent-700 text-xs rounded-full font-mono">
+                      {p}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
           )}
-        </div>}
+        </div>
 
         {/* ── Actions ──────────────────────────────────────────────────── */}
         <div className="flex justify-end gap-4">
