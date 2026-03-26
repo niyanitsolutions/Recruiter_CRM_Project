@@ -193,6 +193,9 @@ const [errors,       setErrors]       = useState({})
     [permDept, permLevel, restrictOn, restrictMods, addDeptsOn, addDepts]
   )
 
+  // Partner users get a fixed permission set — permissions section is hidden
+  const isPartner = formData.user_type === 'partner'
+
   // ── Load reference data ──────────────────────────────────────────────────
   useEffect(() => {
     const fetchData = async () => {
@@ -233,12 +236,13 @@ const [errors,       setErrors]       = useState({})
           joining_date:  user.joining_date?.split('T')[0] || '',
           status:        user.status         || 'active',
         })
-        // Derive permission dept from role (Owner designation → 'owner', else by role)
-        const editDept = user.designation === 'Owner' ? 'owner' : (ROLE_TO_DEPT[user.role] || 'admin')
-        setPermDept(editDept)
-        // Derive level: if user has any :delete permissions → manager, else executive
-        const hasDelete = (user.permissions || []).some(p => p.endsWith(':delete'))
-        setPermLevel(hasDelete ? 'manager' : 'executive')
+        // Only derive permission dept for internal users — partners don't use the section
+        if (user.user_type !== 'partner') {
+          const editDept = user.designation === 'Owner' ? 'owner' : (ROLE_TO_DEPT[user.role] || 'admin')
+          setPermDept(editDept)
+          const hasDelete = (user.permissions || []).some(p => p.endsWith(':delete'))
+          setPermLevel(hasDelete ? 'manager' : 'executive')
+        }
       } catch (err) { setError('Failed to load user') }
       finally { setLoading(false) }
     }
@@ -273,7 +277,7 @@ const [errors,       setErrors]       = useState({})
         else if (!/[a-z]/.test(formData.password)) newErrors.password = 'Must contain at least one lowercase letter'
         else if (!/\d/.test(formData.password))    newErrors.password = 'Must contain at least one number'
       }
-      if (!permDept) {
+      if (!isPartner && !permDept) {
         newErrors.permissions = 'Please select a Department to assign permissions.'
       }
     }
@@ -360,11 +364,16 @@ const [errors,       setErrors]       = useState({})
         submitData.joining_date = submitData.joining_date + 'T00:00:00'
       }
 
-      // Assign computed permissions, role, and user_type from dept selection
-      if (permDept) {
+      if (isPartner) {
+        // Partner: fixed role + user_type, no permissions sent (backend uses ROLE_PERMISSIONS['partner'])
+        submitData.role      = 'partner'
+        submitData.user_type = 'partner'
+        delete submitData.permissions
+      } else if (permDept) {
+        // Internal: assign computed permissions and role from dept selection
         submitData.permissions = computedPermissions
         submitData.role        = DEPT_TO_ROLE[permDept] || submitData.role
-        submitData.user_type   = permDept === 'partner' ? 'partner' : 'internal'
+        submitData.user_type   = 'internal'
       }
 
       // ── API call ──────────────────────────────────────────────────────
@@ -607,6 +616,15 @@ const [errors,       setErrors]       = useState({})
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">User Type</label>
+              <select name="user_type" value={formData.user_type} onChange={handleChange}
+                className="w-full px-3 py-2 border border-surface-300 rounded-lg">
+                <option value="internal">Internal Employee</option>
+                <option value="partner">Partner</option>
+              </select>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">Department</label>
               <select name="department_id" value={formData.department_id}
                 onChange={e => { handleChange(e); if (e.target.value !== 'custom') setDeptCustom('') }}
@@ -702,8 +720,8 @@ const [errors,       setErrors]       = useState({})
           </div>
         )}
 
-        {/* ── Permissions ───────────────────────────────────────────────── */}
-        <div
+        {/* ── Permissions (hidden for partner — they get a fixed set) ──── */}
+        {!isPartner && <div
           ref={permissionsSectionRef}
           className={`bg-white rounded-xl shadow-sm border p-6 ${!isEdit && errors.permissions ? 'border-red-400' : 'border-surface-100'}`}
         >
@@ -827,7 +845,7 @@ const [errors,       setErrors]       = useState({})
               </div>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* ── Actions ──────────────────────────────────────────────────── */}
         <div className="flex justify-end gap-4">
