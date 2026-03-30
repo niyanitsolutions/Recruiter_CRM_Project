@@ -39,6 +39,9 @@ from app.api.v1 import reports, analytics, imports_exports, targets, audit, sche
 # ============== Company Settings ==============
 from app.api.v1 import company_settings
 
+# ============== Tenant Settings (Phase 6) ==============
+from app.api.v1 import tenant_settings
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -114,6 +117,7 @@ app.include_router(interviews.router, prefix=API_V1_PREFIX, tags=["Interviews"])
 app.include_router(pipelines.router, prefix=API_V1_PREFIX, tags=["Pipelines"])
 app.include_router(settings_router.router, prefix=API_V1_PREFIX, tags=["Settings"])
 app.include_router(company_settings.router, prefix=API_V1_PREFIX, tags=["Company Settings"])
+app.include_router(tenant_settings.router, prefix=API_V1_PREFIX, tags=["Tenant Settings"])
 
 # ============== PHASE 4 ROUTERS ==============
 app.include_router(onboards.router, prefix=API_V1_PREFIX, tags=["Onboards"])

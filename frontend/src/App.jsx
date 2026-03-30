@@ -76,6 +76,15 @@ import {
   Notifications
 } from './pages/phase4'
 
+// Settings sub-pages (Phase 6)
+import {
+  TeamsPage, BranchesPage, PipelineStagePage, JobCategoriesPage,
+  InterviewSettingsPage, DocumentTemplatesPage, ResumeParsingPage, CandidateSourcesPage,
+  InvoiceSettingsPage, CommissionRulesPage, LocalizationPage,
+  EmailConfigPage, NotificationSettingsPage, SecuritySettingsPage,
+  DataManagementPage, CustomFieldsPage, BrandingPage, SLAConfigPage,
+} from './pages/settings'
+
 // Phase 5 - Reports, Analytics, Imports, Exports, Targets, Audit
 import ReportsPage from './pages/reports/ReportsPage'
 import ReportGenerator from './pages/reports/ReportGenerator'
@@ -322,14 +331,28 @@ function App() {
 
       {/* ADMIN ONLY */}
       <Route element={<CompanyRoute allowedRoles={['admin']}><Layout title="Admin" /></CompanyRoute>}>
-        <Route
-          path="/settings"
-          element={<PermissionRoute permission="crm_settings:view"><Settings /></PermissionRoute>}
-        />
-        <Route
-          path="/company-settings"
-          element={<PermissionRoute permission="crm_settings:view"><CompanySettings /></PermissionRoute>}
-        />
+        <Route path="/settings" element={<PermissionRoute permission="crm_settings:view"><Settings /></PermissionRoute>} />
+        <Route path="/company-settings" element={<PermissionRoute permission="crm_settings:view"><CompanySettings /></PermissionRoute>} />
+
+        {/* Settings sub-pages */}
+        <Route path="/settings/teams"                element={<PermissionRoute permission="crm_settings:view"><TeamsPage /></PermissionRoute>} />
+        <Route path="/settings/branches"             element={<PermissionRoute permission="crm_settings:view"><BranchesPage /></PermissionRoute>} />
+        <Route path="/settings/pipeline-stages"      element={<PermissionRoute permission="crm_settings:view"><PipelineStagePage /></PermissionRoute>} />
+        <Route path="/settings/job-categories"       element={<PermissionRoute permission="crm_settings:view"><JobCategoriesPage /></PermissionRoute>} />
+        <Route path="/settings/interview-settings"   element={<PermissionRoute permission="crm_settings:view"><InterviewSettingsPage /></PermissionRoute>} />
+        <Route path="/settings/document-templates"   element={<PermissionRoute permission="crm_settings:view"><DocumentTemplatesPage /></PermissionRoute>} />
+        <Route path="/settings/resume-parsing"       element={<PermissionRoute permission="crm_settings:view"><ResumeParsingPage /></PermissionRoute>} />
+        <Route path="/settings/candidate-sources"    element={<PermissionRoute permission="crm_settings:view"><CandidateSourcesPage /></PermissionRoute>} />
+        <Route path="/settings/invoice-settings"     element={<PermissionRoute permission="crm_settings:view"><InvoiceSettingsPage /></PermissionRoute>} />
+        <Route path="/settings/commission-rules"     element={<PermissionRoute permission="crm_settings:view"><CommissionRulesPage /></PermissionRoute>} />
+        <Route path="/settings/localization"         element={<PermissionRoute permission="crm_settings:view"><LocalizationPage /></PermissionRoute>} />
+        <Route path="/settings/email-config"         element={<PermissionRoute permission="crm_settings:view"><EmailConfigPage /></PermissionRoute>} />
+        <Route path="/settings/notification-settings" element={<PermissionRoute permission="crm_settings:view"><NotificationSettingsPage /></PermissionRoute>} />
+        <Route path="/settings/security"             element={<PermissionRoute permission="crm_settings:view"><SecuritySettingsPage /></PermissionRoute>} />
+        <Route path="/settings/data-management"      element={<PermissionRoute permission="crm_settings:view"><DataManagementPage /></PermissionRoute>} />
+        <Route path="/settings/custom-fields"        element={<PermissionRoute permission="crm_settings:view"><CustomFieldsPage /></PermissionRoute>} />
+        <Route path="/settings/branding"             element={<PermissionRoute permission="crm_settings:view"><BrandingPage /></PermissionRoute>} />
+        <Route path="/settings/sla-config"           element={<PermissionRoute permission="crm_settings:view"><SLAConfigPage /></PermissionRoute>} />
       </Route>
 
       {/* PARTNER ONLY */}
