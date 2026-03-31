@@ -2,7 +2,7 @@
 Settings Model - Phase 3
 Company settings including custom fields, interview stages, email templates
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Any, Dict
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -76,7 +76,7 @@ class CustomFieldDefinition(BaseModel):
     is_active: bool = Field(default=True)
     
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
 
@@ -163,7 +163,7 @@ class InterviewStageDefinition(BaseModel):
     is_active: bool = Field(default=True)
     
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
 
@@ -225,7 +225,7 @@ class EmailTemplate(BaseModel):
     is_active: bool = Field(default=True)
     
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
 

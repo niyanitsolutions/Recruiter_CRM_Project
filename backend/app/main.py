@@ -11,6 +11,7 @@ import os
 
 from app.core.config import settings
 from app.core.database import connect_to_mongo, close_mongo_connection
+from app.core.redis import init_redis, close_redis
 from app.services.plan_service import plan_service
 from app.services.subscription_reminder_service import reminder_background_loop
 
@@ -51,6 +52,8 @@ async def lifespan(app: FastAPI):
     print(f" Environment: {os.getenv('ENVIRONMENT', 'development')}")
     await connect_to_mongo()
     print(" Connected to MongoDB")
+    await init_redis()
+    print(" Redis initialized")
     seeded = await plan_service.seed_default_plans()
     print(f" Plans seeded/updated: {seeded}")
     # Start subscription reminder background task (runs every 24 hours)
@@ -59,6 +62,7 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     reminder_task.cancel()
+    await close_redis()
     await close_mongo_connection()
     print(" Shutting down CRM API Server...")
 
@@ -67,8 +71,8 @@ app = FastAPI(
     title="Multi-Tenant CRM System",
     description="SaaS-Grade Recruitment & Partner Platform",
     version="5.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
     lifespan=lifespan
 )
 

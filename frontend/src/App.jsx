@@ -439,7 +439,7 @@ function App() {
         <Route path="/partners/new"
           element={<PermissionRoute permission="partners:create"><PartnerForm /></PermissionRoute>} />
         <Route path="/partners/:id"
-          element={<PermissionRoute permission="partners:view"><Partners /></PermissionRoute>} />
+          element={<PermissionRoute permission="partners:view"><PartnerForm /></PermissionRoute>} />
         <Route path="/partners/:id/edit"
           element={<PermissionRoute permission="partners:edit"><PartnerForm /></PermissionRoute>} />
 

@@ -2,7 +2,7 @@
 Target Model - Phase 5
 Goals, targets, and performance tracking
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -165,8 +165,8 @@ class TargetModel(BaseModel):
     notify_on_achievement: bool = True
     
     # Audit
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = ""
     updated_by: Optional[str] = None
     is_deleted: bool = False
@@ -191,7 +191,7 @@ class TargetHistoryModel(BaseModel):
     related_entity_id: Optional[str] = None
     
     # Audit
-    recorded_at: datetime = Field(default_factory=datetime.utcnow)
+    recorded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     recorded_by: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -216,7 +216,7 @@ class TargetTemplateModel(BaseModel):
     assign_to_roles: List[str] = []  # Role names to auto-assign
     
     is_active: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = ""
 
     model_config = ConfigDict(from_attributes=True)

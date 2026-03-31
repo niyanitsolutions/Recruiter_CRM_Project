@@ -4,7 +4,7 @@ Handles interview scheduling, feedback, and management
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List
-from datetime import date
+from datetime import date, timezone
 
 from app.models.company.interview import (
     InterviewCreate, InterviewUpdate, InterviewReschedule, InterviewFeedbackSubmit,
@@ -166,7 +166,7 @@ async def update_interview(
     if update_dict:
         from datetime import datetime
         update_dict["updated_by"] = current_user["id"]
-        update_dict["updated_at"] = datetime.utcnow()
+        update_dict["updated_at"] = datetime.now(timezone.utc)
         await collection.update_one({"_id": interview_id}, {"$set": update_dict})
     
     interview = await InterviewService.get_interview(db, interview_id)
@@ -247,7 +247,7 @@ async def confirm_interview(
             "$set": {
                 "status": InterviewStatus.CONFIRMED.value,
                 "updated_by": current_user["id"],
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.now(timezone.utc)
             }
         }
     )
@@ -273,7 +273,7 @@ async def start_interview(
             "$set": {
                 "status": InterviewStatus.IN_PROGRESS.value,
                 "updated_by": current_user["id"],
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.now(timezone.utc)
             }
         }
     )
@@ -300,7 +300,7 @@ async def mark_no_show(
                 "status": InterviewStatus.NO_SHOW.value,
                 "result": InterviewResult.FAILED.value,
                 "updated_by": current_user["id"],
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.now(timezone.utc)
             }
         }
     )

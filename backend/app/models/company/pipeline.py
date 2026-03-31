@@ -2,7 +2,7 @@
 Pipeline Model - ATS Upgrade
 Job-specific interview pipelines with customizable stages
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -59,7 +59,7 @@ class PipelineModel(BaseModel):
     is_default: bool = Field(default=False)  # Company default pipeline
 
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
 

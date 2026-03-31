@@ -2,7 +2,7 @@
 Analytics Model - Phase 5
 Dashboard analytics, KPIs, and chart data structures
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -258,8 +258,8 @@ class DashboardLayout(BaseModel):
     row_height: int = 100
     
     # Audit
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_deleted: bool = False
 
     model_config = ConfigDict(from_attributes=True)
@@ -285,7 +285,7 @@ class DashboardResponse(BaseModel):
     financial: Optional[FinancialAnalytics] = None
     team: Optional[TeamAnalytics] = None
     onboarding: Optional[OnboardingAnalytics] = None
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ChartResponse(BaseModel):
@@ -293,7 +293,7 @@ class ChartResponse(BaseModel):
     config: ChartConfig
     series: List[ChartSeries]
     total_value: Optional[float] = None
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class WidgetDataResponse(BaseModel):
@@ -302,7 +302,7 @@ class WidgetDataResponse(BaseModel):
     widget_type: str
     title: str
     data: Any
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class SaveDashboardRequest(BaseModel):

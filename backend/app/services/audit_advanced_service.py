@@ -3,7 +3,7 @@ Advanced Audit Service - Phase 5
 Session tracking, security alerts, and enhanced audit features
 (Separate from Phase 2 AuditService which handles basic audit logging)
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
 import math
@@ -88,7 +88,7 @@ class AuditAdvancedService:
             "http_method": http_method,
             "response_status": response_status,
             "duration_ms": duration_ms,
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         }
         
         await self.audit_logs.insert_one(audit_log)
@@ -129,10 +129,12 @@ class AuditAdvancedService:
             else:
                 query["timestamp"] = {"$lte": request.end_date}
         if request.search:
+            import re as _re
+            _s = _re.escape(request.search)
             query["$or"] = [
-                {"description": {"$regex": request.search, "$options": "i"}},
-                {"entity_name": {"$regex": request.search, "$options": "i"}},
-                {"user_name": {"$regex": request.search, "$options": "i"}}
+                {"description": {"$regex": _s, "$options": "i"}},
+                {"entity_name": {"$regex": _s, "$options": "i"}},
+                {"user_name": {"$regex": _s, "$options": "i"}}
             ]
         
         total = await self.audit_logs.count_documents(query)
@@ -404,8 +406,8 @@ class AuditAdvancedService:
             "ip_address": ip_address,
             "location": location.model_dump(),
             "device": device.model_dump(),
-            "created_at": datetime.utcnow(),
-            "last_activity": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "last_activity": datetime.now(timezone.utc),
             "expires_at": expires_at,
             "request_count": 0,
             "is_remembered": is_remembered,
@@ -471,7 +473,7 @@ class AuditAdvancedService:
         result = await self.sessions.update_one(
             {"id": session_id, "status": SessionStatus.ACTIVE.value},
             {
-                "$set": {"last_activity": datetime.utcnow()},
+                "$set": {"last_activity": datetime.now(timezone.utc)},
                 "$inc": {"request_count": 1}
             }
         )
@@ -489,7 +491,7 @@ class AuditAdvancedService:
             {
                 "$set": {
                     "status": SessionStatus.REVOKED.value,
-                    "ended_at": datetime.utcnow()
+                    "ended_at": datetime.now(timezone.utc)
                 }
             }
         )
@@ -514,7 +516,7 @@ class AuditAdvancedService:
             {
                 "$set": {
                     "status": SessionStatus.REVOKED.value,
-                    "ended_at": datetime.utcnow()
+                    "ended_at": datetime.now(timezone.utc)
                 }
             }
         )
@@ -525,12 +527,12 @@ class AuditAdvancedService:
         result = await self.sessions.update_many(
             {
                 "status": SessionStatus.ACTIVE.value,
-                "expires_at": {"$lt": datetime.utcnow()}
+                "expires_at": {"$lt": datetime.now(timezone.utc)}
             },
             {
                 "$set": {
                     "status": SessionStatus.EXPIRED.value,
-                    "ended_at": datetime.utcnow()
+                    "ended_at": datetime.now(timezone.utc)
                 }
             }
         )
@@ -557,7 +559,7 @@ class AuditAdvancedService:
             "ip_address": ip_address,
             "location": GeoLocation(ip_address=ip_address).model_dump(),
             "device": device.model_dump(),
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         }
         
         await self.login_history.insert_one(login_log)
@@ -642,7 +644,7 @@ class AuditAdvancedService:
         recent_failures = await self.login_history.count_documents({
             "user_id": user_id,
             "success": False,
-            "timestamp": {"$gte": datetime.utcnow() - timedelta(minutes=15)}
+            "timestamp": {"$gte": datetime.now(timezone.utc) - timedelta(minutes=15)}
         })
         
         if recent_failures >= 5:
@@ -690,7 +692,7 @@ class AuditAdvancedService:
             "related_audit_ids": related_audit_ids or [],
             "metadata": metadata or {},
             "is_resolved": False,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc)
         }
         
         await self.security_alerts.insert_one(alert)
@@ -748,7 +750,7 @@ class AuditAdvancedService:
             {
                 "$set": {
                     "is_resolved": True,
-                    "resolved_at": datetime.utcnow(),
+                    "resolved_at": datetime.now(timezone.utc),
                     "resolved_by": user_id,
                     "resolution_notes": resolution_notes
                 }
@@ -862,7 +864,7 @@ class AuditAdvancedService:
     
     def _get_time_ago(self, timestamp: datetime) -> str:
         """Get human-readable time ago string"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         diff = now - timestamp
         
         if diff.days > 365:

@@ -2,7 +2,7 @@
 Export Service - Phase 5
 Handles data export to Excel, CSV, and PDF
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
 import io
@@ -49,7 +49,7 @@ class ExportService:
             "status": ExportStatus.PENDING.value,
             "total_records": 0,
             "processed_records": 0,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
             "created_by": user_id,
             "is_deleted": False
         }
@@ -140,7 +140,7 @@ class ExportService:
             # Update status to processing
             await self.export_jobs.update_one(
                 {"id": export_id},
-                {"$set": {"status": ExportStatus.PROCESSING.value, "started_at": datetime.utcnow()}}
+                {"$set": {"status": ExportStatus.PROCESSING.value, "started_at": datetime.now(timezone.utc)}}
             )
             
             # Get data based on entity type
@@ -172,13 +172,13 @@ class ExportService:
                 {"id": export_id},
                 {"$set": {
                     "status": ExportStatus.COMPLETED.value,
-                    "completed_at": datetime.utcnow(),
+                    "completed_at": datetime.now(timezone.utc),
                     "total_records": len(data),
                     "processed_records": len(data),
                     "file_url": file_url,
                     "file_name": file_name,
                     "file_size": len(file_content) if isinstance(file_content, bytes) else len(file_content.encode()),
-                    "expires_at": datetime.utcnow() + timedelta(days=7)
+                    "expires_at": datetime.now(timezone.utc) + timedelta(days=7)
                 }}
             )
             
@@ -187,7 +187,7 @@ class ExportService:
                 {"id": export_id},
                 {"$set": {
                     "status": ExportStatus.FAILED.value,
-                    "completed_at": datetime.utcnow(),
+                    "completed_at": datetime.now(timezone.utc),
                     "error_message": str(e)
                 }}
             )

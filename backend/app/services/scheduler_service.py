@@ -2,7 +2,7 @@
 Scheduler Service - Phase 5
 Background job execution and task scheduling
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, Dict, Any
 from bson import ObjectId
 import traceback
@@ -51,8 +51,8 @@ class SchedulerService:
             "timeout_seconds": 3600,
             "run_count": 0,
             "failure_count": 0,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
             "created_by": user_id,
             "is_deleted": False
         }
@@ -129,7 +129,7 @@ class SchedulerService:
             query["company_id"] = company_id
         
         update_data = data.model_dump(exclude_unset=True)
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = datetime.now(timezone.utc)
         
         if "schedule" in update_data and update_data["schedule"]:
             schedule = TaskSchedule(**update_data["schedule"])
@@ -172,7 +172,7 @@ class SchedulerService:
         if company_id:
             query["company_id"] = company_id
         
-        update_data = {"is_active": is_active, "updated_at": datetime.utcnow()}
+        update_data = {"is_active": is_active, "updated_at": datetime.now(timezone.utc)}
         
         if is_active:
             # Recalculate next run
@@ -205,7 +205,7 @@ class SchedulerService:
     
     async def run_due_tasks(self) -> int:
         """Run all tasks that are due (called by scheduler)"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         cursor = self.tasks.find({
             "is_active": True,
@@ -240,7 +240,7 @@ class SchedulerService:
             "task_id": task["id"],
             "task_type": task["task_type"],
             "task_name": task["name"],
-            "started_at": datetime.utcnow(),
+            "started_at": datetime.now(timezone.utc),
             "status": TaskStatus.RUNNING.value,
             "retry_attempt": 0,
             "triggered_by": triggered_by,
@@ -260,7 +260,7 @@ class SchedulerService:
             result = await self._run_task_logic(task_type, task)
             
             # Update execution log
-            completed_at = datetime.utcnow()
+            completed_at = datetime.now(timezone.utc)
             duration_ms = int((completed_at - execution["started_at"]).total_seconds() * 1000)
             
             await self.execution_logs.update_one(
@@ -303,7 +303,7 @@ class SchedulerService:
                 {"id": execution_id},
                 {"$set": {
                     "status": TaskStatus.FAILED.value,
-                    "completed_at": datetime.utcnow(),
+                    "completed_at": datetime.now(timezone.utc),
                     "error_message": error_message,
                     "stack_trace": stack_trace
                 }}
@@ -313,7 +313,7 @@ class SchedulerService:
                 {"id": task["id"]},
                 {
                     "$set": {
-                        "last_run": datetime.utcnow(),
+                        "last_run": datetime.now(timezone.utc),
                         "last_status": TaskStatus.FAILED.value
                     },
                     "$inc": {"run_count": 1, "failure_count": 1}
@@ -526,9 +526,9 @@ class SchedulerService:
         result = await self.db.user_sessions.update_many(
             {
                 "status": "active",
-                "expires_at": {"$lt": datetime.utcnow()}
+                "expires_at": {"$lt": datetime.now(timezone.utc)}
             },
-            {"$set": {"status": "expired", "ended_at": datetime.utcnow()}}
+            {"$set": {"status": "expired", "ended_at": datetime.now(timezone.utc)}}
         )
         
         return TaskResult(

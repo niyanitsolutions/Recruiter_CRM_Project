@@ -2,7 +2,7 @@
 Role Service - Phase 2
 Handles role and permission management within a company
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Tuple
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -44,7 +44,7 @@ class RoleService:
                     "is_system_role": True,
                     "is_active": True,
                     "created_by": "system",
-                    "created_at": datetime.utcnow(),
+                    "created_at": datetime.now(timezone.utc),
                     "is_deleted": False
                 }
                 
@@ -76,7 +76,7 @@ class RoleService:
                 return False, f"Invalid permissions: {', '.join(invalid_perms)}", None
             
             role_id = str(ObjectId())
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             role_doc = {
                 "_id": role_id,
@@ -231,7 +231,7 @@ class RoleService:
                 update_dict["permissions"] = cleaned
             
             update_dict["updated_by"] = updated_by_id
-            update_dict["updated_at"] = datetime.utcnow()
+            update_dict["updated_at"] = datetime.now(timezone.utc)
             
             await self.collection.update_one(
                 {"_id": role_id},
@@ -303,7 +303,7 @@ class RoleService:
             if user_count > 0:
                 return False, f"Cannot delete role: {user_count} users are assigned to this role"
             
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             await self.collection.update_one(
                 {"_id": role_id},
@@ -402,7 +402,7 @@ class RoleService:
                         "role_id": role.get("id"),
                         "permissions": permissions,
                         "updated_by": assigned_by_id,
-                        "updated_at": datetime.utcnow()
+                        "updated_at": datetime.now(timezone.utc)
                     }
                 }
             )

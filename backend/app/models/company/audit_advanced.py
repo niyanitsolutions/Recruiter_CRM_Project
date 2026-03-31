@@ -2,7 +2,7 @@
 Advanced Audit Model - Phase 5
 Enhanced audit logging, session tracking, and security monitoring
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -184,7 +184,7 @@ class AuditLogModel(BaseModel):
     response_status: Optional[int] = None
     
     # Timing
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     duration_ms: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -211,8 +211,8 @@ class SessionModel(BaseModel):
     device: DeviceInfo
     
     # Timing
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    last_activity: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    last_activity: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: datetime
     ended_at: Optional[datetime] = None
     
@@ -255,7 +255,7 @@ class SecurityAlertModel(BaseModel):
     resolution_notes: Optional[str] = None
     
     # Timing
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -276,7 +276,7 @@ class LoginHistoryModel(BaseModel):
     device: DeviceInfo
     
     # Timing
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = ConfigDict(from_attributes=True)
 

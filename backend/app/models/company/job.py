@@ -2,7 +2,7 @@
 Job Model - Phase 3
 Job postings with eligibility criteria and custom fields
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -178,7 +178,7 @@ class JobModel(BaseModel):
     
     # ===== Timestamps =====
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
     

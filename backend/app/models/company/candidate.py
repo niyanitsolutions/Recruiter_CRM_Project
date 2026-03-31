@@ -2,7 +2,7 @@
 Candidate Model - Phase 3
 Candidate profiles with AI resume parsing support
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from pydantic import ConfigDict, BaseModel, Field, EmailStr, field_validator
 from enum import Enum
@@ -103,7 +103,7 @@ class DocumentItem(BaseModel):
     name: str
     file_url: str
     file_type: Optional[str] = None  # resume, photo, id_proof, certificate
-    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+    uploaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class CustomFieldValue(BaseModel):
@@ -221,7 +221,7 @@ class CandidateModel(BaseModel):
     
     # ===== Timestamps =====
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
     

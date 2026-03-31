@@ -1,8 +1,9 @@
+import re
 """
 User Service - Phase 2
 Complete user management within a company
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Tuple
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -103,7 +104,7 @@ class UserService:
             
             # Create user document
             user_id = str(ObjectId())
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             user_doc = {
                 "_id": user_id,
@@ -248,11 +249,11 @@ class UserService:
 
         if search:
             query["$or"] = [
-                {"full_name": {"$regex": search, "$options": "i"}},
-                {"username": {"$regex": search, "$options": "i"}},
-                {"email": {"$regex": search, "$options": "i"}},
-                {"mobile": {"$regex": search, "$options": "i"}},
-                {"employee_id": {"$regex": search, "$options": "i"}}
+                {"full_name": {"$regex": re.escape(search), "$options": "i"}},
+                {"username": {"$regex": re.escape(search), "$options": "i"}},
+                {"email": {"$regex": re.escape(search), "$options": "i"}},
+                {"mobile": {"$regex": re.escape(search), "$options": "i"}},
+                {"employee_id": {"$regex": re.escape(search), "$options": "i"}}
             ]
         
         if role:
@@ -395,7 +396,7 @@ class UserService:
                 del update_dict["user_type"]  # ignore explicit None
 
             update_dict["updated_by"] = updated_by_id
-            update_dict["updated_at"] = datetime.utcnow()
+            update_dict["updated_at"] = datetime.now(timezone.utc)
 
             # Perform update
             await self.collection.update_one(
@@ -453,7 +454,7 @@ class UserService:
                 return False, "No fields to update", None
             
             update_dict["updated_by"] = user_id
-            update_dict["updated_at"] = datetime.utcnow()
+            update_dict["updated_at"] = datetime.now(timezone.utc)
             
             await self.collection.update_one(
                 {"_id": user_id},
@@ -525,9 +526,9 @@ class UserService:
                 {
                     "$set": {
                         "password_hash": new_hash,
-                        "password_changed_at": datetime.utcnow(),
+                        "password_changed_at": datetime.now(timezone.utc),
                         "must_change_password": False,
-                        "updated_at": datetime.utcnow()
+                        "updated_at": datetime.now(timezone.utc)
                     }
                 }
             )
@@ -580,12 +581,12 @@ class UserService:
                 {
                     "$set": {
                         "password_hash": new_hash,
-                        "password_changed_at": datetime.utcnow(),
+                        "password_changed_at": datetime.now(timezone.utc),
                         "must_change_password": password_data.must_change_password,
                         "failed_login_attempts": 0,
                         "locked_until": None,
                         "updated_by": admin_id,
-                        "updated_at": datetime.utcnow()
+                        "updated_at": datetime.now(timezone.utc)
                     }
                 }
             )
@@ -639,7 +640,7 @@ class UserService:
                     "$set": {
                         "status": status,
                         "updated_by": updated_by_id,
-                        "updated_at": datetime.utcnow()
+                        "updated_at": datetime.now(timezone.utc)
                     }
                 }
             )
@@ -700,7 +701,7 @@ class UserService:
             if user_id == deleted_by_id:
                 return False, "Cannot delete yourself"
             
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             await self.collection.update_one(
                 {"_id": user_id},
@@ -752,7 +753,7 @@ class UserService:
         
         # Recently logged in (last 24 hours)
         from datetime import timedelta
-        day_ago = datetime.utcnow() - timedelta(days=1)
+        day_ago = datetime.now(timezone.utc) - timedelta(days=1)
         logged_in_today = await self.collection.count_documents({
             "is_deleted": False,
             "last_login": {"$gte": day_ago}

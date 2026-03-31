@@ -2,7 +2,7 @@
 Interview Service - Phase 3
 Business logic for interview scheduling and feedback
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -188,7 +188,7 @@ class InterviewService:
             "scheduled_by": scheduled_by,
             "scheduled_by_name": scheduled_by_name,
             "created_by": scheduled_by,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
             "is_deleted": False
         }
 
@@ -351,7 +351,7 @@ class InterviewService:
             "to_date": _to_dt(reschedule_data.new_date),
             "reason": reschedule_data.reason,
             "rescheduled_by": rescheduled_by,
-            "rescheduled_at": datetime.utcnow()
+            "rescheduled_at": datetime.now(timezone.utc)
         }
         
         # Combine date and time
@@ -373,7 +373,7 @@ class InterviewService:
                     "status": InterviewStatus.RESCHEDULED.value,
                     "is_rescheduled": True,
                     "updated_by": rescheduled_by,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 },
                 "$inc": {"reschedule_count": 1},
                 "$push": {"reschedule_history": reschedule_entry}
@@ -416,7 +416,7 @@ class InterviewService:
             "remarks": feedback_data.remarks,
             "feedback_by": submitted_by,
             "feedback_by_name": user_name,
-            "feedback_at": datetime.utcnow()
+            "feedback_at": datetime.now(timezone.utc)
         }
         
         await collection.update_one(
@@ -428,7 +428,7 @@ class InterviewService:
                     "result": feedback_data.result,
                     "status": InterviewStatus.COMPLETED.value,
                     "updated_by": submitted_by,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )
@@ -483,9 +483,9 @@ class InterviewService:
                     "status": InterviewStatus.CANCELLED.value,
                     "cancellation_reason": reason,
                     "cancelled_by": cancelled_by,
-                    "cancelled_at": datetime.utcnow(),
+                    "cancelled_at": datetime.now(timezone.utc),
                     "updated_by": cancelled_by,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )

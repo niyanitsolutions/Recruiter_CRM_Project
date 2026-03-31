@@ -45,12 +45,6 @@ const TopBar = ({ title, subtitle, actions }) => {
     navigate('/login', { replace: true })
   }
 
-  const notifications = [
-    { id: 1, title: 'New user registered', time: '5 min ago', unread: true },
-    { id: 2, title: 'Payment received', time: '1 hour ago', unread: true },
-    { id: 3, title: 'Plan upgraded', time: '2 hours ago', unread: false },
-  ]
-
   const profileMenuItems = isSuperAdmin
     ? [
         { icon: User, label: 'Profile', onClick: () => navigate('/super-admin/profile') },
@@ -60,7 +54,7 @@ const TopBar = ({ title, subtitle, actions }) => {
     : [
         { icon: User, label: 'Edit Profile', onClick: () => navigate('/profile') },
         { icon: Building2, label: 'Company Settings', onClick: () => navigate('/company-settings') },
-        { icon: CreditCard, label: 'Billing', onClick: () => navigate('/billing') },
+        { icon: CreditCard, label: 'Billing & Plans', onClick: () => navigate('/upgrade-plan') },
         { icon: HelpCircle, label: 'Help', onClick: () => window.open('mailto:support@example.com') },
       ]
 
@@ -97,32 +91,13 @@ const TopBar = ({ title, subtitle, actions }) => {
               <div className="px-4 py-3 border-b border-surface-100">
                 <h3 className="font-semibold text-surface-900">Notifications</h3>
               </div>
-              <div className="max-h-80 overflow-y-auto">
-                {notifications.map((notif) => (
-                  <button
-                    key={notif.id}
-                    onClick={() => setIsNotificationsOpen(false)}
-                    className={clsx(
-                      'w-full px-4 py-3 text-left hover:bg-surface-50 transition-colors border-b border-surface-100 last:border-0',
-                      notif.unread && 'bg-accent-50/50'
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      {notif.unread && (
-                        <span className="w-2 h-2 mt-2 bg-accent-500 rounded-full flex-shrink-0" />
-                      )}
-                      <div className={clsx(!notif.unread && 'ml-5')}>
-                        <p className="text-sm font-medium text-surface-900">{notif.title}</p>
-                        <p className="text-xs text-surface-500">{notif.time}</p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+              <div className="px-4 py-8 text-center text-sm text-surface-400">
+                No new notifications
               </div>
               <div className="px-4 py-2 border-t border-surface-100">
                 <button
                   className="text-sm text-accent-600 hover:text-accent-700 font-medium"
-                  onClick={() => setIsNotificationsOpen(false)}
+                  onClick={() => { setIsNotificationsOpen(false); navigate('/notifications') }}
                 >
                   View all notifications
                 </button>

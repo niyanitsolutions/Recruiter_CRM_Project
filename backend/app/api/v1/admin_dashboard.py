@@ -3,7 +3,7 @@ Company Admin Dashboard API - Phase 2
 Handles company admin dashboard data
 """
 from fastapi import APIRouter, Depends, HTTPException
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 
 from app.services.user_service import UserService
@@ -188,7 +188,7 @@ async def get_system_health(
     db = Depends(get_company_db),
 ):
     """Get system health indicators"""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     day_ago = now - timedelta(days=1)
     week_ago = now - timedelta(days=7)
     

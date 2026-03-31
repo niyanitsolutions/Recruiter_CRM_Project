@@ -78,9 +78,11 @@ async def list_my_tenants(
     if status_filter:
         query["status"] = status_filter
     if search:
+        import re as _re
+        _s = _re.escape(search)
         query["$or"] = [
-            {"company_name": {"$regex": search, "$options": "i"}},
-            {"owner.email": {"$regex": search, "$options": "i"}},
+            {"company_name": {"$regex": _s, "$options": "i"}},
+            {"owner.email": {"$regex": _s, "$options": "i"}},
         ]
 
     total = await master_db.tenants.count_documents(query)

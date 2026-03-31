@@ -2,7 +2,7 @@
 Report Model - Phase 5
 Report configurations, saved reports, and scheduled reports
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -212,8 +212,8 @@ class SavedReportModel(BaseModel):
     next_run: Optional[datetime] = None
     
     # Audit
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = ""
     updated_by: Optional[str] = None
     is_deleted: bool = False
@@ -246,7 +246,7 @@ class ReportExecutionLog(BaseModel):
     trigger_type: str = "manual"  # manual, scheduled, api
     
     # Audit
-    executed_at: datetime = Field(default_factory=datetime.utcnow)
+    executed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = ConfigDict(from_attributes=True)
 

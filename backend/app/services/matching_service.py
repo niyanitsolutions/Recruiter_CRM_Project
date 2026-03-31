@@ -2,7 +2,7 @@
 Matching Service — Naukri-style ATS scoring engine
 Computes candidate-job match scores and stores in matching_results collection.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -157,7 +157,7 @@ class MatchingService:
         ).limit(limit).to_list(length=limit)
 
         docs = []
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         for cand in candidates:
             s = MatchingService._skill_score(job, cand)

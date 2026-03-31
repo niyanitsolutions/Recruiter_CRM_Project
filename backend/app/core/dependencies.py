@@ -9,33 +9,20 @@ from jose import jwt, JWTError
 from datetime import datetime, timezone
 
 from app.core.config import settings
+from app.core.database import get_master_db as _db_get_master_db, get_company_db as _db_get_company_db
 
 # Security scheme
 security = HTTPBearer()
 
-# Database connection manager (simplified - in production use proper connection pooling)
-_master_db = None
-_company_dbs = {}
-
 
 async def get_master_db():
-    """Get master database connection"""
-    global _master_db
-    if _master_db is None:
-        from motor.motor_asyncio import AsyncIOMotorClient
-        client = AsyncIOMotorClient(settings.MONGODB_URI)
-        _master_db = client[settings.MASTER_DB_NAME]
-    return _master_db
+    """Get master database connection via the shared DatabaseManager."""
+    return _db_get_master_db()
 
 
 async def get_company_db_by_id(company_id: str):
-    """Get company-specific database connection"""
-    global _company_dbs
-    if company_id not in _company_dbs:
-        from motor.motor_asyncio import AsyncIOMotorClient
-        client = AsyncIOMotorClient(settings.MONGODB_URI)
-        _company_dbs[company_id] = client[f"company_{company_id}_db"]
-    return _company_dbs[company_id]
+    """Get company-specific database via the shared DatabaseManager."""
+    return _db_get_company_db(company_id)
 
 
 def decode_token(token: str) -> dict:

@@ -26,8 +26,11 @@ const Clients = () => {
   const [types, setTypes] = useState([])
 
   useEffect(() => {
-    loadClients()
     loadDropdowns()
+  }, [])
+
+  useEffect(() => {
+    loadClients()
   }, [pagination.page, filters, activeTab])
 
   const loadDropdowns = async () => {

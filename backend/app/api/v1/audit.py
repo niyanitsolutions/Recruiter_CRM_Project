@@ -4,7 +4,7 @@ Advanced audit logging, session tracking, and security monitoring endpoints
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from typing import Optional, List
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 
 from app.core.dependencies import (
     get_current_user,
@@ -145,9 +145,9 @@ async def get_audit_summary(
     service = AuditService(db)
     
     if not start_date:
-        start_date = datetime.utcnow() - timedelta(days=30)
+        start_date = datetime.now(timezone.utc) - timedelta(days=30)
     if not end_date:
-        end_date = datetime.utcnow()
+        end_date = datetime.now(timezone.utc)
     
     return await service.get_audit_summary(
         company_id=current_user["company_id"],

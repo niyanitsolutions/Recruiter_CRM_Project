@@ -3,7 +3,6 @@ Authentication Schemas
 Request/Response schemas for authentication endpoints
 """
 
-from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field, EmailStr
 
@@ -43,18 +42,19 @@ class TokenResponse(BaseModel):
 class LoginResponse(BaseModel):
     """
     Login response with user context
-    
+
     Includes:
     - JWT tokens
     - User information
     - Company context (for tenant users)
     - Permissions
+    - Subscription / plan info
     """
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int
-    
+
     # User Info
     user_id: str
     username: str
@@ -62,17 +62,27 @@ class LoginResponse(BaseModel):
     email: str
     role: str
     permissions: List[str]
-    
-    # Company Context (null for SuperAdmin)
+    designation: Optional[str] = None
+    department_id: Optional[str] = None
+    reporting_to: Optional[str] = None
+
+    # Company Context (null for SuperAdmin / Seller)
     company_id: Optional[str] = None
     company_name: Optional[str] = None
-    
+
     # Flags
     is_super_admin: bool = False
     is_owner: bool = False
     is_seller: bool = False
     seller_id: Optional[str] = None
     user_type: Optional[str] = None
+
+    # Subscription / plan info (tenant users only)
+    plan_name: Optional[str] = None
+    plan_display_name: Optional[str] = None
+    plan_expiry: Optional[str] = None
+    total_user_seats: Optional[int] = None
+    is_trial: Optional[bool] = None
 
 
 class RefreshTokenRequest(BaseModel):

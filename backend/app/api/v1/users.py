@@ -150,6 +150,7 @@ async def validate_field(
     field: str = Query(..., pattern="^(username|email|mobile)$"),
     value: str = Query(..., min_length=1),
     exclude_user_id: Optional[str] = None,
+    _: dict = Depends(get_current_user),
     db = Depends(get_company_db)
 ):
     """Validate if a field value is unique"""

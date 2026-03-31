@@ -28,24 +28,26 @@ def _resolve_effective_permissions(user: dict, role_doc: Optional[dict]) -> list
     Single source of truth for computing effective permissions.
 
     Priority order:
-      1. If user has a stored permissions list → use it directly (pre-computed by frontend).
-      2. If a role document exists in DB → use role document's permissions.
-      3. Fallback to the hardcoded ROLE_PERMISSIONS map.
+      1. override_permissions == True  → user.permissions (individual override, even if [])
+      2. Role document in DB           → role_doc.permissions (role-based, always fresh)
+      3. Hardcoded ROLE_PERMISSIONS    → last-resort fallback
 
     dashboard:view is always added to ensure navigation is always accessible.
     This function is used at both login and token-refresh time.
     """
-    stored_perms = user.get("permissions")
-    if stored_perms:
-        perms = set(stored_perms)
+    # Priority 1: user has an individual permission override
+    if bool(user.get("override_permissions")):
+        perms = set(user.get("permissions") or [])
         perms.add("dashboard:view")
         return list(perms)
 
+    # Priority 2: role document exists in DB — always reflects the latest role settings
     if role_doc and role_doc.get("permissions"):
         perms = set(role_doc["permissions"])
         perms.add("dashboard:view")
         return list(perms)
 
+    # Priority 3: hardcoded fallback (role not in DB yet, or role has no permissions set)
     role_name = user.get("role", "")
     perms = set(ROLE_PERMISSIONS.get(role_name, []))
     perms.add("dashboard:view")

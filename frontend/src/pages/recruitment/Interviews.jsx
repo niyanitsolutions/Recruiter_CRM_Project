@@ -27,8 +27,11 @@ const Interviews = () => {
   const [statuses, setStatuses] = useState([])
 
   useEffect(() => {
-    loadData()
     loadDropdowns()
+  }, [])
+
+  useEffect(() => {
+    loadData()
   }, [activeTab, pagination.page, filters])
 
   const loadDropdowns = async () => {

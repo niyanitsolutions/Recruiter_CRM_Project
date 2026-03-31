@@ -255,13 +255,13 @@ const authSlice = createSlice({
           role:        action.payload.role,
           userType:    action.payload.user_type    || 'internal',
           designation: action.payload.designation  || '',
-          permissions: action.payload.permissions,
-          companyId:   action.payload.company_id,
-          companyName: action.payload.company_name,
-          isSuperAdmin: action.payload.is_super_admin,
+          permissions: action.payload.permissions  || [],
+          companyId:   action.payload.company_id   || null,
+          companyName: action.payload.company_name || null,
+          isSuperAdmin: action.payload.is_super_admin || false,
           isSeller:    action.payload.is_seller    || false,
           sellerId:    action.payload.seller_id    || null,
-          isOwner:     action.payload.is_owner,
+          isOwner:     action.payload.is_owner     || false,
         }
         setToken(action.payload.access_token)
         setUser(state.user)

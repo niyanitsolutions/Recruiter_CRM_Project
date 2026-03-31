@@ -2,7 +2,7 @@
 Role Model - Company Level
 Defines roles and their permissions within a company
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -321,7 +321,7 @@ class RoleModel(BaseModel):
     is_system_role: bool = Field(default=False)  # System roles cannot be deleted
     is_active: bool = Field(default=True)
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
     is_deleted: bool = Field(default=False)

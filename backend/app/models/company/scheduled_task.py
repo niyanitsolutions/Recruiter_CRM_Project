@@ -2,7 +2,7 @@
 Scheduled Task Model - Phase 5
 Background jobs, automation, and task scheduling
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -164,8 +164,8 @@ class ScheduledTaskModel(BaseModel):
     failure_count: int = 0
     
     # Audit
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: Optional[str] = None
     is_deleted: bool = False
 
@@ -183,7 +183,7 @@ class TaskExecutionLog(BaseModel):
     task_name: str
     
     # Execution details
-    started_at: datetime = Field(default_factory=datetime.utcnow)
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
     duration_ms: Optional[int] = None
     

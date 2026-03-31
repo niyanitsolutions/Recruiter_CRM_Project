@@ -218,7 +218,6 @@ const InterviewForm = () => {
         payload.job_id = formData.job_id
       }
 
-      console.log('Scheduling interview payload:', payload)
       await interviewService.scheduleInterview(payload)
       toast.success('Interview scheduled successfully')
       navigate('/interviews')

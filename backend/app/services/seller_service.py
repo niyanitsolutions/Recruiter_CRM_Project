@@ -77,9 +77,9 @@ class SellerService:
             query["status"] = status
         if search:
             query["$or"] = [
-                {"seller_name": {"$regex": search, "$options": "i"}},
-                {"company_name": {"$regex": search, "$options": "i"}},
-                {"email": {"$regex": search, "$options": "i"}},
+                {"seller_name": {"$regex": re.escape(search), "$options": "i"}},
+                {"company_name": {"$regex": re.escape(search), "$options": "i"}},
+                {"email": {"$regex": re.escape(search), "$options": "i"}},
             ]
 
         total = await master_db.sellers.count_documents(query)

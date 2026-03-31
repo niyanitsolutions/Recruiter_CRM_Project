@@ -40,8 +40,11 @@ const Candidates = () => {
   const [applyingJobId, setApplyingJobId] = useState(null)
 
   useEffect(() => {
-    loadCandidates()
     loadDropdowns()
+  }, [])
+
+  useEffect(() => {
+    loadCandidates()
   }, [pagination.page, filters, activeTab])
 
   const loadDropdowns = async () => {

@@ -1,8 +1,9 @@
+import re
 """
 Designation Service - Phase 2
 Handles designation/job title management within a company
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Tuple
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -37,7 +38,7 @@ class DesignationService:
         try:
             # Check for duplicate name
             existing = await self.collection.find_one({
-                "name": {"$regex": f"^{desig_data.name}$", "$options": "i"},
+                "name": {"$regex": f"^{re.escape(desig_data.name)}$", "$options": "i"},
                 "is_deleted": False
             })
             
@@ -63,7 +64,7 @@ class DesignationService:
                     return False, "Department not found", None
             
             desig_id = str(ObjectId())
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             desig_doc = {
                 "_id": desig_id,
@@ -223,7 +224,7 @@ class DesignationService:
             if "name" in update_dict:
                 dup = await self.collection.find_one({
                     "_id": {"$ne": desig_id},
-                    "name": {"$regex": f"^{update_dict['name']}$", "$options": "i"},
+                    "name": {"$regex": f"^{re.escape(update_dict['name'])}$", "$options": "i"},
                     "is_deleted": False
                 })
                 if dup:
@@ -250,7 +251,7 @@ class DesignationService:
                     return False, "Department not found", None
             
             update_dict["updated_by"] = updated_by_id
-            update_dict["updated_at"] = datetime.utcnow()
+            update_dict["updated_at"] = datetime.now(timezone.utc)
             
             await self.collection.update_one(
                 {"_id": desig_id},
@@ -307,7 +308,7 @@ class DesignationService:
             if user_count > 0:
                 return False, f"Cannot delete designation: {user_count} users have this designation"
             
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             await self.collection.update_one(
                 {"_id": desig_id},

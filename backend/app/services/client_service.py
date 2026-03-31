@@ -1,8 +1,9 @@
+import re
 """
 Client Service - Phase 3
 Business logic for client (hiring company) management
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -33,7 +34,7 @@ class ClientService:
         
         # Check for duplicate name
         existing = await collection.find_one({
-            "name": {"$regex": f"^{client_data.name}$", "$options": "i"},
+            "name": {"$regex": f"^{re.escape(client_data.name)}$", "$options": "i"},
             "is_deleted": False
         })
         if existing:
@@ -58,7 +59,7 @@ class ClientService:
         client_dict = client_data.model_dump(exclude_unset=True)
         client_dict["_id"] = str(ObjectId())
         client_dict["created_by"] = created_by
-        client_dict["created_at"] = datetime.utcnow()
+        client_dict["created_at"] = datetime.now(timezone.utc)
         client_dict["is_deleted"] = False
         client_dict["status"] = client_dict.get("status", "active")  # always persist status
         client_dict["total_jobs"] = 0
@@ -146,10 +147,12 @@ class ClientService:
         query = {"is_deleted": False}
         
         if search:
+            import re as _re
+            _s = _re.escape(search)
             query["$or"] = [
-                {"name": {"$regex": search, "$options": "i"}},
-                {"code": {"$regex": search, "$options": "i"}},
-                {"email": {"$regex": search, "$options": "i"}}
+                {"name": {"$regex": _s, "$options": "i"}},
+                {"code": {"$regex": _s, "$options": "i"}},
+                {"email": {"$regex": _s, "$options": "i"}}
             ]
         
         if status_filter:
@@ -159,7 +162,7 @@ class ClientService:
             query["client_type"] = client_type
         
         if city:
-            query["city"] = {"$regex": city, "$options": "i"}
+            query["city"] = {"$regex": re.escape(city), "$options": "i"}
         
         # Count total
         total = await collection.count_documents(query)
@@ -225,7 +228,7 @@ class ClientService:
         # Check for duplicate name
         if "name" in update_dict:
             existing_name = await collection.find_one({
-                "name": {"$regex": f"^{update_dict['name']}$", "$options": "i"},
+                "name": {"$regex": f"^{re.escape(update_dict['name'])}$", "$options": "i"},
                 "_id": {"$ne": client_id},
                 "is_deleted": False
             })
@@ -250,7 +253,7 @@ class ClientService:
                 )
         
         update_dict["updated_by"] = updated_by
-        update_dict["updated_at"] = datetime.utcnow()
+        update_dict["updated_at"] = datetime.now(timezone.utc)
         
         # Update
         await collection.update_one(
@@ -317,7 +320,7 @@ class ClientService:
             {
                 "$set": {
                     "is_deleted": True,
-                    "deleted_at": datetime.utcnow(),
+                    "deleted_at": datetime.now(timezone.utc),
                     "deleted_by": deleted_by
                 }
             }

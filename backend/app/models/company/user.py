@@ -2,7 +2,7 @@
 User Model - Company Level (Enhanced for Phase 2)
 Complete user management within a company
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import ConfigDict, BaseModel, Field, EmailStr, field_validator
 from enum import Enum
@@ -80,7 +80,7 @@ class UserModel(BaseModel):
     
     # Timestamps
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
     

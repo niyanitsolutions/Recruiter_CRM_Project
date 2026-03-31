@@ -1,8 +1,9 @@
+import re
 """
 Department Service - Phase 2
 Handles department management within a company
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Tuple
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -36,7 +37,7 @@ class DepartmentService:
             # Check for duplicate name or code
             existing = await self.collection.find_one({
                 "$or": [
-                    {"name": {"$regex": f"^{dept_data.name}$", "$options": "i"}},
+                    {"name": {"$regex": f"^{re.escape(dept_data.name)}$", "$options": "i"}},
                     {"code": dept_data.code.upper()}
                 ],
                 "is_deleted": False
@@ -66,7 +67,7 @@ class DepartmentService:
                     return False, "Department head user not found", None
             
             dept_id = str(ObjectId())
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             dept_doc = {
                 "_id": dept_id,
@@ -237,7 +238,7 @@ class DepartmentService:
             if "name" in update_dict:
                 dup = await self.collection.find_one({
                     "_id": {"$ne": dept_id},
-                    "name": {"$regex": f"^{update_dict['name']}$", "$options": "i"},
+                    "name": {"$regex": f"^{re.escape(update_dict['name'])}$", "$options": "i"},
                     "is_deleted": False
                 })
                 if dup:
@@ -278,7 +279,7 @@ class DepartmentService:
                     return False, "Department head user not found", None
             
             update_dict["updated_by"] = updated_by_id
-            update_dict["updated_at"] = datetime.utcnow()
+            update_dict["updated_at"] = datetime.now(timezone.utc)
             
             await self.collection.update_one(
                 {"_id": dept_id},
@@ -344,7 +345,7 @@ class DepartmentService:
             if child_count > 0:
                 return False, f"Cannot delete department: {child_count} sub-departments exist"
             
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             await self.collection.update_one(
                 {"_id": dept_id},

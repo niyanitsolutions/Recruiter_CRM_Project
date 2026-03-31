@@ -2,7 +2,7 @@
 Import/Export Model - Phase 5
 Bulk data import, export, and templates
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -161,8 +161,8 @@ class ImportTemplateModel(BaseModel):
     is_active: bool = True
     
     # Audit
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -205,8 +205,8 @@ class ImportJobModel(BaseModel):
     completed_at: Optional[datetime] = None
     
     # Audit
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = ""
     is_deleted: bool = False
 
@@ -251,7 +251,7 @@ class ExportJobModel(BaseModel):
     completed_at: Optional[datetime] = None
     
     # Audit
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = ""
     is_deleted: bool = False
 

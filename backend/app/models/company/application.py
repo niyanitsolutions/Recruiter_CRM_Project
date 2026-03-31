@@ -2,7 +2,7 @@
 Application Model - Phase 3
 Candidate applications to jobs (Candidate-Job mapping)
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -48,7 +48,7 @@ class StageHistory(BaseModel):
     to_stage: str
     changed_by: str
     changed_by_name: Optional[str] = None
-    changed_at: datetime = Field(default_factory=datetime.utcnow)
+    changed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     remarks: Optional[str] = None
 
 
@@ -126,11 +126,11 @@ class ApplicationModel(BaseModel):
     internal_remarks: Optional[str] = None  # Not visible to partners
     
     # ===== Timestamps =====
-    applied_at: datetime = Field(default_factory=datetime.utcnow)
+    applied_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     status_changed_at: Optional[datetime] = None
     
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
     

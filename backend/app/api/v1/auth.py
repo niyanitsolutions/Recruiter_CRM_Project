@@ -239,10 +239,78 @@ async def forgot_password(request: ForgotPasswordRequest):
 @router.post("/reset-password", response_model=MessageResponse)
 async def reset_password(request: ResetPasswordRequest):
     """
-    Reset password using token from email
+    Reset password using token from email.
     """
-    # TODO: Implement password reset with token
-    return {"message": "Password reset functionality coming soon", "success": False}
+    from app.core.database import get_master_db as _get_master_db
+    from app.core.security import hash_password
+    from datetime import datetime, timezone
+
+    master_db = _get_master_db()
+    now = datetime.now(timezone.utc)
+    token = request.token
+    new_password = request.new_password
+
+    # Check super_admins
+    sa = await master_db.super_admins.find_one({
+        "reset_token": token,
+        "reset_token_expiry": {"$gt": now},
+        "is_deleted": False,
+    })
+    if sa:
+        await master_db.super_admins.update_one(
+            {"_id": sa["_id"]},
+            {"$set": {
+                "password_hash": hash_password(new_password),
+                "reset_token": None,
+                "reset_token_expiry": None,
+                "updated_at": now,
+            }}
+        )
+        return {"message": "Password reset successfully. Please log in.", "success": True}
+
+    # Check tenant owner
+    tenant = await master_db.tenants.find_one({
+        "owner.reset_token": token,
+        "owner.reset_token_expiry": {"$gt": now},
+        "is_deleted": False,
+    })
+    if tenant:
+        await master_db.tenants.update_one(
+            {"_id": tenant["_id"]},
+            {"$set": {
+                "owner.password_hash": hash_password(new_password),
+                "owner.reset_token": None,
+                "owner.reset_token_expiry": None,
+            }}
+        )
+        return {"message": "Password reset successfully. Please log in.", "success": True}
+
+    # Check company users
+    from app.core.database import get_company_db as _get_company_db
+    tenants_cursor = master_db.tenants.find({"is_deleted": {"$ne": True}})
+    async for t in tenants_cursor:
+        company_db = _get_company_db(t["company_id"])
+        user = await company_db.users.find_one({
+            "reset_token": token,
+            "reset_token_expiry": {"$gt": now},
+            "is_deleted": False,
+        })
+        if user:
+            await company_db.users.update_one(
+                {"_id": user["_id"]},
+                {"$set": {
+                    "password_hash": hash_password(new_password),
+                    "reset_token": None,
+                    "reset_token_expiry": None,
+                    "updated_at": now,
+                }}
+            )
+            return {"message": "Password reset successfully. Please log in.", "success": True}
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid or expired reset token"
+    )
 
 
 @router.post("/change-password", response_model=MessageResponse)
@@ -251,10 +319,50 @@ async def change_password(
     auth: AuthContext = Depends(get_current_user)
 ):
     """
-    Change password for authenticated user
+    Change password for authenticated user.
     """
-    # TODO: Implement password change
-    return {"message": "Password change functionality coming soon", "success": False}
+    from app.core.database import get_master_db as _get_master_db, get_company_db as _get_company_db
+    from app.core.security import verify_password, hash_password
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    current_password = request.current_password
+    new_password = request.new_password
+
+    if auth.is_super_admin:
+        master_db = _get_master_db()
+        sa = await master_db.super_admins.find_one({"_id": auth.user_id, "is_deleted": False})
+        if not sa or not verify_password(current_password, sa.get("password_hash", "")):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+        await master_db.super_admins.update_one(
+            {"_id": auth.user_id},
+            {"$set": {"password_hash": hash_password(new_password), "updated_at": now}}
+        )
+        return {"message": "Password changed successfully.", "success": True}
+
+    if auth.is_owner and auth.company_id:
+        master_db = _get_master_db()
+        tenant = await master_db.tenants.find_one({"company_id": auth.company_id})
+        if not tenant or not verify_password(current_password, tenant.get("owner", {}).get("password_hash", "")):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+        await master_db.tenants.update_one(
+            {"company_id": auth.company_id},
+            {"$set": {"owner.password_hash": hash_password(new_password)}}
+        )
+        return {"message": "Password changed successfully.", "success": True}
+
+    if auth.company_id:
+        company_db = _get_company_db(auth.company_id)
+        user = await company_db.users.find_one({"_id": auth.user_id, "is_deleted": False})
+        if not user or not verify_password(current_password, user.get("password_hash", "")):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+        await company_db.users.update_one(
+            {"_id": auth.user_id},
+            {"$set": {"password_hash": hash_password(new_password), "updated_at": now}}
+        )
+        return {"message": "Password changed successfully.", "success": True}
+
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to change password")
 
 
 @router.get("/me")

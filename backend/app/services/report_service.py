@@ -2,7 +2,7 @@
 Report Service - Phase 5
 Handles report generation, saving, and scheduling
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional
 from bson import ObjectId
 
@@ -34,7 +34,7 @@ class ReportService:
         user_id: str = ""
     ) -> ReportResponse:
         """Generate a report based on type and filters"""
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         
         # Resolve date range
         date_range = self._resolve_date_range(filters.date_range if filters else None)
@@ -64,7 +64,7 @@ class ReportService:
             data, columns = [], []
         
         # Calculate execution time
-        execution_time = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+        execution_time = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
         
         # Log execution
         await self._log_execution(
@@ -79,7 +79,7 @@ class ReportService:
         return ReportResponse(
             report_type=report_type,
             report_name=REPORT_TYPE_DISPLAY.get(report_type, report_type.value),
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(timezone.utc),
             filters_applied=filters.model_dump() if filters else {},
             columns=columns,
             data=data,
@@ -112,8 +112,8 @@ class ReportService:
             "is_public": data.is_public,
             "shared_with": data.shared_with,
             "schedule": data.schedule.model_dump() if data.schedule else None,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
             "created_by": user_id,
             "is_deleted": False
         }
@@ -201,7 +201,7 @@ class ReportService:
     ) -> Optional[SavedReportResponse]:
         """Update a saved report"""
         update_data = data.model_dump(exclude_unset=True)
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = datetime.now(timezone.utc)
         update_data["updated_by"] = user_id
         
         if "filters" in update_data and update_data["filters"]:
@@ -234,7 +234,7 @@ class ReportService:
             {
                 "$set": {
                     "is_deleted": True,
-                    "deleted_at": datetime.utcnow(),
+                    "deleted_at": datetime.now(timezone.utc),
                     "deleted_by": user_id
                 }
             }
@@ -938,6 +938,6 @@ class ReportService:
             "status": "completed",
             "triggered_by": user_id,
             "trigger_type": "manual",
-            "executed_at": datetime.utcnow()
+            "executed_at": datetime.now(timezone.utc)
         }
         await self.execution_logs.insert_one(log)

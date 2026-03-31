@@ -3,7 +3,7 @@ Pipeline Service - ATS Upgrade
 Business logic for job-specific interview pipelines
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -71,7 +71,7 @@ class PipelineService:
             "stages": stages,
             "is_default": pipeline_data.is_default,
             "created_by": created_by,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
             "is_deleted": False,
         }
 
@@ -166,7 +166,7 @@ class PipelineService:
         if not existing:
             raise HTTPException(status_code=404, detail="Pipeline not found")
 
-        update_dict: Dict[str, Any] = {"updated_by": updated_by, "updated_at": datetime.utcnow()}
+        update_dict: Dict[str, Any] = {"updated_by": updated_by, "updated_at": datetime.now(timezone.utc)}
 
         if update_data.name is not None:
             update_dict["name"] = update_data.name
@@ -206,7 +206,7 @@ class PipelineService:
 
         await collection.update_one(
             {"_id": pipeline_id},
-            {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow(), "deleted_by": deleted_by}}
+            {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc), "deleted_by": deleted_by}}
         )
         return True
 

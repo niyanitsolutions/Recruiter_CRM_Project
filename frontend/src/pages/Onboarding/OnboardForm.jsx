@@ -53,13 +53,13 @@ const OnboardForm = () => {
   const fetchDropdowns = async () => {
     try {
       const [candidatesRes, jobsRes, clientsRes] = await Promise.all([
-        candidateService.getAll({ page_size: 100 }),
-        jobService.getAll({ page_size: 100, status: 'open' }),
-        clientService.getAll({ page_size: 100 })
+        candidateService.getCandidates({ page_size: 100 }),
+        jobService.getJobs({ page_size: 100, status: 'open' }),
+        clientService.getClients({ page_size: 100 })
       ])
-      setCandidates(candidatesRes.items || [])
-      setJobs(jobsRes.items || [])
-      setClients(clientsRes.items || [])
+      setCandidates(candidatesRes.data || [])
+      setJobs(jobsRes.data || [])
+      setClients(clientsRes.data || [])
     } catch (error) {
       console.error('Error fetching dropdowns:', error)
     }

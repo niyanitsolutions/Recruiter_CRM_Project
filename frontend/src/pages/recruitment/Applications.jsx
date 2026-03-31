@@ -38,8 +38,11 @@ const Applications = () => {
   const [showStatusModal, setShowStatusModal] = useState(false)
 
   useEffect(() => {
-    loadApplications()
     loadDropdowns()
+  }, [])
+
+  useEffect(() => {
+    loadApplications()
   }, [pagination.page, filters])
 
   const loadDropdowns = async () => {

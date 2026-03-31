@@ -2,7 +2,7 @@
 Onboard Model - Phase 4
 Tracks candidate onboarding journey from offer to joining
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List
 from pydantic import ConfigDict, BaseModel, Field, field_validator
 from enum import Enum
@@ -91,7 +91,7 @@ class StatusHistory(BaseModel):
     """Status change history"""
     from_status: Optional[str] = None
     to_status: str
-    changed_at: datetime = Field(default_factory=datetime.utcnow)
+    changed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     changed_by: str
     reason: Optional[str] = None
     notes: Optional[str] = None
@@ -163,8 +163,8 @@ class OnboardModel(BaseModel):
     partner_name: Optional[str] = None
     
     # Audit Fields
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = ""
     updated_by: Optional[str] = None
     is_deleted: bool = False

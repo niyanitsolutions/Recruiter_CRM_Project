@@ -33,7 +33,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
-import { logout, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType } from '../../store/authSlice'
+import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType } from '../../store/authSlice'
 
 // ─── Permission → nav-item mapping ────────────────────────────────────────────
 // `permissions` is an array — the nav item shows if the user has ANY one of them.
@@ -118,7 +118,7 @@ const SideNav = ({ isCollapsed, onToggle }) => {
   const userRole     = useSelector(selectUserRole)
   const userType     = useSelector(selectUserType)
 
-  const handleLogout = () => dispatch(logout())
+  const handleLogout = () => dispatch(logoutUser())
 
   // ── Build menu ──────────────────────────────────────────────────────────────
   const getMenuSections = () => {

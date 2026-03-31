@@ -29,8 +29,11 @@ const Jobs = () => {
   const [priorities, setPriorities] = useState([])
 
   useEffect(() => {
-    loadJobs()
     loadDropdowns()
+  }, [])
+
+  useEffect(() => {
+    loadJobs()
   }, [pagination.page, filters])
 
   const loadDropdowns = async () => {
@@ -283,7 +286,6 @@ const Jobs = () => {
               <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-surface-100">
                 <button
                   onClick={() => {
-                    console.log('View job id:', job.id)
                     if (!job.id) return
                     navigate(`/jobs/view/${job.id}`)
                   }}
@@ -295,7 +297,6 @@ const Jobs = () => {
                 {has('jobs:edit') && (
                   <button
                     onClick={() => {
-                      console.log('Edit job id:', job.id)
                       if (!job.id) return
                       navigate(`/jobs/edit/${job.id}`)
                     }}
@@ -307,7 +308,6 @@ const Jobs = () => {
                 )}
                 <button
                   onClick={() => {
-                    console.log('Find matching for job id:', job.id)
                     if (!job.id) return
                     navigate(`/jobs/${job.id}/matching`)
                   }}

@@ -2,7 +2,7 @@
 Partner Payout Model - Phase 4
 Tracks partner commissions, invoices, and payments
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List
 from pydantic import ConfigDict, BaseModel, Field, field_validator
 from enum import Enum
@@ -235,8 +235,8 @@ class PartnerPayoutModel(BaseModel):
     client_name: Optional[str] = None
     
     # Audit Fields
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = ""
     updated_by: Optional[str] = None
     is_deleted: bool = False
@@ -294,8 +294,8 @@ class InvoiceModel(BaseModel):
     partner_mobile: Optional[str] = None
     
     # Audit Fields
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = ""
     updated_by: Optional[str] = None
     is_deleted: bool = False

@@ -32,7 +32,7 @@ const AnalyticsDashboard = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await analyticsService.getDashboard({ comparison });
+      const data = await analyticsService.getDashboard({ date_range: dateRange, comparison });
       setDashboard(data);
     } catch (err) {
       console.error('Error loading dashboard:', err);

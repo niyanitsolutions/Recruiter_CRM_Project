@@ -2,7 +2,7 @@
 Audit Service - Phase 2
 Handles audit logging for all operations
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -65,7 +65,7 @@ class AuditService:
             "ip_address": ip_address,
             "user_agent": user_agent,
             "request_id": request_id,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc)
         }
         
         await self.collection.insert_one(log_doc)
@@ -114,10 +114,12 @@ class AuditService:
                 query["created_at"] = {"$lte": filter_params.end_date}
         
         if filter_params.search:
+            import re as _re
+            _s = _re.escape(filter_params.search)
             query["$or"] = [
-                {"description": {"$regex": filter_params.search, "$options": "i"}},
-                {"entity_name": {"$regex": filter_params.search, "$options": "i"}},
-                {"user_name": {"$regex": filter_params.search, "$options": "i"}}
+                {"description": {"$regex": _s, "$options": "i"}},
+                {"entity_name": {"$regex": _s, "$options": "i"}},
+                {"user_name": {"$regex": _s, "$options": "i"}}
             ]
         
         # Get total count
@@ -215,7 +217,7 @@ class AuditService:
         """Get activity statistics for dashboard"""
         from datetime import timedelta
         
-        start_date = datetime.utcnow() - timedelta(days=days)
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
         
         # Total actions in period
         total_actions = await self.collection.count_documents({

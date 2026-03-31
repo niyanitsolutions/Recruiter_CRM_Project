@@ -2,7 +2,7 @@
 Candidate Service - Phase 3
 Business logic for candidate management with AI resume parsing
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, Dict, Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -88,7 +88,7 @@ class CandidateService:
         candidate_dict["email"] = candidate_data.email.lower()
         candidate_dict["mobile"] = mobile_clean
         candidate_dict["created_by"] = created_by
-        candidate_dict["created_at"] = datetime.utcnow()
+        candidate_dict["created_at"] = datetime.now(timezone.utc)
         candidate_dict["is_deleted"] = False
         candidate_dict["status"] = CandidateStatus.ACTIVE.value
         
@@ -234,7 +234,7 @@ class CandidateService:
         if search_params:
             # Keyword search (name, email, skills)
             if search_params.keyword:
-                keyword = search_params.keyword.lower()
+                keyword = re.escape(search_params.keyword.lower())
                 query["$or"] = [
                     {"full_name": {"$regex": keyword, "$options": "i"}},
                     {"email": {"$regex": keyword, "$options": "i"}},
@@ -272,7 +272,7 @@ class CandidateService:
             
             # Location
             if search_params.location:
-                query["current_city"] = {"$in": [{"$regex": loc, "$options": "i"} for loc in search_params.location]}
+                query["current_city"] = {"$in": [{"$regex": re.escape(loc), "$options": "i"} for loc in search_params.location]}
             
             # Status — map UI values to DB values for backward compatibility
             if search_params.status:
@@ -439,7 +439,7 @@ class CandidateService:
             update_dict["skill_tags"] = [s["name"].lower() for s in update_dict["skills"]]
         
         update_dict["updated_by"] = updated_by
-        update_dict["updated_at"] = datetime.utcnow()
+        update_dict["updated_at"] = datetime.now(timezone.utc)
         
         # Motor cannot encode datetime.date — convert before update
         _sanitize_for_mongo(update_dict)
@@ -502,10 +502,10 @@ class CandidateService:
             {
                 "$set": {
                     "status": new_status,
-                    "status_changed_at": datetime.utcnow(),
+                    "status_changed_at": datetime.now(timezone.utc),
                     "status_changed_by": updated_by,
                     "updated_by": updated_by,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )
@@ -567,9 +567,9 @@ class CandidateService:
             {
                 "$set": {
                     "assigned_to": assigned_to,
-                    "assigned_at": datetime.utcnow(),
+                    "assigned_at": datetime.now(timezone.utc),
                     "updated_by": assigned_by,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )
@@ -632,7 +632,7 @@ class CandidateService:
             {
                 "$set": {
                     "is_deleted": True,
-                    "deleted_at": datetime.utcnow(),
+                    "deleted_at": datetime.now(timezone.utc),
                     "deleted_by": deleted_by
                 }
             }
@@ -702,11 +702,11 @@ class CandidateService:
             collection = db[CandidateService.COLLECTION]
             update_data = {
                 "resume_parsed": True,
-                "resume_parsed_at": datetime.utcnow(),
+                "resume_parsed_at": datetime.now(timezone.utc),
                 "parsed_data": result.model_dump(),
                 "parse_confidence": result.confidence_score,
                 "updated_by": updated_by,
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.now(timezone.utc)
             }
             
             # Update skill tags if found
@@ -766,7 +766,7 @@ class CandidateService:
             {"$set": {
                 "resume_url": resume_url,
                 "updated_by": updated_by,
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.now(timezone.utc)
             }}
         )
 
@@ -804,7 +804,7 @@ class CandidateService:
         for city in cities:
             if city in words:
                 found_city = city
-                conditions.append({"current_city": {"$regex": city, "$options": "i"}})
+                conditions.append({"current_city": {"$regex": re.escape(city), "$options": "i"}})
                 words.remove(city)
                 break
         
@@ -895,7 +895,7 @@ class CandidateService:
         
         # Recent candidates (last 7 days)
         from datetime import timedelta
-        week_ago = datetime.utcnow() - timedelta(days=7)
+        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
         recent = await collection.count_documents({
             **base_query,
             "created_at": {"$gte": week_ago}

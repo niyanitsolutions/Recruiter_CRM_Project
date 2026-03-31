@@ -2,7 +2,7 @@
 Target Service - Phase 5
 Handles goals, targets, and performance tracking
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
 
@@ -61,8 +61,8 @@ class TargetService:
             "filters": data.filters,
             "notify_on_milestones": data.notify_on_milestones,
             "notify_on_achievement": data.notify_on_achievement,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
             "created_by": user_id,
             "is_deleted": False
         }
@@ -142,7 +142,7 @@ class TargetService:
     ) -> Optional[TargetResponse]:
         """Update a target"""
         update_data = data.model_dump(exclude_unset=True)
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = datetime.now(timezone.utc)
         update_data["updated_by"] = user_id
         
         if "end_date" in update_data and update_data["end_date"]:
@@ -170,7 +170,7 @@ class TargetService:
             {
                 "$set": {
                     "is_deleted": True,
-                    "deleted_at": datetime.utcnow(),
+                    "deleted_at": datetime.now(timezone.utc),
                     "deleted_by": user_id
                 }
             }
@@ -216,8 +216,8 @@ class TargetService:
                 "filters": {},
                 "notify_on_milestones": True,
                 "notify_on_achievement": True,
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow(),
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
                 "created_by": user_id,
                 "is_deleted": False
             }
@@ -260,7 +260,7 @@ class TargetService:
             "change_source": data.source,
             "related_entity_type": data.related_entity_type,
             "related_entity_id": data.related_entity_id,
-            "recorded_at": datetime.utcnow(),
+            "recorded_at": datetime.now(timezone.utc),
             "recorded_by": user_id
         }
         await self.target_history.insert_one(history)
@@ -273,12 +273,12 @@ class TargetService:
         achieved_at = None
         if new_status in [TargetStatus.ACHIEVED.value, TargetStatus.EXCEEDED.value]:
             if target.get("status") not in [TargetStatus.ACHIEVED.value, TargetStatus.EXCEEDED.value]:
-                achieved_at = datetime.utcnow()
+                achieved_at = datetime.now(timezone.utc)
         
         update_data = {
             "current_value": new_value,
             "status": new_status,
-            "updated_at": datetime.utcnow(),
+            "updated_at": datetime.now(timezone.utc),
             "updated_by": user_id
         }
         
@@ -706,7 +706,7 @@ class TargetService:
             achieved = current >= milestone_value
             milestones.append(TargetMilestone(
                 percentage=pct,
-                achieved_at=datetime.utcnow() if achieved else None,
+                achieved_at=datetime.now(timezone.utc) if achieved else None,
                 value_at_milestone=current if achieved else None
             ))
         

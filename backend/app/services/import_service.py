@@ -2,7 +2,7 @@
 Import Service - Phase 5
 Handles bulk data import from Excel/CSV files
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
 import re
@@ -347,8 +347,8 @@ class ImportService:
             "skipped_rows": 0,
             "validation_errors": [],
             "row_results": [],
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
             "created_by": user_id,
             "is_deleted": False
         }
@@ -391,7 +391,7 @@ class ImportService:
                 {"id": import_id},
                 {"$set": {
                     "status": ImportStatus.PROCESSING.value,
-                    "started_at": datetime.utcnow()
+                    "started_at": datetime.now(timezone.utc)
                 }}
             )
             
@@ -440,7 +440,7 @@ class ImportService:
                                 continue
                             elif duplicate_action == ImportAction.UPDATE:
                                 # Update existing record
-                                mapped_data["updated_at"] = datetime.utcnow()
+                                mapped_data["updated_at"] = datetime.now(timezone.utc)
                                 mapped_data["updated_by"] = user_id
                                 await collection.update_one(
                                     {"id": existing_id},
@@ -459,8 +459,8 @@ class ImportService:
                     record_id = str(ObjectId())
                     mapped_data["id"] = record_id
                     mapped_data["company_id"] = company_id
-                    mapped_data["created_at"] = datetime.utcnow()
-                    mapped_data["updated_at"] = datetime.utcnow()
+                    mapped_data["created_at"] = datetime.now(timezone.utc)
+                    mapped_data["updated_at"] = datetime.now(timezone.utc)
                     mapped_data["created_by"] = user_id
                     mapped_data["is_deleted"] = False
                     
@@ -508,7 +508,7 @@ class ImportService:
                 {"id": import_id},
                 {"$set": {
                     "status": final_status,
-                    "completed_at": datetime.utcnow(),
+                    "completed_at": datetime.now(timezone.utc),
                     "processed_rows": len(file_data),
                     "successful_rows": successful,
                     "failed_rows": failed,
@@ -522,7 +522,7 @@ class ImportService:
                 {"id": import_id},
                 {"$set": {
                     "status": ImportStatus.FAILED.value,
-                    "completed_at": datetime.utcnow(),
+                    "completed_at": datetime.now(timezone.utc),
                     "validation_errors": [{"row_number": 0, "column": "system", "value": None, "error": str(e)}]
                 }}
             )

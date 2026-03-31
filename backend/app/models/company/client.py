@@ -2,7 +2,7 @@
 Client Model - Phase 3
 Companies that hire candidates (Hiring Clients)
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import ConfigDict, BaseModel, Field, EmailStr, field_validator
 from enum import Enum
@@ -91,7 +91,7 @@ class ClientModel(BaseModel):
     
     # Timestamps
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
     

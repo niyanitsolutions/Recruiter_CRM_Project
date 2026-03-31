@@ -1,3 +1,4 @@
+import re
 """
 Tenant Service
 Handles company registration and management
@@ -46,7 +47,7 @@ class TenantService:
         
         if company_name:
             existing = await master_db.tenants.find_one({
-                "company_name": {"$regex": f"^{company_name}$", "$options": "i"},
+                "company_name": {"$regex": f"^{re.escape(company_name)}$", "$options": "i"},
                 "is_deleted": False
             })
             if existing:
@@ -336,9 +337,9 @@ class TenantService:
 
         if search:
             query["$or"] = [
-                {"company_name": {"$regex": search, "$options": "i"}},
-                {"owner.email": {"$regex": search, "$options": "i"}},
-                {"owner.full_name": {"$regex": search, "$options": "i"}}
+                {"company_name": {"$regex": re.escape(search), "$options": "i"}},
+                {"owner.email": {"$regex": re.escape(search), "$options": "i"}},
+                {"owner.full_name": {"$regex": re.escape(search), "$options": "i"}}
             ]
 
         total = await master_db.tenants.count_documents(query)
@@ -488,7 +489,7 @@ class TenantService:
             return None, "A tenant with this email already exists"
 
         existing_name = await master_db.tenants.find_one({
-            "company_name": {"$regex": f"^{data.company_name}$", "$options": "i"},
+            "company_name": {"$regex": f"^{re.escape(data.company_name)}$", "$options": "i"},
             "is_deleted": False,
         })
         if existing_name:

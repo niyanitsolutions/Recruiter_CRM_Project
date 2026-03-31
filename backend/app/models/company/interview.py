@@ -2,7 +2,7 @@
 Interview Model - Phase 3
 Interview scheduling, tracking, and feedback
 """
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timezone
 from typing import Optional, List
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -78,7 +78,7 @@ class InterviewFeedback(BaseModel):
     # Feedback by
     feedback_by: Optional[str] = None
     feedback_by_name: Optional[str] = None
-    feedback_at: datetime = Field(default_factory=datetime.utcnow)
+    feedback_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class RescheduleHistory(BaseModel):
@@ -87,7 +87,7 @@ class RescheduleHistory(BaseModel):
     to_date: datetime
     reason: Optional[str] = None
     rescheduled_by: str
-    rescheduled_at: datetime = Field(default_factory=datetime.utcnow)
+    rescheduled_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ============== Main Model ==============
@@ -176,7 +176,7 @@ class InterviewModel(BaseModel):
     
     # ===== Timestamps =====
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
     

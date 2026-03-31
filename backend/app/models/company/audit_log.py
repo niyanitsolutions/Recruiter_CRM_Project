@@ -2,7 +2,7 @@
 Audit Log Model - Company Level (Enhanced for Phase 2)
 Complete audit trail for all changes within a company
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -92,7 +92,7 @@ class AuditLogModel(BaseModel):
     request_id: Optional[str] = None
     
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     model_config = ConfigDict(populate_by_name=True)
 

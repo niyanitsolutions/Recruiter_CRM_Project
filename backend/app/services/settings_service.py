@@ -2,7 +2,7 @@
 Settings Service - Phase 3
 Business logic for company settings, custom fields, interview stages
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -58,7 +58,7 @@ class SettingsService:
         field_dict["is_active"] = True
         field_dict["is_visible"] = True
         field_dict["created_by"] = created_by
-        field_dict["created_at"] = datetime.utcnow()
+        field_dict["created_at"] = datetime.now(timezone.utc)
         
         await collection.insert_one(field_dict)
         
@@ -97,7 +97,7 @@ class SettingsService:
         
         update_dict = update_data.model_dump(exclude_unset=True, exclude_none=True)
         update_dict["updated_by"] = updated_by
-        update_dict["updated_at"] = datetime.utcnow()
+        update_dict["updated_at"] = datetime.now(timezone.utc)
         
         await collection.update_one({"_id": field_id}, {"$set": update_dict})
         
@@ -111,7 +111,7 @@ class SettingsService:
         
         result = await collection.update_one(
             {"_id": field_id},
-            {"$set": {"is_active": False, "updated_by": deleted_by, "updated_at": datetime.utcnow()}}
+            {"$set": {"is_active": False, "updated_by": deleted_by, "updated_at": datetime.now(timezone.utc)}}
         )
         
         return result.modified_count > 0
@@ -135,7 +135,7 @@ class SettingsService:
                 **stage_data,
                 "is_active": True,
                 "created_by": created_by,
-                "created_at": datetime.utcnow()
+                "created_at": datetime.now(timezone.utc)
             }
             await collection.insert_one(stage_dict)
             stages.append(InterviewStageDefinition(**stage_dict))
@@ -160,7 +160,7 @@ class SettingsService:
         stage_dict["_id"] = str(ObjectId())
         stage_dict["is_active"] = True
         stage_dict["created_by"] = created_by
-        stage_dict["created_at"] = datetime.utcnow()
+        stage_dict["created_at"] = datetime.now(timezone.utc)
         
         await collection.insert_one(stage_dict)
         
@@ -192,7 +192,7 @@ class SettingsService:
         
         update_dict = update_data.model_dump(exclude_unset=True, exclude_none=True)
         update_dict["updated_by"] = updated_by
-        update_dict["updated_at"] = datetime.utcnow()
+        update_dict["updated_at"] = datetime.now(timezone.utc)
         
         await collection.update_one({"_id": stage_id}, {"$set": update_dict})
         
@@ -217,7 +217,7 @@ class SettingsService:
         
         result = await collection.update_one(
             {"_id": stage_id},
-            {"$set": {"is_active": False, "updated_by": deleted_by, "updated_at": datetime.utcnow()}}
+            {"$set": {"is_active": False, "updated_by": deleted_by, "updated_at": datetime.now(timezone.utc)}}
         )
         
         return result.modified_count > 0
@@ -234,7 +234,7 @@ class SettingsService:
         for order_item in stage_orders:
             await collection.update_one(
                 {"_id": order_item["id"]},
-                {"$set": {"stage_order": order_item["order"], "updated_by": updated_by, "updated_at": datetime.utcnow()}}
+                {"$set": {"stage_order": order_item["order"], "updated_by": updated_by, "updated_at": datetime.now(timezone.utc)}}
             )
         
         return await SettingsService.list_interview_stages(db)
@@ -257,7 +257,7 @@ class SettingsService:
                 **template_data,
                 "is_active": True,
                 "created_by": created_by,
-                "created_at": datetime.utcnow()
+                "created_at": datetime.now(timezone.utc)
             }
             await collection.insert_one(template_dict)
             templates.append(EmailTemplate(**template_dict))
@@ -298,7 +298,7 @@ class SettingsService:
         
         update_dict = update_data.model_dump(exclude_unset=True, exclude_none=True)
         update_dict["updated_by"] = updated_by
-        update_dict["updated_at"] = datetime.utcnow()
+        update_dict["updated_at"] = datetime.now(timezone.utc)
         
         await collection.update_one({"_id": template_id}, {"$set": update_dict})
         
@@ -330,7 +330,7 @@ class SettingsService:
         
         update_dict = update_data.model_dump(exclude_unset=True, exclude_none=True)
         update_dict["updated_by"] = updated_by
-        update_dict["updated_at"] = datetime.utcnow()
+        update_dict["updated_at"] = datetime.now(timezone.utc)
         
         # Upsert
         await collection.update_one(

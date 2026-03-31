@@ -1,8 +1,9 @@
+import re
 """
 Onboard Service - Phase 4
 Handles onboarding workflow, day counter, and reminders
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List, Dict
 from bson import ObjectId
 import math
@@ -44,7 +45,7 @@ class OnboardService:
         # Create initial status history
         status_history = [StatusHistory(
             to_status=OnboardStatus.OFFER_RELEASED.value,
-            changed_at=datetime.utcnow(),
+            changed_at=datetime.now(timezone.utc),
             changed_by=created_by,
             notes="Onboard record created"
         )]
@@ -64,8 +65,8 @@ class OnboardService:
             "status_history": [sh.model_dump() for sh in status_history],
             "days_at_client": 0,
             "payout_eligible": False,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
             "created_by": created_by,
             "is_deleted": False,
             # Denormalized fields
@@ -82,7 +83,7 @@ class OnboardService:
         # Update application status to "offered"
         await self.db.applications.update_one(
             {"id": data.application_id},
-            {"$set": {"status": "offered", "updated_at": datetime.utcnow()}}
+            {"$set": {"status": "offered", "updated_at": datetime.now(timezone.utc)}}
         )
         
         return OnboardResponse(**onboard_data)
@@ -105,7 +106,7 @@ class OnboardService:
     ) -> Optional[OnboardResponse]:
         """Update onboard record"""
         update_data = data.model_dump(exclude_unset=True)
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = datetime.now(timezone.utc)
         update_data["updated_by"] = updated_by
         
         result = await self.collection.find_one_and_update(
@@ -127,7 +128,7 @@ class OnboardService:
             {
                 "$set": {
                     "is_deleted": True,
-                    "deleted_at": datetime.utcnow(),
+                    "deleted_at": datetime.now(timezone.utc),
                     "deleted_by": deleted_by
                 }
             }
@@ -157,9 +158,9 @@ class OnboardService:
             query["partner_id"] = partner_id
         if search:
             query["$or"] = [
-                {"candidate_name": {"$regex": search, "$options": "i"}},
-                {"job_title": {"$regex": search, "$options": "i"}},
-                {"client_name": {"$regex": search, "$options": "i"}}
+                {"candidate_name": {"$regex": re.escape(search), "$options": "i"}},
+                {"job_title": {"$regex": re.escape(search), "$options": "i"}},
+                {"client_name": {"$regex": re.escape(search), "$options": "i"}}
             ]
         if from_date:
             query["offer_released_date"] = {"$gte": from_date.isoformat()}
@@ -206,7 +207,7 @@ class OnboardService:
         status_history = StatusHistory(
             from_status=onboard.get("status"),
             to_status=data.status.value,
-            changed_at=datetime.utcnow(),
+            changed_at=datetime.now(timezone.utc),
             changed_by=updated_by,
             reason=data.reason,
             notes=data.notes
@@ -214,7 +215,7 @@ class OnboardService:
         
         update_data = {
             "status": data.status.value,
-            "updated_at": datetime.utcnow(),
+            "updated_at": datetime.now(timezone.utc),
             "updated_by": updated_by
         }
         
@@ -265,7 +266,7 @@ class OnboardService:
         status_history = StatusHistory(
             from_status=onboard.get("status"),
             to_status=OnboardStatus.DOJ_EXTENDED.value,
-            changed_at=datetime.utcnow(),
+            changed_at=datetime.now(timezone.utc),
             changed_by=updated_by,
             reason=data.reason,
             notes=f"DOJ extended to {data.new_doj}"
@@ -278,7 +279,7 @@ class OnboardService:
                     "expected_doj": data.new_doj.isoformat(),
                     "status": OnboardStatus.DOJ_EXTENDED.value,
                     "doj_extension_reasons": extension_reasons,
-                    "updated_at": datetime.utcnow(),
+                    "updated_at": datetime.now(timezone.utc),
                     "updated_by": updated_by
                 },
                 "$inc": {"doj_extension_count": 1},
@@ -315,9 +316,9 @@ class OnboardService:
                 if data.document_url:
                     doc["document_url"] = data.document_url
                 if data.status == DocumentStatus.SUBMITTED:
-                    doc["submitted_at"] = datetime.utcnow().isoformat()
+                    doc["submitted_at"] = datetime.now(timezone.utc).isoformat()
                 elif data.status == DocumentStatus.VERIFIED:
-                    doc["verified_at"] = datetime.utcnow().isoformat()
+                    doc["verified_at"] = datetime.now(timezone.utc).isoformat()
                     doc["verified_by"] = updated_by
                 elif data.status == DocumentStatus.REJECTED:
                     doc["rejection_reason"] = data.rejection_reason
@@ -335,7 +336,7 @@ class OnboardService:
                 "$set": {
                     "documents": documents,
                     "documents_verified": all_verified,
-                    "updated_at": datetime.utcnow(),
+                    "updated_at": datetime.now(timezone.utc),
                     "updated_by": updated_by
                 }
             },
@@ -375,7 +376,7 @@ class OnboardService:
                         "$set": {
                             "days_at_client": days_at_client,
                             "payout_eligible": payout_eligible,
-                            "updated_at": datetime.utcnow()
+                            "updated_at": datetime.now(timezone.utc)
                         }
                     }
                 )
@@ -446,7 +447,7 @@ class OnboardService:
         """Mark reminder as sent"""
         reminder_log = ReminderLog(
             reminder_type=reminder_type,
-            sent_at=datetime.utcnow(),
+            sent_at=datetime.now(timezone.utc),
             sent_to=recipients,
             channel=channel,
             status="sent"
@@ -582,7 +583,7 @@ class OnboardService:
             "commission_rule": commission_rule.model_dump(),
             "calculation": calculation.model_dump(),
             "status": PayoutStatus.PENDING.value,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
             "created_by": "system",
             "is_deleted": False,
             # Denormalized

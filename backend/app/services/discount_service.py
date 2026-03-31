@@ -57,8 +57,8 @@ class DiscountService:
             query["status"] = status
         if search:
             query["$or"] = [
-                {"name": {"$regex": search, "$options": "i"}},
-                {"code": {"$regex": search, "$options": "i"}},
+                {"name": {"$regex": re.escape(search), "$options": "i"}},
+                {"code": {"$regex": re.escape(search), "$options": "i"}},
             ]
 
         total = await master_db.discounts.count_documents(query)

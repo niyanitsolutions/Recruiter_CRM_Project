@@ -2,7 +2,7 @@
 Notification Model - Phase 4
 System notifications and auto-reminders
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from pydantic import ConfigDict, BaseModel, Field
 from enum import Enum
@@ -168,8 +168,8 @@ class NotificationModel(BaseModel):
     action_taken_at: Optional[datetime] = None
     
     # Audit Fields
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_deleted: bool = False
 
     model_config = ConfigDict(from_attributes=True)
@@ -207,7 +207,7 @@ class ScheduledReminderModel(BaseModel):
     next_occurrence: Optional[datetime] = None
     
     # Audit Fields
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = ""
     is_deleted: bool = False
 

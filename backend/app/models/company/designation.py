@@ -2,7 +2,7 @@
 Designation Model - Company Level
 Defines job titles/positions within a company
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from pydantic import ConfigDict, BaseModel, Field
 
@@ -18,7 +18,7 @@ class DesignationModel(BaseModel):
     is_active: bool = Field(default=True)
     sort_order: int = Field(default=0)
     created_by: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_by: Optional[str] = None
     updated_at: Optional[datetime] = None
     is_deleted: bool = Field(default=False)

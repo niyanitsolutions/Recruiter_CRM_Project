@@ -2,7 +2,7 @@
 Notification Service - Phase 4
 Handles notifications, auto-reminders, and scheduled tasks
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List
 from bson import ObjectId
 
@@ -46,8 +46,8 @@ class NotificationService:
             "channels": [c.value for c in data.channels],
             "channel_status": channel_status,
             "is_read": False,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
             "is_deleted": False
         }
         
@@ -138,8 +138,8 @@ class NotificationService:
             {
                 "$set": {
                     "is_read": True,
-                    "read_at": datetime.utcnow(),
-                    "updated_at": datetime.utcnow()
+                    "read_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )
@@ -160,8 +160,8 @@ class NotificationService:
             {
                 "$set": {
                     "is_read": True,
-                    "read_at": datetime.utcnow(),
-                    "updated_at": datetime.utcnow()
+                    "read_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )
@@ -183,7 +183,7 @@ class NotificationService:
             {
                 "$set": {
                     "is_deleted": True,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )
@@ -204,7 +204,7 @@ class NotificationService:
             "company_id": company_id,
             "channels": [c.value for c in data.channels],
             "status": ScheduledReminderStatus.SCHEDULED.value,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
             "created_by": created_by,
             "is_deleted": False
         }
@@ -217,7 +217,7 @@ class NotificationService:
         company_id: str
     ) -> List[ScheduledReminderInDB]:
         """Get reminders that are due to be sent"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         cursor = self.reminders_collection.find({
             "company_id": company_id,
@@ -259,7 +259,7 @@ class NotificationService:
                 # Update reminder status
                 update_data = {
                     "status": ScheduledReminderStatus.SENT.value,
-                    "sent_at": datetime.utcnow()
+                    "sent_at": datetime.now(timezone.utc)
                 }
                 
                 # Handle recurring reminders
@@ -337,7 +337,7 @@ class NotificationService:
                 expected_doj - timedelta(days=2),
                 datetime.min.time().replace(hour=9)
             )
-            if doj_reminder_date > datetime.utcnow():
+            if doj_reminder_date > datetime.now(timezone.utc):
                 reminder = await self.create_scheduled_reminder(
                     ScheduledReminderCreate(
                         reminder_type=ScheduledReminderType.DOJ_UPCOMING,
@@ -366,7 +366,7 @@ class NotificationService:
                     actual_doj + timedelta(days=days),
                     datetime.min.time().replace(hour=9)
                 )
-                if reminder_date > datetime.utcnow():
+                if reminder_date > datetime.now(timezone.utc):
                     reminder = await self.create_scheduled_reminder(
                         ScheduledReminderCreate(
                             reminder_type=reminder_type,
@@ -621,7 +621,7 @@ class NotificationService:
             {
                 "$set": {
                     f"channel_status.{channel}": status.value,
-                    "sent_at": datetime.utcnow() if status == NotificationStatus.SENT else None
+                    "sent_at": datetime.now(timezone.utc) if status == NotificationStatus.SENT else None
                 }
             }
         )

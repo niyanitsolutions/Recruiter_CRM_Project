@@ -2,7 +2,7 @@
 Analytics Service - Phase 5
 Dashboard analytics, KPIs, and chart data generation
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List
 from bson import ObjectId
 
@@ -906,8 +906,8 @@ class AnalyticsService:
             "widgets": [w.model_dump() for w in widgets],
             "columns": 4,
             "row_height": 100,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
             "is_deleted": False
         }
         
@@ -923,7 +923,7 @@ class AnalyticsService:
         name: Optional[str] = None
     ) -> Optional[DashboardLayout]:
         """Update dashboard layout"""
-        update_data = {"updated_at": datetime.utcnow()}
+        update_data = {"updated_at": datetime.now(timezone.utc)}
         
         if widgets:
             update_data["widgets"] = [w.model_dump() for w in widgets]

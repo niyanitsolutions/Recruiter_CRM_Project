@@ -22,7 +22,6 @@ const JobDetails = () => {
   const loadJob = async () => {
     try {
       setLoading(true)
-      console.log('Loading job id:', id)
       const jobRes = await jobService.getJob(id)
       setJob(jobRes.data)
     } catch (error) {

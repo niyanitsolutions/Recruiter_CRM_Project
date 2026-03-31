@@ -2,7 +2,7 @@
 Application Service - Phase 3
 Business logic for candidate applications (Candidate-Job mapping)
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -122,7 +122,7 @@ class ApplicationService:
             if reasons:
                 initial_status = ApplicationStatus.REJECTED.value
                 rejection_reason = "; ".join(reasons)
-                rejected_at_val = datetime.utcnow()
+                rejected_at_val = datetime.now(timezone.utc)
                 rejected_by_val = "system"
             else:
                 initial_status = ApplicationStatus.ELIGIBLE.value
@@ -154,15 +154,15 @@ class ApplicationService:
                 "to_stage": initial_status,
                 "changed_by": created_by,
                 "changed_by_name": applied_by_name,
-                "changed_at": datetime.utcnow(),
+                "changed_at": datetime.now(timezone.utc),
                 "remarks": rejection_reason or "Application created"
             }],
             "eligibility_score": eligibility_result.get("score"),
             "eligibility_details": eligibility_result,
             "notes": application_data.notes,
-            "applied_at": datetime.utcnow(),
+            "applied_at": datetime.now(timezone.utc),
             "created_by": created_by,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
             "is_deleted": False
         }
         
@@ -375,15 +375,15 @@ class ApplicationService:
             "to_stage": new_status,
             "changed_by": updated_by,
             "changed_by_name": user_name,
-            "changed_at": datetime.utcnow(),
+            "changed_at": datetime.now(timezone.utc),
             "remarks": status_update.remarks
         }
         
         update_data = {
             "status": new_status,
-            "status_changed_at": datetime.utcnow(),
+            "status_changed_at": datetime.now(timezone.utc),
             "updated_by": updated_by,
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.now(timezone.utc)
         }
         
         if status_update.stage_id:
@@ -396,7 +396,7 @@ class ApplicationService:
         # Handle rejection
         if new_status == ApplicationStatus.REJECTED.value:
             update_data["rejection_reason"] = status_update.rejection_reason
-            update_data["rejected_at"] = datetime.utcnow()
+            update_data["rejected_at"] = datetime.now(timezone.utc)
             update_data["rejected_by"] = updated_by
             update_data["rejected_at_stage"] = old_status
         
@@ -406,11 +406,11 @@ class ApplicationService:
                 update_data["offered_ctc"] = status_update.offered_ctc
             if status_update.offered_designation:
                 update_data["offered_designation"] = status_update.offered_designation
-            update_data["offer_date"] = datetime.utcnow()
+            update_data["offer_date"] = datetime.now(timezone.utc)
         
         # Handle joining
         if new_status == ApplicationStatus.JOINED.value:
-            update_data["actual_joining_date"] = status_update.actual_joining_date or datetime.utcnow()
+            update_data["actual_joining_date"] = status_update.actual_joining_date or datetime.now(timezone.utc)
         
         await collection.update_one(
             {"_id": application_id},
@@ -476,7 +476,7 @@ class ApplicationService:
                 "assigned_to": assigned_to,
                 "assigned_to_name": assignee.get("full_name"),
                 "updated_by": assigned_by,
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.now(timezone.utc)
             }}
         )
         
@@ -512,7 +512,7 @@ class ApplicationService:
         
         await collection.update_one(
             {"_id": application_id},
-            {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow(), "deleted_by": deleted_by}}
+            {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc), "deleted_by": deleted_by}}
         )
         
         # Update job stats
@@ -551,7 +551,7 @@ class ApplicationService:
         by_status = {item["_id"]: item["count"] for item in status_counts}
         
         from datetime import timedelta
-        week_ago = datetime.utcnow() - timedelta(days=7)
+        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
         recent = await collection.count_documents({**base_query, "applied_at": {"$gte": week_ago}})
         
         return {

@@ -1,8 +1,9 @@
+import re
 """
 Job Service - Phase 3
 Business logic for job management with eligibility matching
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -71,7 +72,7 @@ class JobService:
         if not job_code:
             client_code = client.get("code", "JOB")[:3].upper()
             last_job = await collection.find_one(
-                {"job_code": {"$regex": f"^{client_code}-"}},
+                {"job_code": {"$regex": f"^{re.escape(client_code)}-"}},
                 sort=[("job_code", -1)]
             )
             if last_job:
@@ -86,7 +87,7 @@ class JobService:
         job_dict["job_code"] = job_code
         job_dict["client_name"] = client["name"]
         job_dict["created_by"] = created_by
-        job_dict["created_at"] = datetime.utcnow()
+        job_dict["created_at"] = datetime.now(timezone.utc)
         job_dict["is_deleted"] = False
         job_dict["filled_positions"] = 0
         job_dict["total_applications"] = 0
@@ -96,7 +97,7 @@ class JobService:
         job_dict["rejected_count"] = 0
         
         if job_dict.get("status") == JobStatus.OPEN.value:
-            job_dict["posted_date"] = datetime.utcnow().replace(
+            job_dict["posted_date"] = datetime.now(timezone.utc).replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
 
@@ -207,9 +208,9 @@ class JobService:
         if search_params:
             if search_params.keyword:
                 query["$or"] = [
-                    {"title": {"$regex": search_params.keyword, "$options": "i"}},
-                    {"job_code": {"$regex": search_params.keyword, "$options": "i"}},
-                    {"description": {"$regex": search_params.keyword, "$options": "i"}}
+                    {"title": {"$regex": re.escape(search_params.keyword), "$options": "i"}},
+                    {"job_code": {"$regex": re.escape(search_params.keyword), "$options": "i"}},
+                    {"description": {"$regex": re.escape(search_params.keyword), "$options": "i"}}
                 ]
             if search_params.client_id:
                 query["client_id"] = search_params.client_id
@@ -270,18 +271,18 @@ class JobService:
             new_status = update_dict["status"]
             old_status = existing.get("status")
             if new_status == JobStatus.OPEN.value and old_status != JobStatus.OPEN.value:
-                update_dict["posted_date"] = datetime.utcnow().replace(
+                update_dict["posted_date"] = datetime.now(timezone.utc).replace(
                     hour=0, minute=0, second=0, microsecond=0
                 )
             if new_status in [JobStatus.CLOSED.value, JobStatus.FILLED.value]:
-                update_dict["closed_date"] = datetime.utcnow().replace(
+                update_dict["closed_date"] = datetime.now(timezone.utc).replace(
                     hour=0, minute=0, second=0, microsecond=0
                 )
-            update_dict["status_changed_at"] = datetime.utcnow()
+            update_dict["status_changed_at"] = datetime.now(timezone.utc)
             update_dict["status_changed_by"] = updated_by
 
         update_dict["updated_by"] = updated_by
-        update_dict["updated_at"] = datetime.utcnow()
+        update_dict["updated_at"] = datetime.now(timezone.utc)
 
         # Motor cannot encode datetime.date — convert all date fields to datetime
         _sanitize_for_mongo(update_dict)
@@ -330,7 +331,7 @@ class JobService:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                                 detail=f"Cannot delete job with {active_applications} active applications")
         
-        await collection.update_one({"_id": job_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.utcnow(), "deleted_by": deleted_by}})
+        await collection.update_one({"_id": job_id}, {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc), "deleted_by": deleted_by}})
         
         from app.services.client_service import ClientService
         await ClientService.update_client_stats(db, existing["client_id"])

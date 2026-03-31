@@ -2,7 +2,7 @@
 Partner Payout Service - Phase 4
 Handles partner commissions, invoices, and payments
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Optional
 from bson import ObjectId
 import math
@@ -55,8 +55,8 @@ class PartnerPayoutService:
             "payout_eligible_date": payout_eligible_date.isoformat(),
             "calculation": calculation.model_dump(),
             "status": PayoutStatus.PENDING.value,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
             "created_by": created_by,
             "is_deleted": False,
             # Denormalized
@@ -171,7 +171,7 @@ class PartnerPayoutService:
                         {
                             "$set": {
                                 "status": PayoutStatus.ELIGIBLE.value,
-                                "updated_at": datetime.utcnow()
+                                "updated_at": datetime.now(timezone.utc)
                             }
                         }
                     )
@@ -252,8 +252,8 @@ class PartnerPayoutService:
             "total_amount": round(total_amount, 2),
             "status": InvoiceStatus.SUBMITTED.value,
             "notes": data.notes,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
             "created_by": created_by,
             "is_deleted": False,
             # Denormalized
@@ -273,7 +273,7 @@ class PartnerPayoutService:
                     "invoice_number": invoice_number,
                     "invoice_date": data.invoice_date.isoformat(),
                     "invoice_status": InvoiceStatus.SUBMITTED.value,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )
@@ -347,10 +347,10 @@ class PartnerPayoutService:
                 "$set": {
                     "status": InvoiceStatus.APPROVED.value,
                     "approved_by": approved_by,
-                    "approved_at": datetime.utcnow(),
+                    "approved_at": datetime.now(timezone.utc),
                     "approved_amount": data.approved_amount or invoice.get("total_amount"),
                     "accounts_notes": data.notes,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             },
             return_document=True
@@ -363,7 +363,7 @@ class PartnerPayoutService:
                 "$set": {
                     "status": PayoutStatus.INVOICE_APPROVED.value,
                     "invoice_status": InvoiceStatus.APPROVED.value,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )
@@ -394,10 +394,10 @@ class PartnerPayoutService:
                 "$set": {
                     "status": InvoiceStatus.REJECTED.value,
                     "rejected_by": rejected_by,
-                    "rejected_at": datetime.utcnow(),
+                    "rejected_at": datetime.now(timezone.utc),
                     "rejection_reason": data.rejection_reason,
                     "accounts_notes": data.notes,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             },
             return_document=True
@@ -411,7 +411,7 @@ class PartnerPayoutService:
                     "status": PayoutStatus.ELIGIBLE.value,
                     "invoice_status": InvoiceStatus.REJECTED.value,
                     "rejection_reason": data.rejection_reason,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )
@@ -441,9 +441,9 @@ class PartnerPayoutService:
             {
                 "$set": {
                     "status": InvoiceStatus.PAID.value,
-                    "paid_at": datetime.utcnow(),
+                    "paid_at": datetime.now(timezone.utc),
                     "payment_details": data.model_dump(),
-                    "updated_at": datetime.utcnow(),
+                    "updated_at": datetime.now(timezone.utc),
                     "updated_by": recorded_by
                 }
             },
@@ -460,7 +460,7 @@ class PartnerPayoutService:
                     "payment_method": data.payment_method.value,
                     "payment_reference": data.payment_reference,
                     "payment_notes": data.notes,
-                    "updated_at": datetime.utcnow()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )
