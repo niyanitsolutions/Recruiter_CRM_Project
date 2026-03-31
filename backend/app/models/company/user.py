@@ -59,6 +59,12 @@ class UserModel(BaseModel):
     department_id: Optional[str] = None
     reporting_to: Optional[str] = None  # User ID of manager
     joining_date: Optional[datetime] = None
+
+    # Permission configuration (source of truth for UI reconstruction)
+    primary_department: Optional[str] = None   # e.g. "admin", "hr", "accounts"
+    level: Optional[str] = None                # "executive" | "manager"
+    assigned_departments: List[str] = Field(default_factory=list)
+    restricted_modules: List[str] = Field(default_factory=list)
     
     # User type
     user_type: str = Field(default="internal")  # internal | partner
@@ -121,6 +127,12 @@ class UserCreate(BaseModel):
     reporting_to: Optional[str] = None
     joining_date: Optional[datetime] = None
 
+    # Permission configuration (source of truth for UI reconstruction)
+    primary_department: Optional[str] = None   # e.g. "admin", "hr", "accounts"
+    level: Optional[str] = None                # "executive" | "manager"
+    assigned_departments: Optional[List[str]] = None
+    restricted_modules: Optional[List[str]] = None
+
     # Status
     status: Optional[str] = Field(default=UserStatus.ACTIVE.value)
     send_welcome_email: bool = Field(default=True)
@@ -161,7 +173,7 @@ class UserUpdate(BaseModel):
     """Schema for updating a user (Admin can edit all fields)"""
     full_name: Optional[str] = Field(None, min_length=2, max_length=100)
     mobile: Optional[str] = Field(None, min_length=10, max_length=15)
-    
+
     # Profile
     avatar_url: Optional[str] = None
     date_of_birth: Optional[datetime] = None
@@ -170,7 +182,7 @@ class UserUpdate(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
     zip_code: Optional[str] = None
-    
+
     # Employment (Admin only)
     employee_id: Optional[str] = None
     role: Optional[str] = None
@@ -183,7 +195,13 @@ class UserUpdate(BaseModel):
     department_id: Optional[str] = None
     reporting_to: Optional[str] = None
     joining_date: Optional[datetime] = None
-    
+
+    # Permission configuration (source of truth for UI reconstruction)
+    primary_department: Optional[str] = None
+    level: Optional[str] = None
+    assigned_departments: Optional[List[str]] = None
+    restricted_modules: Optional[List[str]] = None
+
     # Status (Admin only)
     status: Optional[str] = None
 
@@ -252,12 +270,18 @@ class UserResponse(BaseModel):
     reporting_to: Optional[str]
     reporting_to_name: Optional[str] = None  # Manager's name
     joining_date: Optional[datetime]
-    
+
+    # Permission configuration (source of truth for UI reconstruction)
+    primary_department: Optional[str] = None
+    level: Optional[str] = None
+    assigned_departments: List[str] = Field(default_factory=list)
+    restricted_modules: List[str] = Field(default_factory=list)
+
     # Status
     status: str
     is_owner: bool
     last_login: Optional[datetime]
-    
+
     # Timestamps
     created_at: datetime
     updated_at: Optional[datetime]

@@ -132,6 +132,12 @@ class UserService:
                 "department_id": user_data.department_id,
                 "reporting_to": user_data.reporting_to,
                 "joining_date": user_data.joining_date,
+                # Permission configuration — stored so the edit form can reconstruct
+                # the exact UI state without reverse-engineering from permissions[].
+                "primary_department": user_data.primary_department,
+                "level": user_data.level,
+                "assigned_departments": user_data.assigned_departments or [],
+                "restricted_modules": user_data.restricted_modules or [],
                 "status": user_data.status or UserStatus.ACTIVE.value,
                 "is_owner": False,
                 "last_login": None,

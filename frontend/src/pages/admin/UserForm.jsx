@@ -236,12 +236,37 @@ const [errors,       setErrors]       = useState({})
           joining_date:  user.joining_date?.split('T')[0] || '',
           status:        user.status         || 'active',
         })
-        // Only derive permission dept for internal users — partners don't use the section
+        // Restore permission configuration for internal users.
+        // Use stored config fields as source of truth; fall back to inference
+        // for legacy users created before these fields were introduced.
         if (user.user_type !== 'partner') {
-          const editDept = user.designation === 'Owner' ? 'owner' : (ROLE_TO_DEPT[user.role] || 'admin')
-          setPermDept(editDept)
-          const hasDelete = (user.permissions || []).some(p => p.endsWith(':delete'))
-          setPermLevel(hasDelete ? 'manager' : 'executive')
+          const dept =
+            user.primary_department ||
+            (user.designation === 'Owner' ? 'owner' : (ROLE_TO_DEPT[user.role] || 'admin'))
+          setPermDept(dept)
+
+          const lvl =
+            user.level ||
+            ((user.permissions || []).some(p => p.endsWith(':delete')) ? 'manager' : 'executive')
+          setPermLevel(lvl)
+
+          // Restore Restrict Modules
+          if (user.restricted_modules && user.restricted_modules.length > 0) {
+            setRestrictOn(true)
+            setRestrictMods(user.restricted_modules)
+          } else {
+            setRestrictOn(false)
+            setRestrictMods([])
+          }
+
+          // Restore Assign Other Departments
+          if (user.assigned_departments && user.assigned_departments.length > 0) {
+            setAddDeptsOn(true)
+            setAddDepts(user.assigned_departments)
+          } else {
+            setAddDeptsOn(false)
+            setAddDepts([])
+          }
         }
       } catch (err) { setError('Failed to load user') }
       finally { setLoading(false) }
@@ -369,11 +394,20 @@ const [errors,       setErrors]       = useState({})
         submitData.role      = 'partner'
         submitData.user_type = 'partner'
         delete submitData.permissions
+        // Clear config fields for partners — they have no department-based config
+        delete submitData.primary_department
+        delete submitData.level
+        delete submitData.assigned_departments
+        delete submitData.restricted_modules
       } else if (permDept) {
-        // Internal: assign computed permissions and role from dept selection
-        submitData.permissions = computedPermissions
-        submitData.role        = DEPT_TO_ROLE[permDept] || submitData.role
-        submitData.user_type   = 'internal'
+        // Internal: send computed permissions AND the config fields that generated them
+        submitData.permissions          = computedPermissions
+        submitData.role                 = DEPT_TO_ROLE[permDept] || submitData.role
+        submitData.user_type            = 'internal'
+        submitData.primary_department   = permDept
+        submitData.level                = permLevel
+        submitData.assigned_departments = addDeptsOn ? addDepts : []
+        submitData.restricted_modules   = restrictOn ? restrictMods : []
       }
 
       // ── API call ──────────────────────────────────────────────────────
