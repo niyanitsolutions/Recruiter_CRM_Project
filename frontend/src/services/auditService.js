@@ -48,6 +48,12 @@ const auditService = {
     const response = await api.get(`/audit-logs/user/${userId}`, { params })
     return response.data
   },
+
+  // Get login activity logs
+  getLoginActivity: async (params = {}) => {
+    const response = await api.get('/auth/login-activity', { params })
+    return response.data
+  },
 }
 
 export default auditService

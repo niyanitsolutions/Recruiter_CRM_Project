@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search, Filter, ChevronLeft, ChevronRight, Eye, X } from 'lucide-react'
+import { Search, Filter, ChevronLeft, ChevronRight, Eye, X, Activity, LogIn } from 'lucide-react'
 import auditService from '../../services/auditService'
 
-const AuditLogs = () => {
+/* ─────────────────────────────────────────────
+   System Activity Tab
+───────────────────────────────────────────── */
+const SystemActivity = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -12,7 +15,7 @@ const AuditLogs = () => {
   const [entityTypes, setEntityTypes] = useState([])
   const [showFilters, setShowFilters] = useState(false)
   const [selectedLog, setSelectedLog] = useState(null)
-  
+
   const [filters, setFilters] = useState({
     search: searchParams.get('search') || '',
     action: searchParams.get('action') || '',
@@ -84,12 +87,7 @@ const AuditLogs = () => {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-surface-900">Audit Logs</h1>
-        <p className="text-surface-500 mt-1">Track all activities in the system</p>
-      </div>
-
+    <>
       {/* Search & Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-4">
         <div className="flex flex-col md:flex-row gap-4">
@@ -138,10 +136,10 @@ const AuditLogs = () => {
           <thead className="bg-surface-50 border-b">
             <tr>
               <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase">Action</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase">Entity</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase">Module</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase">Description</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase">User</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase">Date</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase">Time</th>
               <th className="text-right px-6 py-3 text-xs font-semibold text-surface-600 uppercase">Details</th>
             </tr>
           </thead>
@@ -211,6 +209,140 @@ const AuditLogs = () => {
           </div>
         </div>
       )}
+    </>
+  )
+}
+
+/* ─────────────────────────────────────────────
+   Login Activity Tab
+───────────────────────────────────────────── */
+const LoginActivity = () => {
+  const [logs, setLogs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const PAGE_SIZE = 20
+
+  const fetchLogs = useCallback(async (p = 1) => {
+    try {
+      setLoading(true)
+      const res = await auditService.getLoginActivity({ page: p, page_size: PAGE_SIZE })
+      setLogs(res.data || [])
+      setTotal(res.total || 0)
+    } catch (err) { console.error(err) }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchLogs(page) }, [fetchLogs, page])
+
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+
+  const getStatusColor = (status) => {
+    if (!status) return 'bg-surface-100 text-surface-600'
+    return status === 'success'
+      ? 'bg-green-100 text-green-700'
+      : 'bg-red-100 text-red-700'
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-surface-100 overflow-hidden">
+      <table className="w-full">
+        <thead className="bg-surface-50 border-b">
+          <tr>
+            <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase">User</th>
+            <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase">Role</th>
+            <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase">Status</th>
+            <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase">Time</th>
+            <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase">IP Address</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-surface-100">
+          {loading ? (
+            <tr><td colSpan={5} className="px-6 py-8 text-center text-surface-500">Loading...</td></tr>
+          ) : logs.length === 0 ? (
+            <tr><td colSpan={5} className="px-6 py-8 text-center text-surface-500">No login activity found</td></tr>
+          ) : (
+            logs.map(log => (
+              <tr key={log.id} className="hover:bg-surface-50">
+                <td className="px-6 py-4">
+                  <p className="font-medium text-surface-900">{log.username || log.email || '—'}</p>
+                  {log.email && log.username && (
+                    <p className="text-xs text-surface-400">{log.email}</p>
+                  )}
+                </td>
+                <td className="px-6 py-4 text-surface-600 capitalize">{log.role || '—'}</td>
+                <td className="px-6 py-4">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(log.status)}`}>
+                    {log.status || 'success'}
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-surface-500 text-sm">
+                  {log.login_time ? new Date(log.login_time).toLocaleString() : '—'}
+                </td>
+                <td className="px-6 py-4 text-surface-500 font-mono text-sm">{log.ip_address || '—'}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+
+      {totalPages > 1 && (
+        <div className="px-6 py-4 border-t flex items-center justify-between">
+          <p className="text-sm text-surface-600">
+            Page {page} of {totalPages} &nbsp;·&nbsp; {total} records
+          </p>
+          <div className="flex gap-2">
+            <button onClick={() => setPage(p => p - 1)} disabled={page === 1}
+              className="p-2 border rounded-lg disabled:opacity-50"><ChevronLeft className="w-4 h-4" /></button>
+            <button onClick={() => setPage(p => p + 1)} disabled={page === totalPages}
+              className="p-2 border rounded-lg disabled:opacity-50"><ChevronRight className="w-4 h-4" /></button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────
+   Main Page
+───────────────────────────────────────────── */
+const TABS = [
+  { key: 'system', label: 'System Activity', icon: Activity },
+  { key: 'login', label: 'Login Activity', icon: LogIn },
+]
+
+const AuditLogs = () => {
+  const [activeTab, setActiveTab] = useState('system')
+
+  return (
+    <div className="p-6 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-surface-900">Audit Logs</h1>
+        <p className="text-surface-500 mt-1">Track all activities in the system</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-surface-100 p-1 rounded-xl w-fit">
+        {TABS.map(tab => {
+          const Icon = tab.icon
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === tab.key
+                  ? 'bg-white text-surface-900 shadow-sm'
+                  : 'text-surface-500 hover:text-surface-700'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {activeTab === 'system' ? <SystemActivity /> : <LoginActivity />}
     </div>
   )
 }

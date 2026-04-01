@@ -22,7 +22,7 @@ import { X, Users, Minus, Plus, ArrowRight, CreditCard } from 'lucide-react'
 export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) {
   const navigate = useNavigate()
   const user = useSelector(selectUser)
-  const [additionalSeats, setAdditionalSeats] = useState(5)
+  const [additionalSeats, setAdditionalSeats] = useState(0)
 
   if (!isOpen) return null
 
@@ -39,20 +39,22 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
   const planLabel  = plan_display_name || plan_name || 'Current Plan'
   const newTotal   = total_user_seats + additionalSeats
 
-  const adjust = (delta) => setAdditionalSeats(prev => Math.max(1, prev + delta))
+  const adjust = (delta) => setAdditionalSeats(prev => Math.max(0, prev + delta))
 
   const handleInput = (e) => {
     const val = parseInt(e.target.value, 10)
-    if (!isNaN(val) && val >= 1) setAdditionalSeats(val)
+    if (!isNaN(val) && val >= 0) setAdditionalSeats(val)
   }
 
   const handleProceed = () => {
+    if (additionalSeats < 1) return
     onClose()
     navigate('/upgrade-plan', {
       state: {
         tenantId:        user?.companyId,
         currentPlan:     planLabel,
         additionalSeats,
+        existingSeats:   total_user_seats,
         fromDashboard:   true,
       },
     })
@@ -167,7 +169,8 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
         {/* Actions */}
         <button
           onClick={handleProceed}
-          className="w-full flex items-center justify-center gap-2 bg-accent-600 hover:bg-accent-700 text-white font-semibold py-3 px-4 rounded-xl transition-colors"
+          disabled={additionalSeats < 1}
+          className="w-full flex items-center justify-center gap-2 bg-accent-600 hover:bg-accent-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-xl transition-colors"
         >
           Proceed to Upgrade
           <ArrowRight className="w-4 h-4" />

@@ -18,10 +18,17 @@ const UpgradePlan = () => {
   const navigate    = useNavigate()
   const expiredInfo = location.state || {}
 
+  // Seat-upgrade mode: arriving from UpgradeSeatsModal with additionalSeats + existingSeats
+  const isSeatUpgrade  = Boolean(expiredInfo.fromDashboard)
+  const existingSeats  = expiredInfo.existingSeats  || 0
+
   const [plans,        setPlans]        = useState([])
   const [selectedPlan, setSelectedPlan] = useState(null)
   const [billing,      setBilling]      = useState('monthly')
-  const [userCount,    setUserCount]    = useState(3)
+  // For seat upgrade: start with the count chosen in the modal
+  const [userCount,    setUserCount]    = useState(
+    isSeatUpgrade ? (expiredInfo.additionalSeats || 1) : 3
+  )
   const [isLoading,    setIsLoading]    = useState(false)
   const [loadingPlans, setLoadingPlans] = useState(true)
   const [success,      setSuccess]      = useState(null)
@@ -58,11 +65,13 @@ const UpgradePlan = () => {
     return billing === 'yearly' ? plan.price_per_user_yearly : plan.price_per_user_monthly
   }
 
+  // For seat upgrade: payment is for NEW seats only (not existing + new)
   const getSubtotal = (plan) => {
     if (!plan) return 0
     const ppu   = getPricePerUser(plan)
-    const users = Math.max(userCount, 1)
-    return billing === 'yearly' ? ppu * users * 12 : ppu * users
+    // Seats to charge: only the additional ones for seat upgrades, full count for renewals
+    const chargeableSeats = Math.max(userCount, 1)
+    return billing === 'yearly' ? ppu * chargeableSeats * 12 : ppu * chargeableSeats
   }
 
   const adjustUserCount = (delta) => {
@@ -78,12 +87,14 @@ const UpgradePlan = () => {
     if (!selectedPlan) { toast.error('Please select a plan'); return }
     setIsLoading(true)
     try {
-      // Step 1: Create renewal order
+      // Step 1: Create order
+      // For seat upgrade: user_count = ADDITIONAL seats only; backend adds to existing
       const orderRes = await api.post('/auth/renew/create-order', {
         tenant_id:     expiredInfo.tenantId,
         plan_id:       selectedPlan.id,
         billing_cycle: billing,
         user_count:    Math.max(userCount, 1),
+        payment_type:  isSeatUpgrade ? 'seat_upgrade' : 'renewal',
       })
       const order = orderRes.data
 
@@ -269,11 +280,11 @@ const UpgradePlan = () => {
             </div>
           )}
 
-          {/* User count selector */}
+          {/* User count / seat count selector */}
           {selectedPlan && (
             <div className="bg-white rounded-xl border border-surface-200 p-5 mb-4">
               <label className="block text-sm font-medium text-surface-700 mb-3">
-                Number of Users
+                {isSeatUpgrade ? 'Additional Seats to Add' : 'Number of Users'}
               </label>
               <div className="flex items-center gap-3">
                 <button
@@ -297,8 +308,22 @@ const UpgradePlan = () => {
                 >
                   <Plus className="w-4 h-4 text-surface-600" />
                 </button>
-                <span className="text-sm text-surface-500">users</span>
+                <span className="text-sm text-surface-500">
+                  {isSeatUpgrade ? 'new seats' : 'users'}
+                </span>
               </div>
+              {/* Seat upgrade: show total seats after upgrade */}
+              {isSeatUpgrade && (
+                <div className="mt-3 flex items-center justify-between bg-accent-50 border border-accent-100 rounded-xl px-4 py-2.5">
+                  <div className="flex items-center gap-2 text-sm text-accent-700">
+                    <Users className="w-4 h-4" />
+                    Total seats after upgrade
+                  </div>
+                  <span className="text-base font-bold text-accent-800">
+                    {existingSeats + userCount}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -307,9 +332,23 @@ const UpgradePlan = () => {
             <div className="bg-white rounded-xl border border-surface-200 p-6">
               <h3 className="font-semibold text-surface-900 mb-4">Order Summary</h3>
 
+              {/* Seat upgrade breakdown */}
+              {isSeatUpgrade && (
+                <div className="bg-surface-50 rounded-lg px-4 py-3 mb-3 text-xs text-surface-600 space-y-1">
+                  <div className="flex justify-between">
+                    <span>Current seats (already paid)</span>
+                    <span className="font-medium">{existingSeats}</span>
+                  </div>
+                  <div className="flex justify-between text-accent-700 font-medium">
+                    <span>Additional seats (paying now)</span>
+                    <span>{userCount}</span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between text-sm mb-1.5">
                 <span className="text-surface-600">
-                  {formatCurrency(getPricePerUser(selectedPlan))} × {Math.max(userCount, 1)} user{Math.max(userCount, 1) !== 1 ? 's' : ''}
+                  {formatCurrency(getPricePerUser(selectedPlan))} × {Math.max(userCount, 1)} {isSeatUpgrade ? 'new seat' : 'user'}{Math.max(userCount, 1) !== 1 ? 's' : ''}
                   {billing === 'yearly' ? ' × 12 months' : ''}
                 </span>
                 <span className="font-medium text-surface-800">{formatCurrency(subtotal)}</span>

@@ -16,6 +16,17 @@ export const getSavedEmail = () => localStorage.getItem(SAVED_EMAIL_KEY) || ''
 export const setSavedEmail = (email) => localStorage.setItem(SAVED_EMAIL_KEY, email)
 export const removeSavedEmail = () => localStorage.removeItem(SAVED_EMAIL_KEY)
 
+// ── Saved password (Base64-encoded, never plain text) ─────────────────────────
+const SAVED_PWD_KEY = 'saved_pwd'
+export const getSavedPassword = () => {
+  const encoded = localStorage.getItem(SAVED_PWD_KEY)
+  if (!encoded) return ''
+  try { return atob(encoded) } catch { return '' }
+}
+export const setSavedPassword = (password) =>
+  localStorage.setItem(SAVED_PWD_KEY, btoa(password))
+export const removeSavedPassword = () => localStorage.removeItem(SAVED_PWD_KEY)
+
 // ── Access token ──────────────────────────────────────────────────────────────
 export const getToken = () =>
   localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY)

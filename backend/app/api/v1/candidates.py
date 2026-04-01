@@ -3,9 +3,10 @@ Candidates API - Phase 3
 Handles candidate management with AI resume parsing and keyword search
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime, timezone, timedelta
-import uuid
+import uuid, asyncio
 
 from app.models.company.candidate import (
     CandidateCreate, CandidateUpdate, CandidateResponse, CandidateListResponse,
@@ -396,26 +397,61 @@ async def delete_candidate(
 
 # ── Candidate Form Link (Method 2) ────────────────────────────────────────────
 
+class FormLinkRequest(BaseModel):
+    email: Optional[str] = None  # If provided, send the link via email
+    frontend_base_url: Optional[str] = None  # e.g. https://app.example.com
+
+
 @router.post("/generate-form-link")
 async def generate_candidate_form_link(
+    body: FormLinkRequest = FormLinkRequest(),
     current_user: dict = Depends(get_current_user),
     db=Depends(get_company_db),
     _: bool = Depends(require_permissions(["candidates:create"])),
 ):
     """
     Generate a unique one-time URL that an external candidate can use to
-    self-register.  The token expires in 7 days.
+    self-register (expires in 7 days).
+    If body.email is provided, also sends the link to that address.
     """
     token = uuid.uuid4().hex
     now = datetime.now(timezone.utc)
     await db.candidate_form_tokens.insert_one({
         "_id": token,
+        "candidate_email": body.email,
         "created_by": current_user["id"],
         "created_at": now,
         "expires_at": now + timedelta(days=7),
         "used": False,
     })
-    return {"success": True, "token": token}
+
+    email_sent = False
+    if body.email:
+        base = (body.frontend_base_url or "").rstrip("/")
+        form_url = f"{base}/apply/{token}"
+        try:
+            from app.services.email_service import EmailService
+            html = (
+                f"<p>Hello,</p>"
+                f"<p>You have been invited to complete a candidate registration form. "
+                f"Please click the link below to submit your details:</p>"
+                f"<p><a href='{form_url}'>{form_url}</a></p>"
+                f"<p>This link expires in 7 days.</p>"
+                f"<p>Regards,<br/>{current_user.get('full_name', 'The Recruitment Team')}</p>"
+            )
+            text = f"Candidate Registration Form\n\n{form_url}\n\nThis link expires in 7 days."
+            email_sent = await asyncio.to_thread(
+                EmailService._send_smtp, body.email, "Candidate Registration Form", html, text
+            )
+        except Exception:
+            pass  # Email failure is non-fatal
+
+    return {
+        "success": True,
+        "token": token,
+        "email_sent": email_sent,
+        "message": "Form link sent successfully" if email_sent else "Form link generated",
+    }
 
 
 # ── Public endpoints (no auth) ────────────────────────────────────────────────

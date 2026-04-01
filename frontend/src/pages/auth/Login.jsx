@@ -8,7 +8,7 @@ import { login, clearError, selectAuth, selectSubscriptionExpired } from '../../
 import { Button, Input } from '../../components/common'
 import { formatDateTime } from '../../utils/format'
 import authService from '../../services/authService'
-import { getSavedEmail, setSavedEmail, removeSavedEmail, getRememberMe } from '../../utils/token'
+import { getSavedEmail, setSavedEmail, removeSavedEmail, getSavedPassword, setSavedPassword, removeSavedPassword, getRememberMe } from '../../utils/token'
 
 const Login = () => {
   const dispatch = useDispatch()
@@ -29,6 +29,7 @@ const Login = () => {
 
   // Remember Me — pre-populate from saved preference
   const savedEmail = getSavedEmail()
+  const savedPassword = getSavedPassword()
   const [rememberMe, setRememberMeState] = useState(!!savedEmail || getRememberMe())
 
   const {
@@ -36,7 +37,7 @@ const Login = () => {
     handleSubmit,
     formState: { errors },
   } = useForm({
-    defaultValues: { identifier: savedEmail, password: '' },
+    defaultValues: { identifier: savedEmail, password: savedPassword },
   })
 
   // Show sessionStorage errors (e.g. subscription expired, set by api.js interceptor)
@@ -56,9 +57,14 @@ const Login = () => {
     const result = await dispatch(login({ ...data, remember_me: rememberMe }))
 
     if (login.fulfilled.match(result)) {
-      // Save or clear the identifier for next visit
-      if (rememberMe) setSavedEmail(data.identifier)
-      else removeSavedEmail()
+      // Save or clear the identifier and password for next visit
+      if (rememberMe) {
+        setSavedEmail(data.identifier)
+        setSavedPassword(data.password)
+      } else {
+        removeSavedEmail()
+        removeSavedPassword()
+      }
 
       if (result.payload.must_change_password) {
         toast.success('Login successful! Please change your password.')

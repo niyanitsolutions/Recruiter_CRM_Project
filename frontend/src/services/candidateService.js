@@ -94,9 +94,11 @@ const candidateService = {
     return response.data
   },
 
-  // Generate a shareable self-registration link for external candidates
-  generateFormLink: async () => {
-    const response = await api.post('/candidates/generate-form-link')
+  // Generate a shareable self-registration link; optionally email it to the candidate
+  generateFormLink: async (email = null) => {
+    const body = { frontend_base_url: window.location.origin }
+    if (email) body.email = email
+    const response = await api.post('/candidates/generate-form-link', body)
     return response.data
   },
 

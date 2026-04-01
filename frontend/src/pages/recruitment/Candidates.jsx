@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Users, Plus, Search, Filter, Eye, Edit, Trash2,
-  Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2
+  Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2, Send
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -38,15 +38,23 @@ const Candidates = () => {
   const [noticePeriods, setNoticePeriods] = useState([])
 
   const [exportOpen, setExportOpen] = useState(false)
+  const [formLinkModal, setFormLinkModal] = useState(false)
+  const [formLinkEmail, setFormLinkEmail] = useState('')
   const [generatingLink, setGeneratingLink] = useState(false)
 
   const handleGenerateFormLink = async () => {
     try {
       setGeneratingLink(true)
-      const res = await candidateService.generateFormLink()
+      const res = await candidateService.generateFormLink(formLinkEmail.trim() || null)
       const url = `${window.location.origin}/apply/${res.token}`
       await navigator.clipboard.writeText(url)
-      toast.success('Form link copied to clipboard!')
+      if (res.email_sent) {
+        toast.success('Form link sent to candidate email!')
+      } else {
+        toast.success('Form link copied to clipboard!')
+      }
+      setFormLinkModal(false)
+      setFormLinkEmail('')
     } catch {
       toast.error('Failed to generate form link')
     } finally {
@@ -228,12 +236,11 @@ const Candidates = () => {
           )}
           {has('candidates:create') && (
             <button
-              onClick={handleGenerateFormLink}
-              disabled={generatingLink}
+              onClick={() => setFormLinkModal(true)}
               className="btn-secondary flex items-center gap-2"
             >
               <Link2 className="w-4 h-4" />
-              {generatingLink ? 'Generating…' : 'Form Link'}
+              Send Form Link
             </button>
           )}
           {has('candidates:create') && (
@@ -648,6 +655,45 @@ const Candidates = () => {
                   </tbody>
                 </table>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Form Link Modal */}
+      {formLinkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setFormLinkModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-surface-900">Send Candidate Form Link</h3>
+              <button onClick={() => setFormLinkModal(false)} className="p-1.5 rounded-lg hover:bg-surface-100">
+                <X className="w-4 h-4 text-surface-500" />
+              </button>
+            </div>
+            <p className="text-sm text-surface-500 mb-4">
+              Enter the candidate's email to send them a self-registration link, or leave blank to copy it to clipboard.
+            </p>
+            <label className="block text-sm font-medium text-surface-700 mb-1">Candidate Email <span className="text-surface-400 font-normal">(optional)</span></label>
+            <input
+              type="email"
+              value={formLinkEmail}
+              onChange={e => setFormLinkEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !generatingLink && handleGenerateFormLink()}
+              placeholder="candidate@example.com"
+              className="w-full px-3 py-2 border border-surface-300 rounded-lg text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setFormLinkModal(false)} className="flex-1 px-4 py-2 text-sm border border-surface-200 rounded-lg hover:bg-surface-50">
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerateFormLink}
+                disabled={generatingLink}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg"
+              >
+                <Send className="w-4 h-4" />
+                {generatingLink ? 'Generating…' : (formLinkEmail.trim() ? 'Send Link' : 'Copy Link')}
+              </button>
             </div>
           </div>
         </div>

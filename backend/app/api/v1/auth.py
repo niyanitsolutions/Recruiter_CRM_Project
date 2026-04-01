@@ -38,6 +38,7 @@ class RenewalOrderRequest(BaseModel):
     plan_id: str
     billing_cycle: str = "monthly"
     user_count: int = 1
+    payment_type: str = "renewal"  # renewal | seat_upgrade
 
 
 class RenewalVerifyRequest(BaseModel):
@@ -509,7 +510,8 @@ async def create_renewal_order(data: RenewalOrderRequest):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
 
     result, error = await payment_service.create_razorpay_order(
-        tenant["_id"], data.plan_id, data.billing_cycle, data.user_count
+        tenant["_id"], data.plan_id, data.billing_cycle, data.user_count,
+        payment_type=data.payment_type,
     )
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
