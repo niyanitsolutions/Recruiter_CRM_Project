@@ -1,7 +1,13 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import axios from 'axios'
 import authService from '../services/authService'
-import { getToken, setToken, removeToken, getUser, setUser, removeUser, isTokenExpired, parseToken } from '../utils/token'
+import {
+  getToken, setToken, removeToken,
+  getUser, setUser, removeUser,
+  getRefreshToken, setRefreshToken, removeRefreshToken,
+  setRememberMe, getRememberMe,
+  isTokenExpired, parseToken,
+} from '../utils/token'
 
 const _API_BASE = import.meta.env.VITE_API_URL || '/api/v1'
 
@@ -43,7 +49,7 @@ const _idleTooLong  = _lastActivity > 0 && (Date.now() - _lastActivity) > INACTI
 if (_idleTooLong) {
   removeToken()
   removeUser()
-  localStorage.removeItem('refresh_token')
+  removeRefreshToken()
   localStorage.removeItem('last_activity')
 }
 
@@ -57,25 +63,26 @@ if (!_tokenValid && _storedToken) {
   removeUser()
 }
 
-// Try localStorage first; fall back to decoding the JWT if user_data is missing.
-// This handles the case where user_data was cleared but the token is still valid.
+// Try localStorage/sessionStorage first; fall back to decoding the JWT if user_data is missing.
 const _initialUser = _tokenValid
   ? (getUser() || _userFromPayload(parseToken(_storedToken)))
   : null
 
-// Persist the user back to localStorage if we recovered it from the JWT
+// Persist the user back to storage if we recovered it from the JWT
 if (_tokenValid && !getUser() && _initialUser) {
   setUser(_initialUser)
 }
 
 const initialState = {
-  user:               _initialUser,
-  token:              _tokenValid ? _storedToken : null,
-  isAuthenticated:    _tokenValid,
-  isLoading:          false,
-  isInitializing:     !_tokenValid && !!localStorage.getItem('refresh_token'), // silent refresh pending
-  error:              null,
+  user:                _initialUser,
+  token:               _tokenValid ? _storedToken : null,
+  isAuthenticated:     _tokenValid,
+  isLoading:           false,
+  isInitializing:      !_tokenValid && !!getRefreshToken(), // silent refresh pending
+  error:               null,
   subscriptionExpired: null, // { type, isOwner, message, planExpiry, tenantId, companyId }
+  forcePasswordChange: false,
+  profileCompleted:    null, // null = unknown, true/false from login response
 }
 
 // ── Async thunks ──────────────────────────────────────────────────────────────
@@ -84,8 +91,9 @@ export const login = createAsyncThunk(
   'auth/login',
   async (credentials, { rejectWithValue }) => {
     try {
-      const response = await authService.login(credentials)
-      return response.data
+      const { remember_me, ...loginData } = credentials
+      const response = await authService.login(loginData)
+      return { ...response.data, remember_me: remember_me !== false }
     } catch (error) {
       if (error.response?.status === 403) {
         const detail = error.response.data?.detail || {}
@@ -134,7 +142,7 @@ export const refreshToken = createAsyncThunk(
   'auth/refreshToken',
   async (_, { rejectWithValue }) => {
     try {
-      const storedRefresh = localStorage.getItem('refresh_token')
+      const storedRefresh = getRefreshToken()
       if (!storedRefresh) throw new Error('No refresh token')
       const response = await authService.refreshToken(storedRefresh)
       return response.data
@@ -153,7 +161,7 @@ export const refreshToken = createAsyncThunk(
 export const initAuth = createAsyncThunk(
   'auth/init',
   async (_, { rejectWithValue }) => {
-    const storedRefresh = localStorage.getItem('refresh_token')
+    const storedRefresh = getRefreshToken()
     if (!storedRefresh) return rejectWithValue('no session')
     try {
       const response = await axios.post(
@@ -206,15 +214,17 @@ export const logoutUser = createAsyncThunk(
 
 // ── Helper: wipe all auth state ───────────────────────────────────────────────
 const _clearAuth = (state) => {
-  state.user               = null
-  state.token              = null
-  state.isAuthenticated    = false
-  state.isInitializing     = false
-  state.error              = null
+  state.user                = null
+  state.token               = null
+  state.isAuthenticated     = false
+  state.isInitializing      = false
+  state.error               = null
   state.subscriptionExpired = null
+  state.forcePasswordChange = false
+  state.profileCompleted    = null
   removeToken()
   removeUser()
-  localStorage.removeItem('refresh_token')
+  removeRefreshToken()
   localStorage.removeItem('last_activity')
 }
 
@@ -230,9 +240,16 @@ const authSlice = createSlice({
       state.user            = user
       state.token           = access_token
       state.isAuthenticated = true
-      setToken(access_token)
-      setUser(user)
-      if (refresh_token) localStorage.setItem('refresh_token', refresh_token)
+      setToken(access_token, getRememberMe())
+      setUser(user, getRememberMe())
+      if (refresh_token) setRefreshToken(refresh_token, getRememberMe())
+    },
+    clearForcePasswordChange: (state) => {
+      state.forcePasswordChange = false
+    },
+    setProfileCompleted: (state) => {
+      state.profileCompleted = true
+      if (state.user) state.user = { ...state.user }
     },
   },
   extraReducers: (builder) => {
@@ -244,9 +261,14 @@ const authSlice = createSlice({
         state.subscriptionExpired = null
       })
       .addCase(login.fulfilled, (state, action) => {
+        const remember = action.payload.remember_me !== false
         state.isLoading = false
         state.isAuthenticated = true
         state.token = action.payload.access_token
+        state.forcePasswordChange = !!action.payload.must_change_password
+        state.profileCompleted = action.payload.profile_completed !== undefined
+          ? action.payload.profile_completed
+          : true
         state.user = {
           id:          action.payload.user_id,
           username:    action.payload.username,
@@ -263,9 +285,10 @@ const authSlice = createSlice({
           sellerId:    action.payload.seller_id    || null,
           isOwner:     action.payload.is_owner     || false,
         }
-        setToken(action.payload.access_token)
-        setUser(state.user)
-        localStorage.setItem('refresh_token', action.payload.refresh_token)
+        setRememberMe(remember)
+        setToken(action.payload.access_token, remember)
+        setUser(state.user, remember)
+        setRefreshToken(action.payload.refresh_token, remember)
         localStorage.setItem('last_activity', Date.now().toString())
       })
       .addCase(login.rejected, (state, action) => {
@@ -295,11 +318,10 @@ const authSlice = createSlice({
 
       // ── Refresh Token (in-flight, via api interceptor) ─────────────────────
       .addCase(refreshToken.fulfilled, (state, action) => {
+        const rem = getRememberMe()
         state.token = action.payload.access_token
-        setToken(action.payload.access_token)
-        if (action.payload.refresh_token) {
-          localStorage.setItem('refresh_token', action.payload.refresh_token)
-        }
+        setToken(action.payload.access_token, rem)
+        if (action.payload.refresh_token) setRefreshToken(action.payload.refresh_token, rem)
       })
       .addCase(refreshToken.rejected, (state) => {
         _clearAuth(state)
@@ -308,22 +330,21 @@ const authSlice = createSlice({
       // ── Get Current User ───────────────────────────────────────────────────
       .addCase(getCurrentUser.fulfilled, (state, action) => {
         state.user = { ...state.user, ...action.payload }
-        setUser(state.user)
+        setUser(state.user, getRememberMe())
       })
 
       // ── Init Auth (silent refresh on app startup) ──────────────────────────
       .addCase(initAuth.fulfilled, (state, action) => {
+        const rem = getRememberMe()
         state.isInitializing  = false
         state.isAuthenticated = true
         state.token           = action.payload.access_token
         if (action.payload.user) {
           state.user = action.payload.user
-          setUser(action.payload.user)
+          setUser(action.payload.user, rem)
         }
-        setToken(action.payload.access_token)
-        if (action.payload.refresh_token) {
-          localStorage.setItem('refresh_token', action.payload.refresh_token)
-        }
+        setToken(action.payload.access_token, rem)
+        if (action.payload.refresh_token) setRefreshToken(action.payload.refresh_token, rem)
       })
       .addCase(initAuth.rejected, (state) => {
         // Silent refresh failed — clear everything so user sees the login page
@@ -332,7 +353,7 @@ const authSlice = createSlice({
   },
 })
 
-export const { logout, clearError, setCredentials } = authSlice.actions
+export const { logout, clearError, setCredentials, clearForcePasswordChange, setProfileCompleted } = authSlice.actions
 // logoutUser is already exported at declaration (createAsyncThunk)
 
 export default authSlice.reducer
@@ -349,4 +370,6 @@ export const selectIsOwner            = (state) => state.auth.user?.isOwner     
 export const selectUserRole           = (state) => state.auth.user?.role          || null
 export const selectUserType           = (state) => state.auth.user?.userType      || 'internal'
 export const selectUserPermissions    = (state) => state.auth.user?.permissions   || []
-export const selectSubscriptionExpired = (state) => state.auth.subscriptionExpired || null
+export const selectSubscriptionExpired  = (state) => state.auth.subscriptionExpired  || null
+export const selectForcePasswordChange  = (state) => state.auth.forcePasswordChange  || false
+export const selectProfileCompleted     = (state) => state.auth.profileCompleted

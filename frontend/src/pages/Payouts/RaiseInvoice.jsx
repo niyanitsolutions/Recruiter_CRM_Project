@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, FileText, CheckCircle, DollarSign, Calendar
 } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import { payoutService } from '../../services'
 
 const RaiseInvoice = () => {
@@ -58,7 +59,7 @@ const RaiseInvoice = () => {
 
   const handleSubmit = async () => {
     if (selectedPayouts.length === 0) {
-      alert('Please select at least one payout')
+      toast.error('Please select at least one payout')
       return
     }
 
@@ -72,7 +73,7 @@ const RaiseInvoice = () => {
       navigate('/payouts/invoices')
     } catch (error) {
       console.error('Error raising invoice:', error)
-      alert('Error raising invoice')
+      toast.error(error.response?.data?.detail || error.response?.data?.message || 'Error raising invoice')
     } finally {
       setSubmitting(false)
     }

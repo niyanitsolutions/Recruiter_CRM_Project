@@ -278,24 +278,83 @@ const [errors,       setErrors]       = useState({})
   const handleChange = (e) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
+    // Clear error for this field as soon as user starts correcting it
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }))
+  }
+
+  // ── Per-field blur validation ─────────────────────────────────────────────
+  const handleBlur = (e) => {
+    const { name, value } = e.target
+    const next = { ...errors }
+
+    switch (name) {
+      case 'full_name':
+        if (!value.trim()) next.full_name = 'Full name is required'
+        else if (value.trim().length < 2) next.full_name = 'Minimum 2 characters'
+        else delete next.full_name
+        break
+      case 'username':
+        if (!value.trim()) next.username = 'Username is required'
+        else if (value.length < 3) next.username = 'Minimum 3 characters'
+        else if (!/^[a-zA-Z0-9_]+$/.test(value)) next.username = 'Letters, numbers, and underscores only'
+        else delete next.username
+        break
+      case 'email':
+        if (!value.trim()) next.email = 'Email is required'
+        else if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value)) next.email = 'Invalid email format'
+        else delete next.email
+        break
+      case 'mobile': {
+        const digits = value.replace(/\D/g, '')
+        if (!value.trim()) next.mobile = 'Contact number is required'
+        else if (!/^[6-9]\d{9}$/.test(digits)) next.mobile = 'Must start with 6–9 and be exactly 10 digits'
+        else delete next.mobile
+        break
+      }
+      case 'password':
+        if (!isEdit) {
+          if (!value) next.password = 'Password is required'
+          else if (value.length < 8) next.password = 'Minimum 8 characters'
+          else if (!/[A-Z]/.test(value)) next.password = 'Must contain at least one uppercase letter'
+          else if (!/[a-z]/.test(value)) next.password = 'Must contain at least one lowercase letter'
+          else if (!/\d/.test(value)) next.password = 'Must contain at least one number'
+          else delete next.password
+        }
+        break
+      default:
+        break
+    }
+    setErrors(next)
   }
 
   // ── Validation & submit ──────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault()
     const newErrors = {}
-    if (!formData.full_name) newErrors.full_name = 'Required'
-    if (!formData.username)  newErrors.username  = 'Required'
-    if (!formData.email)     newErrors.email     = 'Required'
-    if (!formData.mobile) {
-      newErrors.mobile = 'Required'
-    } else if (!/^[6-9]\d{9}$/.test(formData.mobile.replace(/\D/g, ''))) {
-      newErrors.mobile = 'Must start with 6–9 and be 10 digits'
+    if (!formData.full_name.trim()) {
+      newErrors.full_name = 'Full name is required'
+    } else if (formData.full_name.trim().length < 2) {
+      newErrors.full_name = 'Minimum 2 characters'
+    }
+    if (!formData.username.trim()) {
+      newErrors.username = 'Username is required'
+    } else if (!isEdit && !/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+      newErrors.username = 'Letters, numbers, and underscores only'
+    }
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required'
+    } else if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(formData.email)) {
+      newErrors.email = 'Invalid email format'
+    }
+    const mobileDigits = formData.mobile.replace(/\D/g, '')
+    if (!formData.mobile.trim()) {
+      newErrors.mobile = 'Contact number is required'
+    } else if (!/^[6-9]\d{9}$/.test(mobileDigits)) {
+      newErrors.mobile = 'Must start with 6–9 and be exactly 10 digits'
     }
     if (!isEdit) {
       if (!formData.password) {
-        newErrors.password = 'Required'
+        newErrors.password = 'Password is required'
       } else {
         if (formData.password.length < 8)          newErrors.password = 'Minimum 8 characters'
         else if (!/[A-Z]/.test(formData.password)) newErrors.password = 'Must contain at least one uppercase letter'
@@ -453,11 +512,10 @@ const [errors,       setErrors]       = useState({})
       // 402 — seat limit reached
       if (status === 402 && detail?.seat_limit_reached) {
         setError(`User seat limit reached. You have used ${detail.current_active_users} of ${detail.total_user_seats} seats. Please upgrade your plan to add more users.`)
-      } else if (Array.isArray(detail)) {
-        // 422 Pydantic validation errors
-        setError(detail.map(d => d.msg?.replace('Value error, ', '') || d.msg).join('; '))
       } else {
-        setError(typeof detail === 'string' ? detail : 'Failed to save user. Please try again.')
+        // Use clean message from backend (422 now returns {success, message}, others return detail string)
+        const msg = err.response?.data?.message || (typeof detail === 'string' ? detail : null)
+        setError(msg || 'Failed to save user. Please try again.')
       }
     } finally { setSaving(false) }
   }
@@ -476,7 +534,8 @@ const [errors,       setErrors]       = useState({})
       navigate('/users')
     } catch (err) {
       const detail = err.response?.data?.detail
-      setError(typeof detail === 'string' ? detail : 'Failed to create user')
+      const msg = err.response?.data?.message
+      setError(typeof detail === 'string' ? detail : msg || 'Failed to create user')
       setDuplicateModal({ show: false, fields: {}, overrideChecked: false, overrideTouched: false })
     } finally { setSaving(false) }
   }, [duplicateModal.overrideChecked, navigate])
@@ -590,7 +649,7 @@ const [errors,       setErrors]       = useState({})
               <label className="block text-sm font-medium text-surface-700 mb-1">
                 Full Name <span className="text-red-500">*</span>
               </label>
-              <input type="text" name="full_name" value={formData.full_name} onChange={handleChange}
+              <input type="text" name="full_name" value={formData.full_name} onChange={handleChange} onBlur={handleBlur}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-accent-500 ${errors.full_name ? 'border-red-500' : 'border-surface-300'}`} />
               {errors.full_name && <p className="mt-1 text-sm text-red-500">{errors.full_name}</p>}
             </div>
@@ -605,7 +664,7 @@ const [errors,       setErrors]       = useState({})
               <label className="block text-sm font-medium text-surface-700 mb-1">
                 Username <span className="text-red-500">*</span>
               </label>
-              <input type="text" name="username" value={formData.username} onChange={handleChange}
+              <input type="text" name="username" value={formData.username} onChange={handleChange} onBlur={handleBlur}
                 disabled={isEdit}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-accent-500 ${errors.username ? 'border-red-500' : 'border-surface-300'} ${isEdit ? 'bg-surface-100' : ''}`} />
               {errors.username && <p className="mt-1 text-sm text-red-500">{errors.username}</p>}
@@ -616,7 +675,7 @@ const [errors,       setErrors]       = useState({})
                 <label className="block text-sm font-medium text-surface-700 mb-1">
                   Password <span className="text-red-500">*</span>
                 </label>
-                <input type="password" name="password" value={formData.password} onChange={handleChange}
+                <input type="password" name="password" value={formData.password} onChange={handleChange} onBlur={handleBlur}
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-accent-500 ${errors.password ? 'border-red-500' : 'border-surface-300'}`} />
                 <p className="mt-1 text-xs text-surface-500">Min 8 chars, uppercase, lowercase, number.</p>
                 {errors.password && <p className="mt-1 text-sm text-red-500">{errors.password}</p>}
@@ -627,7 +686,7 @@ const [errors,       setErrors]       = useState({})
               <label className="block text-sm font-medium text-surface-700 mb-1">
                 Email <span className="text-red-500">*</span>
               </label>
-              <input type="email" name="email" value={formData.email} onChange={handleChange}
+              <input type="email" name="email" value={formData.email} onChange={handleChange} onBlur={handleBlur}
                 disabled={isEdit}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-accent-500 ${errors.email ? 'border-red-500' : 'border-surface-300'} ${isEdit ? 'bg-surface-100' : ''}`} />
               {errors.email && <p className="mt-1 text-sm text-red-500">{errors.email}</p>}
@@ -637,7 +696,7 @@ const [errors,       setErrors]       = useState({})
               <label className="block text-sm font-medium text-surface-700 mb-1">
                 Contact <span className="text-red-500">*</span>
               </label>
-              <input type="text" name="mobile" value={formData.mobile} onChange={handleChange}
+              <input type="text" name="mobile" value={formData.mobile} onChange={handleChange} onBlur={handleBlur}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-accent-500 ${errors.mobile ? 'border-red-500' : 'border-surface-300'}`} />
               {errors.mobile && <p className="mt-1 text-sm text-red-500">{errors.mobile}</p>}
             </div>

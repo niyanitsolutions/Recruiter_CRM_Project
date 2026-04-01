@@ -84,6 +84,10 @@ class LoginResponse(BaseModel):
     total_user_seats: Optional[int] = None
     is_trial: Optional[bool] = None
 
+    # Onboarding flags
+    must_change_password: bool = False
+    profile_completed: bool = True
+
 
 class RefreshTokenRequest(BaseModel):
     """Request to refresh access token"""

@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Download,
 } from 'lucide-react'
 import userService from '../../services/userService'
 import departmentService from '../../services/departmentService'
@@ -22,6 +23,7 @@ import subscriptionService from '../../services/subscriptionService'
 import SeatLimitModal from '../../components/subscription/SeatLimitModal'
 import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 import SubscriptionBanner from '../../components/subscription/SubscriptionBanner'
+import ExportModal from '../../components/common/ExportModal'
 
 // Status Badge Component
 const StatusBadge = ({ status }) => {
@@ -260,6 +262,7 @@ const Users = () => {
   const [deleteDialog, setDeleteDialog] = useState({ open: false, user: null })
   const [statusDialog, setStatusDialog] = useState({ open: false, user: null, status: '' })
   const [resetPasswordDialog, setResetPasswordDialog] = useState({ open: false, user: null })
+  const [exportOpen, setExportOpen] = useState(false)
 
   // Fetch seat status once on mount
   useEffect(() => {
@@ -413,22 +416,33 @@ const Users = () => {
           <h1 className="text-2xl font-bold text-surface-900">Users</h1>
           <p className="text-surface-500 mt-1">Manage your organization's users</p>
         </div>
-        {has('users:create') && (
-          <button
-            onClick={handleAddUserClick}
-            disabled={seatStatus?.is_expired}
-            title={seatStatus?.seat_limit_reached ? 'User seat limit reached — upgrade to add more' : undefined}
-            className="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add User
-            {seatStatus?.seat_limit_reached && (
-              <span className="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded">
-                {seatStatus.current_active_users}/{seatStatus.total_user_seats}
-              </span>
-            )}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {has('exports:create') && (
+            <button
+              onClick={() => setExportOpen(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
+          )}
+          {has('users:create') && (
+            <button
+              onClick={handleAddUserClick}
+              disabled={seatStatus?.is_expired}
+              title={seatStatus?.seat_limit_reached ? 'User seat limit reached — upgrade to add more' : undefined}
+              className="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add User
+              {seatStatus?.seat_limit_reached && (
+                <span className="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded">
+                  {seatStatus.current_active_users}/{seatStatus.total_user_seats}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Search & Filters */}
@@ -574,7 +588,13 @@ const Users = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-surface-700">{user.designation || '-'}</span>
+                      {user.designation === 'Owner' || user.is_owner ? (
+                        <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">Owner</span>
+                      ) : user.designation === 'Admin' ? (
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">Admin</span>
+                      ) : (
+                        <span className="text-surface-600 text-sm">{user.department || user.designation || '-'}</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-surface-600">
                       {user.department || '-'}
@@ -655,6 +675,44 @@ const Users = () => {
         user={resetPasswordDialog.user}
         onConfirm={handleResetPassword}
         onCancel={() => setResetPasswordDialog({ open: false, user: null })}
+      />
+
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title="Export Users"
+        apiPath="/export/users"
+        extraFilters={({ status, setStatus, extra, setExtraField }) => (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">Role</label>
+              <select value={extra.role || ''} onChange={e => setExtraField('role', e.target.value)} className="input w-full">
+                <option value="">All Roles</option>
+                {roles.map(r => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
+              <select value={status} onChange={e => setStatus(e.target.value)} className="input w-full">
+                <option value="">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-surface-700 mb-1">Department</label>
+              <select value={extra.department || ''} onChange={e => setExtraField('department', e.target.value)} className="input w-full">
+                <option value="">All Departments</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.name}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       />
     </div>
   )

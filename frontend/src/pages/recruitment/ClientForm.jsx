@@ -143,10 +143,11 @@ const ClientForm = () => {
       navigate('/clients')
     } catch (error) {
       const detail = error.response?.data?.detail
+      const msg = error.response?.data?.message
       if (Array.isArray(detail)) {
         toast.error(detail.map(d => d.msg?.replace('Value error, ', '') || d.msg).join('; '))
       } else {
-        toast.error(typeof detail === 'string' ? detail : 'Failed to save client')
+        toast.error(typeof detail === 'string' ? detail : msg || 'Failed to save client')
       }
     } finally {
       setSaving(false)

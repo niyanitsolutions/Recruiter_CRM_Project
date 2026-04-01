@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Search, Plus, Ban, CheckCircle, Trash2, Eye, RefreshCw, Percent } from 'lucide-react'
+import { Search, Plus, Ban, CheckCircle, Trash2, Eye, RefreshCw, Percent, Download } from 'lucide-react'
 import { Button, Card, Table, StatusBadge, Select, Modal, Badge } from '../../components/common'
 import sellerService from '../../services/sellerService'
 import { formatDate, formatRelativeTime } from '../../utils/format'
 import toast from 'react-hot-toast'
+import ExportModal from '../../components/common/ExportModal'
 
 const emptyForm = {
   seller_name: '', company_name: '', email: '', phone: '',
@@ -95,6 +96,7 @@ const Sellers = () => {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [selected, setSelected] = useState(null)
   const [form, setForm] = useState(emptyForm)
+  const [exportOpen, setExportOpen] = useState(false)
   const [formErrors, setFormErrors] = useState({})
 
   const limit = 10
@@ -323,6 +325,7 @@ const Sellers = () => {
         </div>
         <div className="flex gap-3">
           <Button variant="secondary" onClick={fetchSellers} leftIcon={<RefreshCw className="w-4 h-4" />}>Refresh</Button>
+          <Button variant="secondary" onClick={() => setExportOpen(true)} leftIcon={<Download className="w-4 h-4" />}>Export</Button>
           <Button onClick={() => { setForm(emptyForm); setFormErrors({}); setIsCreateOpen(true) }} leftIcon={<Plus className="w-4 h-4" />}>Add Seller</Button>
         </div>
       </div>
@@ -435,6 +438,23 @@ const Sellers = () => {
           </div>
         )}
       </Modal>
+
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title="Export Resellers"
+        apiPath="/export/resellers"
+        extraFilters={({ status, setStatus }) => (
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
+            <select value={status} onChange={e => setStatus(e.target.value)} className="input w-full">
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+            </select>
+          </div>
+        )}
+      />
     </div>
   )
 }

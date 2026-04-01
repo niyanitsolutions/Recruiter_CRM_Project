@@ -147,6 +147,8 @@ class UserService:
                 "locked_until": None,
                 "password_changed_at": now,
                 "must_change_password": False,
+                # New admins haven't completed their profile yet (shown as a one-time popup)
+                "profile_completed": False,
                 "created_by": created_by_id,
                 "created_at": now,
                 "updated_by": None,

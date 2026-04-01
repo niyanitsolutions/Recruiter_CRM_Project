@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Edit, Trash2, Award, Users } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import designationService from '../../services/designationService'
 import usePermissions from '../../hooks/usePermissions'
 
@@ -26,7 +27,7 @@ const Designations = () => {
       await designationService.deleteDesignation(deleteDialog.desig.id)
       setDeleteDialog({ open: false, desig: null })
       fetchDesignations()
-    } catch (err) { alert(err.response?.data?.detail || 'Failed to delete') }
+    } catch (err) { toast.error(err.response?.data?.detail || err.response?.data?.message || 'Failed to delete') }
   }
 
   return (

@@ -209,6 +209,16 @@ class AuthService:
             user.get("is_owner", False)
         )
 
+        # Log login activity
+        await AuthService._log_login_activity(
+            company_id=company_id,
+            user_id=user_id,
+            full_name=user.get("full_name", ""),
+            role=role_name,
+            ip_address=ip_address,
+            device_info=device_info,
+        )
+
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -234,6 +244,9 @@ class AuthService:
             "plan_expiry": tenant.get("plan_expiry").isoformat() if tenant.get("plan_expiry") else None,
             "total_user_seats": tenant.get("max_users", 3),
             "is_trial": tenant.get("is_trial", True),
+            # Onboarding flags
+            "must_change_password": bool(user.get("must_change_password", False)),
+            "profile_completed": bool(user.get("profile_completed", True)),
         }, ""
 
     @staticmethod
@@ -463,6 +476,29 @@ class AuthService:
             "is_active": True,
         })
         return session_id
+
+    @staticmethod
+    async def _log_login_activity(
+        company_id: str,
+        user_id: str,
+        full_name: str,
+        role: str,
+        ip_address: str = "",
+        device_info: str = "",
+    ) -> None:
+        """Insert a login_logs record into the company database."""
+        try:
+            company_db = get_company_db(company_id)
+            await company_db.login_logs.insert_one({
+                "user_id": user_id,
+                "full_name": full_name,
+                "role": role,
+                "login_time": datetime.now(timezone.utc),
+                "ip_address": ip_address,
+                "device": device_info,
+            })
+        except Exception:
+            pass  # Never block login due to logging failure
 
     @staticmethod
     async def _revoke_sessions(user_id: str) -> None:

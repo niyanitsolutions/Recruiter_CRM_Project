@@ -4,7 +4,8 @@ Handles candidate management with AI resume parsing and keyword search
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from typing import Optional, List
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
+import uuid
 
 from app.models.company.candidate import (
     CandidateCreate, CandidateUpdate, CandidateResponse, CandidateListResponse,
@@ -12,8 +13,10 @@ from app.models.company.candidate import (
 )
 from app.services.candidate_service import CandidateService
 from app.core.dependencies import get_current_user, get_company_db, require_permissions
+from app.core.database import get_master_db
 
 router = APIRouter(prefix="/candidates", tags=["Candidates"])
+public_router = APIRouter(prefix="/public", tags=["Public"])
 
 
 @router.get("/")
@@ -188,6 +191,90 @@ async def parse_resume(
     }
 
 
+@router.post("/extract-resume")
+async def extract_resume_file(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    _: bool = Depends(require_permissions(["candidates:create"]))
+):
+    """
+    Upload a resume file (PDF/DOCX/TXT), extract text, and return parsed candidate fields.
+    Used for auto-filling the candidate creation form.
+    """
+    import io, re, os
+
+    ALLOWED = {".pdf", ".doc", ".docx", ".txt"}
+    _, ext = os.path.splitext((file.filename or "").lower())
+    if ext not in ALLOWED:
+        raise HTTPException(status_code=400, detail="Only PDF, DOCX, DOC, or TXT files are supported.")
+
+    content = await file.read()
+    text = ""
+
+    if ext == ".txt":
+        text = content.decode("utf-8", errors="ignore")
+
+    elif ext == ".docx":
+        try:
+            import zipfile, xml.etree.ElementTree as ET
+            with zipfile.ZipFile(io.BytesIO(content)) as z:
+                with z.open("word/document.xml") as xml_file:
+                    tree = ET.parse(xml_file)
+                    texts = [node.text for node in tree.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t") if node.text]
+                    text = " ".join(texts)
+        except Exception:
+            text = ""
+
+    elif ext in (".pdf", ".doc"):
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(content))
+            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception:
+            text = content.decode("utf-8", errors="ignore")
+
+    # ── Parse extracted text ──────────────────────────────────────────────────
+    email_m = re.search(r"[\w.\-+]+@[\w.\-]+\.\w{2,}", text)
+    email = email_m.group() if email_m else None
+
+    phone_m = re.search(r"(?:\+91[-\s]?)?[6-9]\d{9}", re.sub(r"\s", "", text))
+    mobile = phone_m.group() if phone_m else None
+
+    # Simple name extraction: first non-empty line that looks like a name
+    name = ""
+    for line in text.splitlines():
+        line = line.strip()
+        if 2 <= len(line.split()) <= 5 and line.replace(" ", "").isalpha():
+            name = line
+            break
+    first_name = name.split()[0] if name else ""
+    last_name = " ".join(name.split()[1:]) if len(name.split()) > 1 else ""
+
+    # Skills
+    COMMON_SKILLS = [
+        "python", "java", "javascript", "typescript", "react", "vue", "angular",
+        "node", "nodejs", "sql", "mysql", "postgresql", "mongodb", "redis",
+        "aws", "azure", "gcp", "docker", "kubernetes", "git", "agile", "scrum",
+        "django", "flask", "fastapi", "spring", "laravel", "php", "ruby", "go",
+        "rust", "c++", "c#", ".net", "swift", "kotlin", "flutter", "dart",
+        "machine learning", "deep learning", "tensorflow", "pytorch", "nlp",
+    ]
+    text_lower = text.lower()
+    found_skills = [s.title() for s in COMMON_SKILLS if s in text_lower]
+
+    return {
+        "success": True,
+        "data": {
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+            "mobile": re.sub(r"\D", "", mobile)[-10:] if mobile else None,
+            "skills": found_skills,
+            "raw_text": text[:3000],
+        }
+    }
+
+
 @router.post("/{candidate_id}/resume")
 async def upload_candidate_resume(
     candidate_id: str,
@@ -305,3 +392,116 @@ async def delete_candidate(
     )
     
     return {"success": True, "message": "Candidate deleted successfully"}
+
+
+# ── Candidate Form Link (Method 2) ────────────────────────────────────────────
+
+@router.post("/generate-form-link")
+async def generate_candidate_form_link(
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_company_db),
+    _: bool = Depends(require_permissions(["candidates:create"])),
+):
+    """
+    Generate a unique one-time URL that an external candidate can use to
+    self-register.  The token expires in 7 days.
+    """
+    token = uuid.uuid4().hex
+    now = datetime.now(timezone.utc)
+    await db.candidate_form_tokens.insert_one({
+        "_id": token,
+        "created_by": current_user["id"],
+        "created_at": now,
+        "expires_at": now + timedelta(days=7),
+        "used": False,
+    })
+    return {"success": True, "token": token}
+
+
+# ── Public endpoints (no auth) ────────────────────────────────────────────────
+
+@public_router.get("/candidate-form/{token}")
+async def get_candidate_form_meta(token: str):
+    """Validate a form token and return minimal metadata (used by the public form page)."""
+    from app.core.database import get_master_db as _master
+    master_db = _master()
+    # Find the token across all company DBs via the master tenants list
+    tenants = await master_db.tenants.find({}, {"company_id": 1}).to_list(length=500)
+    for t in tenants:
+        cid = t.get("company_id")
+        if not cid:
+            continue
+        from app.core.database import get_company_db as _cdb
+        cdb = _cdb(cid)
+        doc = await cdb.candidate_form_tokens.find_one({"_id": token})
+        if doc:
+            if doc.get("used"):
+                raise HTTPException(status_code=410, detail="This link has already been used.")
+            if doc["expires_at"].replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+                raise HTTPException(status_code=410, detail="This link has expired.")
+            return {"success": True, "token": token, "company_id": cid}
+    raise HTTPException(status_code=404, detail="Invalid or expired form link.")
+
+
+@public_router.post("/candidate-form/{token}")
+async def submit_candidate_form(token: str, data: dict):
+    """
+    Public endpoint — no auth.  Accepts candidate details submitted via the
+    form link and creates a candidate record in the correct company DB.
+    """
+    from app.core.database import get_master_db as _master, get_company_db as _cdb
+    master_db = _master()
+    tenants = await master_db.tenants.find({}, {"company_id": 1}).to_list(length=500)
+    company_db = None
+    token_doc = None
+    for t in tenants:
+        cid = t.get("company_id")
+        if not cid:
+            continue
+        cdb = _cdb(cid)
+        doc = await cdb.candidate_form_tokens.find_one({"_id": token})
+        if doc:
+            token_doc = doc
+            company_db = cdb
+            break
+
+    if not token_doc:
+        raise HTTPException(status_code=404, detail="Invalid or expired form link.")
+    if token_doc.get("used"):
+        raise HTTPException(status_code=410, detail="This link has already been used.")
+    if token_doc["expires_at"].replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=410, detail="This link has expired.")
+
+    # Build minimal candidate document
+    now = datetime.now(timezone.utc)
+    candidate_id = uuid.uuid4().hex
+    candidate = {
+        "_id": candidate_id,
+        "first_name": data.get("first_name", "").strip(),
+        "last_name": data.get("last_name", "").strip(),
+        "email": data.get("email", "").strip().lower(),
+        "mobile": data.get("mobile", "").strip(),
+        "current_city": data.get("current_city", ""),
+        "skills": data.get("skills", []),
+        "summary": data.get("summary", ""),
+        "source": "form_link",
+        "status": "active",
+        "is_deleted": False,
+        "created_by": token_doc.get("created_by"),
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    if not candidate["first_name"] or not candidate["email"]:
+        raise HTTPException(status_code=422, detail="first_name and email are required.")
+
+    # Check for duplicate email
+    existing = await company_db.candidates.find_one({"email": candidate["email"], "is_deleted": False})
+    if existing:
+        raise HTTPException(status_code=409, detail="A candidate with this email already exists.")
+
+    await company_db.candidates.insert_one(candidate)
+    # Mark token as used
+    await company_db.candidate_form_tokens.update_one({"_id": token}, {"$set": {"used": True, "used_at": now}})
+
+    return {"success": True, "message": "Thank you! Your details have been submitted."}

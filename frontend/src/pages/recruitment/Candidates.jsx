@@ -2,16 +2,20 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Users, Plus, Search, Filter, Eye, Edit, Trash2,
-  Mail, MapPin, FileText, Sparkles, Briefcase, X
+  Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import { useSelector } from 'react-redux'
 import candidateService from '../../services/candidateService'
 import applicationService from '../../services/applicationService'
 import usePermissions from '../../hooks/usePermissions'
+import ExportModal from '../../components/common/ExportModal'
+import { selectUserType } from '../../store/authSlice'
 
 const Candidates = () => {
   const navigate = useNavigate()
   const { has } = usePermissions()
+  const userType = useSelector(selectUserType)
   const [candidates, setCandidates] = useState([])
   const [activeTab, setActiveTab] = useState('all') // 'all' | 'active' | 'blacklisted'
   const [loading, setLoading] = useState(true)
@@ -32,6 +36,23 @@ const Candidates = () => {
   const [statuses, setStatuses] = useState([])
   const [sources, setSources] = useState([])
   const [noticePeriods, setNoticePeriods] = useState([])
+
+  const [exportOpen, setExportOpen] = useState(false)
+  const [generatingLink, setGeneratingLink] = useState(false)
+
+  const handleGenerateFormLink = async () => {
+    try {
+      setGeneratingLink(true)
+      const res = await candidateService.generateFormLink()
+      const url = `${window.location.origin}/apply/${res.token}`
+      await navigator.clipboard.writeText(url)
+      toast.success('Form link copied to clipboard!')
+    } catch {
+      toast.error('Failed to generate form link')
+    } finally {
+      setGeneratingLink(false)
+    }
+  }
 
   // Apply modal state
   const [applyModal, setApplyModal] = useState(null)        // null | { candidate }
@@ -195,12 +216,33 @@ const Candidates = () => {
           <h1 className="text-2xl font-bold text-surface-900">Candidates</h1>
           <p className="text-surface-500">Master talent pool — manage candidate profiles</p>
         </div>
-        {has('candidates:create') && (
-          <Link to="/candidates/new" className="btn-primary flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            Add Candidate
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {has('exports:create') && (
+            <button
+              onClick={() => setExportOpen(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
+          )}
+          {has('candidates:create') && (
+            <button
+              onClick={handleGenerateFormLink}
+              disabled={generatingLink}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Link2 className="w-4 h-4" />
+              {generatingLink ? 'Generating…' : 'Form Link'}
+            </button>
+          )}
+          {has('candidates:create') && (
+            <Link to="/candidates/new" className="btn-primary flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              Add Candidate
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -451,13 +493,15 @@ const Candidates = () => {
                     >
                       <option value="active">Active</option>
                       <option value="blacklisted">Blacklisted</option>
-                      <option
-                        value="apply"
-                        disabled={candidate.status === 'blacklisted'}
-                        className="font-semibold text-primary-700"
-                      >
-                        Apply →
-                      </option>
+                      {userType !== 'partner' && (
+                        <option
+                          value="apply"
+                          disabled={candidate.status === 'blacklisted'}
+                          className="font-semibold text-primary-700"
+                        >
+                          Apply →
+                        </option>
+                      )}
                     </select>
                   </td>
                   <td className="px-4 py-4">
@@ -608,6 +652,24 @@ const Candidates = () => {
           </div>
         </div>
       )}
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title="Export Candidates"
+        apiPath="/export/candidates"
+        extraFilters={({ status, setStatus }) => (
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
+            <select value={status} onChange={e => setStatus(e.target.value)} className="input w-full">
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="blacklisted">Blacklisted</option>
+            </select>
+          </div>
+        )}
+      />
     </div>
   )
 }

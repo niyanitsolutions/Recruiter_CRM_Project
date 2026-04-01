@@ -2,15 +2,19 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Briefcase, Plus, Search, Filter, Eye, Edit, Trash2,
-  Building2, MapPin, Users, Clock, AlertCircle
+  Building2, MapPin, Users, Clock, AlertCircle, Download
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
+import { useSelector } from 'react-redux'
 import jobService from '../../services/jobService'
 import usePermissions from '../../hooks/usePermissions'
+import ExportModal from '../../components/common/ExportModal'
+import { selectUserType } from '../../store/authSlice'
 
 const Jobs = () => {
   const navigate = useNavigate()
   const { has } = usePermissions()
+  const userType = useSelector(selectUserType)
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 })
@@ -27,6 +31,7 @@ const Jobs = () => {
   const [jobTypes, setJobTypes] = useState([])
   const [workModes, setWorkModes] = useState([])
   const [priorities, setPriorities] = useState([])
+  const [exportOpen, setExportOpen] = useState(false)
 
   useEffect(() => {
     loadDropdowns()
@@ -117,15 +122,23 @@ const Jobs = () => {
           <h1 className="text-2xl font-bold text-surface-900">Jobs</h1>
           <p className="text-surface-500">Manage job postings and requirements</p>
         </div>
-        {has('jobs:create') && (
-          <Link
-            to="/jobs/new"
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add Job
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {has('exports:create') && (
+            <button
+              onClick={() => setExportOpen(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
+          )}
+          {has('jobs:create') && (
+            <Link to="/jobs/new" className="btn-primary flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              Add Job
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Search & Filters */}
@@ -306,15 +319,17 @@ const Jobs = () => {
                     <Edit className="w-4 h-4 text-surface-500" />
                   </button>
                 )}
-                <button
-                  onClick={() => {
-                    if (!job.id) return
-                    navigate(`/jobs/${job.id}/matching`)
-                  }}
-                  className="px-3 py-1.5 text-sm font-medium text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
-                >
-                  Find Matching
-                </button>
+                {userType !== 'partner' && (
+                  <button
+                    onClick={() => {
+                      if (!job.id) return
+                      navigate(`/jobs/${job.id}/matching`)
+                    }}
+                    className="px-3 py-1.5 text-sm font-medium text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
+                  >
+                    Find Matching
+                  </button>
+                )}
                 {has('jobs:delete') && (
                   <button
                     onClick={() => handleDelete(job.id, job.title)}
@@ -354,6 +369,23 @@ const Jobs = () => {
           </div>
         </div>
       )}
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title="Export Jobs"
+        apiPath="/export/jobs"
+        extraFilters={({ status, setStatus }) => (
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
+            <select value={status} onChange={e => setStatus(e.target.value)} className="input w-full">
+              <option value="">All Statuses</option>
+              {statuses.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      />
     </div>
   )
 }

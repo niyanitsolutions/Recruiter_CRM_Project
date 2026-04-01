@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Calendar, DollarSign, MapPin, FileText } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import { onboardService, candidateService, jobService, clientService } from '../../services'
 
 const OnboardForm = () => {
@@ -129,7 +130,7 @@ const OnboardForm = () => {
       navigate('/onboards')
     } catch (error) {
       console.error('Error saving onboard:', error)
-      alert('Error saving onboard record')
+      toast.error(error.response?.data?.detail || error.response?.data?.message || 'Error saving onboard record')
     } finally {
       setSaving(false)
     }

@@ -349,6 +349,12 @@ async def change_password(
             {"company_id": auth.company_id},
             {"$set": {"owner.password_hash": hash_password(new_password)}}
         )
+        # Also clear must_change_password in company_db if the owner doc exists there
+        company_db = _get_company_db(auth.company_id)
+        await company_db.users.update_one(
+            {"_id": auth.user_id},
+            {"$set": {"must_change_password": False, "password_changed_at": now}}
+        )
         return {"message": "Password changed successfully.", "success": True}
 
     if auth.company_id:
@@ -358,7 +364,12 @@ async def change_password(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
         await company_db.users.update_one(
             {"_id": auth.user_id},
-            {"$set": {"password_hash": hash_password(new_password), "updated_at": now}}
+            {"$set": {
+                "password_hash": hash_password(new_password),
+                "must_change_password": False,
+                "password_changed_at": now,
+                "updated_at": now,
+            }}
         )
         return {"message": "Password changed successfully.", "success": True}
 
@@ -551,3 +562,24 @@ async def resend_verification_email(data: ResendVerificationRequest):
     """
     success, message = await auth_service.resend_verification_email(data.email)
     return {"success": success, "message": message}
+
+
+@router.get("/login-activity")
+async def get_login_activity(
+    page: int = 1,
+    page_size: int = 50,
+    auth: AuthContext = Depends(get_current_user),
+):
+    """Return paginated login activity logs for the current tenant."""
+    from app.core.database import get_company_db as _get_company_db
+    company_db = _get_company_db(auth.company_id)
+    skip = (page - 1) * page_size
+    cursor = company_db.login_logs.find({}).sort("login_time", -1).skip(skip).limit(page_size)
+    logs = []
+    async for doc in cursor:
+        doc["id"] = str(doc.pop("_id", ""))
+        if doc.get("login_time"):
+            doc["login_time"] = doc["login_time"].isoformat()
+        logs.append(doc)
+    total = await company_db.login_logs.count_documents({})
+    return {"data": logs, "total": total, "page": page, "page_size": page_size}

@@ -1,17 +1,20 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
+import { useForm } from 'react-hook-form'
+import toast from 'react-hot-toast'
 import {
   selectIsAuthenticated, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType, selectUser,
-  selectIsInitializing, initAuth,
+  selectIsInitializing, selectProfileCompleted, initAuth, setProfileCompleted,
 } from './store/authSlice'
 import { useAutoLogout } from './hooks/useAutoLogout'
+import api from './services/api'
 
 // Layouts
 import { Layout, AuthLayout } from './components/layout'
 
 // Auth Pages
-import { Login, Register, ForgotPassword, UpgradePlan, VerifyEmail } from './pages/auth'
+import { Login, Register, ForgotPassword, UpgradePlan, VerifyEmail, ChangePassword } from './pages/auth'
 
 // SuperAdmin Pages
 import {
@@ -55,6 +58,7 @@ import {
   Candidates,
   CandidateForm,
   CandidateDetails,
+  CandidatePublicForm,
   Jobs,
   JobForm,
   JobDetails,
@@ -83,6 +87,7 @@ import {
   InvoiceSettingsPage, CommissionRulesPage, LocalizationPage,
   EmailConfigPage, NotificationSettingsPage, SecuritySettingsPage,
   DataManagementPage, CustomFieldsPage, BrandingPage, SLAConfigPage,
+  LoginActivityPage,
 } from './pages/settings'
 
 // Phase 5 - Reports, Analytics, Imports, Exports, Targets, Audit
@@ -246,6 +251,101 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// ─── Profile Completion Modal ─────────────────────────────────────────────────
+/**
+ * One-time popup shown to Owner/Admin users who haven't completed their profile.
+ * Shown once after login; dismissed permanently after a successful save.
+ */
+const ProfileCompleteModal = () => {
+  const dispatch = useDispatch()
+  const user = useSelector(selectUser)
+  const profileCompleted = useSelector(selectProfileCompleted)
+  const [saving, setSaving] = useState(false)
+
+  const isAdminLevel = user?.isOwner || user?.designation === 'Admin' || user?.designation === 'Owner'
+  const shouldShow = isAdminLevel && profileCompleted === false
+
+  const { register, handleSubmit, formState: { errors } } = useForm({
+    defaultValues: {
+      full_name: user?.fullName || '',
+      email:     user?.email    || '',
+      mobile:    '',
+    },
+  })
+
+  if (!shouldShow) return null
+
+  const onSubmit = async (data) => {
+    setSaving(true)
+    try {
+      await api.patch(`/users/${user.id}`, {
+        full_name:         data.full_name,
+        profile_completed: true,
+      })
+      dispatch(setProfileCompleted())
+      toast.success('Profile updated!')
+    } catch {
+      toast.error('Failed to save profile. Please try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 animate-fade-in">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-accent-100 mb-3">
+            <span className="text-2xl">👋</span>
+          </div>
+          <h2 className="text-xl font-bold text-surface-900">Complete Your Profile</h2>
+          <p className="text-surface-500 text-sm mt-1">
+            Just a few details to get your account ready.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div>
+            <label className="input-label">Full Name <span className="text-danger-500">*</span></label>
+            <input
+              className={`input ${errors.full_name ? 'border-danger-500' : ''}`}
+              placeholder="Your full name"
+              {...register('full_name', { required: 'Full name is required', minLength: { value: 2, message: 'Minimum 2 characters' } })}
+            />
+            {errors.full_name && <p className="input-error-text mt-1">{errors.full_name.message}</p>}
+          </div>
+
+          <div>
+            <label className="input-label">Email</label>
+            <input
+              className="input bg-surface-50 cursor-not-allowed"
+              value={user?.email || ''}
+              disabled
+            />
+          </div>
+
+          <div>
+            <label className="input-label">Mobile</label>
+            <input
+              className="input"
+              placeholder="Contact number (optional)"
+              {...register('mobile')}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full py-3 bg-accent-600 hover:bg-accent-700 disabled:opacity-60 text-white font-semibold rounded-xl transition-colors mt-2"
+          >
+            {saving ? 'Saving…' : 'Save & Continue'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── Auth Initializer ─────────────────────────────────────────────────────────
 /**
  * Runs once on app mount.
@@ -285,6 +385,7 @@ function App() {
   return (
     <ErrorBoundary>
     <AuthInitializer>
+    <ProfileCompleteModal />
     <Routes>
       {/* AUTH — Login & ForgotPassword use the split-panel AuthLayout */}
       <Route element={<GuestRoute><AuthLayout /></GuestRoute>}>
@@ -295,8 +396,16 @@ function App() {
       {/* Register is standalone (full-screen, no split panel) */}
       <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
 
+      {/* Change password — requires authentication, uses AuthLayout */}
+      <Route element={<ProtectedRoute><AuthLayout /></ProtectedRoute>}>
+        <Route path="/change-password" element={<ChangePassword />} />
+      </Route>
+
       {/* Upgrade plan — public, accessible to expired owners who can't log in */}
       <Route path="/upgrade-plan" element={<UpgradePlan />} />
+
+      {/* Candidate self-registration via form link — public, no auth */}
+      <Route path="/apply/:token" element={<CandidatePublicForm />} />
 
       {/* Email verification — public, uses AuthLayout for consistent design */}
       <Route element={<AuthLayout />}>
@@ -353,6 +462,7 @@ function App() {
         <Route path="/settings/custom-fields"        element={<PermissionRoute permission="crm_settings:view"><CustomFieldsPage /></PermissionRoute>} />
         <Route path="/settings/branding"             element={<PermissionRoute permission="crm_settings:view"><BrandingPage /></PermissionRoute>} />
         <Route path="/settings/sla-config"           element={<PermissionRoute permission="crm_settings:view"><SLAConfigPage /></PermissionRoute>} />
+        <Route path="/settings/login-activity"       element={<PermissionRoute permission="crm_settings:view"><LoginActivityPage /></PermissionRoute>} />
       </Route>
 
       {/* PARTNER ONLY */}

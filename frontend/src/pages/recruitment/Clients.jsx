@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Building2, Plus, Search, Filter, MoreVertical,
-  Edit, Trash2, Eye, Phone, Mail, MapPin, Briefcase
+  Edit, Trash2, Eye, Phone, Mail, MapPin, Briefcase, Download
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import clientService from '../../services/clientService'
 import usePermissions from '../../hooks/usePermissions'
+import ExportModal from '../../components/common/ExportModal'
 
 const Clients = () => {
   const navigate = useNavigate()
@@ -24,6 +25,7 @@ const Clients = () => {
   const [showFilters, setShowFilters] = useState(false)
   const [statuses, setStatuses] = useState([])
   const [types, setTypes] = useState([])
+  const [exportOpen, setExportOpen] = useState(false)
 
   useEffect(() => {
     loadDropdowns()
@@ -110,15 +112,23 @@ const Clients = () => {
           <h1 className="text-2xl font-bold text-surface-900">Clients</h1>
           <p className="text-surface-500">Manage hiring companies and vendors</p>
         </div>
-        {has('clients:create') && (
-          <Link
-            to="/clients/new"
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add Client
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {has('exports:create') && (
+            <button
+              onClick={() => setExportOpen(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
+          )}
+          {has('clients:create') && (
+            <Link to="/clients/new" className="btn-primary flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              Add Client
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -345,6 +355,24 @@ const Clients = () => {
           </div>
         )}
       </div>
+
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title="Export Clients"
+        apiPath="/export/clients"
+        extraFilters={({ status, setStatus }) => (
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
+            <select value={status} onChange={e => setStatus(e.target.value)} className="input w-full">
+              <option value="">All Statuses</option>
+              {statuses.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      />
     </div>
   )
 }

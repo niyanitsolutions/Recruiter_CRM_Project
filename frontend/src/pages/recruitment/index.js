@@ -11,6 +11,7 @@ export { default as ClientForm } from './ClientForm'
 export { default as Candidates } from './Candidates'
 export { default as CandidateForm } from './CandidateForm'
 export { default as CandidateDetails } from './CandidateDetails'
+export { default as CandidatePublicForm } from './CandidatePublicForm'
 
 // Jobs
 export { default as Jobs } from './Jobs'

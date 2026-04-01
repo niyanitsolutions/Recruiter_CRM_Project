@@ -4,6 +4,7 @@ import {
   Eye, FileText, CheckCircle, XCircle, DollarSign, 
   Clock, Download, CreditCard
 } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
 import { selectUserRole } from '../../store/authSlice'
 import { payoutService } from '../../services'
@@ -82,7 +83,7 @@ const Invoices = () => {
       setSelectedInvoice(null)
     } catch (error) {
       console.error('Error approving invoice:', error)
-      alert('Error approving invoice')
+      toast.error(error.response?.data?.detail || error.response?.data?.message || 'Error approving invoice')
     } finally {
       setActionLoading(false)
     }
@@ -99,7 +100,7 @@ const Invoices = () => {
       setRejectReason('')
     } catch (error) {
       console.error('Error rejecting invoice:', error)
-      alert('Error rejecting invoice')
+      toast.error(error.response?.data?.detail || error.response?.data?.message || 'Error rejecting invoice')
     } finally {
       setActionLoading(false)
     }
@@ -115,7 +116,7 @@ const Invoices = () => {
       setSelectedInvoice(null)
     } catch (error) {
       console.error('Error recording payment:', error)
-      alert('Error recording payment')
+      toast.error(error.response?.data?.detail || error.response?.data?.message || 'Error recording payment')
     } finally {
       setActionLoading(false)
     }

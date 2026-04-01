@@ -205,19 +205,11 @@ class PaymentService:
             logger.error(f"Failed to activate tenant: {error}")
 
         # ── Update tenant plan details ────────────────────────────────────────
-        # Seat upgrade rule: total seats = previous_total + newly_purchased.
-        # Existing users are NEVER reset — seats are only additive.
+        # Seat upgrade rule: user_count on the order IS the new total seat limit.
+        # For all payment types the purchased user_count replaces (not adds to) the
+        # previous max_users value.
         # plan_expiry is set ONCE from actual payment time and stored permanently.
-        newly_purchased = int(payment.get("user_count", 1))
-        current_tenant = await master_db.tenants.find_one({"_id": payment["tenant_id"]})
-        previous_seats = int((current_tenant or {}).get("max_users", 0))
-
-        if payment.get("payment_type") == "seat_upgrade":
-            # Additive: keep all existing seats and add newly purchased ones
-            new_total_seats = previous_seats + newly_purchased
-        else:
-            # New subscription or renewal: use the purchased user count directly
-            new_total_seats = newly_purchased
+        new_total_seats = int(payment.get("user_count", 1))
 
         await master_db.tenants.update_one(
             {"_id": payment["tenant_id"]},

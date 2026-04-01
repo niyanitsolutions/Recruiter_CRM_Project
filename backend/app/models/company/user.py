@@ -83,6 +83,9 @@ class UserModel(BaseModel):
     # Password Management
     password_changed_at: Optional[datetime] = None
     must_change_password: bool = Field(default=False)  # Force password change on next login
+
+    # Profile completion (shown as one-time popup for admin/owner on first login)
+    profile_completed: bool = Field(default=True)  # default True for existing users
     
     # Timestamps
     created_by: Optional[str] = None
@@ -204,6 +207,9 @@ class UserUpdate(BaseModel):
 
     # Status (Admin only)
     status: Optional[str] = None
+
+    # Profile completion
+    profile_completed: Optional[bool] = None
 
     @field_validator('mobile')
     @classmethod

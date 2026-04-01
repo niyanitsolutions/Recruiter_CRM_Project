@@ -94,6 +94,22 @@ const candidateService = {
     return response.data
   },
 
+  // Generate a shareable self-registration link for external candidates
+  generateFormLink: async () => {
+    const response = await api.post('/candidates/generate-form-link')
+    return response.data
+  },
+
+  // Extract & parse a resume file for form auto-fill (no candidate_id needed)
+  parseResumeFile: async (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const response = await api.post('/candidates/extract-resume', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
+
   // Upload resume file (PDF / DOC / DOCX)
   uploadResume: async (candidateId, file) => {
     const formData = new FormData()

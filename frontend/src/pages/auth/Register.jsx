@@ -175,6 +175,12 @@ const Register = () => {
 
   const password = watch('owner_password')
 
+  // ─── Clear all errors whenever the step changes ───────────────────────────
+  // Prevents step N+1 fields from showing red on first mount
+  useEffect(() => {
+    clearErrors()
+  }, [currentStep]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── Fetch plans on mount ─────────────────────────────────────────────────
   useEffect(() => {
     const fetchPlans = async () => {

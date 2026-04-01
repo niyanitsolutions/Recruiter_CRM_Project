@@ -2,9 +2,11 @@
 Main FastAPI Application - Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5
 Multi-tenant CRM System for Recruitment Agencies
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import asyncio
 import os
@@ -36,6 +38,9 @@ from app.api.v1 import onboards, payouts, notifications
 
 # ============== Phase 5 - Reports, Analytics, Import/Export, Targets, Audit ==============
 from app.api.v1 import reports, analytics, imports_exports, targets, audit, scheduler
+
+# ============== Export ==============
+from app.api.v1 import export
 
 # ============== Company Settings ==============
 from app.api.v1 import company_settings
@@ -76,6 +81,27 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# ── Global exception handlers ─────────────────────────────────────────────────
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_request: Request, exc: RequestValidationError):
+    """
+    Convert Pydantic 422 validation errors into a single clean message
+    instead of the raw list format that the frontend would have to parse.
+    """
+    errors = exc.errors()
+    # Build one readable sentence per field error
+    messages = []
+    for err in errors:
+        loc = " → ".join(str(l) for l in err.get("loc", []) if l != "body")
+        msg = err.get("msg", "Invalid value").replace("Value error, ", "")
+        messages.append(f"{loc}: {msg}" if loc else msg)
+    return JSONResponse(
+        status_code=422,
+        content={"success": False, "message": "; ".join(messages)},
+    )
+
+
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
@@ -115,6 +141,7 @@ app.include_router(admin_dashboard.router, prefix=API_V1_PREFIX, tags=["Admin Da
 # ============== PHASE 3 ROUTERS ==============
 app.include_router(clients.router, prefix=API_V1_PREFIX, tags=["Clients"])
 app.include_router(candidates.router, prefix=API_V1_PREFIX, tags=["Candidates"])
+app.include_router(candidates.public_router, prefix=API_V1_PREFIX, tags=["Public Forms"])
 app.include_router(jobs.router, prefix=API_V1_PREFIX, tags=["Jobs"])
 app.include_router(applications.router, prefix=API_V1_PREFIX, tags=["Applications"])
 app.include_router(interviews.router, prefix=API_V1_PREFIX, tags=["Interviews"])
@@ -135,6 +162,7 @@ app.include_router(imports_exports.router, prefix=API_V1_PREFIX, tags=["Import/E
 app.include_router(targets.router, prefix=API_V1_PREFIX, tags=["Targets"])
 app.include_router(audit.router, prefix=API_V1_PREFIX, tags=["Advanced Audit"])
 app.include_router(scheduler.router, prefix=API_V1_PREFIX, tags=["Scheduler"])
+app.include_router(export.router, prefix=API_V1_PREFIX, tags=["Export"])
 
 
 # Serve uploaded files (resumes, etc.)

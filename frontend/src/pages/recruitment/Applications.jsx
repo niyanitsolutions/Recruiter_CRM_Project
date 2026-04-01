@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  FileText, Eye, User
+  FileText, Eye, User, Download
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import applicationService from '../../services/applicationService'
+import ExportModal from '../../components/common/ExportModal'
+import usePermissions from '../../hooks/usePermissions'
 
 const FALLBACK_STATUSES = [
   { value: 'applied', label: 'Applied' },
@@ -24,6 +26,7 @@ const FALLBACK_STATUSES = [
 
 const Applications = () => {
   const navigate = useNavigate()
+  const { has } = usePermissions()
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 })
@@ -36,6 +39,7 @@ const Applications = () => {
   const [statuses, setStatuses] = useState([])
   const [selectedIds, setSelectedIds] = useState([])
   const [showStatusModal, setShowStatusModal] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
 
   useEffect(() => {
     loadDropdowns()
@@ -148,17 +152,28 @@ const Applications = () => {
           <h1 className="text-2xl font-bold text-surface-900">Applications</h1>
           <p className="text-surface-500">Track candidate applications through the hiring pipeline</p>
         </div>
-        {selectedIds.length > 0 && (
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-surface-600">{selectedIds.length} selected</span>
+        <div className="flex items-center gap-2">
+          {has('exports:create') && (
             <button
-              onClick={() => setShowStatusModal(true)}
-              className="btn-primary text-sm"
+              onClick={() => setExportOpen(true)}
+              className="btn-secondary flex items-center gap-2"
             >
-              Update Status
+              <Download className="w-4 h-4" />
+              Export
             </button>
-          </div>
-        )}
+          )}
+          {selectedIds.length > 0 && has('applications:edit') && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-surface-600">{selectedIds.length} selected</span>
+              <button
+                onClick={() => setShowStatusModal(true)}
+                className="btn-primary text-sm"
+              >
+                Update Status
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -348,6 +363,24 @@ const Applications = () => {
           </div>
         </div>
       )}
+
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title="Export Applications"
+        apiPath="/export/applications"
+        extraFilters={({ status, setStatus }) => (
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
+            <select value={status} onChange={e => setStatus(e.target.value)} className="input w-full">
+              <option value="">All Statuses</option>
+              {statuses.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      />
     </div>
   )
 }

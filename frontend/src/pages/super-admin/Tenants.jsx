@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Search, Filter, Building2, MoreVertical, Eye, Edit, Ban, Trash2,
-  CheckCircle, XCircle, RefreshCw, Plus, CreditCard, UserPlus,
+  CheckCircle, XCircle, RefreshCw, Plus, CreditCard, UserPlus, Download,
 } from 'lucide-react'
 import { Button, Card, Table, Badge, StatusBadge, Input, Select, Modal } from '../../components/common'
 import superAdminService from '../../services/superAdminService'
 import { formatDate, formatRelativeTime } from '../../utils/format'
 import toast from 'react-hot-toast'
+import ExportModal from '../../components/common/ExportModal'
 
 // ── Create Tenant Modal ───────────────────────────────────────────────────────
 
@@ -274,6 +275,7 @@ const Tenants = () => {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
 
   const limit = 10
 
@@ -450,6 +452,9 @@ const Tenants = () => {
           <Button variant="secondary" onClick={fetchTenants} leftIcon={<RefreshCw className="w-4 h-4" />}>
             Refresh
           </Button>
+          <Button variant="secondary" onClick={() => setExportOpen(true)} leftIcon={<Download className="w-4 h-4" />}>
+            Export
+          </Button>
           <Button onClick={() => setIsCreateOpen(true)} leftIcon={<Plus className="w-4 h-4" />}>
             Create Tenant
           </Button>
@@ -564,6 +569,26 @@ const Tenants = () => {
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         onCreated={fetchTenants}
+      />
+
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title="Export Tenants"
+        apiPath="/export/tenants"
+        extraFilters={({ status, setStatus }) => (
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
+            <select value={status} onChange={e => setStatus(e.target.value)} className="input w-full">
+              <option value="">All Statuses</option>
+              <option value="active">Active</option>
+              <option value="pending">Pending</option>
+              <option value="suspended">Suspended</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="trial_expired">Trial Expired</option>
+            </select>
+          </div>
+        )}
       />
     </div>
   )

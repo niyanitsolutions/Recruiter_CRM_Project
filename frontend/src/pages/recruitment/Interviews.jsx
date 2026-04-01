@@ -3,11 +3,12 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   Calendar, Plus, Search, Filter, Eye, Edit,
   Video, Phone, MapPin, Clock, User, CheckCircle,
-  XCircle, AlertCircle, MessageSquare
+  XCircle, AlertCircle, MessageSquare, Download
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import interviewService from '../../services/interviewService'
 import usePermissions from '../../hooks/usePermissions'
+import ExportModal from '../../components/common/ExportModal'
 
 const Interviews = () => {
   const navigate = useNavigate()
@@ -25,6 +26,7 @@ const Interviews = () => {
   })
   const [showFilters, setShowFilters] = useState(false)
   const [statuses, setStatuses] = useState([])
+  const [exportOpen, setExportOpen] = useState(false)
 
   useEffect(() => {
     loadDropdowns()
@@ -134,15 +136,23 @@ const Interviews = () => {
           <h1 className="text-2xl font-bold text-surface-900">Interviews</h1>
           <p className="text-surface-500">Schedule and manage candidate interviews</p>
         </div>
-        {has('interviews:schedule') && (
-          <Link
-            to="/interviews/schedule"
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Schedule Interview
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {has('exports:create') && (
+            <button
+              onClick={() => setExportOpen(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
+          )}
+          {has('interviews:schedule') && (
+            <Link to="/interviews/schedule" className="btn-primary flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              Schedule Interview
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -356,6 +366,24 @@ const Interviews = () => {
           </div>
         )}
       </div>
+
+      <ExportModal
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title="Export Interviews"
+        apiPath="/export/interviews"
+        extraFilters={({ status, setStatus }) => (
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
+            <select value={status} onChange={e => setStatus(e.target.value)} className="input w-full">
+              <option value="">All Statuses</option>
+              {statuses.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      />
     </div>
   )
 }

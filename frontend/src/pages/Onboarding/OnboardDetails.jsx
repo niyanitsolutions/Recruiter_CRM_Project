@@ -5,6 +5,7 @@ import {
   User, Building2, Briefcase, FileText, CheckCircle, XCircle,
   AlertCircle, RefreshCw
 } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import { onboardService } from '../../services'
 
 const STATUS_COLORS = {
@@ -73,7 +74,7 @@ const OnboardDetails = () => {
       setShowExtendModal(false)
     } catch (error) {
       console.error('Error updating status:', error)
-      alert('Error updating status')
+      toast.error(error.response?.data?.detail || error.response?.data?.message || 'Error updating status')
     } finally {
       setActionLoading(false)
     }

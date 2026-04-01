@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Edit, Trash2, Building, Users, MoreVertical } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import departmentService from '../../services/departmentService'
 import usePermissions from '../../hooks/usePermissions'
 
@@ -26,7 +27,7 @@ const Departments = () => {
       await departmentService.deleteDepartment(deleteDialog.dept.id)
       setDeleteDialog({ open: false, dept: null })
       fetchDepartments()
-    } catch (err) { alert(err.response?.data?.detail || 'Failed to delete') }
+    } catch (err) { toast.error(err.response?.data?.detail || err.response?.data?.message || 'Failed to delete') }
   }
 
   return (

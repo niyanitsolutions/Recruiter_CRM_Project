@@ -77,18 +77,14 @@ const InterviewForm = () => {
   }, [prefillApplicationId])
 
   const loadBase = async () => {
-    try {
-      const [modeRes, userRes, jobRes] = await Promise.all([
-        interviewService.getModes(),
-        userService.getUsers({ page_size: 100 }),
-        jobService.getJobs({ status: 'open', page_size: 100 })
-      ])
-      setModes(modeRes.data || [])
-      setUsers(userRes.data || [])
-      setJobs(jobRes.data || [])
-    } catch (err) {
-      console.error('Error loading base data:', err)
-    }
+    const [modeRes, userRes, jobRes] = await Promise.allSettled([
+      interviewService.getModes(),
+      userService.getUsers({ page_size: 100 }),
+      jobService.getJobs({ status: 'open,on_hold', page_size: 200 }),
+    ])
+    if (modeRes.status === 'fulfilled') setModes(modeRes.value.data || [])
+    if (userRes.status === 'fulfilled') setUsers(userRes.value.data || [])
+    if (jobRes.status === 'fulfilled') setJobs(jobRes.value.data || [])
   }
 
   const loadApplicationAndSetJob = async (appId) => {

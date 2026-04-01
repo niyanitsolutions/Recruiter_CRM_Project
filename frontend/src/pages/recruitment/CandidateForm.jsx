@@ -161,6 +161,28 @@ const CandidateForm = () => {
     }
     if (!isEdit) {
       setPendingResumeFile(file)
+      // Auto-parse the resume to pre-fill the form
+      try {
+        setParsing(true)
+        const res = await candidateService.parseResumeFile(file)
+        if (res.data) {
+          const p = res.data
+          setFormData(prev => ({
+            ...prev,
+            first_name: p.first_name || prev.first_name,
+            last_name: p.last_name || prev.last_name,
+            email: p.email || prev.email,
+            mobile: p.mobile || prev.mobile,
+            skills: p.skills?.length ? p.skills : prev.skills,
+          }))
+          if (p.first_name || p.email) toast.success('Resume parsed — form auto-filled')
+          if (p.raw_text) setResumeText(p.raw_text)
+        }
+      } catch {
+        // Parsing failure is non-fatal — user still has the file set
+      } finally {
+        setParsing(false)
+      }
       return
     }
     try {

@@ -4,7 +4,7 @@ import {
   Workflow, Briefcase, CalendarCheck, FileText, ScanLine, UserPlus2,
   Receipt, BadgeDollarSign, CreditCard, Globe2, Mail, Bell,
   Lock, ScrollText, Database, FormInput, Palette, Target, SlidersHorizontal,
-  ChevronRight,
+  Activity, ChevronRight,
 } from 'lucide-react'
 
 const SECTIONS = [
@@ -68,6 +68,7 @@ const SECTIONS = [
     iconColor: 'text-slate-600',
     items: [
       { icon: Lock,       label: 'Security',        description: 'Password policy, 2FA, session timeout and IP allowlist', path: '/settings/security' },
+      { icon: Activity,   label: 'Login Activity',  description: 'View login history: user, role, time and IP address',    path: '/settings/login-activity' },
       { icon: ScrollText, label: 'Audit Logs',      description: 'View system activity and change history',                path: '/audit-logs' },
       { icon: Database,   label: 'Data Management', description: 'Backups, retention rules and GDPR options',             path: '/settings/data-management' },
       { icon: FormInput,  label: 'Custom Fields',   description: 'Add custom fields to candidates, jobs and clients',     path: '/settings/custom-fields' },

@@ -8,6 +8,7 @@ import { login, clearError, selectAuth, selectSubscriptionExpired } from '../../
 import { Button, Input } from '../../components/common'
 import { formatDateTime } from '../../utils/format'
 import authService from '../../services/authService'
+import { getSavedEmail, setSavedEmail, removeSavedEmail, getRememberMe } from '../../utils/token'
 
 const Login = () => {
   const dispatch = useDispatch()
@@ -26,12 +27,16 @@ const Login = () => {
   // Inline error for sessionStorage-sourced messages (e.g. api.js interceptor)
   const [inlineError, setInlineError] = useState('')
 
+  // Remember Me — pre-populate from saved preference
+  const savedEmail = getSavedEmail()
+  const [rememberMe, setRememberMeState] = useState(!!savedEmail || getRememberMe())
+
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm({
-    defaultValues: { identifier: '', password: '' },
+    defaultValues: { identifier: savedEmail, password: '' },
   })
 
   // Show sessionStorage errors (e.g. subscription expired, set by api.js interceptor)
@@ -48,9 +53,18 @@ const Login = () => {
     setEmailNotVerified(null)
     setResendSent(false)
     setInlineError('')
-    const result = await dispatch(login(data))
+    const result = await dispatch(login({ ...data, remember_me: rememberMe }))
 
     if (login.fulfilled.match(result)) {
+      // Save or clear the identifier for next visit
+      if (rememberMe) setSavedEmail(data.identifier)
+      else removeSavedEmail()
+
+      if (result.payload.must_change_password) {
+        toast.success('Login successful! Please change your password.')
+        navigate('/change-password')
+        return
+      }
       toast.success('Login successful!')
     } else if (login.rejected.match(result)) {
       const payload = result.payload
@@ -320,7 +334,16 @@ const Login = () => {
           {...register('password', { required: 'Password is required' })}
         />
 
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMeState(e.target.checked)}
+              className="w-4 h-4 rounded border-surface-300 accent-accent-600 cursor-pointer"
+            />
+            <span className="text-sm text-surface-600">Remember me</span>
+          </label>
           <Link to="/forgot-password" className="text-sm text-accent-600 hover:text-accent-700 font-medium">
             Forgot password?
           </Link>
