@@ -49,7 +49,8 @@ const JobForm = () => {
     notes: '',
     status: 'draft',
     min_percentage: '',
-    pipeline_id: ''
+    pipeline_id: '',
+    gender_eligibility: 'all'
   })
 
   const [newMandatorySkill, setNewMandatorySkill] = useState('')
@@ -117,7 +118,8 @@ const JobForm = () => {
           notice_period_max: '',
           ctc_max: job.eligibility?.max_ctc || '',
           min_percentage: job.min_percentage ?? '',
-          pipeline_id: job.pipeline_id || ''
+          pipeline_id: job.pipeline_id || '',
+          gender_eligibility: job.gender_eligibility || 'all'
         }))
       }
     } catch (error) {
@@ -208,6 +210,7 @@ const JobForm = () => {
         },
         min_percentage: formData.min_percentage !== '' ? Number(formData.min_percentage) : null,
         pipeline_id: formData.pipeline_id || null,
+        gender_eligibility: formData.gender_eligibility || 'all',
         education_required: [],
         skills_required: []
       }
@@ -598,6 +601,22 @@ const JobForm = () => {
                     {p.name} ({p.stage_count} stages){p.is_default ? ' — Default' : ''}
                   </option>
                 ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">
+                Gender Eligibility
+              </label>
+              <select
+                name="gender_eligibility"
+                value={formData.gender_eligibility}
+                onChange={handleChange}
+                className="input w-full"
+              >
+                <option value="all">No Gender Restriction</option>
+                <option value="male">Only Men</option>
+                <option value="female">Only Women</option>
               </select>
             </div>
           </div>

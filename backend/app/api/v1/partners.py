@@ -88,8 +88,9 @@ async def get_partner_statuses(
     current_user: dict = Depends(get_current_user),
     _: bool = Depends(require_permissions(["partners:view"]))
 ):
-    """Available status values for partner dropdowns."""
-    statuses = [{"value": s.value, "label": s.value.title()} for s in UserStatus]
+    """Available status values for partner dropdowns (suspend removed)."""
+    allowed = {UserStatus.ACTIVE, UserStatus.INACTIVE}
+    statuses = [{"value": s.value, "label": s.value.title()} for s in UserStatus if s in allowed]
     return {"success": True, "data": statuses}
 
 
@@ -229,7 +230,7 @@ async def update_partner(
 async def update_partner_status(
     request:    Request,
     partner_id: str,
-    status:     str  = Query(..., pattern="^(active|inactive|suspended)$"),
+    status:     str  = Query(..., pattern="^(active|inactive)$"),
     current_user: dict = Depends(get_current_user),
     db                 = Depends(get_company_db),
     _: bool            = Depends(require_permissions(["partners:edit"]))

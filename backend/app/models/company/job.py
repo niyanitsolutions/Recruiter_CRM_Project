@@ -172,10 +172,14 @@ class JobModel(BaseModel):
     internal_notes: Optional[str] = None  # Not visible to partners
     tags: List[str] = Field(default_factory=list)
     
+    # ===== Gender Eligibility =====
+    # "all" = no restriction, "male" = only men, "female" = only women
+    gender_eligibility: str = Field(default="all")
+
     # ===== Partner Access =====
     visible_to_partners: bool = Field(default=True)
     partner_commission: Optional[float] = None  # Override client commission
-    
+
     # ===== Timestamps =====
     created_by: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -235,6 +239,8 @@ class JobCreate(BaseModel):
     internal_notes: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     
+    gender_eligibility: Optional[str] = Field(default="all")
+
     visible_to_partners: bool = Field(default=True)
     partner_commission: Optional[float] = None
 
@@ -283,6 +289,8 @@ class JobUpdate(BaseModel):
     internal_notes: Optional[str] = None
     tags: Optional[List[str]] = None
     
+    gender_eligibility: Optional[str] = None
+
     visible_to_partners: Optional[bool] = None
     partner_commission: Optional[float] = None
 
@@ -341,9 +349,10 @@ class JobResponse(BaseModel):
     status_display: str = ""
     
     tags: List[str]
+    gender_eligibility: str = "all"
     visible_to_partners: bool
     partner_commission: Optional[float]
-    
+
     created_at: datetime
     updated_at: Optional[datetime]
 

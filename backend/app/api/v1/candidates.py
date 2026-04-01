@@ -513,18 +513,42 @@ async def submit_candidate_form(token: str, data: dict):
     if token_doc["expires_at"].replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         raise HTTPException(status_code=410, detail="This link has expired.")
 
-    # Build minimal candidate document
+    # Build candidate document from full public form payload
     now = datetime.now(timezone.utc)
     candidate_id = uuid.uuid4().hex
+
+    first_name = data.get("first_name", "").strip()
+    email = data.get("email", "").strip().lower()
+
+    if not first_name or not email:
+        raise HTTPException(status_code=422, detail="first_name and email are required.")
+
     candidate = {
         "_id": candidate_id,
-        "first_name": data.get("first_name", "").strip(),
-        "last_name": data.get("last_name", "").strip(),
-        "email": data.get("email", "").strip().lower(),
-        "mobile": data.get("mobile", "").strip(),
-        "current_city": data.get("current_city", ""),
+        "first_name": first_name,
+        "last_name": (data.get("last_name") or "").strip() or None,
+        "email": email,
+        "mobile": (data.get("mobile") or "").strip() or None,
+        "alternate_mobile": (data.get("alternate_mobile") or "").strip() or None,
+        "date_of_birth": data.get("date_of_birth") or None,
+        "gender": data.get("gender") or None,
+        "current_city": data.get("current_city") or None,
+        "current_state": data.get("current_state") or None,
+        "total_experience_years": data.get("total_experience_years"),
+        "current_company": data.get("current_company") or None,
+        "current_designation": data.get("current_designation") or None,
+        "current_ctc": data.get("current_ctc"),
+        "expected_ctc": data.get("expected_ctc"),
+        "notice_period": data.get("notice_period") or None,
         "skills": data.get("skills", []),
-        "summary": data.get("summary", ""),
+        "skill_tags": data.get("skill_tags", [s.get("name", s) if isinstance(s, dict) else s for s in data.get("skills", [])]),
+        "education": data.get("education", []),
+        "percentage": data.get("percentage"),
+        "preferred_locations": data.get("preferred_locations", []),
+        "willing_to_relocate": bool(data.get("willing_to_relocate", False)),
+        "linkedin_url": data.get("linkedin_url") or None,
+        "portfolio_url": data.get("portfolio_url") or None,
+        "notes": data.get("summary") or None,
         "source": "form_link",
         "status": "active",
         "is_deleted": False,
@@ -532,9 +556,6 @@ async def submit_candidate_form(token: str, data: dict):
         "created_at": now,
         "updated_at": now,
     }
-
-    if not candidate["first_name"] or not candidate["email"]:
-        raise HTTPException(status_code=422, detail="first_name and email are required.")
 
     # Check for duplicate email
     existing = await company_db.candidates.find_one({"email": candidate["email"], "is_deleted": False})
