@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Loader2 } from 'lucide-react'
 import partnerService from '../../services/partnerService'
-import designationService from '../../services/designationService'
 
 const PartnerForm = () => {
   const navigate  = useNavigate()
@@ -14,30 +13,15 @@ const PartnerForm = () => {
   const [error,   setError]   = useState(null)
 
   const [formData, setFormData] = useState({
-    username:       '',
-    email:          '',
-    full_name:      '',
-    mobile:         '',
-    password:       '',
-    designation:    '',
-    designation_id: '',
-    status:         'active',
+    username:  '',
+    email:     '',
+    full_name: '',
+    mobile:    '',
+    password:  '',
+    status:    'active',
   })
 
-  const [designations, setDesignations] = useState([])
-  const [errors,       setErrors]       = useState({})
-  const [desigCustom,  setDesigCustom]  = useState('')
-
-  // Load designations
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await designationService.getDesignations()
-        setDesignations(res.data || [])
-      } catch (err) { console.error(err) }
-    }
-    fetchData()
-  }, [])
+  const [errors, setErrors] = useState({})
 
   // Load existing partner on edit
   useEffect(() => {
@@ -48,14 +32,12 @@ const PartnerForm = () => {
         const response = await partnerService.getPartner(id)
         const p = response.data
         setFormData({
-          username:       p.username       || '',
-          email:          p.email          || '',
-          full_name:      p.full_name      || '',
-          mobile:         p.mobile         || '',
-          password:       '',
-          designation:    p.designation    || '',
-          designation_id: p.designation_id || '',
-          status:         p.status         || 'active',
+          username:  p.username  || '',
+          email:     p.email     || '',
+          full_name: p.full_name || '',
+          mobile:    p.mobile    || '',
+          password:  '',
+          status:    p.status    || 'active',
         })
       } catch (err) { setError('Failed to load partner') }
       finally { setLoading(false) }
@@ -96,40 +78,7 @@ const PartnerForm = () => {
     try {
       setSaving(true)
 
-      const normalizeName = (v) =>
-        v.trim().replace(/\s+/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-
-      // On-the-fly Designation creation
-      let designationId = formData.designation_id
-      let designationName = formData.designation
-      if (!isEdit && designationId === 'custom' && desigCustom.trim()) {
-        const desigName = normalizeName(desigCustom)
-        try {
-          const desigRes = await designationService.createDesignation({ name: desigName, code: null })
-          const created = desigRes.data
-          if (created?.id) {
-            designationId   = created.id
-            designationName = created.name
-            setDesignations(prev => [...prev, created])
-          }
-        } catch (createErr) {
-          const msg = createErr?.response?.data?.detail || ''
-          if (typeof msg === 'string' && msg.toLowerCase().includes('already exists')) {
-            const listRes = await designationService.getDesignations()
-            const existing = (listRes.data || []).find(d => d.name?.toLowerCase().trim() === desigName.toLowerCase().trim())
-            if (existing) { designationId = existing.id; designationName = existing.name }
-            else throw createErr
-          } else throw createErr
-        }
-      }
-
-      // Build payload
-      const submitData = {
-        ...formData,
-        designation_id: designationId === 'custom' ? undefined : designationId,
-        designation:    designationId === 'custom' ? undefined : designationName,
-      }
-
+      const submitData = { ...formData }
       if (isEdit && !submitData.password) delete submitData.password
       Object.keys(submitData).forEach(k => { if (submitData[k] === '') delete submitData[k] })
 
@@ -228,38 +177,13 @@ const PartnerForm = () => {
         {/* Additional Details */}
         <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-6">
           <h2 className="text-lg font-semibold mb-4">Additional Details</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">Designation</label>
-              <select name="designation_id" value={formData.designation_id}
-                onChange={e => {
-                  handleChange(e)
-                  if (e.target.value !== 'custom') setDesigCustom('')
-                  const selected = designations.find(d => d.id === e.target.value)
-                  if (selected) setFormData(prev => ({ ...prev, designation_id: e.target.value, designation: selected.name }))
-                }}
-                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500">
-                <option value="">Select</option>
-                {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                <option value="custom">Custom…</option>
-              </select>
-              {formData.designation_id === 'custom' && (
-                <input type="text" value={desigCustom} onChange={e => setDesigCustom(e.target.value)}
-                  placeholder="Enter new designation"
-                  className="mt-2 w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500" />
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
-              <select name="status" value={formData.status} onChange={handleChange}
-                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500">
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-            </div>
-
+          <div className="max-w-xs">
+            <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
+            <select name="status" value={formData.status} onChange={handleChange}
+              className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500">
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
           </div>
         </div>
 
