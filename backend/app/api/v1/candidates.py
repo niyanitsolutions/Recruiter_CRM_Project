@@ -412,8 +412,10 @@ async def generate_candidate_form_link(
     """
     Generate a unique one-time URL that an external candidate can use to
     self-register (expires in 7 days).
-    If body.email is provided, also sends the link to that address.
+    Token generation ALWAYS succeeds. Email is sent only when EMAIL_ENABLED=True.
     """
+    from app.core.config import settings as _settings
+
     token = uuid.uuid4().hex
     now = datetime.now(timezone.utc)
     await db.candidate_form_tokens.insert_one({
@@ -426,7 +428,9 @@ async def generate_candidate_form_link(
     })
 
     email_sent = False
-    if body.email:
+    email_enabled = _settings.EMAIL_ENABLED
+
+    if body.email and email_enabled:
         base = (body.frontend_base_url or "").rstrip("/")
         form_url = f"{base}/apply/{token}"
         try:
@@ -444,12 +448,13 @@ async def generate_candidate_form_link(
                 EmailService._send_smtp, body.email, "Candidate Registration Form", html, text
             )
         except Exception:
-            pass  # Email failure is non-fatal
+            pass  # Email failure is never fatal
 
     return {
         "success": True,
         "token": token,
         "email_sent": email_sent,
+        "email_enabled": email_enabled,
         "message": "Form link sent successfully" if email_sent else "Form link generated",
     }
 

@@ -147,6 +147,7 @@ const Register = () => {
     watch,
     trigger,
     setValue,
+    getValues,
     clearErrors,
     formState: { errors },
   } = useForm({
@@ -284,6 +285,16 @@ const Register = () => {
   const prevStep = () => {
     clearErrors()
     setCurrentStep(prev => Math.max(prev - 1, 1))
+  }
+
+  // Finish / Proceed to Payment — validates only the current (last form) step,
+  // then calls onSubmit directly. Avoids triggering global handleSubmit validation
+  // which would show errors on unmounted fields from other steps.
+  const handleFinish = async () => {
+    const isValid = await validateStep(currentStep)
+    if (isValid) {
+      await onSubmit(getValues())
+    }
   }
 
   // ─── Form submission ──────────────────────────────────────────────────────
@@ -1081,7 +1092,8 @@ const Register = () => {
                   </Button>
                 ) : (
                   <Button
-                    type="submit"
+                    type="button"
+                    onClick={handleFinish}
                     isLoading={isLoading}
                     rightIcon={<CheckCircle className="w-4 h-4" />}
                   >

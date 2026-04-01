@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     TRIAL_DAYS: int = 14
 
     # Email / SMTP Settings
+    # EMAIL_ENABLED = False disables ALL outgoing email (safe default for dev/staging).
+    # Set to True in production once SMTP credentials are configured.
+    EMAIL_ENABLED: bool = False
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USERNAME: str = ""

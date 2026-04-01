@@ -42,17 +42,46 @@ const Candidates = () => {
   const [formLinkEmail, setFormLinkEmail] = useState('')
   const [generatingLink, setGeneratingLink] = useState(false)
 
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Fallback for non-HTTPS or browsers that block clipboard API
+      try {
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'
+        document.body.appendChild(ta)
+        ta.focus()
+        ta.select()
+        const ok = document.execCommand('copy')
+        document.body.removeChild(ta)
+        return ok
+      } catch {
+        return false
+      }
+    }
+  }
+
   const handleGenerateFormLink = async () => {
     try {
       setGeneratingLink(true)
       const res = await candidateService.generateFormLink(formLinkEmail.trim() || null)
       const url = `${window.location.origin}/apply/${res.token}`
-      await navigator.clipboard.writeText(url)
+
       if (res.email_sent) {
+        await copyToClipboard(url)
         toast.success('Form link sent to candidate email!')
+      } else if (formLinkEmail.trim() && !res.email_enabled) {
+        // Email was entered but service is disabled — copy instead
+        await copyToClipboard(url)
+        toast.success('Email service disabled. Link copied instead.')
       } else {
-        toast.success('Form link copied to clipboard!')
+        const copied = await copyToClipboard(url)
+        toast.success(copied ? 'Link copied to clipboard!' : 'Link generated! Share this URL: ' + url)
       }
+
       setFormLinkModal(false)
       setFormLinkEmail('')
     } catch {

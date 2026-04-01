@@ -22,13 +22,17 @@ class EmailService:
 
     @staticmethod
     def _send_smtp(to_email: str, subject: str, html_body: str, text_body: str = "") -> bool:
-        """Send email via SMTP. Returns True on success."""
+        """Send email via SMTP. Returns True on success, False when disabled or on error."""
+        if not settings.EMAIL_ENABLED:
+            logger.debug(f"[EMAIL DISABLED] Skipping email to {to_email} | Subject: {subject}")
+            return False
+
         if not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD:
             logger.info(
                 "[EMAIL FALLBACK — SMTP not configured]\n"
                 f"  To: {to_email}\n  Subject: {subject}\n  Body: {text_body or html_body}"
             )
-            return True  # Treat as success so app flow continues
+            return False  # SMTP not configured; treat as not sent
 
         try:
             msg = MIMEMultipart("alternative")

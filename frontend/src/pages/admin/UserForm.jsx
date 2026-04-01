@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Loader2, Shield, GitBranch, ChevronDown } from 'lucide-react'
+import toast from 'react-hot-toast'
 import userService from '../../services/userService'
 import departmentService from '../../services/departmentService'
 import designationService from '../../services/designationService'
@@ -495,6 +496,7 @@ const [errors,       setErrors]       = useState({})
         }
       } else {
         await userService.createUser(submitData)
+        toast.success('User created successfully. Share credentials manually.')
       }
 
       navigate('/users')
