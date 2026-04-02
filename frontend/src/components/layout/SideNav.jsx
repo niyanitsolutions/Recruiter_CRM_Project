@@ -245,21 +245,22 @@ const SideNav = ({ isCollapsed, onToggle }) => {
 
   return (
     <aside className={clsx(
-      'fixed left-0 top-0 h-screen bg-primary-500 text-white transition-all duration-300 z-40 flex flex-col',
+      'fixed left-0 top-0 h-screen text-white transition-all duration-300 z-40 flex flex-col',
+      'bg-gradient-to-b from-indigo-950 via-slate-900 to-violet-950',
       isCollapsed ? 'w-20' : 'w-64'
     )}>
       {/* Logo */}
-      <div className={clsx('h-16 flex items-center border-b border-white/10', isCollapsed ? 'justify-center px-2' : 'px-6')}>
+      <div className={clsx('h-16 flex items-center border-b border-white/5', isCollapsed ? 'justify-center px-2' : 'px-5')}>
         {!isCollapsed ? (
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center font-bold text-lg shadow-glow">C</div>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center font-bold text-base shadow-glow flex-shrink-0">C</div>
             <div>
-              <h1 className="font-bold text-lg">CRM</h1>
-              <p className="text-xs text-white/60">Recruitment Platform</p>
+              <h1 className="font-bold text-base leading-tight tracking-wide">CRM</h1>
+              <p className="text-[10px] text-white/40 tracking-wider uppercase">Recruitment</p>
             </div>
           </div>
         ) : (
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center font-bold text-lg shadow-glow">C</div>
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center font-bold text-base shadow-glow">C</div>
         )}
       </div>
 
@@ -276,7 +277,7 @@ const SideNav = ({ isCollapsed, onToggle }) => {
         {sections.map((sec, idx) => (
           <div key={sec.section} className={idx > 0 ? 'mt-6' : ''}>
             {!isCollapsed && (
-              <p className="px-6 mb-2 text-xs font-semibold text-white/40 uppercase tracking-wider">
+              <p className="px-5 mb-1 text-[10px] font-semibold text-white/30 uppercase tracking-widest">
                 {sec.section}
               </p>
             )}
@@ -291,7 +292,7 @@ const SideNav = ({ isCollapsed, onToggle }) => {
         ))}
 
         {/* Divider */}
-        <div className="my-4 mx-3 border-t border-white/10" />
+        <div className="my-4 mx-3 border-t border-white/5" />
 
         {/* Utility links: only for company users (not super-admin or seller) */}
         {!isSuperAdmin && !isSeller && (
@@ -323,24 +324,24 @@ const SideNav = ({ isCollapsed, onToggle }) => {
       </nav>
 
       {/* User info + logout */}
-      <div className="border-t border-white/10 p-4">
+      <div className="border-t border-white/5 p-3">
         {!isCollapsed ? (
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-semibold">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500/40 to-indigo-600/40 border border-white/10 flex items-center justify-center font-semibold text-sm flex-shrink-0">
               {user?.fullName?.charAt(0) || user?.full_name?.charAt(0) || 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user?.fullName || user?.full_name || 'User'}</p>
-              <p className="text-xs text-white/60 truncate capitalize">
+              <p className="text-sm font-medium truncate text-white/90">{user?.fullName || user?.full_name || 'User'}</p>
+              <p className="text-xs text-white/40 truncate capitalize">
                 {(user?.role || userRole || 'User').replace(/_/g, ' ')}
               </p>
             </div>
-            <button onClick={handleLogout} className="p-2 hover:bg-white/10 rounded-lg transition-colors" title="Logout">
+            <button onClick={handleLogout} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white/80" title="Logout">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
         ) : (
-          <button onClick={handleLogout} className="w-full flex justify-center p-2 hover:bg-white/10 rounded-lg transition-colors" title="Logout">
+          <button onClick={handleLogout} className="w-full flex justify-center p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white/80" title="Logout">
             <LogOut className="w-5 h-5" />
           </button>
         )}
@@ -349,7 +350,7 @@ const SideNav = ({ isCollapsed, onToggle }) => {
       {/* Collapse toggle */}
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-20 w-6 h-6 bg-primary-500 border border-white/20 rounded-full flex items-center justify-center hover:bg-primary-600 transition-colors shadow-lg"
+        className="absolute -right-3 top-20 w-6 h-6 bg-indigo-900 border border-white/20 rounded-full flex items-center justify-center hover:bg-violet-800 transition-colors shadow-lg"
       >
         {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
       </button>

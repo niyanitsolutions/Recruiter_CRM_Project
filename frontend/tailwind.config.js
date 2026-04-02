@@ -20,47 +20,50 @@ export default {
           800: '#0c0a1b',
           900: '#090815',
         },
-        // Accent blue for buttons
+        // Accent violet for buttons
         accent: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6', // Primary button color
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+          50: '#f5f3ff',
+          100: '#ede9fe',
+          200: '#ddd6fe',
+          300: '#c4b5fd',
+          400: '#a78bfa',
+          500: '#8b5cf6', // Primary button color
+          600: '#7c3aed',
+          700: '#6d28d9',
+          800: '#5b21b6',
+          900: '#4c1d95',
         },
         // Status colors
         success: {
           50: '#f0fdf4',
+          400: '#4ade80',
           500: '#22c55e',
           600: '#16a34a',
         },
         warning: {
           50: '#fffbeb',
+          400: '#fbbf24',
           500: '#f59e0b',
           600: '#d97706',
         },
         danger: {
           50: '#fef2f2',
+          400: '#f87171',
           500: '#ef4444',
           600: '#dc2626',
         },
-        // Neutral grays
+        // Dark surface scale (50 = darkest bg, 900 = brightest text)
         surface: {
-          50: '#fafafa',
-          100: '#f5f5f5',
-          200: '#e5e5e5',
-          300: '#d4d4d4',
-          400: '#a3a3a3',
-          500: '#737373',
-          600: '#525252',
-          700: '#404040',
-          800: '#262626',
-          900: '#171717',
+          50:  '#0f172a',  // Page background — deep navy
+          100: '#1e293b',  // Card / panel background
+          200: '#334155',  // Borders
+          300: '#475569',  // Subtle / disabled
+          400: '#64748b',  // Placeholder text
+          500: '#94a3b8',  // Secondary text
+          600: '#cbd5e1',  // Body text muted
+          700: '#e2e8f0',  // Body text
+          800: '#f1f5f9',  // Headings
+          900: '#f8fafc',  // Bright headings
         }
       },
       fontFamily: {
@@ -69,10 +72,12 @@ export default {
         mono: ['JetBrains Mono', 'monospace'],
       },
       boxShadow: {
-        'soft': '0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04)',
-        'card': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)',
-        'elevated': '0 10px 40px -10px rgba(0, 0, 0, 0.15)',
-        'glow': '0 0 20px rgba(59, 130, 246, 0.3)',
+        'soft': '0 2px 15px -3px rgba(0,0,0,0.4), 0 10px 20px -2px rgba(0,0,0,0.3)',
+        'card': '0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -2px rgba(0,0,0,0.2)',
+        'elevated': '0 20px 60px -10px rgba(0,0,0,0.6)',
+        'glow': '0 0 20px rgba(139, 92, 246, 0.4)',
+        'glow-sm': '0 0 10px rgba(139, 92, 246, 0.3)',
+        'glow-lg': '0 0 40px rgba(139, 92, 246, 0.35)',
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out',
