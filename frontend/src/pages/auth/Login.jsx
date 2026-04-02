@@ -302,27 +302,32 @@ const Login = () => {
 
   // ── Login form (default) ──────────────────────────────────────────────────
   return (
-    <div className="animate-fade-in">
+    <div style={{ animation: 'cardEntrance 0.5s cubic-bezier(0.16,1,0.3,1) both' }}>
 
       {/* Header */}
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-surface-900">Welcome back</h2>
-        <p className="text-surface-500 mt-2">Sign in to access your recruitment CRM dashboard.</p>
+      <div className="mb-7">
+        <h2 style={{ color: '#f1f5f9', fontSize: '22px', fontWeight: '800', letterSpacing: '-0.02em', marginBottom: '6px' }}>
+          Welcome back
+        </h2>
+        <p style={{ color: '#64748b', fontSize: '13px' }}>
+          Sign in to your recruitment dashboard
+        </p>
       </div>
 
-      {/* Inline error banner (sessionStorage-sourced only) */}
+      {/* Inline error banner */}
       {inlineError && (
-        <div className="mb-5 flex items-start gap-3 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
-          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-red-700 font-medium">{inlineError}</p>
+        <div className="mb-5 flex items-start gap-3 px-4 py-3"
+          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '10px' }}>
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#f87171' }} />
+          <p style={{ color: '#fca5a5', fontSize: '13px', fontWeight: '500' }}>{inlineError}</p>
         </div>
       )}
 
       {/* Login Form */}
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Input
           label="Username, Email, or Mobile"
-          placeholder="Enter your username, email, or mobile"
+          placeholder="Enter username, email, or mobile"
           leftIcon={<Mail className="w-4 h-4" />}
           error={errors.identifier?.message}
           {...register('identifier', {
@@ -340,55 +345,115 @@ const Login = () => {
           {...register('password', { required: 'Password is required' })}
         />
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between pt-1">
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={rememberMe}
               onChange={(e) => setRememberMeState(e.target.checked)}
-              className="w-4 h-4 rounded border-surface-300 accent-accent-600 cursor-pointer"
+              className="w-4 h-4 cursor-pointer"
+              style={{ accentColor: '#6366f1' }}
             />
-            <span className="text-sm text-surface-600">Remember me</span>
+            <span style={{ color: '#94a3b8', fontSize: '13px' }}>Remember me</span>
           </label>
-          <Link to="/forgot-password" className="text-sm text-accent-600 hover:text-accent-700 font-medium">
+          <Link to="/forgot-password"
+            style={{ color: '#818cf8', fontSize: '13px', fontWeight: '500', textDecoration: 'none' }}
+            onMouseOver={e => e.target.style.color = '#a5b4fc'}
+            onMouseOut={e => e.target.style.color = '#818cf8'}
+          >
             Forgot password?
           </Link>
         </div>
 
-        <Button
+        {/* Sign In button */}
+        <button
           type="submit"
-          isLoading={isLoading}
-          className="w-full"
-          rightIcon={<ArrowRight className="w-4 h-4" />}
+          disabled={isLoading}
+          className="w-full flex items-center justify-center gap-2"
+          style={{
+            marginTop: '8px',
+            padding: '12px',
+            borderRadius: '12px',
+            border: 'none',
+            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+            color: 'white',
+            fontWeight: '700',
+            fontSize: '14px',
+            letterSpacing: '0.02em',
+            cursor: isLoading ? 'not-allowed' : 'pointer',
+            opacity: isLoading ? 0.7 : 1,
+            boxShadow: '0 0 24px rgba(99,102,241,0.35)',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseOver={e => { if (!isLoading) { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 0 32px rgba(99,102,241,0.5)' }}}
+          onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 0 24px rgba(99,102,241,0.35)' }}
         >
-          Sign In
-        </Button>
+          {isLoading
+            ? <><span style={{ width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} /> Signing in…</>
+            : <>Sign In <ArrowRight className="w-4 h-4" /></>
+          }
+        </button>
       </form>
 
       {/* Divider */}
-      <div className="relative my-8">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-surface-200" />
-        </div>
-        <div className="relative flex justify-center text-sm">
-          <span className="px-4 bg-white text-surface-500">New to CRM Platform?</span>
-        </div>
+      <div className="flex items-center gap-3 my-6">
+        <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.07)' }} />
+        <span style={{ color: '#334155', fontSize: '12px', whiteSpace: 'nowrap' }}>New to CRM Platform?</span>
+        <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.07)' }} />
       </div>
 
       <div className="flex flex-col gap-3">
-        <Link to="/register?mode=trial">
-          <Button className="w-full" rightIcon={<ArrowRight className="w-4 h-4" />}>
-            Start Free Trial
-          </Button>
+        <Link to="/register?mode=trial" style={{ textDecoration: 'none' }}>
+          <button
+            className="w-full flex items-center justify-center gap-2"
+            style={{
+              padding: '11px',
+              borderRadius: '12px',
+              border: '1px solid rgba(99,102,241,0.35)',
+              background: 'rgba(99,102,241,0.08)',
+              color: '#a5b4fc',
+              fontWeight: '600',
+              fontSize: '13px',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              width: '100%',
+            }}
+            onMouseOver={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.15)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.55)' }}
+            onMouseOut={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.08)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.35)' }}
+          >
+            Start Free Trial <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </Link>
-        <Link to="/register?mode=subscription">
-          <Button variant="outline" className="w-full">
+        <Link to="/register?mode=subscription" style={{ textDecoration: 'none' }}>
+          <button
+            className="w-full"
+            style={{
+              padding: '11px',
+              borderRadius: '12px',
+              border: '1px solid rgba(255,255,255,0.07)',
+              background: 'transparent',
+              color: '#64748b',
+              fontWeight: '500',
+              fontSize: '13px',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              width: '100%',
+            }}
+            onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#94a3b8' }}
+            onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#64748b' }}
+          >
             Subscription / Buy Plan
-          </Button>
+          </button>
         </Link>
       </div>
 
-      
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes cardEntrance {
+          from { opacity: 0; transform: translateY(20px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import React, { forwardRef, useState } from 'react'
+import { forwardRef, useState } from 'react'
 import { clsx } from 'clsx'
 import { Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react'
 
@@ -32,11 +32,11 @@ const Input = forwardRef(({
       
       <div className="relative">
         {leftIcon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#475569' }}>
             {leftIcon}
           </div>
         )}
-        
+
         <input
           ref={ref}
           type={inputType}
@@ -44,10 +44,8 @@ const Input = forwardRef(({
           className={clsx(
             'input',
             error && 'input-error',
-            success && 'border-success-500 focus:border-success-500 focus:ring-success-500/20',
             leftIcon && 'pl-10',
             (rightIcon || isPassword) && 'pr-10',
-            disabled && 'bg-surface-100 cursor-not-allowed',
             inputClassName
           )}
           {...props}
