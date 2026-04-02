@@ -26,55 +26,37 @@
            focus:ring-offset-surface-50 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-gradient-to-br from-indigo-500 to-violet-500 text-white
-           hover:from-indigo-600 hover:to-violet-600 focus:ring-indigo-500 shadow-glow-sm active:scale-[0.98];
+    @apply btn text-white shadow-glow-sm active:scale-[0.98];
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
   }
-  .btn-secondary {
-    @apply btn bg-surface-100 text-surface-700 hover:bg-surface-200 focus:ring-surface-400 border border-surface-200;
-  }
-  .btn-outline {
-    @apply btn bg-transparent text-accent-400 border-2 border-accent-500 hover:bg-accent-500/10 focus:ring-accent-500;
-  }
-  .btn-danger  { @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500; }
-  .btn-ghost   { @apply btn bg-transparent text-surface-500 hover:bg-surface-100 hover:text-surface-700 focus:ring-surface-400; }
+  .btn-primary:hover { background: linear-gradient(135deg, #4f46e5, #7c3aed); }
+  .btn-secondary { @apply btn bg-surface-100 text-surface-700 hover:bg-surface-200 border border-surface-200; }
+  .btn-outline   { @apply btn bg-transparent text-accent-400 border-2 border-accent-500 hover:bg-accent-500/10; }
+  .btn-danger    { @apply btn bg-red-600 text-white hover:bg-red-700; }
+  .btn-ghost     { @apply btn bg-transparent text-surface-500 hover:bg-surface-100 hover:text-surface-700; }
   .btn-lg { @apply px-6 py-3 text-base; }
   .btn-sm { @apply px-3 py-1.5 text-xs; }
 
-  /* .input class used in forms that adopt it explicitly */
-  .input {
-    background-color: #1e293b;
-    color: #e2e8f0;
-    border: 1px solid #334155;
-    border-radius: 8px;
-    padding: 10px 14px;
-    font-size: 0.875rem;
-    width: 100%;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  }
-  .input:focus       { border-color: #6366f1; outline: none; box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
-  .input::placeholder { color: #64748b; }
-  .input-error        { border-color: #ef4444 !important; }
-  .input-error:focus  { border-color: #ef4444 !important; box-shadow: 0 0 0 2px rgba(239,68,68,0.2) !important; }
-  .input-label        { @apply block text-sm font-medium mb-1.5; color: #cbd5e1; }
-  .input-help         { @apply text-xs mt-1; color: #64748b; }
-  .input-error-text   { @apply text-xs mt-1; color: #ef4444; }
+  .input-label      { @apply block text-sm font-medium mb-1.5; color: #94a3b8; }
+  .input-help       { @apply text-xs mt-1; color: #64748b; }
+  .input-error-text { @apply text-xs mt-1; color: #f87171; }
 
-  .card        { @apply bg-surface-100/80 backdrop-blur-sm rounded-xl border border-surface-200/50 shadow-card; }
-  .card-hover  { @apply card hover:shadow-soft hover:border-surface-300/50 transition-all duration-200; }
+  .card       { @apply rounded-xl border shadow-card; background-color: #1e293b; border-color: #334155; }
+  .card-hover { @apply card hover:shadow-soft transition-all duration-200; border-color: #475569; }
 
   .nav-item        { @apply flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-white/60 rounded-lg transition-all duration-200 hover:bg-white/10 hover:text-white; }
-  .nav-item-active { @apply nav-item bg-violet-500/20 text-white border border-violet-400/20 shadow-glow-sm; }
+  .nav-item-active { @apply nav-item text-white border border-violet-400/20 shadow-glow-sm; background-color: rgba(139,92,246,0.2); }
 
   .stat-card  { @apply card p-6; }
   .stat-value { @apply text-3xl font-bold text-surface-900; }
   .stat-label { @apply text-sm text-surface-500 mt-1; }
 
-  .table-container { @apply overflow-x-auto rounded-xl border border-surface-200/50; }
+  .table-container { @apply overflow-x-auto rounded-xl; border: 1px solid #334155; }
   .table           { @apply w-full text-sm; }
-  .table th        { @apply px-4 py-3 text-left text-xs font-semibold text-surface-500 uppercase tracking-wider bg-surface-100 border-b border-surface-200/50; }
-  .table td        { @apply px-4 py-3 border-b border-surface-200/30 text-surface-700; }
-  .table tr:last-child td { @apply border-b-0; }
-  .table tr:hover td      { @apply bg-surface-200/20; }
+  .table th        { @apply px-4 py-3 text-left text-xs font-semibold text-surface-500 uppercase tracking-wider; background-color: #1e293b; border-bottom: 1px solid #334155; }
+  .table td        { @apply px-4 py-3 text-surface-700; border-bottom: 1px solid #1e293b; }
+  .table tr:last-child td { border-bottom: none; }
+  .table tr:hover td      { background-color: rgba(51,65,85,0.3); }
 
   .badge         { @apply inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full; }
   .badge-success { @apply badge bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20; }
@@ -84,33 +66,34 @@
   .badge-neutral { @apply badge bg-surface-200/60 text-surface-500 ring-1 ring-surface-300/30; }
 
   .step-indicator { @apply flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold transition-all duration-300; }
-  .step-active    { @apply step-indicator bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-glow; }
+  .step-active    { @apply step-indicator text-white shadow-glow; background: linear-gradient(135deg,#8b5cf6,#6366f1); }
   .step-completed { @apply step-indicator bg-emerald-600 text-white; }
   .step-pending   { @apply step-indicator bg-surface-200 text-surface-500; }
 
   .skeleton { @apply bg-gradient-to-r from-surface-200 via-surface-100 to-surface-200 bg-[length:200%_100%] animate-shimmer rounded; }
 
-  .dropdown      { @apply absolute z-50 mt-2 bg-surface-100/95 backdrop-blur-xl rounded-xl shadow-elevated border border-surface-200/50 py-1 min-w-[200px]; }
-  .dropdown-item { @apply w-full px-4 py-2.5 text-sm text-left text-surface-600 hover:bg-surface-200/50 hover:text-surface-800 transition-colors; }
+  .dropdown      { @apply absolute z-50 mt-2 backdrop-blur-xl rounded-xl shadow-elevated py-1 min-w-[200px]; background-color: #1e293b; border: 1px solid #334155; }
+  .dropdown-item { @apply w-full px-4 py-2.5 text-sm text-left text-surface-600 transition-colors; }
+  .dropdown-item:hover { background-color: rgba(51,65,85,0.5); color: #e2e8f0; }
 
   .modal-overlay { @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm; }
-  .modal-content { @apply bg-surface-100/95 backdrop-blur-xl rounded-2xl shadow-elevated border border-surface-200/50 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto; }
+  .modal-content { @apply backdrop-blur-xl rounded-2xl shadow-elevated max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto; background-color: #1e293b; border: 1px solid #334155; }
 
-  .tooltip { @apply absolute z-50 px-2 py-1 text-xs font-medium text-white bg-surface-200 rounded shadow-lg whitespace-nowrap; }
+  .tooltip { @apply absolute z-50 px-2 py-1 text-xs font-medium text-white rounded shadow-lg whitespace-nowrap; background-color: #1e293b; }
 }
 
 /* ── Utilities ──────────────────────────────────────────────────────────────── */
 @layer utilities {
-  .text-gradient { @apply bg-gradient-to-r from-violet-400 to-blue-400 bg-clip-text text-transparent; }
-  .glass         { @apply bg-surface-100/60 backdrop-blur-lg border border-white/10; }
-  .glass-dark    { @apply bg-surface-50/80  backdrop-blur-lg border border-white/5; }
-  .focus-ring    { @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-50; }
+  .text-gradient  { @apply bg-gradient-to-r from-violet-400 to-blue-400 bg-clip-text text-transparent; }
+  .glass          { background: rgba(30,41,59,0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
+  .glass-dark     { background: rgba(15,23,42,0.8);  backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }
+  .focus-ring     { @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-50; }
   .hide-scrollbar::-webkit-scrollbar { display: none; }
   .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   .glow-pulse { animation: glowPulse 2s ease-in-out infinite; }
   @keyframes glowPulse {
-    0%, 100% { box-shadow: 0 0 10px rgba(139,92,246,0.3); }
-    50%       { box-shadow: 0 0 25px rgba(139,92,246,0.6); }
+    0%,100% { box-shadow: 0 0 10px rgba(139,92,246,0.3); }
+    50%     { box-shadow: 0 0 25px rgba(139,92,246,0.6); }
   }
   .animate-stagger > * { animation: slideUp 0.5s ease-out forwards; opacity: 0; }
   .animate-stagger > *:nth-child(1) { animation-delay: 0.1s; }
@@ -121,93 +104,125 @@
   .animate-stagger > *:nth-child(6) { animation-delay: 0.6s; }
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   DARK THEME HARD OVERRIDES
-   These rules are OUTSIDE all @layer blocks.
-   In CSS Cascade Level 5, unlayered author styles have HIGHER priority than
-   any @layer rule — including Tailwind utility classes. This guarantees they
-   cannot be overridden by any bg-white / bg-gray-* / bg-surface-* Tailwind class
-   anywhere in the codebase.
-   ══════════════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════════
+   GLOBAL HARD OVERRIDES — written OUTSIDE all @layer blocks.
+   Unlayered author CSS has higher cascade priority than any @layer rule
+   (including Tailwind utilities). These rules cannot be beaten by any
+   Tailwind class such as bg-white, bg-gray-50, bg-surface-*, text-gray-*, etc.
+   ════════════════════════════════════════════════════════════════════════════ */
 
-/* ── White-card containers → dark panel ──────────────────────────────────── */
+/* ── 1. Dark panel containers ─────────────────────────────────────────────── */
 .bg-white {
   background-color: #1e293b !important;
 }
 
-/* ── ALL form inputs globally ─────────────────────────────────────────────── */
+/* ── 2. ALL input / textarea / select → light gray bg + black text ─────────
+   Light inputs on dark backgrounds give maximum readability.
+   We use the highest-specificity selectors available to beat browser UA
+   stylesheet and any Tailwind generated classes.                              */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
 textarea,
 select {
-  background-color: #1e293b !important;
-  color: #e2e8f0 !important;
-  border-color: #334155 !important;
-  border-radius: 8px;
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  border: 1px solid #94a3b8 !important;
+  border-radius: 8px !important;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  -webkit-text-fill-color: #0f172a;  /* overrides autofill color in Chrome */
 }
 
 input:not([type="checkbox"]):not([type="radio"])::placeholder,
 textarea::placeholder {
   color: #64748b !important;
+  -webkit-text-fill-color: #64748b !important;
   opacity: 1;
 }
 
+/* Focus ring */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
 textarea:focus,
 select:focus {
   border-color: #6366f1 !important;
   outline: none !important;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3) !important;
+  background-color: #f1f5f9 !important;
 }
 
-/* Disabled fields */
+/* Disabled state */
 input:disabled,
 textarea:disabled,
 select:disabled {
-  background-color: #0f172a !important;
+  background-color: #cbd5e1 !important;
   color: #475569 !important;
-  cursor: not-allowed;
-  opacity: 1;
+  -webkit-text-fill-color: #475569 !important;
+  cursor: not-allowed !important;
+  opacity: 0.7 !important;
 }
 
-/* Select native dropdown options */
+/* ── 3. Chrome autofill override (Chrome forces blue tint on autofilled) ──── */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 999px #e2e8f0 inset !important;
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #0f172a;
+}
+
+/* ── 4. Select native dropdown options ────────────────────────────────────── */
 select option {
-  background-color: #0f172a;
+  background-color: #1e293b;
   color: #e2e8f0;
 }
 
-/* ── Labels ───────────────────────────────────────────────────────────────── */
+/* ── 5. Labels → muted readable color ────────────────────────────────────── */
 label {
   color: #94a3b8;
 }
 
-/* ── Error state on inputs ────────────────────────────────────────────────── */
+/* ── 6. Error state on inputs ─────────────────────────────────────────────── */
 input.border-red-500,
-input[class*="border-red-"],
+input[class*="border-red"],
 select.border-red-500,
-textarea.border-red-500 {
+textarea.border-red-500,
+.input-error {
   border-color: #ef4444 !important;
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15) !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
 }
 
-/* ── Prevent white text on light alert/status backgrounds ─────────────────── */
-.bg-green-50  { background-color: rgba(16, 185, 129, 0.1) !important; }
-.bg-red-50    { background-color: rgba(239, 68, 68, 0.1)  !important; }
-.bg-yellow-50 { background-color: rgba(245, 158, 11, 0.1) !important; }
-.bg-blue-50   { background-color: rgba(99, 102, 241, 0.1) !important; }
-.bg-accent-50 { background-color: rgba(139, 92, 246, 0.1) !important; }
+/* ── 7. Headings — ensure readable on dark backgrounds ─────────────────────
+   text-surface-* classes are dark-mapped in tailwind.config.js.
+   These rules catch pages that still use old Tailwind gray/slate text classes. */
+h1, h2, h3, h4, h5, h6 {
+  color: #e2e8f0;
+}
+
+/* ── 8. Status/alert background overrides (light bg-* → dark transparent) ── */
+.bg-green-50  { background-color: rgba(16, 185, 129, 0.12) !important; }
+.bg-red-50    { background-color: rgba(239, 68, 68, 0.12)  !important; }
+.bg-yellow-50 { background-color: rgba(245, 158, 11, 0.12) !important; }
+.bg-blue-50   { background-color: rgba(99, 102, 241, 0.12) !important; }
+.bg-amber-100 { background-color: rgba(245, 158, 11, 0.15) !important; }
+.bg-accent-50 { background-color: rgba(139, 92, 246, 0.12) !important; }
 
 .text-green-700  { color: #34d399 !important; }
 .text-red-700    { color: #f87171 !important; }
-.text-yellow-700 { color: #fbbf24 !important; }
+.text-yellow-700, .text-amber-700 { color: #fbbf24 !important; }
 .text-blue-700   { color: #818cf8 !important; }
+.text-amber-700  { color: #fbbf24 !important; }
 
-/* ── Gray text classes used in inline JSX → keep readable on dark bg ──────── */
+/* ── 9. Legacy gray text classes → remain readable on dark backgrounds ───── */
 .text-gray-900, .text-black { color: #f1f5f9 !important; }
 .text-gray-800              { color: #e2e8f0 !important; }
 .text-gray-700              { color: #cbd5e1 !important; }
 .text-gray-600, .text-gray-500 { color: #94a3b8 !important; }
 .text-gray-400              { color: #64748b !important; }
 
-/* ── Inline border classes ────────────────────────────────────────────────── */
+/* ── 10. Legacy border classes ────────────────────────────────────────────── */
 .border-gray-200, .border-gray-300 { border-color: #334155 !important; }
+
+/* ── 11. bg-surface-50 or bg-gray-50 used as info boxes → dark ───────────── */
+.bg-surface-50:not(body) { background-color: #0f172a !important; }
+.bg-gray-50              { background-color: #1e293b !important; }
+.bg-gray-100             { background-color: #1e293b !important; }
+.bg-gray-200             { background-color: #334155 !important; }
