@@ -42,6 +42,51 @@
   ::selection {
     @apply bg-accent-500/30 text-accent-300;
   }
+
+  /* ── Global form element dark theme ────────────────────────────────────────
+     Applies to ALL inputs/textareas/selects regardless of Tailwind classes.
+     Forms that use inline class lists (no .input) still get dark styling.    */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  textarea,
+  select {
+    background-color: #1e293b;
+    color: #f1f5f9;
+    border-color: #334155;
+    border-radius: 8px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"])::placeholder,
+  textarea::placeholder {
+    color: #64748b;
+    opacity: 1;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+  textarea:focus,
+  select:focus {
+    border-color: #6366f1 !important;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+  }
+
+  input:disabled,
+  textarea:disabled,
+  select:disabled {
+    background-color: #0b1220 !important;
+    color: #64748b !important;
+    cursor: not-allowed;
+    opacity: 1;
+  }
+
+  select option {
+    background-color: #0f172a;
+    color: #f1f5f9;
+  }
+
+  label {
+    color: #cbd5e1;
+  }
 }
 
 /* Component styles */
@@ -52,7 +97,7 @@
   }
 
   .btn-primary {
-    @apply btn bg-gradient-to-r from-violet-600 to-violet-500 text-white hover:from-violet-700 hover:to-violet-600 focus:ring-accent-500 shadow-glow-sm active:scale-[0.98];
+    @apply btn bg-gradient-to-br from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600 focus:ring-indigo-500 shadow-glow-sm active:scale-[0.98];
   }
 
   .btn-secondary {
@@ -81,23 +126,49 @@
 
   /* Inputs */
   .input {
-    @apply w-full px-4 py-2.5 text-sm bg-surface-100 border border-surface-200 rounded-lg text-surface-800 transition-all duration-200 placeholder:text-surface-400 focus:outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/20;
+    background-color: #1e293b;
+    color: #f1f5f9;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.875rem;
+    width: 100%;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .input:focus {
+    border-color: #6366f1;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  }
+
+  .input::placeholder {
+    color: #64748b;
   }
 
   .input-error {
-    @apply border-red-500 focus:border-red-500 focus:ring-red-500/20;
+    border-color: #ef4444 !important;
+    box-shadow: none !important;
+  }
+
+  .input-error:focus {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
   }
 
   .input-label {
-    @apply block text-sm font-medium text-surface-700 mb-1.5;
+    @apply block text-sm font-medium mb-1.5;
+    color: #cbd5e1;
   }
 
   .input-help {
-    @apply text-xs text-surface-500 mt-1;
+    @apply text-xs mt-1;
+    color: #64748b;
   }
 
   .input-error-text {
-    @apply text-xs text-red-400 mt-1;
+    @apply text-xs mt-1;
+    color: #ef4444;
   }
 
   /* Cards */
@@ -229,10 +300,23 @@
 
 /* Utility classes */
 @layer utilities {
-  /* Override bg-white so hardcoded white cards become dark panels */
+  /* Override bg-white so hardcoded white cards/forms become dark panels */
   .bg-white {
     background-color: #1e293b !important;
   }
+
+  /* Ensure text-gray-* and text-black used in some inline forms stay readable */
+  .text-gray-900, .text-black { color: #f1f5f9 !important; }
+  .text-gray-800              { color: #e2e8f0 !important; }
+  .text-gray-700              { color: #cbd5e1 !important; }
+  .text-gray-600, .text-gray-500 { color: #94a3b8 !important; }
+  .text-gray-400              { color: #64748b !important; }
+
+  /* Border overrides for common inline patterns */
+  .border-gray-200, .border-gray-300 { border-color: #334155 !important; }
+
+  /* Inline bg-surface-50 used as input bg in some forms → also dark */
+  .bg-surface-50.border { background-color: #1e293b !important; }
 
   .text-gradient {
     @apply bg-gradient-to-r from-violet-400 to-blue-400 bg-clip-text text-transparent;
