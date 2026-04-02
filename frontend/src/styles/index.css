@@ -2,132 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Base styles */
+/* ── Base reset ─────────────────────────────────────────────────────────────── */
 @layer base {
-  * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-  }
-
-  html {
-    scroll-behavior: smooth;
-  }
-
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     @apply font-sans text-surface-700 bg-surface-50 antialiased;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-
-  /* Custom scrollbar */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-
-  ::-webkit-scrollbar-track {
-    @apply bg-surface-50;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    @apply bg-surface-300 rounded-full;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-surface-400;
-  }
-
-  /* Selection color */
-  ::selection {
-    @apply bg-accent-500/30 text-accent-300;
-  }
-
-  /* ── Global form element dark theme ────────────────────────────────────────
-     Applies to ALL inputs/textareas/selects regardless of Tailwind classes.
-     Forms that use inline class lists (no .input) still get dark styling.    */
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
-  textarea,
-  select {
-    background-color: #1e293b;
-    color: #f1f5f9;
-    border-color: #334155;
-    border-radius: 8px;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  }
-
-  input:not([type="checkbox"]):not([type="radio"])::placeholder,
-  textarea::placeholder {
-    color: #64748b;
-    opacity: 1;
-  }
-
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
-  textarea:focus,
-  select:focus {
-    border-color: #6366f1 !important;
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
-  }
-
-  input:disabled,
-  textarea:disabled,
-  select:disabled {
-    background-color: #0b1220 !important;
-    color: #64748b !important;
-    cursor: not-allowed;
-    opacity: 1;
-  }
-
-  select option {
-    background-color: #0f172a;
-    color: #f1f5f9;
-  }
-
-  label {
-    color: #cbd5e1;
-  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-surface-50; }
+  ::-webkit-scrollbar-thumb { @apply bg-surface-300 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-surface-400; }
+  ::selection { @apply bg-accent-500/30 text-accent-300; }
 }
 
-/* Component styles */
+/* ── Components ─────────────────────────────────────────────────────────────── */
 @layer components {
-  /* Buttons */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-surface-50 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg
+           transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2
+           focus:ring-offset-surface-50 disabled:opacity-50 disabled:cursor-not-allowed;
   }
-
   .btn-primary {
-    @apply btn bg-gradient-to-br from-indigo-500 to-violet-500 text-white hover:from-indigo-600 hover:to-violet-600 focus:ring-indigo-500 shadow-glow-sm active:scale-[0.98];
+    @apply btn bg-gradient-to-br from-indigo-500 to-violet-500 text-white
+           hover:from-indigo-600 hover:to-violet-600 focus:ring-indigo-500 shadow-glow-sm active:scale-[0.98];
   }
-
   .btn-secondary {
     @apply btn bg-surface-100 text-surface-700 hover:bg-surface-200 focus:ring-surface-400 border border-surface-200;
   }
-
   .btn-outline {
     @apply btn bg-transparent text-accent-400 border-2 border-accent-500 hover:bg-accent-500/10 focus:ring-accent-500;
   }
+  .btn-danger  { @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500; }
+  .btn-ghost   { @apply btn bg-transparent text-surface-500 hover:bg-surface-100 hover:text-surface-700 focus:ring-surface-400; }
+  .btn-lg { @apply px-6 py-3 text-base; }
+  .btn-sm { @apply px-3 py-1.5 text-xs; }
 
-  .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
-  }
-
-  .btn-ghost {
-    @apply btn bg-transparent text-surface-500 hover:bg-surface-100 hover:text-surface-700 focus:ring-surface-400;
-  }
-
-  .btn-lg {
-    @apply px-6 py-3 text-base;
-  }
-
-  .btn-sm {
-    @apply px-3 py-1.5 text-xs;
-  }
-
-  /* Inputs */
+  /* .input class used in forms that adopt it explicitly */
   .input {
     background-color: #1e293b;
-    color: #f1f5f9;
+    color: #e2e8f0;
     border: 1px solid #334155;
     border-radius: 8px;
     padding: 10px 14px;
@@ -135,236 +51,163 @@
     width: 100%;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
+  .input:focus       { border-color: #6366f1; outline: none; box-shadow: 0 0 0 2px rgba(99,102,241,0.2); }
+  .input::placeholder { color: #64748b; }
+  .input-error        { border-color: #ef4444 !important; }
+  .input-error:focus  { border-color: #ef4444 !important; box-shadow: 0 0 0 2px rgba(239,68,68,0.2) !important; }
+  .input-label        { @apply block text-sm font-medium mb-1.5; color: #cbd5e1; }
+  .input-help         { @apply text-xs mt-1; color: #64748b; }
+  .input-error-text   { @apply text-xs mt-1; color: #ef4444; }
 
-  .input:focus {
-    border-color: #6366f1;
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-  }
+  .card        { @apply bg-surface-100/80 backdrop-blur-sm rounded-xl border border-surface-200/50 shadow-card; }
+  .card-hover  { @apply card hover:shadow-soft hover:border-surface-300/50 transition-all duration-200; }
 
-  .input::placeholder {
-    color: #64748b;
-  }
+  .nav-item        { @apply flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-white/60 rounded-lg transition-all duration-200 hover:bg-white/10 hover:text-white; }
+  .nav-item-active { @apply nav-item bg-violet-500/20 text-white border border-violet-400/20 shadow-glow-sm; }
 
-  .input-error {
-    border-color: #ef4444 !important;
-    box-shadow: none !important;
-  }
+  .stat-card  { @apply card p-6; }
+  .stat-value { @apply text-3xl font-bold text-surface-900; }
+  .stat-label { @apply text-sm text-surface-500 mt-1; }
 
-  .input-error:focus {
-    border-color: #ef4444 !important;
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
-  }
+  .table-container { @apply overflow-x-auto rounded-xl border border-surface-200/50; }
+  .table           { @apply w-full text-sm; }
+  .table th        { @apply px-4 py-3 text-left text-xs font-semibold text-surface-500 uppercase tracking-wider bg-surface-100 border-b border-surface-200/50; }
+  .table td        { @apply px-4 py-3 border-b border-surface-200/30 text-surface-700; }
+  .table tr:last-child td { @apply border-b-0; }
+  .table tr:hover td      { @apply bg-surface-200/20; }
 
-  .input-label {
-    @apply block text-sm font-medium mb-1.5;
-    color: #cbd5e1;
-  }
+  .badge         { @apply inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full; }
+  .badge-success { @apply badge bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20; }
+  .badge-warning { @apply badge bg-amber-500/15  text-amber-400  ring-1 ring-amber-500/20;  }
+  .badge-danger  { @apply badge bg-red-500/15    text-red-400    ring-1 ring-red-500/20;    }
+  .badge-info    { @apply badge bg-violet-500/15 text-violet-400 ring-1 ring-violet-500/20; }
+  .badge-neutral { @apply badge bg-surface-200/60 text-surface-500 ring-1 ring-surface-300/30; }
 
-  .input-help {
-    @apply text-xs mt-1;
-    color: #64748b;
-  }
+  .step-indicator { @apply flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold transition-all duration-300; }
+  .step-active    { @apply step-indicator bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-glow; }
+  .step-completed { @apply step-indicator bg-emerald-600 text-white; }
+  .step-pending   { @apply step-indicator bg-surface-200 text-surface-500; }
 
-  .input-error-text {
-    @apply text-xs mt-1;
-    color: #ef4444;
-  }
+  .skeleton { @apply bg-gradient-to-r from-surface-200 via-surface-100 to-surface-200 bg-[length:200%_100%] animate-shimmer rounded; }
 
-  /* Cards */
-  .card {
-    @apply bg-surface-100/80 backdrop-blur-sm rounded-xl border border-surface-200/50 shadow-card;
-  }
+  .dropdown      { @apply absolute z-50 mt-2 bg-surface-100/95 backdrop-blur-xl rounded-xl shadow-elevated border border-surface-200/50 py-1 min-w-[200px]; }
+  .dropdown-item { @apply w-full px-4 py-2.5 text-sm text-left text-surface-600 hover:bg-surface-200/50 hover:text-surface-800 transition-colors; }
 
-  .card-hover {
-    @apply card hover:shadow-soft hover:border-surface-300/50 transition-all duration-200;
-  }
+  .modal-overlay { @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm; }
+  .modal-content { @apply bg-surface-100/95 backdrop-blur-xl rounded-2xl shadow-elevated border border-surface-200/50 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto; }
 
-  /* Sidebar Navigation */
-  .nav-item {
-    @apply flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-white/60 rounded-lg transition-all duration-200 hover:bg-white/10 hover:text-white;
-  }
-
-  .nav-item-active {
-    @apply nav-item bg-violet-500/20 text-white border border-violet-400/20 shadow-glow-sm;
-  }
-
-  /* Stats Card */
-  .stat-card {
-    @apply card p-6;
-  }
-
-  .stat-value {
-    @apply text-3xl font-bold text-surface-900;
-  }
-
-  .stat-label {
-    @apply text-sm text-surface-500 mt-1;
-  }
-
-  /* Table */
-  .table-container {
-    @apply overflow-x-auto rounded-xl border border-surface-200/50;
-  }
-
-  .table {
-    @apply w-full text-sm;
-  }
-
-  .table th {
-    @apply px-4 py-3 text-left text-xs font-semibold text-surface-500 uppercase tracking-wider bg-surface-100 border-b border-surface-200/50;
-  }
-
-  .table td {
-    @apply px-4 py-3 border-b border-surface-200/30 text-surface-700;
-  }
-
-  .table tr:last-child td {
-    @apply border-b-0;
-  }
-
-  .table tr:hover td {
-    @apply bg-surface-200/20;
-  }
-
-  /* Badge */
-  .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full;
-  }
-
-  .badge-success {
-    @apply badge bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20;
-  }
-
-  .badge-warning {
-    @apply badge bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20;
-  }
-
-  .badge-danger {
-    @apply badge bg-red-500/15 text-red-400 ring-1 ring-red-500/20;
-  }
-
-  .badge-info {
-    @apply badge bg-violet-500/15 text-violet-400 ring-1 ring-violet-500/20;
-  }
-
-  .badge-neutral {
-    @apply badge bg-surface-200/60 text-surface-500 ring-1 ring-surface-300/30;
-  }
-
-  /* Steps indicator */
-  .step-indicator {
-    @apply flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold transition-all duration-300;
-  }
-
-  .step-active {
-    @apply step-indicator bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-glow;
-  }
-
-  .step-completed {
-    @apply step-indicator bg-emerald-600 text-white;
-  }
-
-  .step-pending {
-    @apply step-indicator bg-surface-200 text-surface-500;
-  }
-
-  /* Loading skeleton */
-  .skeleton {
-    @apply bg-gradient-to-r from-surface-200 via-surface-100 to-surface-200 bg-[length:200%_100%] animate-shimmer rounded;
-  }
-
-  /* Dropdown */
-  .dropdown {
-    @apply absolute z-50 mt-2 bg-surface-100/95 backdrop-blur-xl rounded-xl shadow-elevated border border-surface-200/50 py-1 min-w-[200px];
-  }
-
-  .dropdown-item {
-    @apply w-full px-4 py-2.5 text-sm text-left text-surface-600 hover:bg-surface-200/50 hover:text-surface-800 transition-colors;
-  }
-
-  /* Modal */
-  .modal-overlay {
-    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm;
-  }
-
-  .modal-content {
-    @apply bg-surface-100/95 backdrop-blur-xl rounded-2xl shadow-elevated border border-surface-200/50 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto;
-  }
-
-  /* Tooltip */
-  .tooltip {
-    @apply absolute z-50 px-2 py-1 text-xs font-medium text-white bg-surface-200 rounded shadow-lg whitespace-nowrap;
-  }
+  .tooltip { @apply absolute z-50 px-2 py-1 text-xs font-medium text-white bg-surface-200 rounded shadow-lg whitespace-nowrap; }
 }
 
-/* Utility classes */
+/* ── Utilities ──────────────────────────────────────────────────────────────── */
 @layer utilities {
-  /* Override bg-white so hardcoded white cards/forms become dark panels */
-  .bg-white {
-    background-color: #1e293b !important;
+  .text-gradient { @apply bg-gradient-to-r from-violet-400 to-blue-400 bg-clip-text text-transparent; }
+  .glass         { @apply bg-surface-100/60 backdrop-blur-lg border border-white/10; }
+  .glass-dark    { @apply bg-surface-50/80  backdrop-blur-lg border border-white/5; }
+  .focus-ring    { @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-50; }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .glow-pulse { animation: glowPulse 2s ease-in-out infinite; }
+  @keyframes glowPulse {
+    0%, 100% { box-shadow: 0 0 10px rgba(139,92,246,0.3); }
+    50%       { box-shadow: 0 0 25px rgba(139,92,246,0.6); }
   }
-
-  /* Ensure text-gray-* and text-black used in some inline forms stay readable */
-  .text-gray-900, .text-black { color: #f1f5f9 !important; }
-  .text-gray-800              { color: #e2e8f0 !important; }
-  .text-gray-700              { color: #cbd5e1 !important; }
-  .text-gray-600, .text-gray-500 { color: #94a3b8 !important; }
-  .text-gray-400              { color: #64748b !important; }
-
-  /* Border overrides for common inline patterns */
-  .border-gray-200, .border-gray-300 { border-color: #334155 !important; }
-
-  /* Inline bg-surface-50 used as input bg in some forms → also dark */
-  .bg-surface-50.border { background-color: #1e293b !important; }
-
-  .text-gradient {
-    @apply bg-gradient-to-r from-violet-400 to-blue-400 bg-clip-text text-transparent;
-  }
-
-  .glass {
-    @apply bg-surface-100/60 backdrop-blur-lg border border-white/10;
-  }
-
-  .glass-dark {
-    @apply bg-surface-50/80 backdrop-blur-lg border border-white/5;
-  }
-
-  /* Animations */
-  .animate-stagger > * {
-    animation: slideUp 0.5s ease-out forwards;
-    opacity: 0;
-  }
-
+  .animate-stagger > * { animation: slideUp 0.5s ease-out forwards; opacity: 0; }
   .animate-stagger > *:nth-child(1) { animation-delay: 0.1s; }
   .animate-stagger > *:nth-child(2) { animation-delay: 0.2s; }
   .animate-stagger > *:nth-child(3) { animation-delay: 0.3s; }
   .animate-stagger > *:nth-child(4) { animation-delay: 0.4s; }
   .animate-stagger > *:nth-child(5) { animation-delay: 0.5s; }
   .animate-stagger > *:nth-child(6) { animation-delay: 0.6s; }
-
-  /* Focus visible */
-  .focus-ring {
-    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-50;
-  }
-
-  /* Hide scrollbar */
-  .hide-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .hide-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-
-  /* Glow pulse for accent elements */
-  .glow-pulse {
-    animation: glowPulse 2s ease-in-out infinite;
-  }
-
-  @keyframes glowPulse {
-    0%, 100% { box-shadow: 0 0 10px rgba(139,92,246,0.3); }
-    50% { box-shadow: 0 0 25px rgba(139,92,246,0.6); }
-  }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   DARK THEME HARD OVERRIDES
+   These rules are OUTSIDE all @layer blocks.
+   In CSS Cascade Level 5, unlayered author styles have HIGHER priority than
+   any @layer rule — including Tailwind utility classes. This guarantees they
+   cannot be overridden by any bg-white / bg-gray-* / bg-surface-* Tailwind class
+   anywhere in the codebase.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── White-card containers → dark panel ──────────────────────────────────── */
+.bg-white {
+  background-color: #1e293b !important;
+}
+
+/* ── ALL form inputs globally ─────────────────────────────────────────────── */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+textarea,
+select {
+  background-color: #1e293b !important;
+  color: #e2e8f0 !important;
+  border-color: #334155 !important;
+  border-radius: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:not([type="checkbox"]):not([type="radio"])::placeholder,
+textarea::placeholder {
+  color: #64748b !important;
+  opacity: 1;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+textarea:focus,
+select:focus {
+  border-color: #6366f1 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+}
+
+/* Disabled fields */
+input:disabled,
+textarea:disabled,
+select:disabled {
+  background-color: #0f172a !important;
+  color: #475569 !important;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+/* Select native dropdown options */
+select option {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+/* ── Labels ───────────────────────────────────────────────────────────────── */
+label {
+  color: #94a3b8;
+}
+
+/* ── Error state on inputs ────────────────────────────────────────────────── */
+input.border-red-500,
+input[class*="border-red-"],
+select.border-red-500,
+textarea.border-red-500 {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15) !important;
+}
+
+/* ── Prevent white text on light alert/status backgrounds ─────────────────── */
+.bg-green-50  { background-color: rgba(16, 185, 129, 0.1) !important; }
+.bg-red-50    { background-color: rgba(239, 68, 68, 0.1)  !important; }
+.bg-yellow-50 { background-color: rgba(245, 158, 11, 0.1) !important; }
+.bg-blue-50   { background-color: rgba(99, 102, 241, 0.1) !important; }
+.bg-accent-50 { background-color: rgba(139, 92, 246, 0.1) !important; }
+
+.text-green-700  { color: #34d399 !important; }
+.text-red-700    { color: #f87171 !important; }
+.text-yellow-700 { color: #fbbf24 !important; }
+.text-blue-700   { color: #818cf8 !important; }
+
+/* ── Gray text classes used in inline JSX → keep readable on dark bg ──────── */
+.text-gray-900, .text-black { color: #f1f5f9 !important; }
+.text-gray-800              { color: #e2e8f0 !important; }
+.text-gray-700              { color: #cbd5e1 !important; }
+.text-gray-600, .text-gray-500 { color: #94a3b8 !important; }
+.text-gray-400              { color: #64748b !important; }
+
+/* ── Inline border classes ────────────────────────────────────────────────── */
+.border-gray-200, .border-gray-300 { border-color: #334155 !important; }
