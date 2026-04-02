@@ -46,23 +46,43 @@ const PhoneComboInput = ({ fieldName, label, codeValue, onCodeChange, register, 
       </label>
       <div
         className={clsx(
-          'flex rounded-lg border transition-colors focus-within:ring-2 focus-within:ring-accent-500/20 focus-within:border-accent-400',
-          errors[fieldName] ? 'border-danger-500' : 'border-surface-300'
+          'flex rounded-lg overflow-hidden transition-colors focus-within:ring-2 focus-within:ring-indigo-500/30 focus-within:border-indigo-500',
+          errors[fieldName] ? 'border border-red-500' : 'border border-slate-400'
         )}
       >
         <select
           value={codeValue}
           onChange={e => onCodeChange(e.target.value)}
-          className="shrink-0 bg-surface-50 border-r border-surface-200 pl-2 pr-1 py-2.5 text-sm text-surface-700 focus:outline-none cursor-pointer rounded-l-lg"
+          className="shrink-0 cursor-pointer focus:outline-none"
+          style={{
+            width: '120px',
+            background: '#e2e8f0',
+            color: '#0f172a',
+            borderRight: '1px solid #94a3b8',
+            borderRadius: 0,
+            padding: '10px 6px 10px 10px',
+            fontSize: '0.8125rem',
+          }}
         >
           {COUNTRY_CODES.map(c => (
-            <option key={c.code} value={c.code}>{c.label} — {c.country}</option>
+            <option key={c.code} value={c.code} style={{ background: '#fff', color: '#0f172a' }}>
+              {c.label} — {c.country}
+            </option>
           ))}
         </select>
         <input
           type="tel"
           placeholder={placeholder}
-          className="flex-1 px-3 py-2.5 text-sm text-surface-900 placeholder:text-surface-400 focus:outline-none bg-white rounded-r-lg"
+          className="focus:outline-none"
+          style={{
+            flex: 1,
+            background: '#e2e8f0',
+            color: '#0f172a',
+            borderRadius: 0,
+            padding: '10px 12px',
+            fontSize: '0.875rem',
+            minWidth: 0,
+          }}
           {...register(fieldName, {
             required: `${label} is required`,
             pattern: {
