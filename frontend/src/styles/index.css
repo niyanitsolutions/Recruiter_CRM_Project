@@ -37,6 +37,21 @@
   .btn-lg { @apply px-6 py-3 text-base; }
   .btn-sm { @apply px-3 py-1.5 text-xs; }
 
+  /* Base input class — width + padding only; colors handled by unlayered global rules */
+  .input {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    border-width: 1px;
+    border-style: solid;
+    border-radius: 8px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .input.pl-10 { padding-left: 2.5rem; }
+  .input.pr-10 { padding-right: 2.5rem; }
+
   .input-label      { @apply block text-sm font-medium mb-1.5; color: #94a3b8; }
   .input-help       { @apply text-xs mt-1; color: #64748b; }
   .input-error-text { @apply text-xs mt-1; color: #f87171; }
