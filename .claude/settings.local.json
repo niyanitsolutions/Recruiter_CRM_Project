@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "WebFetch(domain:mixkit.co)",
+      "Bash(curl -L -o \"d:/crm-project/frontend/public/videos/crm-bg.mp4\" \"https://assets.mixkit.co/videos/42648/42648-1080.mp4\" --progress-bar)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend"
