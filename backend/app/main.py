@@ -37,7 +37,7 @@ from app.api.v1 import settings as settings_router
 from app.api.v1 import onboards, payouts, notifications
 
 # ============== Phase 5 - Reports, Analytics, Import/Export, Targets, Audit ==============
-from app.api.v1 import reports, analytics, imports_exports, targets, audit, scheduler
+from app.api.v1 import reports, analytics, imports_exports, targets, audit, scheduler, tasks
 
 # ============== Export ==============
 from app.api.v1 import export
@@ -163,6 +163,7 @@ app.include_router(targets.router, prefix=API_V1_PREFIX, tags=["Targets"])
 app.include_router(audit.router, prefix=API_V1_PREFIX, tags=["Advanced Audit"])
 app.include_router(scheduler.router, prefix=API_V1_PREFIX, tags=["Scheduler"])
 app.include_router(export.router, prefix=API_V1_PREFIX, tags=["Export"])
+app.include_router(tasks.router, prefix=API_V1_PREFIX, tags=["Tasks"])
 
 
 # Serve uploaded files (resumes, etc.)

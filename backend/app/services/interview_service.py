@@ -192,6 +192,32 @@ class InterviewService:
             "is_deleted": False
         }
 
+        # ── Overlap validation — prevent double-booking interviewers ────────────
+        if scheduled_datetime and interview_data.interviewer_ids:
+            new_end = scheduled_datetime + timedelta(minutes=interview_data.duration_minutes or 60)
+            # Fetch same-day interviews for these interviewers
+            day_start = scheduled_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end   = scheduled_datetime.replace(hour=23, minute=59, second=59, microsecond=999999)
+            same_day = await collection.find({
+                "interviewer_ids": {"$in": interview_data.interviewer_ids},
+                "scheduled_datetime": {"$gte": day_start, "$lte": day_end},
+                "status": {"$in": [InterviewStatus.SCHEDULED.value, InterviewStatus.IN_PROGRESS.value]},
+                "is_deleted": False,
+            }).to_list(length=50)
+            for existing_iv in same_day:
+                iv_start = existing_iv.get("scheduled_datetime")
+                iv_dur   = existing_iv.get("duration_minutes") or 60
+                if iv_start:
+                    iv_end = iv_start + timedelta(minutes=iv_dur)
+                    # Overlap: new starts before existing ends AND new ends after existing starts
+                    if scheduled_datetime < iv_end and new_end > iv_start:
+                        t = existing_iv.get("scheduled_time", "")
+                        d = iv_start.strftime("%d %b %Y")
+                        raise HTTPException(
+                            status_code=409,
+                            detail=f"Scheduling conflict: one or more interviewers already have an interview on {d} at {t}. Please choose a different time slot."
+                        )
+
         await collection.insert_one(interview_dict)
 
         # Update application interview count (only when scheduled via application)

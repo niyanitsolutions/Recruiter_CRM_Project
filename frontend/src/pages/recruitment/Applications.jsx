@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  FileText, Eye, User, Download
+  FileText, Eye, User, Download, X
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import applicationService from '../../services/applicationService'
@@ -33,7 +33,8 @@ const Applications = () => {
   const [filters, setFilters] = useState({
     job_id: '',
     candidate_id: '',
-    status: ''
+    status: '',
+    keyword: '',
   })
   const [showFilters, setShowFilters] = useState(false)
   const [statuses, setStatuses] = useState([])
@@ -178,8 +179,17 @@ const Applications = () => {
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-4 mb-6">
-        <div className="flex flex-wrap gap-4">
+        <div className="flex flex-wrap gap-3">
           <div className="flex-1 min-w-[200px]">
+            <input
+              type="text"
+              value={filters.keyword}
+              onChange={(e) => setFilters(prev => ({ ...prev, keyword: e.target.value }))}
+              placeholder="Search by candidate, job or client…"
+              className="input w-full"
+            />
+          </div>
+          <div className="min-w-[180px]">
             <select
               value={filters.status}
               onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
@@ -191,15 +201,34 @@ const Applications = () => {
               ))}
             </select>
           </div>
+          {(filters.keyword || filters.status) && (
+            <button
+              onClick={() => setFilters({ job_id: '', candidate_id: '', status: '', keyword: '' })}
+              className="btn-secondary text-sm flex items-center gap-1"
+            >
+              <X className="w-3.5 h-3.5" /> Clear
+            </button>
+          )}
         </div>
       </div>
 
       {/* Pipeline View */}
       <div className="bg-white rounded-xl shadow-sm border border-surface-200 overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center">
-            <div className="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full mx-auto"></div>
-            <p className="mt-2 text-surface-500">Loading applications...</p>
+          <div>
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4 px-4 py-4 border-b border-surface-100">
+                <div className="w-5 h-5 bg-surface-200 rounded skeleton flex-shrink-0" />
+                <div className="w-8 h-8 rounded-full bg-surface-200 skeleton flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 bg-surface-200 rounded skeleton w-36" />
+                  <div className="h-2.5 bg-surface-200 rounded skeleton w-48" />
+                </div>
+                <div className="h-3 bg-surface-200 rounded skeleton w-24" />
+                <div className="h-5 bg-surface-200 rounded-full skeleton w-20" />
+                <div className="h-3 bg-surface-200 rounded skeleton w-16" />
+              </div>
+            ))}
           </div>
         ) : applications.length === 0 ? (
           <div className="p-8 text-center">
@@ -219,6 +248,7 @@ const Applications = () => {
                   />
                 </th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Candidate</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Match</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Job</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Stage</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Status</th>
@@ -249,6 +279,23 @@ const Applications = () => {
                         <p className="text-sm text-surface-500">{app.candidate_email}</p>
                       </div>
                     </div>
+                  </td>
+                  <td className="px-4 py-4">
+                    {app.eligibility_score != null ? (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700,
+                        background: app.eligibility_score >= 70
+                          ? 'rgba(16,185,129,0.15)' : app.eligibility_score >= 50
+                          ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.12)',
+                        color: app.eligibility_score >= 70 ? '#34d399'
+                          : app.eligibility_score >= 50 ? '#fbbf24' : '#f87171',
+                      }}>
+                        {Math.round(app.eligibility_score)}%
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, color: '#475569' }}>—</span>
+                    )}
                   </td>
                   <td className="px-4 py-4">
                     <div>

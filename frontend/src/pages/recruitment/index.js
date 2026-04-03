@@ -21,6 +21,7 @@ export { default as JobMatchingCandidates } from './JobMatchingCandidates'
 
 // Applications
 export { default as Applications } from './Applications'
+export { default as ApplicationDetail } from './ApplicationDetail'
 
 // Interviews
 export { default as Interviews } from './Interviews'

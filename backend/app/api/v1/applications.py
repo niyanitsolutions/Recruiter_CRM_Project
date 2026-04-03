@@ -24,6 +24,7 @@ async def list_applications(
     status: Optional[str] = None,  # Comma-separated
     partner_id: Optional[str] = None,
     assigned_to: Optional[str] = None,
+    keyword: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
     _: bool = Depends(require_permissions(["candidates:view"]))
@@ -43,7 +44,8 @@ async def list_applications(
         candidate_id=candidate_id,
         status_filter=status_list,
         partner_id=partner_id,
-        assigned_to=assigned_to
+        assigned_to=assigned_to,
+        keyword=keyword,
     )
     
     return {"success": True, **result}

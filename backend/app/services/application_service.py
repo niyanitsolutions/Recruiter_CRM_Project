@@ -2,7 +2,7 @@
 Application Service - Phase 3
 Business logic for candidate applications (Candidate-Job mapping)
 """
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -253,13 +253,14 @@ class ApplicationService:
         candidate_id: Optional[str] = None,
         status_filter: Optional[List[str]] = None,
         partner_id: Optional[str] = None,
-        assigned_to: Optional[str] = None
+        assigned_to: Optional[str] = None,
+        keyword: Optional[str] = None,
     ) -> Dict[str, Any]:
         """List applications with filters"""
         collection = db[ApplicationService.COLLECTION]
-        
+
         query = {"is_deleted": False}
-        
+
         if job_id:
             query["job_id"] = job_id
         if candidate_id:
@@ -270,6 +271,15 @@ class ApplicationService:
             query["partner_id"] = partner_id
         if assigned_to:
             query["assigned_to"] = assigned_to
+        if keyword:
+            import re
+            pattern = re.compile(re.escape(keyword.strip()), re.IGNORECASE)
+            query["$or"] = [
+                {"candidate_name": {"$regex": pattern}},
+                {"candidate_email": {"$regex": pattern}},
+                {"job_title": {"$regex": pattern}},
+                {"client_name": {"$regex": pattern}},
+            ]
         
         total = await collection.count_documents(query)
         skip = (page - 1) * page_size
@@ -448,6 +458,36 @@ class ApplicationService:
             )
         except Exception:
             pass
+
+        # Auto-create onboard record when offer is accepted
+        if new_status == ApplicationStatus.OFFER_ACCEPTED.value:
+            try:
+                existing_onboard = await db["onboards"].find_one({
+                    "application_id": application_id,
+                    "is_deleted": False
+                })
+                if not existing_onboard:
+                    # Re-fetch to get latest offered_ctc / offered_designation after update
+                    fresh = await collection.find_one({"_id": application_id})
+                    updater = await db["users"].find_one({"_id": updated_by})
+                    company_id = (updater or {}).get("company_id", "")
+                    from app.services.onboard_service import OnboardService
+                    from app.models.company.onboard import OnboardCreate
+                    onboard_payload = OnboardCreate(
+                        candidate_id=fresh.get("candidate_id", ""),
+                        application_id=application_id,
+                        job_id=fresh.get("job_id", ""),
+                        client_id=fresh.get("client_id", ""),
+                        partner_id=fresh.get("partner_id"),
+                        offer_ctc=float(fresh.get("offered_ctc") or 0),
+                        offer_designation=fresh.get("offered_designation") or fresh.get("job_title") or "TBD",
+                        offer_location=fresh.get("job_location") or "TBD",
+                        offer_released_date=date.today(),
+                    )
+                    onboard_svc = OnboardService(db)
+                    await onboard_svc.create(onboard_payload, company_id, updated_by)
+            except Exception:
+                pass  # Non-critical — application status update already succeeded
 
         return await ApplicationService.get_application(db, application_id)
     

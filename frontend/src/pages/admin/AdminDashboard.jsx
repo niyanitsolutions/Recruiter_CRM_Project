@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { selectUser, selectUserPermissions } from '../../store/authSlice'
 import adminDashboardService from '../../services/adminDashboardService'
+import applicationService from '../../services/applicationService'
 import subscriptionService from '../../services/subscriptionService'
 import SubscriptionBanner from '../../components/subscription/SubscriptionBanner'
 import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
@@ -92,6 +93,7 @@ const AdminDashboard = () => {
 
   const [loading,           setLoading]           = useState(true)
   const [dashboardData,     setDashboardData]     = useState(null)
+  const [recruitStats,      setRecruitStats]      = useState(null)
   const [error,             setError]             = useState(null)
   const [seatStatus,        setSeatStatus]        = useState(null)
   const [showUpgradeModal,  setShowUpgradeModal]  = useState(false)
@@ -101,8 +103,12 @@ const AdminDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
-      const response = await adminDashboardService.getDashboardData()
-      setDashboardData(response.data)
+      const [mainRes, recruitRes] = await Promise.allSettled([
+        adminDashboardService.getDashboardData(),
+        applicationService.getDashboardStats(),
+      ])
+      if (mainRes.status === 'fulfilled') setDashboardData(mainRes.value.data)
+      if (recruitRes.status === 'fulfilled') setRecruitStats(recruitRes.value.data)
       setError(null)
     } catch (err) {
       setError('Failed to load dashboard data')
@@ -114,7 +120,6 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     fetchDashboardData()
-    // Fetch seat/subscription status for banner and subscription card
     subscriptionService.getTenantSeatStatus()
       .then(res => setSeatStatus(res.data?.data || null))
       .catch(() => {})
@@ -335,6 +340,82 @@ const AdminDashboard = () => {
           )}
         </div>
       )}
+
+      {/* Hiring Funnel */}
+      {has('candidates:view') && recruitStats && (() => {
+        const funnel = [
+          { label: 'Applied',     value: recruitStats.applied     || 0, color: '#6366f1' },
+          { label: 'Screening',   value: recruitStats.screening   || 0, color: '#8b5cf6' },
+          { label: 'Shortlisted', value: recruitStats.shortlisted || 0, color: '#3b82f6' },
+          { label: 'Interview',   value: recruitStats.interview   || 0, color: '#f59e0b' },
+          { label: 'Offered',     value: recruitStats.offered     || 0, color: '#10b981' },
+          { label: 'Joined',      value: recruitStats.joined      || 0, color: '#22c55e' },
+        ]
+        const maxVal = Math.max(...funnel.map(f => f.value), 1)
+        const offerRate = recruitStats.applied > 0
+          ? Math.round((recruitStats.offered / recruitStats.applied) * 100) : 0
+        const joinRate = recruitStats.offered > 0
+          ? Math.round((recruitStats.joined / recruitStats.offered) * 100) : 0
+        const rejectRate = recruitStats.total > 0
+          ? Math.round((recruitStats.rejected / recruitStats.total) * 100) : 0
+
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-surface-900 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-surface-400" />
+                Hiring Funnel
+              </h2>
+              <div className="flex gap-4 text-sm">
+                <span style={{ color: '#94a3b8' }}>
+                  Total: <strong style={{ color: '#e2e8f0' }}>{recruitStats.total || 0}</strong>
+                </span>
+                <span style={{ color: '#94a3b8' }}>
+                  This week: <strong style={{ color: '#818cf8' }}>{recruitStats.recent_week || 0}</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Funnel bars */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
+              {funnel.map(stage => (
+                <div key={stage.label} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '88px', fontSize: '12px', color: '#94a3b8', textAlign: 'right', flexShrink: 0 }}>
+                    {stage.label}
+                  </div>
+                  <div style={{ flex: 1, height: '22px', background: 'rgba(30,41,59,0.6)', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', borderRadius: '4px',
+                      width: `${(stage.value / maxVal) * 100}%`,
+                      background: stage.color,
+                      transition: 'width 0.6s ease',
+                      minWidth: stage.value > 0 ? '4px' : '0',
+                    }} />
+                  </div>
+                  <div style={{ width: '36px', fontSize: '13px', fontWeight: 700, color: '#e2e8f0', textAlign: 'right', flexShrink: 0 }}>
+                    {stage.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Conversion KPIs */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', borderTop: '1px solid rgba(51,65,85,0.5)', paddingTop: '16px' }}>
+              {[
+                { label: 'Offer Rate', value: `${offerRate}%`, sub: 'applied → offered', color: '#10b981' },
+                { label: 'Join Rate',  value: `${joinRate}%`,  sub: 'offered → joined',  color: '#22c55e' },
+                { label: 'Reject Rate',value: `${rejectRate}%`,sub: 'of all applications',color: '#ef4444' },
+              ].map(kpi => (
+                <div key={kpi.label} style={{ textAlign: 'center', padding: '12px', background: 'rgba(15,23,42,0.4)', borderRadius: '10px' }}>
+                  <div style={{ fontSize: '22px', fontWeight: 800, color: kpi.color }}>{kpi.value}</div>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginTop: '2px' }}>{kpi.label}</div>
+                  <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>{kpi.sub}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Upgrade Seats Modal */}
       <UpgradeSeatsModal

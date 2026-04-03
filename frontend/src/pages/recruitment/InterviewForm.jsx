@@ -80,7 +80,7 @@ const InterviewForm = () => {
     const [modeRes, userRes, jobRes] = await Promise.allSettled([
       interviewService.getModes(),
       userService.getUsers({ page_size: 100 }),
-      jobService.getJobs({ status: 'open,on_hold', page_size: 200 }),
+      jobService.getJobsDropdown('open,on_hold'),
     ])
     if (modeRes.status === 'fulfilled') setModes(modeRes.value.data || [])
     if (userRes.status === 'fulfilled') setUsers(userRes.value.data || [])

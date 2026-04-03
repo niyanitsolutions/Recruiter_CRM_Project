@@ -77,7 +77,9 @@ const PERMISSION_NAV_MAP = [
     path: '/payouts/invoices', icon: Receipt,    label: 'Invoices',        section: 'Finance' },
   // System
   { permissions: ['targets:view', 'targets:create', 'targets:edit'],
-    path: '/targets',    icon: Target,    label: 'Targets',   section: 'System' },
+    path: '/targets',    icon: Target,       label: 'Targets',   section: 'System' },
+  { permissions: ['dashboard:view'],
+    path: '/tasks',      icon: FileCheck,    label: 'Tasks',     section: 'System' },
   { permissions: ['reports:view'],
     path: '/reports',    icon: FileText,  label: 'Reports',   section: 'System' },
   { permissions: ['analytics:view'],

@@ -85,6 +85,19 @@ const ROLE_TO_DEPT = {
   partner:              'partner',
 }
 
+// Guess permDept from a free-form department name string
+function guessDeptFromName(name) {
+  if (!name) return ''
+  const n = name.toLowerCase()
+  if (/partner/.test(n)) return 'partner'
+  if (/account|finance|billing|payment/.test(n)) return 'accounts'
+  if (/hr|human.?resource/.test(n)) return 'hr'
+  if (/client|sales|business.?dev|bd/.test(n)) return 'client_coordinator'
+  if (/recruit|talent|candidate|sourcing/.test(n)) return 'candidate_coordinator'
+  if (/admin|management|operation/.test(n)) return 'admin'
+  return ''
+}
+
 function computePermissions(dept, level, restrictedMods, additionalDepts) {
   if (!dept) return ['dashboard:view']
   const cfg = DEPT_MODULES[dept]
@@ -722,7 +735,16 @@ const [errors,       setErrors]       = useState({})
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">Department</label>
               <select name="department_id" value={formData.department_id}
-                onChange={e => { handleChange(e); if (e.target.value !== 'custom') setDeptCustom('') }}
+                onChange={e => {
+                  handleChange(e)
+                  if (e.target.value !== 'custom') setDeptCustom('')
+                  // Auto-suggest permDept only if not already set
+                  if (!permDept && e.target.value && e.target.value !== 'custom') {
+                    const deptName = departments.find(d => d.id === e.target.value)?.name || ''
+                    const suggested = guessDeptFromName(deptName)
+                    if (suggested) setPermDept(suggested)
+                  }
+                }}
                 className="w-full px-3 py-2 border border-surface-300 rounded-lg">
                 <option value="">Select</option>
                 {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}

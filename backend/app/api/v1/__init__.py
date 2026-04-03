@@ -39,6 +39,7 @@ from . import imports_exports
 from . import targets
 from . import audit
 from . import scheduler
+from . import tasks
 
 
 __all__ = [
@@ -74,4 +75,5 @@ __all__ = [
     'targets',
     'audit',
     'scheduler',
+    'tasks',
 ]

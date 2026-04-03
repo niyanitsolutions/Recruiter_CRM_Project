@@ -64,6 +64,7 @@ import {
   JobDetails,
   JobMatchingCandidates,
   Applications,
+  ApplicationDetail,
   Interviews,
   InterviewForm,
   FeedbackForm
@@ -101,6 +102,7 @@ import ExportsPage from './pages/exports/ExportsPage'
 import TargetsPage from './pages/targets/TargetsPage'
 import Leaderboard from './pages/targets/Leaderboard'
 import AuditLogsPage from './pages/audit/AuditLogsPage'
+import { Tasks } from './pages/tasks'
 
 // ─── Permission-aware default landing page ────────────────────────────────────
 // Used for post-login redirect and for bounce-back when a user hits a
@@ -519,6 +521,8 @@ function App() {
 
         <Route path="/applications"
           element={<PermissionRoute permission="candidates:view"><Applications /></PermissionRoute>} />
+        <Route path="/applications/:id"
+          element={<PermissionRoute permission="candidates:view"><ApplicationDetail /></PermissionRoute>} />
 
         <Route path="/interviews"
           element={<PermissionRoute permission="interviews:view"><Interviews /></PermissionRoute>} />
@@ -629,6 +633,10 @@ function App() {
           element={<PermissionRoute permission="targets:view"><TargetsPage /></PermissionRoute>} />
         <Route path="/leaderboard"
           element={<PermissionRoute permission="targets:view"><Leaderboard /></PermissionRoute>} />
+
+        {/* ── Tasks ── */}
+        <Route path="/tasks"
+          element={<CompanyRoute><Tasks /></CompanyRoute>} />
 
         {/* ── Audit ── */}
         <Route path="/audit-logs"
