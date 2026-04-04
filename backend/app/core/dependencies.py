@@ -7,9 +7,12 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Callable
 from jose import jwt, JWTError
 from datetime import datetime, timezone
+import logging
 
 from app.core.config import settings
 from app.core.database import get_master_db as _db_get_master_db, get_company_db as _db_get_company_db
+
+logger = logging.getLogger(__name__)
 
 # Security scheme
 security = HTTPBearer()
@@ -107,12 +110,19 @@ def require_permissions(required_permissions: List[str]) -> Callable:
         if current_user.get("is_owner"):
             return current_user
 
-        user_permissions = current_user.get("permissions", [])
+        user_permissions = current_user.get("permissions") or []
 
         # Check if user has all required permissions
         missing = [p for p in required_permissions if p not in user_permissions]
 
         if missing:
+            logger.warning(
+                "Permission denied | user=%s | role=%s | required=%s | missing=%s",
+                current_user.get("id", "?"),
+                current_user.get("role", "?"),
+                required_permissions,
+                missing,
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Missing required permissions: {', '.join(missing)}"

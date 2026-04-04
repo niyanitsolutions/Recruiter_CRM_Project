@@ -360,9 +360,9 @@ ROLE_PERMISSIONS = {
         "departments:view", "departments:create", "departments:edit", "departments:delete",
         "designations:view", "designations:create", "designations:edit", "designations:delete",
         "clients:view", "clients:create", "clients:edit", "clients:delete",
-        "candidates:view",
-        "jobs:view",
-        "interviews:view",
+        "candidates:view", "candidates:create", "candidates:edit", "candidates:delete", "candidates:assign",
+        "jobs:view", "jobs:create", "jobs:edit", "jobs:delete",
+        "interviews:view", "interviews:schedule", "interviews:update_status",
         "partners:view", "partners:create", "partners:edit", "partners:delete",
         "onboards:view", "onboards:create", "onboards:edit",
         "accounts:view", "accounts:invoices", "accounts:payouts",
@@ -380,6 +380,7 @@ ROLE_PERMISSIONS = {
         "notifications:create",
     ],
     "candidate_coordinator": [
+        "dashboard:view",
         "clients:view",
         "candidates:view", "candidates:create", "candidates:edit", "candidates:delete", "candidates:assign",
         "interviews:view", "interviews:schedule", "interviews:update_status",
@@ -388,6 +389,7 @@ ROLE_PERMISSIONS = {
         "jobs:view", "onboards:view", "reports:view",
     ],
     "client_coordinator": [
+        "dashboard:view",
         "clients:view", "clients:create", "clients:edit", "clients:delete",
         "jobs:view", "jobs:create", "jobs:edit", "jobs:delete",
         "interviews:view", "interviews:schedule", "interviews:update_status",
@@ -395,15 +397,19 @@ ROLE_PERMISSIONS = {
         "candidates:view", "onboards:view", "reports:view",
     ],
     "hr": [
+        "dashboard:view",
         "users:view", "candidates:view",
         "onboards:view", "onboards:create", "onboards:edit",
         "reports:view",
     ],
     "accounts": [
+        "dashboard:view",
         "accounts:view", "accounts:invoices", "accounts:payouts",
         "clients:view", "partners:view", "reports:view", "reports:export",
+        "payouts:view", "payouts:edit", "invoices:view", "invoices:approve",
     ],
     "partner": [
+        "dashboard:view",
         "candidates:view", "candidates:create",
         "jobs:view", "interviews:view",
         "accounts:view", "accounts:invoices",

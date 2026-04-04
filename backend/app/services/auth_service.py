@@ -23,7 +23,7 @@ from app.models.company.user import UserStatus, ROLE_PERMISSIONS
 
 logger = logging.getLogger(__name__)
 
-def _resolve_effective_permissions(user: dict, role_doc: Optional[dict]) -> list:
+async def _resolve_effective_permissions(user: dict, role_doc: Optional[dict], db=None) -> list:
     """
     Single source of truth for computing effective permissions.
 
@@ -32,24 +32,55 @@ def _resolve_effective_permissions(user: dict, role_doc: Optional[dict]) -> list
       2. Role document in DB           → role_doc.permissions (role-based, always fresh)
       3. Hardcoded ROLE_PERMISSIONS    → last-resort fallback
 
-    dashboard:view is always added to ensure navigation is always accessible.
+    After the base permissions are resolved:
+      4. If user has assigned_departments → merge permissions from all those role docs (union)
+      5. Subtract any restricted_modules → remove all "module:*" permissions for each module
+
+    dashboard:view is always preserved so navigation never breaks.
     This function is used at both login and token-refresh time.
     """
-    # Priority 1: user has an individual permission override
+    # ── Step 1-3: resolve base permissions ────────────────────────────────────
+
     if bool(user.get("override_permissions")):
+        # Individual override: use exactly what's stored (even if [])
         perms = set(user.get("permissions") or [])
-        perms.add("dashboard:view")
-        return list(perms)
-
-    # Priority 2: role document exists in DB — always reflects the latest role settings
-    if role_doc and role_doc.get("permissions"):
+    elif role_doc and role_doc.get("permissions"):
+        # Role document in DB — always reflects the latest role settings
         perms = set(role_doc["permissions"])
-        perms.add("dashboard:view")
-        return list(perms)
+    else:
+        # Hardcoded fallback (role not in DB yet, or role has no permissions set)
+        role_name = user.get("role", "")
+        perms = set(ROLE_PERMISSIONS.get(role_name, []))
 
-    # Priority 3: hardcoded fallback (role not in DB yet, or role has no permissions set)
-    role_name = user.get("role", "")
-    perms = set(ROLE_PERMISSIONS.get(role_name, []))
+    # ── Step 4: merge assigned_departments (multi-role support) ───────────────
+    # Each entry is a role/department slug (e.g. "hr", "accounts"). We fetch the
+    # role doc for each and union its permissions into the base set.
+    assigned_departments = user.get("assigned_departments") or []
+    if assigned_departments and db is not None and not bool(user.get("override_permissions")):
+        for dept_slug in assigned_departments:
+            if not dept_slug:
+                continue
+            # Treat the slug as a role name (primary_department == role slug pattern)
+            dept_role_doc = await db.roles.find_one(
+                {"name": dept_slug, "is_deleted": False}
+            )
+            if dept_role_doc and dept_role_doc.get("permissions"):
+                perms.update(dept_role_doc["permissions"])
+            else:
+                # Fall back to hardcoded defaults for that role
+                perms.update(ROLE_PERMISSIONS.get(dept_slug, []))
+
+    # ── Step 5: subtract restricted_modules ───────────────────────────────────
+    # restricted_modules contains module slugs like "jobs", "candidates".
+    # Remove all permissions whose prefix matches a restricted module.
+    restricted_modules = user.get("restricted_modules") or []
+    if restricted_modules:
+        perms = {
+            p for p in perms
+            if not any(p == m or p.startswith(f"{m}:") for m in restricted_modules)
+        }
+
+    # dashboard:view is always preserved — navigation must always be accessible
     perms.add("dashboard:view")
     return list(perms)
 
@@ -168,7 +199,7 @@ class AuthService:
             {"name": role_name, "is_deleted": False}
         )
 
-        effective_perms = _resolve_effective_permissions(user, role_doc)
+        effective_perms = await _resolve_effective_permissions(user, role_doc, db=company_db)
 
         user_id = str(user.get("_id") or user.get("id", ""))
         # Revoke any existing active sessions — new login always wins
@@ -693,7 +724,7 @@ class AuthService:
                 {"name": role_name, "is_deleted": False}
             )
 
-            effective_perms = _resolve_effective_permissions(user, role_doc)
+            effective_perms = await _resolve_effective_permissions(user, role_doc, db=company_db)
 
             _user_type = "partner" if role_name == "partner" else user.get("user_type", "internal")
             token_data = {
@@ -754,7 +785,7 @@ class AuthService:
             {"name": role_name, "is_deleted": False}
         )
 
-        return _resolve_effective_permissions(user, role_doc), ""
+        return await _resolve_effective_permissions(user, role_doc, db=company_db), ""
 
     @staticmethod
     async def verify_email(token: str, account_type: str = "tenant") -> Tuple[bool, str]:

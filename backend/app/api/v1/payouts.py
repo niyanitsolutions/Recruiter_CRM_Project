@@ -10,7 +10,6 @@ from app.core.dependencies import (
     get_current_user,
     get_company_db,
     require_permissions,
-    require_role
 )
 from app.models.company.partner_payout import (
     PartnerPayoutCreate, PartnerPayoutResponse, PartnerPayoutListResponse,
@@ -59,7 +58,7 @@ async def get_my_payouts(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     payout_status: Optional[str] = None,
-    current_user: dict = Depends(require_role(["partner"])),
+    current_user: dict = Depends(require_permissions(["accounts:invoices"])),
     db = Depends(get_company_db)
 ):
     """Get current partner's payouts"""
@@ -75,7 +74,7 @@ async def get_my_payouts(
 
 @router.get("/my-stats", response_model=PartnerPayoutStats)
 async def get_my_payout_stats(
-    current_user: dict = Depends(require_role(["partner"])),
+    current_user: dict = Depends(require_permissions(["accounts:invoices"])),
     db = Depends(get_company_db)
 ):
     """Get current partner's payout statistics"""
@@ -88,7 +87,7 @@ async def get_my_payout_stats(
 
 @router.get("/eligible")
 async def get_eligible_payouts(
-    current_user: dict = Depends(require_role(["partner"])),
+    current_user: dict = Depends(require_permissions(["accounts:invoices"])),
     db = Depends(get_company_db)
 ):
     """Get payouts eligible for invoice (Partner)"""
@@ -154,7 +153,7 @@ async def update_payout_eligibility(
 @router.post("/invoices", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
 async def raise_invoice(
     data: InvoiceCreate,
-    current_user: dict = Depends(require_role(["partner"])),
+    current_user: dict = Depends(require_permissions(["accounts:invoices"])),
     db = Depends(get_company_db)
 ):
     """Raise invoice for eligible payouts (Partner)"""
@@ -204,7 +203,7 @@ async def get_my_invoices(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     invoice_status: Optional[str] = None,
-    current_user: dict = Depends(require_role(["partner"])),
+    current_user: dict = Depends(require_permissions(["accounts:invoices"])),
     db = Depends(get_company_db)
 ):
     """Get current partner's invoices"""

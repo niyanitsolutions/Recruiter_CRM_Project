@@ -166,12 +166,21 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.CLIENTS_CREATE,
         Permission.CLIENTS_EDIT,
         Permission.CLIENTS_DELETE,
-        # Candidates - VIEW (Admin doesn't manage candidates directly)
+        # Candidates - FULL (admin oversees all recruitment activity)
         Permission.CANDIDATES_VIEW,
-        # Jobs - VIEW (Admin doesn't manage jobs directly)
+        Permission.CANDIDATES_CREATE,
+        Permission.CANDIDATES_EDIT,
+        Permission.CANDIDATES_DELETE,
+        Permission.CANDIDATES_ASSIGN,
+        # Jobs - FULL
         Permission.JOBS_VIEW,
-        # Interviews - VIEW only
+        Permission.JOBS_CREATE,
+        Permission.JOBS_EDIT,
+        Permission.JOBS_DELETE,
+        # Interviews - FULL
         Permission.INTERVIEWS_VIEW,
+        Permission.INTERVIEWS_SCHEDULE,
+        Permission.INTERVIEWS_UPDATE_STATUS,
         # Partners - FULL
         Permission.PARTNERS_VIEW,
         Permission.PARTNERS_CREATE,
@@ -223,6 +232,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.NOTIFICATIONS_CREATE,
     ],
     SystemRole.CANDIDATE_COORDINATOR: [
+        Permission.DASHBOARD_VIEW,
         # Clients - VIEW only
         Permission.CLIENTS_VIEW,
         # Candidates - FULL
@@ -248,6 +258,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.REPORTS_VIEW,
     ],
     SystemRole.CLIENT_COORDINATOR: [
+        Permission.DASHBOARD_VIEW,
         # Clients - FULL
         Permission.CLIENTS_VIEW,
         Permission.CLIENTS_CREATE,
@@ -272,6 +283,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.REPORTS_VIEW,
     ],
     SystemRole.HR: [
+        Permission.DASHBOARD_VIEW,
         # Users - VIEW only
         Permission.USERS_VIEW,
         # Candidates - VIEW
@@ -284,10 +296,15 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.REPORTS_VIEW,
     ],
     SystemRole.ACCOUNTS: [
+        Permission.DASHBOARD_VIEW,
         # Accounts - FULL
         Permission.ACCOUNTS_VIEW,
         Permission.ACCOUNTS_INVOICES,
         Permission.ACCOUNTS_PAYOUTS,
+        Permission.PAYOUTS_VIEW,
+        Permission.PAYOUTS_EDIT,
+        Permission.INVOICES_VIEW,
+        Permission.INVOICES_APPROVE,
         # Clients - VIEW only
         Permission.CLIENTS_VIEW,
         # Partners - VIEW only
@@ -297,6 +314,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.REPORTS_EXPORT,
     ],
     SystemRole.PARTNER: [
+        Permission.DASHBOARD_VIEW,
         # Candidates - CREATE and VIEW own
         Permission.CANDIDATES_VIEW,
         Permission.CANDIDATES_CREATE,
