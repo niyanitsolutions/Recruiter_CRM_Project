@@ -79,6 +79,15 @@ const tenantSettingsService = {
 
   getDataManagement: () => api.get(`${BASE}/data-management`).then(r => r.data),
   saveDataManagement: (data) => api.put(`${BASE}/data-management`, data).then(r => r.data),
+
+  // Candidate Sources
+  getCandidateSources: () => api.get(`${BASE}/candidate-sources`).then(r => r.data),
+  createCandidateSource: (data) => api.post(`${BASE}/candidate-sources`, data).then(r => r.data),
+  updateCandidateSource: (id, data) => api.put(`${BASE}/candidate-sources/${id}`, data).then(r => r.data),
+  deleteCandidateSource: (id) => api.delete(`${BASE}/candidate-sources/${id}`).then(r => r.data),
+
+  // Email Config Test
+  testEmailConfig: (to) => api.post(`${BASE}/email-config/test`, { to }).then(r => r.data),
 }
 
 export default tenantSettingsService

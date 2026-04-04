@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { UserPlus2, Plus, Pencil, Trash2, Loader2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
-import api from '../../services/api'
+import tenantSettingsService from '../../services/tenantSettingsService'
 import {
   Breadcrumb, PageHeader, SectionCard, Field, Input, SaveBtn, CancelBtn, SkeletonLoader, Toggle,
 } from './SettingsLayout'
@@ -36,10 +36,10 @@ const CandidateSourcesPage = () => {
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await api.get('/tenant-settings/candidate-sources')
-      setSources(res.data?.data || [])
+      const res = await tenantSettingsService.getCandidateSources()
+      setSources(res.data || [])
     } catch {
-      // If endpoint doesn't exist yet, use defaults as display
+      toast.error('Failed to load candidate sources')
       setSources(DEFAULT_SOURCES.map((name, i) => ({ id: `default-${i}`, name, is_active: true, is_default: true })))
     } finally {
       setLoading(false)
@@ -61,10 +61,10 @@ const CandidateSourcesPage = () => {
     try {
       setSaving(true)
       if (editing) {
-        await api.put(`/tenant-settings/candidate-sources/${editing}`, form)
+        await tenantSettingsService.updateCandidateSource(editing, form)
         toast.success('Source updated')
       } else {
-        await api.post('/tenant-settings/candidate-sources', form)
+        await tenantSettingsService.createCandidateSource(form)
         toast.success('Source created')
       }
       setModal(false)
@@ -80,7 +80,7 @@ const CandidateSourcesPage = () => {
     if (s.is_default) { toast.error('Default sources cannot be deleted'); return }
     try {
       setDeleting(s.id)
-      await api.delete(`/tenant-settings/candidate-sources/${s.id}`)
+      await tenantSettingsService.deleteCandidateSource(s.id)
       toast.success('Source deleted')
       load()
     } catch {

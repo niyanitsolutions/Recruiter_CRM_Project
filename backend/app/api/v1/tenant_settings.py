@@ -1105,3 +1105,188 @@ async def save_data_management(
     company_id = current_user["company_id"]
     saved = await _save_setting(db, company_id, "data_management", data.model_dump(), current_user["id"])
     return {"success": True, "data": saved, "message": "Data management settings saved"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CANDIDATE SOURCES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+DEFAULT_CANDIDATE_SOURCES = [
+    "LinkedIn", "Naukri", "Indeed", "Referral", "Website",
+    "Campus", "Job Fair", "HeadHunting", "Walk-in", "Agency", "Internal Transfer",
+]
+
+
+class CandidateSourceCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    is_active: bool = True
+
+
+class CandidateSourceUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+@router.get("/candidate-sources")
+async def list_candidate_sources(
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_company_db),
+):
+    """List all candidate sources (defaults + custom)."""
+    company_id = current_user["company_id"]
+
+    # Fetch custom sources from DB
+    cursor = db.candidate_sources.find({"company_id": company_id, "is_deleted": {"$ne": True}})
+    custom = [_doc_to_dict(d) for d in await cursor.to_list(length=200)]
+    custom_names = {s["name"] for s in custom}
+
+    # Merge with defaults (defaults shown as non-editable placeholders)
+    defaults = [
+        {"id": f"default-{i}", "name": src, "is_active": True, "is_default": True, "description": ""}
+        for i, src in enumerate(DEFAULT_CANDIDATE_SOURCES)
+        if src not in custom_names
+    ]
+
+    # Custom sources first, then remaining defaults
+    all_sources = custom + defaults
+    return {"success": True, "data": all_sources}
+
+
+@router.post("/candidate-sources")
+async def create_candidate_source(
+    data: CandidateSourceCreate,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_company_db),
+):
+    company_id = current_user["company_id"]
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(400, "Source name is required")
+
+    # Prevent duplicates
+    existing = await db.candidate_sources.find_one({
+        "company_id": company_id, "name": name, "is_deleted": {"$ne": True}
+    })
+    if existing:
+        raise HTTPException(400, f"Source '{name}' already exists")
+
+    now = _now()
+    doc = {
+        "_id": _oid(),
+        "company_id": company_id,
+        "name": name,
+        "description": data.description or "",
+        "is_active": data.is_active,
+        "is_default": False,
+        "created_by": current_user["id"],
+        "created_at": now,
+        "updated_at": now,
+        "is_deleted": False,
+    }
+    await db.candidate_sources.insert_one(doc)
+    return {"success": True, "data": _doc_to_dict(doc), "message": "Source created"}
+
+
+@router.put("/candidate-sources/{source_id}")
+async def update_candidate_source(
+    source_id: str,
+    data: CandidateSourceUpdate,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_company_db),
+):
+    company_id = current_user["company_id"]
+    update = {k: v for k, v in data.model_dump(exclude_none=True).items()}
+    if not update:
+        raise HTTPException(400, "No fields to update")
+    update["updated_at"] = _now()
+
+    result = await db.candidate_sources.update_one(
+        {"_id": source_id, "company_id": company_id, "is_deleted": {"$ne": True}},
+        {"$set": update}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(404, "Source not found")
+    updated = await db.candidate_sources.find_one({"_id": source_id})
+    return {"success": True, "data": _doc_to_dict(updated), "message": "Source updated"}
+
+
+@router.delete("/candidate-sources/{source_id}")
+async def delete_candidate_source(
+    source_id: str,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_company_db),
+):
+    company_id = current_user["company_id"]
+    result = await db.candidate_sources.update_one(
+        {"_id": source_id, "company_id": company_id},
+        {"$set": {"is_deleted": True, "updated_at": _now()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(404, "Source not found")
+    return {"success": True, "message": "Source deleted"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EMAIL CONFIG TEST
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class EmailTestRequest(BaseModel):
+    to: str
+
+
+@router.post("/email-config/test")
+async def test_email_config(
+    data: EmailTestRequest,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_company_db),
+):
+    """Send a test email using the tenant's saved SMTP config."""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    company_id = current_user["company_id"]
+    cfg_doc = await _get_setting(db, company_id, "email_config")
+
+    if not cfg_doc or not cfg_doc.get("is_enabled"):
+        raise HTTPException(400, "Email configuration is disabled. Enable it first.")
+
+    host = cfg_doc.get("smtp_host", "")
+    port = int(cfg_doc.get("smtp_port", 587))
+    username = cfg_doc.get("smtp_username", "")
+    password = cfg_doc.get("smtp_password", "")
+    use_tls = cfg_doc.get("smtp_use_tls", True)
+    from_name = cfg_doc.get("from_name", "CRM")
+    from_email = cfg_doc.get("from_email", username)
+
+    if not host or not username or not password:
+        raise HTTPException(400, "SMTP host, username, and password are required.")
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "CRM Email Test"
+        msg["From"] = f"{from_name} <{from_email}>"
+        msg["To"] = data.to
+        msg.attach(MIMEText(
+            f"<p>This is a test email from your CRM. SMTP configuration is working correctly.</p>"
+            f"<p><small>Sent at {_now().strftime('%Y-%m-%d %H:%M UTC')}</small></p>",
+            "html"
+        ))
+
+        with smtplib.SMTP(host, port, timeout=10) as server:
+            server.ehlo()
+            if use_tls:
+                server.starttls()
+            server.login(username, password)
+            server.sendmail(from_email, data.to, msg.as_string())
+
+        return {"success": True, "message": f"Test email sent to {data.to}"}
+
+    except smtplib.SMTPAuthenticationError:
+        raise HTTPException(400, "SMTP authentication failed. Check username and password.")
+    except smtplib.SMTPConnectError:
+        raise HTTPException(400, f"Cannot connect to {host}:{port}. Check host and port.")
+    except Exception as exc:
+        raise HTTPException(400, f"Email delivery failed: {str(exc)}")

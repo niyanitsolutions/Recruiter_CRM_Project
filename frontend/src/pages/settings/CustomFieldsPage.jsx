@@ -29,7 +29,7 @@ const FIELD_TYPES = [
 ]
 
 const EMPTY = {
-  name: '', label: '', field_type: 'text', entity_type: 'candidate',
+  field_name: '', field_label: '', field_type: 'text', entity_type: 'candidate',
   is_required: false, options: [], placeholder: '', hint: '',
 }
 
@@ -73,23 +73,37 @@ const CustomFieldsPage = () => {
   const openEdit = (f) => {
     setEditing(f.id || f._id)
     setForm({
-      name: f.name || '', label: f.label || f.name || '',
+      field_name: f.field_name || f.name || '',
+      field_label: f.field_label || f.label || f.field_name || '',
       field_type: f.field_type || 'text', entity_type: f.entity_type || 'candidate',
-      is_required: f.is_required || false, options: f.options || [],
-      placeholder: f.placeholder || '', hint: f.hint || '',
+      is_required: f.is_required || false,
+      // Normalize options to plain strings for the tag-style editor
+      options: (f.options || []).map(o => (typeof o === 'object' ? (o.label || o.value) : o)),
+      placeholder: f.placeholder || '', hint: f.hint || f.help_text || '',
     })
     setModal(true)
   }
 
   const handleSave = async () => {
-    if (!form.name.trim()) { toast.error('Field name required'); return }
+    if (!form.field_name.trim()) { toast.error('Field key (name) is required'); return }
+    if (!form.field_label.trim()) { toast.error('Field label is required'); return }
     try {
       setSaving(true)
+      // Map frontend form shape → backend schema
+      const payload = {
+        ...form,
+        help_text: form.hint,
+        // Convert plain string options → {value, label} objects that the backend expects
+        options: (form.options || []).map(opt =>
+          typeof opt === 'string' ? { value: opt.toLowerCase().replace(/\s+/g, '_'), label: opt } : opt
+        ),
+      }
+      delete payload.hint
       if (editing) {
-        await settingsService.updateCustomField(editing, form)
+        await settingsService.updateCustomField(editing, payload)
         toast.success('Field updated')
       } else {
-        await settingsService.createCustomField(form)
+        await settingsService.createCustomField(payload)
         toast.success('Field created')
       }
       setModal(false)
@@ -170,12 +184,12 @@ const CustomFieldsPage = () => {
                 <div key={fid} className="flex items-center gap-4 px-6 py-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="font-medium text-surface-900 text-sm">{field.label || field.name}</p>
+                      <p className="font-medium text-surface-900 text-sm">{field.field_label || field.label || field.field_name}</p>
                       {field.is_required && <span className="text-xs text-danger-500">Required</span>}
                     </div>
                     <p className="text-xs text-surface-500 mt-0.5">
                       {field.entity_type} · {field.field_type}
-                      {field.name && field.name !== field.label ? ` · key: ${field.name}` : ''}
+                      {field.field_name ? ` · key: ${field.field_name}` : ''}
                     </p>
                   </div>
                   <button onClick={() => openEdit(field)} className="p-1.5 hover:bg-surface-100 rounded-lg transition-colors">
@@ -199,10 +213,10 @@ const CustomFieldsPage = () => {
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Field label="Field Label" required hint="Shown to users">
-              <Input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="e.g. LinkedIn URL" />
+              <Input value={form.field_label} onChange={e => setForm(f => ({ ...f, field_label: e.target.value }))} placeholder="e.g. LinkedIn URL" />
             </Field>
-            <Field label="Field Key" hint="Used in API / exports">
-              <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. linkedin_url" />
+            <Field label="Field Key" hint="Used in API / exports (no spaces)">
+              <Input value={form.field_name} onChange={e => setForm(f => ({ ...f, field_name: e.target.value.toLowerCase().replace(/\s+/g, '_') }))} placeholder="e.g. linkedin_url" />
             </Field>
           </div>
 

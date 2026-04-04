@@ -31,16 +31,20 @@ class DesignationModel(BaseModel):
 class DesignationCreate(BaseModel):
     """Schema for creating a new designation"""
     name: str = Field(..., min_length=2, max_length=100)
+    code: Optional[str] = Field(None, max_length=20)  # Auto-generated if omitted
     description: Optional[str] = Field(None, max_length=500)
     department_id: Optional[str] = None
+    level: Optional[int] = Field(default=1)
     sort_order: Optional[int] = 0
 
 
 class DesignationUpdate(BaseModel):
     """Schema for updating a designation"""
     name: Optional[str] = Field(None, min_length=2, max_length=100)
+    code: Optional[str] = Field(None, max_length=20)
     description: Optional[str] = Field(None, max_length=500)
     department_id: Optional[str] = None
+    level: Optional[int] = None
     is_active: Optional[bool] = None
     sort_order: Optional[int] = None
 

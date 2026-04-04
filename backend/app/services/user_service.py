@@ -19,9 +19,22 @@ from app.services.audit_service import AuditService
 from app.models.company.audit_log import AuditAction, EntityType
 
 
+def _compute_role_type(user: dict) -> str:
+    """
+    Derive explicit role_type from stored user fields.
+    Priority: is_owner flag → 'owner' | role == 'admin' → 'admin' | else → 'user'
+    This is computed at read-time so no DB migration is needed.
+    """
+    if user.get("is_owner"):
+        return "owner"
+    if user.get("role") == "admin":
+        return "admin"
+    return "user"
+
+
 class UserService:
     """Service for user management operations"""
-    
+
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
         self.collection = db.users
@@ -130,7 +143,8 @@ class UserService:
                 "designation_id": user_data.designation_id,
                 "department": user_data.department,
                 "department_id": user_data.department_id,
-                "reporting_to": user_data.reporting_to,
+                # Owners always report to themselves; other users use payload value
+                "reporting_to": user_id if getattr(user_data, "is_owner", False) else user_data.reporting_to,
                 "joining_date": user_data.joining_date,
                 # Permission configuration — stored so the edit form can reconstruct
                 # the exact UI state without reverse-engineering from permissions[].
@@ -195,7 +209,8 @@ class UserService:
             user["id"] = user.pop("_id")
             user.pop("password_hash", None)
             user["role_name"] = get_role_display_name(user.get("role", ""))
-            
+            user["role_type"] = _compute_role_type(user)
+
             # Get reporting manager name
             if user.get("reporting_to"):
                 manager = await self.collection.find_one(
@@ -203,7 +218,7 @@ class UserService:
                     {"full_name": 1}
                 )
                 user["reporting_to_name"] = manager.get("full_name") if manager else None
-        
+
         return user
     
     async def get_user_by_username(self, username: str) -> Optional[Dict]:
@@ -288,6 +303,7 @@ class UserService:
             user["id"] = user.pop("_id")
             user.pop("password_hash", None)
             user["role_name"] = get_role_display_name(user.get("role", ""))
+            user["role_type"] = _compute_role_type(user)
 
             # Get reporting manager name
             if user.get("reporting_to"):
@@ -358,14 +374,15 @@ class UserService:
                 # Only allow status changes by owner
                 pass  # Admins can still update owner, but with restrictions
             
-            # Build update document — include booleans (False) and lists ([]) explicitly.
-            # Only skip fields that are literally None (meaning "not sent by caller").
+            # Build update document — only skip fields that are literally None
+            # (meaning the caller did not send them).
+            # False booleans, empty lists [], and 0 are valid update values and MUST pass through.
             update_dict = {}
             for field, value in update_data.model_dump(exclude_unset=True).items():
                 if value is not None:
                     update_dict[field] = value
-                # Special case: allow False booleans through (e.g. is_owner=False)
-                elif isinstance(value, bool):
+                elif isinstance(value, (bool, list)):
+                    # Allow explicit False and explicit [] (e.g. clear permissions)
                     update_dict[field] = value
 
             if not update_dict:
@@ -402,6 +419,10 @@ class UserService:
                 update_dict["user_type"] = "partner" if update_dict["role"] == "partner" else "internal"
             elif "user_type" in update_dict and update_dict["user_type"] is None:
                 del update_dict["user_type"]  # ignore explicit None
+
+            # Owners always report to themselves — never allow overriding to another user
+            if existing.get("is_owner"):
+                update_dict["reporting_to"] = user_id
 
             update_dict["updated_by"] = updated_by_id
             update_dict["updated_at"] = datetime.now(timezone.utc)

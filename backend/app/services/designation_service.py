@@ -16,15 +16,47 @@ from app.services.audit_service import AuditService
 from app.models.company.audit_log import AuditAction, EntityType
 
 
+def _generate_desig_code(name: str) -> str:
+    """
+    Auto-generate a short designation code from the name.
+    Example: "HR Manager" → "HRM" prefix → "HRM101" (or next available)
+    Takes the first letter of each word, uppercased, capped at 3 chars.
+    The numeric suffix is resolved per-call to guarantee uniqueness in the service.
+    """
+    words = re.split(r'[\s_\-]+', name.strip())
+    initials = "".join(w[0].upper() for w in words if w)[:3]
+    return initials or "DSG"  # fallback prefix if name has no letters
+
+
 class DesignationService:
     """Service for designation management operations"""
-    
+
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
         self.collection = db.designations
         self.users_collection = db.users
         self.departments_collection = db.departments
         self.audit_service = AuditService(db)
+
+    async def _resolve_unique_code(self, prefix: str, exclude_id: Optional[str] = None) -> str:
+        """
+        Given a prefix (e.g. "HRM"), find the next available numeric suffix
+        starting at 101 so the final code is e.g. "HRM101", "HRM102", …
+        """
+        query = {"code": {"$regex": f"^{re.escape(prefix)}\\d+$"}, "is_deleted": False}
+        if exclude_id:
+            query["_id"] = {"$ne": exclude_id}
+        existing_cursor = self.collection.find(query, {"code": 1})
+        existing_codes = [d["code"] async for d in existing_cursor]
+        used_numbers = set()
+        for code in existing_codes:
+            suffix = code[len(prefix):]
+            if suffix.isdigit():
+                used_numbers.add(int(suffix))
+        n = 101
+        while n in used_numbers:
+            n += 1
+        return f"{prefix}{n}"
     
     async def create_designation(
         self,
@@ -45,15 +77,19 @@ class DesignationService:
             if existing:
                 return False, "Designation with this name already exists", None
             
-            # Check for duplicate code if provided
+            # Resolve code — use provided value or auto-generate from name
             if desig_data.code:
+                resolved_code = desig_data.code.upper()
                 code_exists = await self.collection.find_one({
-                    "code": desig_data.code.upper(),
+                    "code": resolved_code,
                     "is_deleted": False
                 })
                 if code_exists:
                     return False, "Designation with this code already exists", None
-            
+            else:
+                prefix = _generate_desig_code(desig_data.name)
+                resolved_code = await self._resolve_unique_code(prefix)
+
             # Validate department if provided
             if desig_data.department_id:
                 dept = await self.departments_collection.find_one({
@@ -62,14 +98,14 @@ class DesignationService:
                 })
                 if not dept:
                     return False, "Department not found", None
-            
+
             desig_id = str(ObjectId())
             now = datetime.now(timezone.utc)
-            
+
             desig_doc = {
                 "_id": desig_id,
                 "name": desig_data.name,
-                "code": desig_data.code.upper() if desig_data.code else None,
+                "code": resolved_code,
                 "description": desig_data.description,
                 "department_id": desig_data.department_id,
                 "level": desig_data.level or 1,

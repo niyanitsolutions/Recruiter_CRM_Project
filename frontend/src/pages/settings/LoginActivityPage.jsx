@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Activity, RefreshCw } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { Breadcrumb, PageHeader, SectionCard, SkeletonLoader } from './SettingsLayout'
 import api from '../../services/api'
 
@@ -19,12 +20,23 @@ const LoginActivityPage = () => {
   const load = useCallback(async (p = 1) => {
     try {
       setLoading(true)
-      const res = await api.get(`/auth/login-activity?page=${p}&page_size=${PAGE_SIZE}`)
-      setLogs(res.data.data || [])
-      setTotal(res.data.total || 0)
+      // Use the existing audit-logs endpoint filtered to login/logout actions
+      const res = await api.get(`/audit-logs/?action=login&page=${p}&page_size=${PAGE_SIZE}`)
+      // Normalize audit log shape → what the table expects
+      const raw = res.data.data || []
+      const mapped = raw.map(log => ({
+        id: log.id || log._id,
+        full_name: log.user_name,
+        role: log.user_role,
+        login_time: log.created_at,
+        ip_address: log.ip_address,
+        device: log.user_agent,
+      }))
+      setLogs(mapped)
+      setTotal(res.data.pagination?.total || res.data.total || 0)
       setPage(p)
     } catch {
-      // silently fail — table stays empty
+      toast.error('Failed to load login activity')
     } finally {
       setLoading(false)
     }

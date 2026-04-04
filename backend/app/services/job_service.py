@@ -497,11 +497,18 @@ class JobService:
         collection = db[JobService.COLLECTION]
         
         query = {"is_deleted": False}
-        query["status"] = {"$in": status_filter} if status_filter else "open"
+        query["status"] = {"$in": status_filter if status_filter else ["open"]}
         if client_id:
             query["client_id"] = client_id
-        
+
         cursor = collection.find(query, {"_id": 1, "title": 1, "job_code": 1, "client_name": 1}).sort("created_at", -1)
         jobs = await cursor.to_list(length=500)
-        
-        return [{"value": j["_id"], "label": f"{j.get('job_code', '')} - {j['title']} ({j.get('client_name', '')})"} for j in jobs]
+
+        result = []
+        for j in jobs:
+            title = (j.get("title") or "").strip() or "Untitled Job"
+            code = j.get("job_code") or ""
+            client = j.get("client_name") or ""
+            label = f"{code} - {title} ({client})" if code else f"{title} ({client})"
+            result.append({"value": j["_id"], "label": label.strip(" -()"), "title": title})
+        return result

@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { Mail, SendHorizonal, CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import tenantSettingsService from '../../services/tenantSettingsService'
-import api from '../../services/api'
 import {
   Breadcrumb, PageHeader, SectionCard, Field, Input, ActionBar, SkeletonLoader, Toggle,
 } from './SettingsLayout'
@@ -53,7 +52,7 @@ const EmailConfigPage = () => {
       setTestResult(null)
       // First save then test
       await tenantSettingsService.saveEmailConfig(data)
-      await api.post('/tenant-settings/email-config/test', { to: testEmail })
+      await tenantSettingsService.testEmailConfig(testEmail)
       setTestResult('ok')
       toast.success('Test email sent successfully!')
     } catch {

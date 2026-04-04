@@ -9,7 +9,10 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 import asyncio
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 from app.core.config import settings
 from app.core.database import connect_to_mongo, close_mongo_connection
@@ -90,7 +93,6 @@ async def validation_exception_handler(_request: Request, exc: RequestValidation
     instead of the raw list format that the frontend would have to parse.
     """
     errors = exc.errors()
-    # Build one readable sentence per field error
     messages = []
     for err in errors:
         loc = " → ".join(str(l) for l in err.get("loc", []) if l != "body")
@@ -99,6 +101,24 @@ async def validation_exception_handler(_request: Request, exc: RequestValidation
     return JSONResponse(
         status_code=422,
         content={"success": False, "message": "; ".join(messages)},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """
+    Catch-all handler: converts any unhandled exception into a standard
+    {"success": false, "message": "..."} JSON response and logs it.
+    HTTPException is intentionally excluded — FastAPI handles those natively.
+    """
+    from fastapi import HTTPException as FastAPIHTTPException
+    if isinstance(exc, FastAPIHTTPException):
+        # Let FastAPI's default HTTPException handler deal with it
+        raise exc
+    logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"success": False, "message": "An unexpected error occurred. Please try again later."},
     )
 
 
