@@ -7,6 +7,7 @@ Complete settings module for tenant admins covering:
   Branding, SLA Config, Document Templates, Resume Parsing Rules,
   Interview Settings (extended)
 """
+import re
 from datetime import datetime, timezone
 from typing import List, Optional, Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, status, Body
@@ -950,10 +951,48 @@ async def save_interview_settings(
 
 # ── Branding ──────────────────────────────────────────────────────────────────
 
+_HEX_COLOR_RE = re.compile(r'^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$')
+
+_BRANDING_DEFAULTS = {
+    "primary_color": "#6366f1",
+    "secondary_color": "#8b5cf6",
+    "accent_color": "#f59e0b",
+    # UI chrome defaults consumed by the settings layout
+    "section_header_color": "#FFFFFF",
+    "section_background": "#1e293b",
+    "logo_url": None,
+    "favicon_url": None,
+    "login_banner_url": None,
+    "login_banner_text": None,
+    "company_tagline": None,
+    "footer_text": None,
+    "dark_mode_enabled": False,
+}
+
+
+def _sanitize_branding(data: dict) -> dict:
+    """
+    Merge stored values with defaults.
+    Hex color fields that are null/empty or invalid fall back to defaults.
+    """
+    COLOR_FIELDS = {
+        "primary_color", "secondary_color", "accent_color",
+        "section_header_color", "section_background",
+    }
+    result = {**_BRANDING_DEFAULTS, **{k: v for k, v in data.items() if v is not None}}
+    for field in COLOR_FIELDS:
+        val = result.get(field)
+        if not val or not _HEX_COLOR_RE.match(str(val)):
+            result[field] = _BRANDING_DEFAULTS[field]
+    return result
+
+
 class BrandingRequest(BaseModel):
     primary_color: str = "#6366f1"
     secondary_color: str = "#8b5cf6"
     accent_color: str = "#f59e0b"
+    section_header_color: str = "#FFFFFF"
+    section_background: str = "#1e293b"
     logo_url: Optional[str] = None
     favicon_url: Optional[str] = None
     login_banner_url: Optional[str] = None
@@ -969,7 +1008,9 @@ async def get_branding(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    data = await _get_setting(db, company_id, "branding")
+    raw = await _get_setting(db, company_id, "branding")
+    # Always return a fully-populated object — never nulls for color fields
+    data = _sanitize_branding(raw)
     return {"success": True, "data": data}
 
 

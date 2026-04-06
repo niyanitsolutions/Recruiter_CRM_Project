@@ -2,17 +2,37 @@
 Task Service - Phase 6
 CRUD for internal CRM tasks
 """
+import logging
 from datetime import datetime, date, timezone
-from typing import Optional, List
+from typing import Optional
 from bson import ObjectId
 from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.models.company.task import TaskCreate, TaskUpdate, TaskResponse, TaskStatus
 
+logger = logging.getLogger(__name__)
+
 
 class TaskService:
     COLLECTION = "tasks"
+
+    # ── Private helper ────────────────────────────────────────────────────────
+
+    @staticmethod
+    async def _get_task_doc(db: AsyncIOMotorDatabase, task_id: str) -> dict:
+        """Fetch raw task document. Raises 404 if not found or soft-deleted."""
+        doc = await db[TaskService.COLLECTION].find_one({"_id": task_id, "is_deleted": False})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Task not found")
+        return doc
+
+    @staticmethod
+    def _is_involved(doc: dict, user_id: str) -> bool:
+        """Return True if user is creator or assignee of the task."""
+        return doc.get("created_by") == user_id or doc.get("assigned_to") == user_id
+
+    # ── Public API ────────────────────────────────────────────────────────────
 
     @staticmethod
     async def create_task(
@@ -28,6 +48,7 @@ class TaskService:
         due_date = None
         if data.due_date:
             due_date = datetime(data.due_date.year, data.due_date.month, data.due_date.day, tzinfo=timezone.utc)
+
         doc = {
             "_id": str(ObjectId()),
             "title": data.title,
@@ -47,20 +68,23 @@ class TaskService:
             "is_deleted": False,
         }
         await db[TaskService.COLLECTION].insert_one(doc)
+        logger.info("Task created | task=%s | by=%s", doc["_id"], created_by)
         return TaskService._to_response(doc)
 
     @staticmethod
     async def list_tasks(
         db: AsyncIOMotorDatabase,
-        user_id: Optional[str] = None,
+        user_id: str,                   # always required — no global access
         status: Optional[str] = None,
         priority: Optional[str] = None,
         page: int = 1,
         page_size: int = 20
     ) -> dict:
-        query = {"is_deleted": False}
-        if user_id:
-            query["$or"] = [{"assigned_to": user_id}, {"created_by": user_id}]
+        """Return tasks where the user is creator or assignee."""
+        query = {
+            "is_deleted": False,
+            "$or": [{"assigned_to": user_id}, {"created_by": user_id}],
+        }
         if status:
             query["status"] = status
         if priority:
@@ -78,10 +102,24 @@ class TaskService:
         }
 
     @staticmethod
-    async def get_task(db: AsyncIOMotorDatabase, task_id: str) -> TaskResponse:
-        doc = await db[TaskService.COLLECTION].find_one({"_id": task_id, "is_deleted": False})
-        if not doc:
-            raise HTTPException(status_code=404, detail="Task not found")
+    async def get_task(
+        db: AsyncIOMotorDatabase,
+        task_id: str,
+        requesting_user_id: str
+    ) -> TaskResponse:
+        """
+        Return task detail.
+        Access: creator (created_by) or assignee (assigned_to) only.
+        """
+        doc = await TaskService._get_task_doc(db, task_id)
+
+        if not TaskService._is_involved(doc, requesting_user_id):
+            logger.warning(
+                "Unauthorized task view | task=%s | user=%s | creator=%s | assignee=%s",
+                task_id, requesting_user_id, doc.get("created_by"), doc.get("assigned_to")
+            )
+            raise HTTPException(status_code=403, detail="Access denied: you are not involved in this task")
+
         return TaskService._to_response(doc)
 
     @staticmethod
@@ -91,12 +129,25 @@ class TaskService:
         data: TaskUpdate,
         updated_by: str
     ) -> TaskResponse:
-        coll = db[TaskService.COLLECTION]
-        existing = await coll.find_one({"_id": task_id, "is_deleted": False})
-        if not existing:
-            raise HTTPException(status_code=404, detail="Task not found")
+        """
+        Update task fields.
+        Access: creator (created_by) or assignee (assigned_to) only.
+        """
+        doc = await TaskService._get_task_doc(db, task_id)
 
+        if not TaskService._is_involved(doc, updated_by):
+            logger.warning(
+                "Unauthorized task update | task=%s | user=%s | creator=%s | assignee=%s",
+                task_id, updated_by, doc.get("created_by"), doc.get("assigned_to")
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied: only the task creator or assignee can update this task"
+            )
+
+        coll = db[TaskService.COLLECTION]
         updates = {k: v for k, v in data.model_dump(exclude_none=True).items()}
+
         if "priority" in updates:
             updates["priority"] = updates["priority"].value if hasattr(updates["priority"], "value") else updates["priority"]
         if "status" in updates:
@@ -110,17 +161,44 @@ class TaskService:
 
         updates["updated_at"] = datetime.now(timezone.utc)
         await coll.update_one({"_id": task_id}, {"$set": updates})
-        return await TaskService.get_task(db, task_id)
+
+        # Re-fetch and return updated doc (internal fetch, no permission re-check needed)
+        updated_doc = await TaskService._get_task_doc(db, task_id)
+        return TaskService._to_response(updated_doc)
 
     @staticmethod
-    async def delete_task(db: AsyncIOMotorDatabase, task_id: str) -> bool:
+    async def delete_task(
+        db: AsyncIOMotorDatabase,
+        task_id: str,
+        requesting_user_id: str
+    ) -> bool:
+        """
+        Soft-delete a task.
+        Access: creator (created_by) ONLY. Assignee cannot delete.
+        """
+        doc = await TaskService._get_task_doc(db, task_id)
+
+        if doc.get("created_by") != requesting_user_id:
+            logger.warning(
+                "Unauthorized task delete attempt | task=%s | user=%s | creator=%s | assignee=%s",
+                task_id, requesting_user_id, doc.get("created_by"), doc.get("assigned_to")
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied: only the task creator can delete this task"
+            )
+
         result = await db[TaskService.COLLECTION].update_one(
             {"_id": task_id, "is_deleted": False},
             {"$set": {"is_deleted": True, "updated_at": datetime.now(timezone.utc)}}
         )
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Task not found")
+
+        logger.info("Task deleted | task=%s | by=%s", task_id, requesting_user_id)
         return True
+
+    # ── Response builder ──────────────────────────────────────────────────────
 
     @staticmethod
     def _to_response(doc: dict) -> TaskResponse:
