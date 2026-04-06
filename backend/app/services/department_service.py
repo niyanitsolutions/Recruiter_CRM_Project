@@ -1,12 +1,28 @@
-import re
 """
 Department Service - Phase 2
 Handles department management within a company
 """
+import re
+import random
+import logging
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Tuple
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
+
+logger = logging.getLogger(__name__)
+
+
+def _generate_dept_code(name: str) -> str:
+    """Auto-generate a department code from the name.
+
+    E.g. "Human Resources" → "HR741"
+    """
+    words = re.split(r'\s+', name.strip())
+    initials = ''.join(w[0].upper() for w in words if w)
+    if not initials:
+        initials = re.sub(r'[^A-Z]', '', name.upper())[:3] or 'DEPT'
+    return initials + str(random.randint(100, 999))
 
 from app.models.company.department import (
     DepartmentCreate, DepartmentUpdate
@@ -34,29 +50,17 @@ class DepartmentService:
     ) -> Tuple[bool, str, Optional[Dict]]:
         """Create a new department"""
         try:
-            # Check for duplicate name or code
+            # Check for duplicate name
             existing = await self.collection.find_one({
-                "$or": [
-                    {"name": {"$regex": f"^{re.escape(dept_data.name)}$", "$options": "i"}},
-                    {"code": dept_data.code.upper()}
-                ],
+                "name": {"$regex": f"^{re.escape(dept_data.name)}$", "$options": "i"},
                 "is_deleted": False
             })
-            
             if existing:
-                if existing.get("name", "").lower() == dept_data.name.lower():
-                    return False, "Department with this name already exists", None
-                return False, "Department with this code already exists", None
-            
-            # Validate parent department if provided
-            if dept_data.parent_department_id:
-                parent = await self.collection.find_one({
-                    "_id": dept_data.parent_department_id,
-                    "is_deleted": False
-                })
-                if not parent:
-                    return False, "Parent department not found", None
-            
+                return False, "Department with this name already exists", None
+
+            # Resolve code — use provided value (uppercased) or auto-generate
+            code = dept_data.code.strip().upper() if dept_data.code else _generate_dept_code(dept_data.name)
+
             # Validate head user if provided
             if dept_data.head_user_id:
                 head = await self.users_collection.find_one({
@@ -65,17 +69,19 @@ class DepartmentService:
                 })
                 if not head:
                     return False, "Department head user not found", None
-            
+
             dept_id = str(ObjectId())
             now = datetime.now(timezone.utc)
-            
+
+            logger.info("Creating department '%s' (code=%s) by user %s", dept_data.name, code, created_by_id)
+
             dept_doc = {
                 "_id": dept_id,
                 "name": dept_data.name,
-                "code": dept_data.code.upper(),
+                "code": code,
                 "description": dept_data.description,
                 "head_user_id": dept_data.head_user_id,
-                "parent_department_id": dept_data.parent_department_id,
+                "parent_department_id": None,
                 "is_active": True,
                 "sort_order": dept_data.sort_order or 0,
                 "created_by": created_by_id,
@@ -103,6 +109,7 @@ class DepartmentService:
             return True, "Department created successfully", dept_doc
             
         except Exception as e:
+            logger.exception("Failed to create department '%s': %s", dept_data.name, e)
             return False, f"Error creating department: {str(e)}", None
     
     async def get_department(self, dept_id: str) -> Optional[Dict]:

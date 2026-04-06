@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Loader2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import departmentService from '../../services/departmentService'
 import userService from '../../services/userService'
 
@@ -62,7 +63,10 @@ const DepartmentForm = () => {
       navigate('/departments')
     } catch (err) {
       const detail = err.response?.data?.detail || err.response?.data?.message
-      setError(typeof detail === 'string' ? detail : 'Failed to save department')
+      const msg = typeof detail === 'string' ? detail : 'Failed to save department'
+      setError(msg)
+      toast.error(msg)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     }
     finally { setSaving(false) }
   }

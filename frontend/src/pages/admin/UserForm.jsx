@@ -400,10 +400,7 @@ const [errors,       setErrors]       = useState({})
       if (!isEdit && departmentId === 'custom' && deptCustom.trim()) {
         const deptName = normalizeName(deptCustom)
         try {
-          const deptRes = await departmentService.createDepartment({
-            name: deptName,
-            code: deptName.slice(0, 10).toUpperCase().replace(/\s+/g, '_'),
-          })
+          const deptRes = await departmentService.createDepartment({ name: deptName })
           const created = deptRes.data
           if (created?.id) {
             departmentId   = created.id
@@ -411,12 +408,22 @@ const [errors,       setErrors]       = useState({})
             setDepartments(prev => [...prev, created])
           }
         } catch (createErr) {
-          const msg = createErr?.response?.data?.detail || ''
+          const msg = createErr?.response?.data?.detail || createErr?.response?.data?.message || ''
           if (typeof msg === 'string' && msg.toLowerCase().includes('already exists')) {
+            // Department already exists — reuse it instead of failing
             const listRes = await departmentService.getDepartments()
-            const existing = (listRes.data || []).find(d => d.name?.toLowerCase().trim() === deptName.toLowerCase().trim())
-            if (existing) { departmentId = existing.id; departmentName = existing.name || deptName } else throw createErr
-          } else throw createErr
+            const existing = (listRes.data || []).find(
+              d => d.name?.toLowerCase().trim() === deptName.toLowerCase().trim()
+            )
+            if (existing) {
+              departmentId   = existing.id
+              departmentName = existing.name || deptName
+            } else {
+              throw createErr
+            }
+          } else {
+            throw createErr
+          }
         }
       }
 

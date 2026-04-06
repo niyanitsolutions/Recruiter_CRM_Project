@@ -31,6 +31,7 @@ class DepartmentModel(BaseModel):
 class DepartmentCreate(BaseModel):
     """Schema for creating a new department"""
     name: str = Field(..., min_length=2, max_length=100)
+    code: Optional[str] = Field(None, max_length=20)   # auto-generated if not provided
     description: Optional[str] = Field(None, max_length=500)
     head_user_id: Optional[str] = None
     sort_order: Optional[int] = 0
