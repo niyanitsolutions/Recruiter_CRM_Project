@@ -9,10 +9,17 @@ const authService = {
   },
 
   /**
-   * Register a new company
+   * Register a new company (subscription flow)
    */
   register: (data) => {
     return api.post('/auth/register', data)
+  },
+
+  /**
+   * Single-page trial setup — POST /api/v1/auth/trial-setup
+   */
+  trialSetup: (data) => {
+    return api.post('/auth/trial-setup', data)
   },
 
   /**
