@@ -138,148 +138,256 @@ class AuthService:
         if seller:
             return seller, ""
 
-        # Try to find as company user
-        tenant, user, error = await tenant_resolver.resolve_login_context(
-            identifier, company_code=company_code
+        # ── Company user / owner login ─────────────────────────────────────────
+        if company_code:
+            # FAST PATH: caller specified a company — scope strictly to that DB.
+            # resolve_login_context already handles owner + user lookup for this case.
+            tenant, user, error = await tenant_resolver.resolve_login_context(
+                identifier, company_code=company_code
+            )
+            if error:
+                return None, error
+            if not tenant or not user:
+                return None, "Invalid credentials"
+
+            ph = (
+                tenant.get("owner", {}).get("password_hash", "")
+                if user.get("is_owner")
+                else user.get("password_hash", "")
+            )
+            if not verify_password(password, ph):
+                await AuthService._increment_failed_attempts(
+                    tenant["company_id"],
+                    user.get("_id") or user.get("id"),
+                    user.get("is_owner", False),
+                )
+                logger.warning("Login failed (wrong password) | company=%s | identifier=%s", company_code, identifier)
+                return None, "Invalid credentials"
+
+            return await AuthService._complete_company_login(tenant, user, ip_address, device_info)
+
+        # GLOBAL PATH (no company_code): check owners first, then all company users.
+        import re as _re
+        master_db = get_master_db()
+        ci = _re.compile(f"^{_re.escape(identifier)}$", _re.IGNORECASE)
+
+        # Step 1 — owner lookup (single-pass across master_db.tenants)
+        owner_tenant = await master_db.tenants.find_one({
+            "$or": [
+                {"owner.username": ci},
+                {"owner.email":    ci},
+                {"owner.mobile":   identifier},
+            ]
+        })
+
+        if owner_tenant:
+            is_valid, error = await tenant_resolver.validate_tenant_access(owner_tenant)
+            if not is_valid:
+                if error.startswith("SUBSCRIPTION_EXPIRED"):
+                    error = "SUBSCRIPTION_EXPIRED_OWNER" + error[len("SUBSCRIPTION_EXPIRED"):]
+                return None, error
+
+            owner_basic = owner_tenant.get("owner", {})
+            company_id  = owner_tenant.get("company_id")
+
+            # Prefer full owner record from company_db (has override_permissions, etc.)
+            user = None
+            if company_id:
+                company_db = get_company_db(company_id)
+                owner_id   = str(owner_basic.get("_id", ""))
+                if owner_id:
+                    user = await company_db.users.find_one({"_id": owner_id, "is_deleted": False})
+            if not user:
+                user = dict(owner_basic)
+            user["role"]     = "admin"
+            user["is_owner"] = True
+
+            ph = owner_tenant.get("owner", {}).get("password_hash", "")
+            if not verify_password(password, ph):
+                await AuthService._increment_failed_attempts(
+                    company_id, str(owner_basic.get("_id", "")), True
+                )
+                logger.warning("Login failed (wrong password) owner | identifier=%s", identifier)
+                return None, "Invalid credentials"
+
+            return await AuthService._complete_company_login(owner_tenant, user, ip_address, device_info)
+
+        # Step 2 — find ALL matching company users across every tenant
+        all_matches = await tenant_resolver.find_all_company_user_matches(identifier)
+
+        if not all_matches:
+            logger.warning("Login failed (user not found) | identifier=%s", identifier)
+            return None, "Invalid credentials"
+
+        # Verify password for each match — collect every tenant where it succeeds
+        valid_matches = []
+        for t, u in all_matches:
+            ph = u.get("password_hash", "")
+            if verify_password(password, ph):
+                is_valid, _ = await tenant_resolver.validate_tenant_access(t)
+                if is_valid:
+                    valid_matches.append((t, u))
+
+        if not valid_matches:
+            # Track failed attempt against the first found tenant
+            first_t, first_u = all_matches[0]
+            await AuthService._increment_failed_attempts(
+                first_t["company_id"], str(first_u.get("_id", "")), False
+            )
+            logger.warning("Login failed (wrong password) | identifier=%s", identifier)
+            return None, "Invalid credentials"
+
+        if len(valid_matches) > 1:
+            # Same credentials are valid in multiple companies — return a selection list.
+            # The frontend shows a picker; the user then calls /auth/login-with-tenant.
+            logger.info(
+                "Login: multiple tenant matches | identifier=%s | count=%d",
+                identifier, len(valid_matches),
+            )
+            return {
+                "tenant_selection_required": True,
+                "message": "Multiple companies found. Please select one to continue.",
+                "tenants": [
+                    {
+                        "company_id":   t["company_id"],
+                        "company_name": t.get("company_name", ""),
+                        "role":         u.get("role", ""),
+                    }
+                    for t, u in valid_matches
+                ],
+            }, ""
+
+        # Exactly one valid match — proceed normally
+        tenant, user = valid_matches[0]
+        return await AuthService._complete_company_login(tenant, user, ip_address, device_info)
+
+    @staticmethod
+    async def login_with_tenant(
+        identifier: str,
+        password: str,
+        company_id: str,
+        request=None,
+    ) -> Tuple[Optional[dict], str]:
+        """
+        Scoped login after the user has selected a tenant from the picker.
+
+        Delegates directly to login() with company_code=company_id so every
+        existing check (status, expiry, permissions, session) is reused without
+        duplication.
+        """
+        return await AuthService.login(
+            identifier, password, request=request, company_code=company_id
         )
 
-        if error:
-            return None, error
+    @staticmethod
+    async def _complete_company_login(
+        tenant: dict,
+        user: dict,
+        ip_address: str = "",
+        device_info: str = "",
+    ) -> Tuple[Optional[dict], str]:
+        """
+        Shared finalization for every company-user login path.
 
-        if not tenant or not user:
-            return None, "Invalid credentials"
-
-        # Get password hash to verify
-        if user.get("is_owner"):
-            password_hash = tenant.get("owner", {}).get("password_hash", "")
-        else:
-            password_hash = user.get("password_hash", "")
-
-        if not verify_password(password, password_hash):
-            await AuthService._increment_failed_attempts(
-                tenant.get("company_id"),
-                user.get("_id") or user.get("id"),
-                user.get("is_owner", False)
-            )
-            return None, "Invalid credentials"
-
-        # Check user status
+        Called AFTER tenant + user are resolved and the password has been
+        verified by the caller.  Handles:
+          - User status check (suspended / inactive)
+          - Subscription expiry
+          - Permission resolution
+          - Session + JWT creation
+          - last_login update + activity log
+        """
+        # ── Status check ──────────────────────────────────────────────────────
         if user.get("status") == UserStatus.SUSPENDED:
             return None, "Your account has been suspended. Please contact your administrator."
-
         if user.get("status") == UserStatus.INACTIVE:
             return None, "Your account is inactive. Please contact your administrator."
 
-        # TEMPORARY: Email verification disabled until SMTP is configured.
-        # To re-enable: uncomment the block below.
-        #
-        # if tenant.get("email_verified") is False:
-        #     owner_email = tenant.get("owner", {}).get("email", "")
-        #     return None, f"EMAIL_NOT_VERIFIED|{owner_email}|Please verify your email before logging in. Check your inbox for the verification link."
-
-        # ── Subscription expiry check ─────────────────────────────────────────
-        # plan_expiry is stored permanently at purchase time and never recalculated.
-        # Block login for the owner AND all users belonging to an expired account.
+        # ── Subscription expiry ───────────────────────────────────────────────
         plan_expiry = tenant.get("plan_expiry")
         if plan_expiry:
             if plan_expiry.tzinfo is None:
                 plan_expiry = plan_expiry.replace(tzinfo=timezone.utc)
             if datetime.now(timezone.utc) > plan_expiry:
-                is_owner = user.get("is_owner", False)
+                is_owner  = user.get("is_owner", False)
                 expiry_str = plan_expiry.isoformat()
                 prefix = "SUBSCRIPTION_EXPIRED_OWNER" if is_owner else "SUBSCRIPTION_EXPIRED_USER"
-                msg = "Your subscription has expired. Please upgrade your plan to continue."
-                return None, f"{prefix}|{expiry_str}|{msg}"
+                return None, f"{prefix}|{expiry_str}|Your subscription has expired. Please upgrade your plan to continue."
 
-        # Resolve effective permissions — always fresh from DB at login time.
-        company_id = tenant.get("company_id")
-        company_db = get_company_db(company_id)
-        role_name = user.get("role", "admin")
+        # ── Permission resolution ─────────────────────────────────────────────
+        company_id  = tenant.get("company_id")
+        company_db  = get_company_db(company_id)
+        role_name   = user.get("role", "admin")
 
-        # Always fetch role doc — needed to merge base+override permissions correctly
-        role_doc = await company_db.roles.find_one(
-            {"name": role_name, "is_deleted": False}
-        )
-
+        role_doc = await company_db.roles.find_one({"name": role_name, "is_deleted": False})
         effective_perms = await _resolve_effective_permissions(user, role_doc, db=company_db)
 
-        user_id = str(user.get("_id") or user.get("id", ""))
-        # Revoke any existing active sessions — new login always wins
+        user_id    = str(user.get("_id") or user.get("id", ""))
+        _user_type = "partner" if role_name == "partner" else user.get("user_type", "internal")
+
+        # ── Session + tokens ──────────────────────────────────────────────────
         await AuthService._revoke_sessions(user_id)
 
-        # Build token payload
-        # Auto-derive user_type for partner role regardless of what's stored in DB
-        _user_type = "partner" if role_name == "partner" else user.get("user_type", "internal")
         token_data = {
-            "sub": user_id,
-            "company_id": company_id,
-            "role": role_name,
-            "user_type": _user_type,
-            "permissions": effective_perms,
+            "sub":          user_id,
+            "company_id":   company_id,
+            "role":         role_name,
+            "user_type":    _user_type,
+            "permissions":  effective_perms,
             "is_super_admin": False,
-            "is_owner": user.get("is_owner", False),
-            "username": user.get("username", ""),
-            "full_name": user.get("full_name", ""),
-            "designation": user.get("designation", ""),
+            "is_owner":     user.get("is_owner", False),
+            "username":     user.get("username", ""),
+            "full_name":    user.get("full_name", ""),
+            "designation":  user.get("designation", ""),
             "department_id": user.get("department_id"),
             "reporting_to": user.get("reporting_to"),
         }
-
         session_id = await AuthService._create_session(
             user_id, "company_user", company_id,
             ip_address=ip_address, device_info=device_info,
         )
-        token_data["jti"] = session_id  # embedded for per-request session validation
-        access_token = create_access_token(token_data)
+        token_data["jti"] = session_id
+        access_token  = create_access_token(token_data)
         refresh_token = create_refresh_token(
-            {"sub": token_data["sub"], "company_id": token_data["company_id"], "jti": session_id}
+            {"sub": user_id, "company_id": company_id, "jti": session_id}
         )
 
-        # Update last login
-        await AuthService._update_last_login(
-            company_id,
-            user.get("_id") or user.get("id"),
-            user.get("is_owner", False)
-        )
-
-        # Log login activity
+        # ── Post-login updates ────────────────────────────────────────────────
+        await AuthService._update_last_login(company_id, user.get("_id") or user.get("id"), user.get("is_owner", False))
         await AuthService._log_login_activity(
-            company_id=company_id,
-            user_id=user_id,
-            full_name=user.get("full_name", ""),
-            role=role_name,
-            ip_address=ip_address,
-            device_info=device_info,
+            company_id=company_id, user_id=user_id,
+            full_name=user.get("full_name", ""), role=role_name,
+            ip_address=ip_address, device_info=device_info,
         )
 
         return {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer",
-            "expires_in": settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            "user_id": user_id,
-            "username": user.get("username", ""),
-            "full_name": user.get("full_name", ""),
-            "email": user.get("email", ""),
-            "role": role_name,
-            "user_type": _user_type,
-            "permissions": effective_perms,
-            "company_id": company_id,
-            "company_name": tenant.get("company_name"),
+            "access_token":   access_token,
+            "refresh_token":  refresh_token,
+            "token_type":     "bearer",
+            "expires_in":     settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            "user_id":        user_id,
+            "username":       user.get("username", ""),
+            "full_name":      user.get("full_name", ""),
+            "email":          user.get("email", ""),
+            "role":           role_name,
+            "user_type":      _user_type,
+            "permissions":    effective_perms,
+            "company_id":     company_id,
+            "company_name":   tenant.get("company_name"),
             "is_super_admin": False,
-            "is_owner": user.get("is_owner", False),
-            "designation": user.get("designation", ""),
-            "department_id": user.get("department_id"),
-            "reporting_to": user.get("reporting_to"),
-            # Subscription info for the frontend dashboard
-            "plan_name": tenant.get("plan_name", "trial"),
+            "is_owner":       user.get("is_owner", False),
+            "designation":    user.get("designation", ""),
+            "department_id":  user.get("department_id"),
+            "reporting_to":   user.get("reporting_to"),
+            # Subscription info
+            "plan_name":         tenant.get("plan_name", "trial"),
             "plan_display_name": tenant.get("plan_display_name", "Trial"),
-            "plan_expiry": tenant.get("plan_expiry").isoformat() if tenant.get("plan_expiry") else None,
-            "total_user_seats": tenant.get("max_users", 3),
-            "is_trial": tenant.get("is_trial", True),
+            "plan_expiry":       tenant.get("plan_expiry").isoformat() if tenant.get("plan_expiry") else None,
+            "total_user_seats":  tenant.get("max_users", 3),
+            "is_trial":          tenant.get("is_trial", True),
             # Onboarding flags
             "must_change_password": bool(user.get("must_change_password", False)),
-            "profile_completed": bool(user.get("profile_completed", True)),
+            "profile_completed":    bool(user.get("profile_completed", True)),
         }, ""
 
     @staticmethod

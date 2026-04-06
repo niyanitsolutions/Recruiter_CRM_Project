@@ -339,5 +339,44 @@ class TenantResolver:
         return None, None, "Invalid credentials"
 
 
+    @staticmethod
+    async def find_all_company_user_matches(identifier: str) -> list:
+        """
+        Scan every non-cancelled tenant DB and return ALL (tenant, user) pairs
+        whose user document matches identifier (username / email / mobile).
+
+        Unlike resolve_login_context, this returns every match so the caller
+        can verify passwords independently and detect same-password multi-tenant
+        scenarios (e.g. a partner registered in two companies).
+
+        Returns:
+            List of (tenant_doc, user_doc) tuples — may be empty.
+        """
+        master_db = get_master_db()
+        ci_pattern = re.compile(f"^{re.escape(identifier)}$", re.IGNORECASE)
+
+        matches: list = []
+        tenants_cursor = master_db.tenants.find(
+            {"status": {"$nin": [TenantStatus.CANCELLED]}}
+        )
+        async for tenant in tenants_cursor:
+            company_id = tenant.get("company_id")
+            if not company_id:
+                continue
+            company_db = get_company_db(company_id)
+            user = await company_db.users.find_one({
+                "is_deleted": False,
+                "$or": [
+                    {"username": ci_pattern},
+                    {"email":    ci_pattern},
+                    {"mobile":   identifier},
+                ],
+            })
+            if user:
+                matches.append((tenant, user))
+
+        return matches
+
+
 # Singleton instance
 tenant_resolver = TenantResolver()

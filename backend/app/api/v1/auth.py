@@ -11,13 +11,13 @@ import re
 
 from app.schemas.auth import (
     LoginRequest,
-    LoginResponse,
     RefreshTokenRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
     ChangePasswordRequest,
     MessageResponse,
-    TokenResponse
+    TokenResponse,
+    TenantLoginRequest,
 )
 from app.schemas.tenant import CompleteRegistration, RegistrationResponse, TrialSetupRequest, TrialSetupResponse
 from app.services.auth_service import auth_service
@@ -47,7 +47,7 @@ class RenewalVerifyRequest(BaseModel):
     razorpay_signature: str
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login")   # response_model omitted: returns LoginResponse OR TenantSelectionResponse
 async def login(data: LoginRequest, request: Request):
     """
     User login endpoint
@@ -130,6 +130,44 @@ async def login(data: LoginRequest, request: Request):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=error
         )
+
+    return result
+
+
+@router.post("/login-with-tenant")
+async def login_with_tenant(data: TenantLoginRequest, request: Request):
+    """
+    Second-step login after tenant selection.
+
+    Called when /auth/login returns tenant_selection_required=true.
+    The user picks a company from the list and re-submits credentials
+    with the chosen company_id.  Returns the same token response as /login.
+    """
+    result, error = await auth_service.login_with_tenant(
+        identifier=data.identifier,
+        password=data.password,
+        company_id=data.company_id,
+        request=request,
+    )
+
+    if error:
+        if "SUBSCRIPTION_EXPIRED" in error:
+            is_owner = error.startswith("SUBSCRIPTION_EXPIRED_OWNER")
+            parts = error.split("|", 2)
+            plan_expiry_str = parts[1] if len(parts) > 1 and parts[1] != "None" else None
+            message = parts[2] if len(parts) > 2 else "Your subscription has expired."
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={
+                    "subscription_expired": True,
+                    "is_owner": is_owner,
+                    "user_type": "tenant",
+                    "message": message,
+                    "plan_expiry": plan_expiry_str,
+                    "company_id": data.company_id,
+                },
+            )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=error)
 
     return result
 
@@ -341,6 +379,10 @@ async def reset_password(request: ResetPasswordRequest):
                     "password_hash": hash_password(new_password),
                     "reset_token": None,
                     "reset_token_expiry": None,
+                    # Clear the forced-change flag so the user is not redirected
+                    # to /change-password again after using the forgot-password link.
+                    "must_change_password": False,
+                    "password_changed_at": now,
                     "updated_at": now,
                 }}
             )

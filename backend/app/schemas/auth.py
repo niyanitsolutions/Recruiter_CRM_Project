@@ -133,3 +133,25 @@ class ErrorResponse(BaseModel):
     detail: str
     error_code: Optional[str] = None
     success: bool = False
+
+
+class TenantLoginRequest(BaseModel):
+    """
+    Second-step login request used after the tenant-selection screen.
+    The user picks one company from the list returned by /auth/login,
+    then calls /auth/login-with-tenant with their credentials + that company_id.
+    """
+    identifier: str = Field(..., min_length=3, description="Username, email, or mobile")
+    password: str   = Field(..., min_length=1)
+    company_id: str = Field(..., description="The company_id the user selected")
+
+
+class TenantSelectionResponse(BaseModel):
+    """
+    Returned by /auth/login when the same password matches user accounts in
+    multiple companies (e.g. a partner registered with two clients).
+    The frontend renders a company picker; the user then calls /auth/login-with-tenant.
+    """
+    tenant_selection_required: bool = True
+    message: str
+    tenants: List[dict]   # [{company_id, company_name, role}, ...]
