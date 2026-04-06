@@ -233,6 +233,8 @@ class UserProfileUpdate(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
     zip_code: Optional[str] = None
+    # Allow user to mark their own profile as complete (used by the one-time popup)
+    profile_completed: Optional[bool] = None
 
     @field_validator('mobile')
     @classmethod

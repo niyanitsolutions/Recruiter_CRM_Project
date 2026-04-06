@@ -255,39 +255,85 @@ class ErrorBoundary extends React.Component {
 
 // ─── Profile Completion Modal ─────────────────────────────────────────────────
 /**
- * One-time popup shown to Owner/Admin users who haven't completed their profile.
- * Shown once after login; dismissed permanently after a successful save.
+ * One-time popup shown to users whose profile_completed flag is false.
+ *
+ * Flow:
+ * 1. On mount, fetch GET /users/me to get the current DB values.
+ * 2. Check which required fields are actually empty (mobile, designation).
+ * 3. If NONE are missing → silently mark profile complete via PUT /users/me, no popup.
+ * 4. If SOME are missing → show the popup with ONLY those fields.
+ * 5. On save → PUT /users/me with the filled values + profile_completed: true.
  */
+
+// Fields that constitute a "complete" profile for the popup check.
+const REQUIRED_PROFILE_FIELDS = [
+  { key: 'mobile',      label: 'Mobile Number',  placeholder: '10-digit mobile number' },
+  { key: 'designation', label: 'Designation',     placeholder: 'e.g. Software Engineer'  },
+]
+
 const ProfileCompleteModal = () => {
-  const dispatch = useDispatch()
-  const user = useSelector(selectUser)
+  const dispatch        = useDispatch()
+  const user            = useSelector(selectUser)
   const profileCompleted = useSelector(selectProfileCompleted)
-  const [saving, setSaving] = useState(false)
 
-  const isAdminLevel = user?.isOwner || user?.designation === 'Admin' || user?.designation === 'Owner'
-  const shouldShow = isAdminLevel && profileCompleted === false
+  // null = still checking, [] = nothing missing (no popup), [...] = fields to fill
+  const [missingFields, setMissingFields] = useState(null)
+  const [saving, setSaving]               = useState(false)
 
-  const { register, handleSubmit, formState: { errors } } = useForm({
-    defaultValues: {
-      full_name: user?.fullName || '',
-      email:     user?.email    || '',
-      mobile:    '',
-    },
-  })
+  const isAdminLevel = user?.isOwner || user?.role === 'admin' ||
+                       user?.designation === 'Admin' || user?.designation === 'Owner'
+  const shouldCheck  = isAdminLevel && profileCompleted === false
 
-  if (!shouldShow) return null
+  const { register, handleSubmit, formState: { errors } } = useForm({ mode: 'onBlur' })
+
+  // On mount: fetch fresh profile data and decide whether to show the popup
+  useEffect(() => {
+    if (!shouldCheck || !user?.id) return
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res     = await api.get('/users/me')
+        const profile = res.data?.data || res.data || {}
+
+        const missing = REQUIRED_PROFILE_FIELDS.filter(
+          f => !profile[f.key] || String(profile[f.key]).trim() === ''
+        )
+
+        if (cancelled) return
+
+        if (missing.length === 0) {
+          // Everything is already filled — silently mark complete, no popup
+          await api.put('/users/me', { profile_completed: true })
+          dispatch(setProfileCompleted())
+        } else {
+          setMissingFields(missing)
+        }
+      } catch {
+        // If the fetch fails, fall back to showing the full popup so the user
+        // is not blocked. Mark as complete after they submit.
+        if (!cancelled) setMissingFields(REQUIRED_PROFILE_FIELDS)
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [shouldCheck, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Don't render until we know what's missing (avoid flash)
+  if (!shouldCheck || missingFields === null || missingFields.length === 0) return null
 
   const onSubmit = async (data) => {
     setSaving(true)
     try {
-      await api.patch(`/users/${user.id}`, {
-        full_name:         data.full_name,
+      await api.put('/users/me', {
+        ...data,
         profile_completed: true,
       })
       dispatch(setProfileCompleted())
       toast.success('Profile updated!')
-    } catch {
-      toast.error('Failed to save profile. Please try again.')
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.response?.data?.message
+      toast.error(typeof msg === 'string' ? msg : 'Failed to save profile. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -302,38 +348,47 @@ const ProfileCompleteModal = () => {
           </div>
           <h2 className="text-xl font-bold text-surface-900">Complete Your Profile</h2>
           <p className="text-surface-500 text-sm mt-1">
-            Just a few details to get your account ready.
+            Please fill in the missing details to continue.
           </p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div>
-            <label className="input-label">Full Name <span className="text-danger-500">*</span></label>
-            <input
-              className={`input ${errors.full_name ? 'border-danger-500' : ''}`}
-              placeholder="Your full name"
-              {...register('full_name', { required: 'Full name is required', minLength: { value: 2, message: 'Minimum 2 characters' } })}
-            />
-            {errors.full_name && <p className="input-error-text mt-1">{errors.full_name.message}</p>}
-          </div>
-
+          {/* Read-only identity fields shown for context */}
+          {user?.fullName && (
+            <div>
+              <label className="input-label">Full Name</label>
+              <input className="input bg-surface-50 cursor-not-allowed" value={user.fullName} disabled />
+            </div>
+          )}
           <div>
             <label className="input-label">Email</label>
-            <input
-              className="input bg-surface-50 cursor-not-allowed"
-              value={user?.email || ''}
-              disabled
-            />
+            <input className="input bg-surface-50 cursor-not-allowed" value={user?.email || ''} disabled />
           </div>
 
-          <div>
-            <label className="input-label">Mobile</label>
-            <input
-              className="input"
-              placeholder="Contact number (optional)"
-              {...register('mobile')}
-            />
-          </div>
+          {/* Only render fields that are actually missing */}
+          {missingFields.map(field => (
+            <div key={field.key}>
+              <label className="input-label">
+                {field.label} <span className="text-danger-500">*</span>
+              </label>
+              <input
+                className={`input ${errors[field.key] ? 'border-danger-500' : ''}`}
+                placeholder={field.placeholder}
+                {...register(field.key, {
+                  required: `${field.label} is required`,
+                  ...(field.key === 'mobile' && {
+                    pattern: {
+                      value: /^[6-9]\d{9}$/,
+                      message: 'Enter a valid 10-digit mobile number starting with 6–9',
+                    },
+                  }),
+                })}
+              />
+              {errors[field.key] && (
+                <p className="input-error-text mt-1">{errors[field.key].message}</p>
+              )}
+            </div>
+          ))}
 
           <button
             type="submit"

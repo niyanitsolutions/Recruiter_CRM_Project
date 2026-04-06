@@ -475,17 +475,19 @@ class UserService:
                 return False, "User not found", None
             
             # Build update document with only allowed fields
+            # Use explicit sentinel check so False booleans (e.g. profile_completed=False)
+            # are not accidentally dropped by `if value` style checks.
             update_dict = {}
             for field, value in update_data.model_dump(exclude_unset=True).items():
                 if value is not None:
                     update_dict[field] = value
-            
+
             if not update_dict:
                 return False, "No fields to update", None
-            
+
             update_dict["updated_by"] = user_id
             update_dict["updated_at"] = datetime.now(timezone.utc)
-            
+
             await self.collection.update_one(
                 {"_id": user_id},
                 {"$set": update_dict}
