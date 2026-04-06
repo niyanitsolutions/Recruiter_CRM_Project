@@ -178,25 +178,104 @@ class TenantResolver:
 
     @staticmethod
     async def resolve_login_context(
-        identifier: str
+        identifier: str,
+        company_code: Optional[str] = None,
     ) -> Tuple[Optional[dict], Optional[dict], str]:
         """
-        Full login resolution flow
+        Full login resolution flow.
 
-        Steps:
-        1. Single $or query in master_db for a tenant whose owner matches
-           any of username / email / mobile.
-        2. If not owner, single $or query per company database.
-        3. Validate tenant access.
+        When company_code is provided (recommended path):
+          1. Look up the tenant by company_code — fail immediately if not found.
+          2. Validate tenant access (status, expiry).
+          3. Search ONLY that company's DB for the user.
+          This prevents any cross-tenant credential match.
+
+        When company_code is omitted (backward-compatible fallback):
+          1. Single $or query in master_db for a tenant whose owner matches
+             username / email / mobile.
+          2. If no owner match, single $or query per company database.
+          3. Validate tenant access at each step.
 
         Returns:
             Tuple of (tenant, user, error_message)
         """
         master_db = get_master_db()
-        # Both username and email are case-insensitive; mobile is exact
         ci_pattern = re.compile(f"^{re.escape(identifier)}$", re.IGNORECASE)
 
-        # ── Step 1: check tenant owners (single query, all three fields) ──────
+        # ── Fast path: company_code provided → single-tenant scope ───────────
+        if company_code:
+            tenant = await master_db.tenants.find_one(
+                {"company_id": company_code.strip(), "is_deleted": {"$ne": True}}
+            )
+            if not tenant:
+                logger.warning(
+                    "Login attempt with unknown company_code=%s identifier=%s",
+                    company_code, identifier
+                )
+                return None, None, "Invalid credentials"
+
+            is_valid, error = await TenantResolver.validate_tenant_access(tenant)
+            if not is_valid:
+                if error.startswith("SUBSCRIPTION_EXPIRED"):
+                    # Check if this is the owner to set the right error prefix
+                    owner = tenant.get("owner", {})
+                    owner_ci = re.compile(
+                        f"^{re.escape(identifier)}$", re.IGNORECASE
+                    )
+                    is_owner_login = (
+                        owner_ci.match(owner.get("username", ""))
+                        or owner_ci.match(owner.get("email", ""))
+                        or owner.get("mobile") == identifier
+                    )
+                    if is_owner_login:
+                        error = "SUBSCRIPTION_EXPIRED_OWNER" + error[len("SUBSCRIPTION_EXPIRED"):]
+                return tenant, None, error
+
+            company_id = tenant.get("company_id")
+            company_db = get_company_db(company_id)
+
+            # Check if the identifier matches the owner first
+            owner_basic = tenant.get("owner", {})
+            owner_ci = re.compile(f"^{re.escape(identifier)}$", re.IGNORECASE)
+            is_owner_match = (
+                owner_ci.match(owner_basic.get("username", ""))
+                or owner_ci.match(owner_basic.get("email", ""))
+                or owner_basic.get("mobile") == identifier
+            )
+
+            if is_owner_match:
+                owner_id = str(owner_basic.get("_id", ""))
+                user = None
+                if owner_id:
+                    user = await company_db.users.find_one(
+                        {"_id": owner_id, "is_deleted": False}
+                    )
+                if not user:
+                    user = dict(owner_basic)
+                user["role"]     = "admin"
+                user["is_owner"] = True
+                return tenant, user, ""
+
+            # Not the owner — search company users
+            user = await company_db.users.find_one({
+                "is_deleted": False,
+                "$or": [
+                    {"username": ci_pattern},
+                    {"email":    ci_pattern},
+                    {"mobile":   identifier},
+                ],
+            })
+            if not user:
+                logger.warning(
+                    "Login failed: user not found in company_code=%s identifier=%s",
+                    company_code, identifier
+                )
+                return None, None, "Invalid credentials"
+
+            return tenant, user, ""
+
+        # ── Fallback: global search (backward-compatible, no company_code) ────
+        # Step 1: check tenant owners (single query, all three fields)
         tenant = await master_db.tenants.find_one({
             "$or": [
                 {"owner.username": ci_pattern},
@@ -208,7 +287,6 @@ class TenantResolver:
         if tenant:
             is_valid, error = await TenantResolver.validate_tenant_access(tenant)
             if not is_valid:
-                # Elevate to owner-specific code so the login endpoint can offer upgrade flow
                 if error.startswith("SUBSCRIPTION_EXPIRED"):
                     error = "SUBSCRIPTION_EXPIRED_OWNER" + error[len("SUBSCRIPTION_EXPIRED"):]
                 return tenant, None, error
@@ -216,9 +294,6 @@ class TenantResolver:
             owner_basic = tenant.get("owner", {})
             company_id  = tenant.get("company_id")
 
-            # Prefer the owner's full record from company_db.users so that any
-            # permission overrides set via the admin UI are honoured at login time.
-            # (master_db.tenants.owner only stores basic fields — no override_permissions.)
             user = None
             if company_id:
                 company_db = get_company_db(company_id)
@@ -229,15 +304,13 @@ class TenantResolver:
                     )
 
             if not user:
-                # Fallback: construct from master_db owner dict
                 user = dict(owner_basic)
 
-            user["role"]     = "admin"   # owner is always admin
+            user["role"]     = "admin"
             user["is_owner"] = True
             return tenant, user, ""
 
-        # ── Step 2: search company users (single $or query per tenant) ────────
-        # Include expired/trial_expired tenants so we can return the right error.
+        # Step 2: search company users across all active tenants
         tenants_cursor = master_db.tenants.find(
             {"status": {"$nin": [TenantStatus.CANCELLED]}}
         )
@@ -246,7 +319,6 @@ class TenantResolver:
             company_id = tenant.get("company_id")
             company_db = get_company_db(company_id)
 
-            # Find user first — then check tenant validity
             user = await company_db.users.find_one({
                 "is_deleted": False,
                 "$or": [

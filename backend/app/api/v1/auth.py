@@ -62,7 +62,9 @@ async def login(data: LoginRequest, request: Request):
     Any existing active session for the user is automatically terminated
     and replaced by the new session (new device always wins).
     """
-    result, error = await auth_service.login(data.identifier, data.password, request=request)
+    result, error = await auth_service.login(
+        data.identifier, data.password, request=request, company_code=data.company_code
+    )
 
     if error:
         if "EMAIL_NOT_VERIFIED" in error:

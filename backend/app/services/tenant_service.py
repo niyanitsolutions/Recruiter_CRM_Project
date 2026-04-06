@@ -250,6 +250,10 @@ class TenantService:
             "user_type": "internal",
             # Owner always reports to themselves; Admin has no reporting_to at creation
             "reporting_to": first_user_id if is_owner else None,
+            # Registration-created users already provided all info — profile is complete
+            "profile_completed": True,
+            # They set their own password during registration — no forced change needed
+            "must_change_password": False,
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
             "is_deleted": False,
@@ -449,6 +453,10 @@ class TenantService:
                 "is_owner": is_owner,
                 "user_type": "internal",
                 "reporting_to": user_id if is_owner else None,   # owner reports to self
+                # Trial-registration users already provided all info — profile is complete
+                "profile_completed": True,
+                # They set their own password during registration — no forced change needed
+                "must_change_password": False,
                 "created_at": now,
                 "updated_at": now,
                 "is_deleted": False,

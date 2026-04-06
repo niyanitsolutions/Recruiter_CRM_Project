@@ -10,19 +10,25 @@ from pydantic import BaseModel, Field, EmailStr
 class LoginRequest(BaseModel):
     """
     Login request schema
-    
-    Supports login with:
-    - Username
-    - Email
-    - Mobile number
-    - Full name
+
+    Supports login with username, email, or mobile number.
+
+    company_code is optional but strongly recommended for non-owner users.
+    When provided, login is scoped strictly to that company's database,
+    preventing any cross-tenant credential match.
+    When omitted, the system falls back to the global identifier search
+    (owner-first, then all active tenants) for backward compatibility.
     """
     identifier: str = Field(
-        ..., 
+        ...,
         min_length=3,
-        description="Username, email, mobile number, or full name"
+        description="Username, email, or mobile number"
     )
     password: str = Field(..., min_length=1)
+    company_code: Optional[str] = Field(
+        None,
+        description="Company code for tenant-scoped login (recommended for non-owners)"
+    )
 
 
 class SuperAdminLoginRequest(BaseModel):

@@ -97,7 +97,7 @@ class AuthService:
     """
 
     @staticmethod
-    async def login(identifier: str, password: str, request=None) -> Tuple[Optional[dict], str]:
+    async def login(identifier: str, password: str, request=None, company_code: Optional[str] = None) -> Tuple[Optional[dict], str]:
         """
         Authenticate user and return tokens.
 
@@ -139,7 +139,9 @@ class AuthService:
             return seller, ""
 
         # Try to find as company user
-        tenant, user, error = await tenant_resolver.resolve_login_context(identifier)
+        tenant, user, error = await tenant_resolver.resolve_login_context(
+            identifier, company_code=company_code
+        )
 
         if error:
             return None, error

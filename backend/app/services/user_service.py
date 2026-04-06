@@ -160,8 +160,9 @@ class UserService:
                 "failed_login_attempts": 0,
                 "locked_until": None,
                 "password_changed_at": now,
-                "must_change_password": False,
-                # New admins haven't completed their profile yet (shown as a one-time popup)
+                # Admin-created users must change the admin-assigned password on first login
+                "must_change_password": True,
+                # New users haven't completed their profile yet (shown as a one-time popup)
                 "profile_completed": False,
                 "created_by": created_by_id,
                 "created_at": now,
