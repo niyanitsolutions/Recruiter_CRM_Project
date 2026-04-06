@@ -36,7 +36,7 @@ export const SectionCard = ({ title, icon: Icon, children, className = '' }) => 
             <Icon className="w-5 h-5 text-accent-400" />
           </div>
         )}
-        <h2 className="text-base font-semibold text-surface-800">{title}</h2>
+        <h2 className="text-base font-semibold text-white">{title}</h2>
       </div>
     )}
     <div className="p-6">{children}</div>
@@ -113,8 +113,8 @@ export const CancelBtn = ({ onClick }) => {
 export const Toggle = ({ checked, onChange, label, description }) => (
   <div className="flex items-center justify-between py-3">
     <div>
-      <p className="text-sm font-medium text-surface-800">{label}</p>
-      {description && <p className="text-xs text-surface-500 mt-0.5">{description}</p>}
+      <p className="text-sm font-medium text-white">{label}</p>
+      {description && <p className="text-xs text-surface-400 mt-0.5">{description}</p>}
     </div>
     <button
       type="button"

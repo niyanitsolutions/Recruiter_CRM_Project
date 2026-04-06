@@ -422,6 +422,93 @@ const CandidateForm = () => {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Resume Upload */}
+        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
+          <h2 className="text-lg font-semibold text-surface-900 mb-4">Resume</h2>
+          {isEdit ? (
+            <div className="space-y-3">
+              {formData.resume_url ? (
+                <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-lg border border-surface-200">
+                  <Upload className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-surface-700 truncate">Resume on file</p>
+                    <p className="text-xs text-surface-500 truncate">{formData.resume_url.split('/').pop()}</p>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <a
+                      href={formData.resume_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary-600 hover:text-primary-800 font-medium"
+                    >
+                      View
+                    </a>
+                    <a
+                      href={formData.resume_url}
+                      download
+                      className="text-xs text-primary-600 hover:text-primary-800 font-medium"
+                    >
+                      Download
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-surface-500">No resume uploaded yet.</p>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  {formData.resume_url ? 'Replace Resume' : 'Upload Resume'}
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={handleResumeUpload}
+                  disabled={resumeUploading}
+                  className="block w-full text-sm text-surface-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 disabled:opacity-50"
+                />
+                <p className="text-xs text-surface-400 mt-1">PDF, DOC, DOCX — max 5 MB</p>
+                {resumeUploading && (
+                  <p className="text-xs text-primary-600 mt-1 flex items-center gap-1">
+                    <span className="animate-spin inline-block w-3 h-3 border border-primary-500 border-t-transparent rounded-full" />
+                    Uploading…
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pendingResumeFile && (
+                <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-lg border border-surface-200">
+                  <Upload className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-surface-700 truncate">{pendingResumeFile.name}</p>
+                    <p className="text-xs text-surface-500">Will be uploaded after saving</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPendingResumeFile(null)}
+                    className="text-xs text-red-500 hover:text-red-700 font-medium flex-shrink-0"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  {pendingResumeFile ? 'Change Resume' : 'Upload Resume'} <span className="text-surface-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={handleResumeUpload}
+                  className="block w-full text-sm text-surface-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                />
+                <p className="text-xs text-surface-400 mt-1">PDF, DOC, DOCX — max 5 MB</p>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Basic Information */}
         <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
           <h2 className="text-lg font-semibold text-surface-900 mb-4">Basic Information</h2>
@@ -879,6 +966,48 @@ const CandidateForm = () => {
               placeholder="Brief summary about the candidate..."
             />
           </div>
+
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-surface-700 mb-1">
+              Resume <span className="text-surface-400 font-normal">(PDF, DOC, DOCX — max 5 MB)</span>
+            </label>
+            {isEdit && formData.resume_url && (
+              <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-lg border border-surface-200 mb-2">
+                <Upload className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-surface-700 truncate">Resume on file</p>
+                  <p className="text-xs text-surface-500 truncate">{formData.resume_url.split('/').pop()}</p>
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <a href={formData.resume_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:text-primary-800 font-medium">View</a>
+                  <a href={formData.resume_url} download className="text-xs text-primary-600 hover:text-primary-800 font-medium">Download</a>
+                </div>
+              </div>
+            )}
+            {!isEdit && pendingResumeFile && (
+              <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-lg border border-surface-200 mb-2">
+                <Upload className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-surface-700 truncate">{pendingResumeFile.name}</p>
+                  <p className="text-xs text-surface-500">Will be uploaded after saving</p>
+                </div>
+                <button type="button" onClick={() => setPendingResumeFile(null)} className="text-xs text-red-500 hover:text-red-700 font-medium flex-shrink-0">Remove</button>
+              </div>
+            )}
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx"
+              onChange={handleResumeUpload}
+              disabled={resumeUploading}
+              className="block w-full text-sm text-surface-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 disabled:opacity-50"
+            />
+            {resumeUploading && (
+              <p className="text-xs text-primary-600 mt-1 flex items-center gap-1">
+                <span className="animate-spin inline-block w-3 h-3 border border-primary-500 border-t-transparent rounded-full" />
+                Uploading…
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Status */}
@@ -903,93 +1032,6 @@ const CandidateForm = () => {
               ))}
             </select>
           </div>
-        </div>
-
-        {/* Resume Upload */}
-        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
-          <h2 className="text-lg font-semibold text-surface-900 mb-4">Resume</h2>
-          {isEdit ? (
-            <div className="space-y-3">
-              {formData.resume_url ? (
-                <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-lg border border-surface-200">
-                  <Upload className="w-5 h-5 text-primary-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-surface-700 truncate">Resume on file</p>
-                    <p className="text-xs text-surface-500 truncate">{formData.resume_url.split('/').pop()}</p>
-                  </div>
-                  <div className="flex gap-2 flex-shrink-0">
-                    <a
-                      href={formData.resume_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary-600 hover:text-primary-800 font-medium"
-                    >
-                      View
-                    </a>
-                    <a
-                      href={formData.resume_url}
-                      download
-                      className="text-xs text-primary-600 hover:text-primary-800 font-medium"
-                    >
-                      Download
-                    </a>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-surface-500">No resume uploaded yet.</p>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  {formData.resume_url ? 'Replace Resume' : 'Upload Resume'}
-                </label>
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleResumeUpload}
-                  disabled={resumeUploading}
-                  className="block w-full text-sm text-surface-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 disabled:opacity-50"
-                />
-                <p className="text-xs text-surface-400 mt-1">PDF, DOC, DOCX — max 5 MB</p>
-                {resumeUploading && (
-                  <p className="text-xs text-primary-600 mt-1 flex items-center gap-1">
-                    <span className="animate-spin inline-block w-3 h-3 border border-primary-500 border-t-transparent rounded-full" />
-                    Uploading…
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {pendingResumeFile && (
-                <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-lg border border-surface-200">
-                  <Upload className="w-5 h-5 text-primary-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-surface-700 truncate">{pendingResumeFile.name}</p>
-                    <p className="text-xs text-surface-500">Will be uploaded after saving</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setPendingResumeFile(null)}
-                    className="text-xs text-red-500 hover:text-red-700 font-medium flex-shrink-0"
-                  >
-                    Remove
-                  </button>
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  {pendingResumeFile ? 'Change Resume' : 'Upload Resume'} <span className="text-surface-400 font-normal">(optional)</span>
-                </label>
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleResumeUpload}
-                  className="block w-full text-sm text-surface-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-                />
-                <p className="text-xs text-surface-400 mt-1">PDF, DOC, DOCX — max 5 MB</p>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Actions */}

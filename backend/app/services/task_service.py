@@ -25,13 +25,16 @@ class TaskService:
         assignee = await users.find_one({"_id": data.assigned_to}) if data.assigned_to else None
 
         now = datetime.now(timezone.utc)
+        due_date = None
+        if data.due_date:
+            due_date = datetime(data.due_date.year, data.due_date.month, data.due_date.day, tzinfo=timezone.utc)
         doc = {
             "_id": str(ObjectId()),
             "title": data.title,
             "description": data.description,
             "priority": data.priority.value,
             "status": TaskStatus.PENDING.value,
-            "due_date": data.due_date,
+            "due_date": due_date,
             "assigned_to": data.assigned_to,
             "assigned_to_name": assignee.get("full_name") if assignee else None,
             "created_by": created_by,
