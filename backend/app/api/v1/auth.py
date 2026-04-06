@@ -19,7 +19,7 @@ from app.schemas.auth import (
     MessageResponse,
     TokenResponse
 )
-from app.schemas.tenant import CompleteRegistration, RegistrationResponse
+from app.schemas.tenant import CompleteRegistration, RegistrationResponse, TrialSetupRequest, TrialSetupResponse
 from app.services.auth_service import auth_service
 from app.services.tenant_service import tenant_service
 from app.services.plan_service import plan_service
@@ -128,6 +128,42 @@ async def login(data: LoginRequest, request: Request):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=error
         )
+
+    return result
+
+
+@router.post("/trial-setup", response_model=TrialSetupResponse)
+async def trial_setup(request: TrialSetupRequest):
+    """
+    Single-page trial onboarding.
+
+    Creates a company + first user (Owner or Admin) in one call.
+    No plan selection required — automatically assigns the active trial plan.
+
+    Validations enforced:
+    - designation must be "Owner" or "Admin" (rejects "Select", empty, null)
+    - password == confirm_password
+    - password meets complexity rules (uppercase, lowercase, digit, ≥8 chars)
+    - contact_number must be a valid 10-digit Indian mobile
+    - company_name, email, username, contact_number must be unique
+    - no_website=true → website stored as null
+    """
+    result, error = await tenant_service.setup_trial(
+        company_name=request.company_name,
+        company_contact=request.company_contact,
+        website=request.website,
+        no_website=request.no_website,
+        person_name=request.person_name,
+        username=request.username,
+        email=str(request.email),
+        contact_number=request.contact_number,
+        password=request.password,
+        designation=request.designation,
+    )
+
+    if error:
+        logger.warning("Trial setup failed | reason=%s", error)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
     return result
 

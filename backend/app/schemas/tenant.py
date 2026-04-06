@@ -46,6 +46,20 @@ class Step1CompanyDetails(BaseModel):
         return v
 
 
+_ALLOWED_DESIGNATIONS = {"Owner", "Admin"}
+_REJECTED_DESIGNATIONS = {"", "select", "none", "null"}
+
+
+def _validate_designation_value(v: str) -> str:
+    """Shared designation validator used by all registration schemas."""
+    if not v or v.strip().lower() in _REJECTED_DESIGNATIONS:
+        raise ValueError("Designation is required. Please select Owner or Admin.")
+    stripped = v.strip()
+    if stripped not in _ALLOWED_DESIGNATIONS:
+        raise ValueError("Designation must be either 'Owner' or 'Admin'.")
+    return stripped
+
+
 class Step2OwnerDetails(BaseModel):
     """
     Step 2: Owner/Admin Information
@@ -54,10 +68,15 @@ class Step2OwnerDetails(BaseModel):
     owner_email: EmailStr
     owner_mobile: str = Field(..., min_length=10)
     owner_username: str = Field(..., min_length=3, max_length=50)
-    owner_designation: str = Field(default="Owner")
+    owner_designation: str = Field(...)
     owner_password: str = Field(..., min_length=8)
     confirm_password: str = Field(..., min_length=8)
-    
+
+    @field_validator('owner_designation')
+    @classmethod
+    def validate_designation(cls, v):
+        return _validate_designation_value(v)
+
     @field_validator('owner_mobile')
     @classmethod
     def validate_mobile(cls, v):
@@ -65,14 +84,14 @@ class Step2OwnerDetails(BaseModel):
         if not re.match(r'^\+?[1-9]\d{9,14}$', cleaned):
             raise ValueError('Invalid mobile number format')
         return cleaned
-    
+
     @field_validator('owner_username')
     @classmethod
     def validate_username(cls, v):
         if not re.match(r'^[a-zA-Z0-9_]+$', v):
             raise ValueError('Username can only contain letters, numbers, and underscores')
         return v.lower()
-    
+
     @field_validator('confirm_password')
     @classmethod
     def passwords_match(cls, v, info):
@@ -116,19 +135,24 @@ class CompleteRegistration(BaseModel):
     state: str = Field(default="")
     zip_code: str = Field(default="")
     country: str = Field(default="India")
-    
+
     # Step 2
     owner_name: str = Field(..., min_length=2, max_length=100)
     owner_email: EmailStr
     owner_mobile: str = Field(..., min_length=10)
     owner_username: str = Field(..., min_length=3, max_length=50)
-    owner_designation: str = Field(default="Owner")
+    owner_designation: str = Field(...)   # must be "Owner" or "Admin" — no default
     owner_password: str = Field(..., min_length=8)
-    
+
     # Step 3
     plan_id: str = Field(...)
     billing_cycle: str = Field(default="monthly")
     user_count: int = Field(default=3, ge=1)
+
+    @field_validator('owner_designation')
+    @classmethod
+    def validate_designation(cls, v):
+        return _validate_designation_value(v)
 
 
 class RegistrationResponse(BaseModel):
@@ -160,3 +184,77 @@ class ValidateFieldResponse(BaseModel):
     field: str
     is_valid: bool
     message: str = ""
+
+
+# ── Trial Setup ───────────────────────────────────────────────────────────────
+
+class TrialSetupRequest(BaseModel):
+    """
+    Single-page trial onboarding payload.
+    Creates company + first user in one call — no plan_id required.
+    """
+    # Company
+    company_name: str = Field(..., min_length=2, max_length=200)
+    company_contact: Optional[str] = Field(None, max_length=20)
+    website: Optional[str] = Field(None, max_length=255)
+    no_website: bool = Field(default=False)
+
+    # User
+    person_name: str = Field(..., min_length=2, max_length=100)
+    username: str = Field(..., min_length=3, max_length=50)
+    email: EmailStr
+    contact_number: str = Field(..., min_length=10, max_length=15)
+    password: str = Field(..., min_length=8, max_length=100)
+    confirm_password: str = Field(..., min_length=8, max_length=100)
+    designation: str = Field(...)
+
+    # ── Validators ────────────────────────────────────────────────────────────
+
+    @field_validator('designation')
+    @classmethod
+    def validate_designation(cls, v: str) -> str:
+        return _validate_designation_value(v)
+
+    @field_validator('username')
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        if not re.match(r'^[a-zA-Z0-9_]+$', v):
+            raise ValueError('Username can only contain letters, numbers, and underscores')
+        return v.lower()
+
+    @field_validator('contact_number')
+    @classmethod
+    def validate_contact_number(cls, v: str) -> str:
+        cleaned = re.sub(r'[\s\-\+]', '', v)
+        if not re.match(r'^[6-9]\d{9}$', cleaned):
+            raise ValueError(
+                'Contact number must be a valid 10-digit Indian mobile starting with 6–9'
+            )
+        return cleaned
+
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'\d', v):
+            raise ValueError('Password must contain at least one digit')
+        return v
+
+    @field_validator('confirm_password')
+    @classmethod
+    def passwords_match(cls, v: str, info) -> str:
+        if 'password' in info.data and v != info.data['password']:
+            raise ValueError('Passwords do not match')
+        return v
+
+
+class TrialSetupResponse(BaseModel):
+    """Response returned after a successful trial setup."""
+    success: bool
+    message: str
+    data: dict

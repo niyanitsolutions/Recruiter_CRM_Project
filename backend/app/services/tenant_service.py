@@ -219,41 +219,56 @@ class TenantService:
         
         # 4. Create company database
         await DatabaseManager.create_company_database(company_id)
-        
-        # 5. Create owner user in company DB
+
+        # 5. Create first user in company DB
+        #
+        # Designation determines access level:
+        #   "Owner" → is_owner=True, full admin permissions, reports_to = self
+        #   "Admin" → is_owner=False, admin permissions only
+        #
+        # Both get the full admin permission set because the admin role already
+        # contains every non-owner permission.  The is_owner flag is what grants
+        # unrestricted bypass in the permission middleware.
         company_db = DatabaseManager.get_company_db(company_id)
-        
+
+        is_owner = (owner_designation == "Owner")
+        first_user_id = tenant_data["owner"]["_id"]
+        permissions = list(ROLE_PERMISSIONS[UserRole.ADMIN])
+
         owner_user = {
-            "_id": tenant_data["owner"]["_id"],
+            "_id": first_user_id,
             "username": owner_username.lower(),
             "email": owner_email,
             "full_name": owner_name,
             "mobile": owner_mobile,
             "password_hash": tenant_data["owner"]["password_hash"],
             "role": UserRole.ADMIN,
-            "permissions": ROLE_PERMISSIONS[UserRole.ADMIN],
+            "permissions": permissions,
             "designation": owner_designation,
             "status": UserStatus.ACTIVE,
-            "is_owner": True,
+            "is_owner": is_owner,
+            "user_type": "internal",
+            # Owner always reports to themselves; Admin has no reporting_to at creation
+            "reporting_to": first_user_id if is_owner else None,
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
-            "is_deleted": False
+            "is_deleted": False,
         }
-        
+
         await company_db.users.insert_one(owner_user)
-        
+
         # Create audit log
         await company_db.audit_logs.insert_one({
             "_id": str(uuid.uuid4()),
             "action": "create",
             "entity_type": "user",
-            "entity_id": owner_user["_id"],
+            "entity_id": first_user_id,
             "entity_name": owner_name,
             "user_id": "system",
             "user_name": "System",
             "user_role": "system",
-            "description": "Company owner account created",
-            "created_at": datetime.now(timezone.utc)
+            "description": f"Company account created — designation: {owner_designation}",
+            "created_at": datetime.now(timezone.utc),
         })
         
         logger.info(f"✅ Company registered: {company_name} (ID: {company_id})")
@@ -300,6 +315,187 @@ class TenantService:
             "is_trial": is_trial
         }, ""
     
+    # ── Trial Setup ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    async def setup_trial(
+        *,
+        company_name: str,
+        company_contact: Optional[str],
+        website: Optional[str],
+        no_website: bool,
+        person_name: str,
+        username: str,
+        email: str,
+        contact_number: str,
+        password: str,
+        designation: str,           # "Owner" | "Admin" — already validated by schema
+    ) -> Tuple[Optional[dict], str]:
+        """
+        Single-call trial onboarding.
+
+        1. Validates uniqueness (company name, email, username, mobile)
+        2. Auto-selects the trial plan from master_db (is_trial_plan=True)
+        3. Creates tenant record with trial_start_date / trial_end_date (14 days)
+        4. Provisions company database
+        5. Creates first user with designation-based permissions
+        6. Owner: reporting_to = own id; is_owner = True
+        7. Rolls back tenant record if user creation fails
+
+        Returns: (result_dict | None, error_message)
+        """
+        master_db = get_master_db()
+
+        # ── 1. Uniqueness checks ──────────────────────────────────────────────
+        is_unique, error = await TenantService.check_unique_fields(
+            company_name=company_name,
+            email=email,
+            mobile=contact_number,
+            username=username,
+        )
+        if not is_unique:
+            logger.warning("Trial setup uniqueness failure | reason=%s", error)
+            return None, error
+
+        # ── 2. Resolve website ────────────────────────────────────────────────
+        resolved_website = None if no_website else (website or None)
+
+        # ── 3. Look up trial plan ─────────────────────────────────────────────
+        trial_plan = await master_db.plans.find_one({"is_trial_plan": True, "is_active": {"$ne": False}})
+        trial_days = trial_plan.get("trial_days", 14) if trial_plan else 14
+        plan_id_val = str(trial_plan["_id"]) if trial_plan else "trial"
+        plan_name_val = trial_plan.get("name", "Trial") if trial_plan else "Trial"
+        plan_display_val = trial_plan.get("display_name", "Trial Plan") if trial_plan else "Trial Plan"
+        max_users_val = trial_plan.get("max_users", 5) if trial_plan else 5
+
+        # ── 4. Build IDs and dates ────────────────────────────────────────────
+        now = datetime.now(timezone.utc)
+        company_id = str(uuid.uuid4())[:8]
+        tenant_id = str(uuid.uuid4())
+        user_id = str(uuid.uuid4())
+
+        trial_start = now
+        trial_end = now + timedelta(days=trial_days)
+
+        # ── 5. Resolve role + permissions ─────────────────────────────────────
+        is_owner = designation == "Owner"
+        role_type = "owner" if is_owner else "admin"
+        # Both Owner and Admin get the full admin permission set.
+        # Owner additionally has is_owner=True which bypasses permission checks.
+        permissions = list(ROLE_PERMISSIONS.get("admin", []))
+
+        hashed_pw = hash_password(password)
+
+        # ── 6. Create tenant record ───────────────────────────────────────────
+        tenant_data = {
+            "_id": tenant_id,
+            "company_id": company_id,
+            "company_name": company_name,
+            "display_name": company_name,
+            "industry": "other",
+            "website": resolved_website,
+            "phone": company_contact or "",
+            "email": email,
+            "location": None,
+            "address": {"street": "", "city": "", "state": "", "zip_code": "", "country": "India"},
+            "owner": {
+                "_id": user_id,
+                "full_name": person_name,
+                "email": email,
+                "mobile": contact_number,
+                "username": username,
+                "designation": designation,
+                "password_hash": hashed_pw,
+            },
+            "plan_id": plan_id_val,
+            "plan_name": plan_name_val,
+            "plan_display_name": plan_display_val,
+            "billing_cycle": "trial",
+            "max_users": max_users_val,
+            "plan_start_date": trial_start,
+            "plan_expiry": trial_end,
+            "trial_start_date": trial_start,
+            "trial_end_date": trial_end,
+            "is_trial": True,
+            "has_used_trial": True,
+            "email_verified": True,
+            "email_verification_token": None,
+            "email_verification_expiry": None,
+            "status": TenantStatus.ACTIVE,
+            "created_at": now,
+            "updated_at": now,
+            "is_deleted": False,
+        }
+
+        await master_db.tenants.insert_one(tenant_data)
+        logger.info("Trial tenant record created | company=%s | id=%s", company_name, company_id)
+
+        # ── 7. Provision company database + owner user ────────────────────────
+        try:
+            await DatabaseManager.create_company_database(company_id)
+            company_db = DatabaseManager.get_company_db(company_id)
+
+            owner_user = {
+                "_id": user_id,
+                "username": username,
+                "email": email,
+                "full_name": person_name,
+                "mobile": contact_number,
+                "password_hash": hashed_pw,
+                "role": UserRole.ADMIN,
+                "permissions": permissions,
+                "designation": designation,
+                "status": UserStatus.ACTIVE,
+                "is_owner": is_owner,
+                "user_type": "internal",
+                "reporting_to": user_id if is_owner else None,   # owner reports to self
+                "created_at": now,
+                "updated_at": now,
+                "is_deleted": False,
+            }
+
+            await company_db.users.insert_one(owner_user)
+
+            # Audit trail
+            await company_db.audit_logs.insert_one({
+                "_id": str(uuid.uuid4()),
+                "action": "create",
+                "entity_type": "user",
+                "entity_id": user_id,
+                "entity_name": person_name,
+                "user_id": "system",
+                "user_name": "System",
+                "user_role": "system",
+                "description": f"Trial account created — designation: {designation}",
+                "created_at": now,
+            })
+
+        except Exception as exc:
+            # Rollback: remove the tenant record so the same email/username can retry
+            logger.error(
+                "Trial setup failed during company DB creation | company=%s | error=%s",
+                company_id, exc, exc_info=True,
+            )
+            await master_db.tenants.delete_one({"_id": tenant_id})
+            return None, "Failed to provision company database. Please try again."
+
+        logger.info(
+            "Trial setup complete | company=%s | user=%s | designation=%s",
+            company_id, user_id, designation,
+        )
+
+        return {
+            "success": True,
+            "message": "Trial setup completed successfully",
+            "data": {
+                "company_id": company_id,
+                "user_id": user_id,
+                "role_type": role_type,
+            },
+        }, ""
+
+    # ── Standard tenant helpers ───────────────────────────────────────────────
+
     @staticmethod
     async def get_tenant(tenant_id: str = None, company_id: str = None) -> Optional[dict]:
         """Get tenant by ID or company_id"""
