@@ -166,9 +166,95 @@ class AuthService:
 
             return await AuthService._complete_company_login(tenant, user, ip_address, device_info)
 
-        # GLOBAL PATH (no company_code): check owners first, then all company users.
+        # GLOBAL PATH (no company_code)
+        # ── Fast path: global_users index (O(1), no per-tenant scanning) ─────
         import re as _re
         master_db = get_master_db()
+        identifier_normalized = identifier.lower().strip()
+
+        global_user = await master_db.global_users.find_one({
+            "$or": [
+                {"email": identifier_normalized},
+                {"mobile": identifier},
+            ]
+        })
+
+        if global_user:
+            if not global_user.get("is_active", True):
+                return None, "Your account has been deactivated. Please contact support."
+
+            if not verify_password(password, global_user.get("password_hash", "")):
+                await master_db.global_users.update_one(
+                    {"_id": global_user["_id"]},
+                    {"$inc": {"failed_login_attempts": 1}},
+                )
+                logger.warning("Login failed (wrong password, global path) | identifier=%s", identifier)
+                return None, "Invalid credentials"
+
+            # Fetch all active company memberships for this global identity
+            mappings = await master_db.user_company_map.find(
+                {"global_user_id": global_user["_id"], "status": "active"}
+            ).to_list(None)
+
+            if mappings:
+                valid_matches = []
+                last_error = ""
+                for mapping in mappings:
+                    cid = mapping["company_id"]
+                    tenant = await master_db.tenants.find_one(
+                        {"company_id": cid, "is_deleted": {"$ne": True}}
+                    )
+                    if not tenant:
+                        continue
+                    is_valid, error = await tenant_resolver.validate_tenant_access(tenant)
+                    if not is_valid:
+                        if mapping.get("is_owner") and error.startswith("SUBSCRIPTION_EXPIRED"):
+                            error = "SUBSCRIPTION_EXPIRED_OWNER" + error[len("SUBSCRIPTION_EXPIRED"):]
+                        last_error = error
+                        continue
+                    company_db = get_company_db(cid)
+                    company_user = await company_db.users.find_one(
+                        {"_id": mapping["local_user_id"], "is_deleted": False}
+                    )
+                    if not company_user:
+                        continue
+                    if mapping.get("is_owner"):
+                        company_user["is_owner"] = True
+                        company_user["role"] = "admin"
+                    valid_matches.append((tenant, company_user))
+
+                if not valid_matches:
+                    return None, last_error or "No valid company access found. Please check your subscription."
+
+                # Reset failed-attempt counter on successful auth
+                await master_db.global_users.update_one(
+                    {"_id": global_user["_id"]},
+                    {"$set": {"failed_login_attempts": 0, "last_login": datetime.now(timezone.utc)}},
+                )
+
+                if len(valid_matches) > 1:
+                    logger.info(
+                        "Login (global path): multiple tenant matches | identifier=%s | count=%d",
+                        identifier, len(valid_matches),
+                    )
+                    return {
+                        "tenant_selection_required": True,
+                        "message": "Multiple companies found. Please select one to continue.",
+                        "tenants": [
+                            {
+                                "company_id":   t["company_id"],
+                                "company_name": t.get("company_name", ""),
+                                "role":         u.get("role", ""),
+                            }
+                            for t, u in valid_matches
+                        ],
+                    }, ""
+
+                tenant, user = valid_matches[0]
+                return await AuthService._complete_company_login(tenant, user, ip_address, device_info)
+
+        # ── Legacy fallback: O(N) scan for users not yet in global_users ─────
+        # Covers tenants registered before the global_users migration was run.
         ci = _re.compile(f"^{_re.escape(identifier)}$", _re.IGNORECASE)
 
         # Step 1 — owner lookup (single-pass across master_db.tenants)
@@ -212,7 +298,7 @@ class AuthService:
 
             return await AuthService._complete_company_login(owner_tenant, user, ip_address, device_info)
 
-        # Step 2 — find ALL matching company users across every tenant
+        # Step 2 — scan all company DBs (O(N) — only reached for unmigrated tenants)
         all_matches = await tenant_resolver.find_all_company_user_matches(identifier)
 
         if not all_matches:
@@ -222,14 +308,12 @@ class AuthService:
         # Verify password for each match — collect every tenant where it succeeds
         valid_matches = []
         for t, u in all_matches:
-            ph = u.get("password_hash", "")
-            if verify_password(password, ph):
+            if verify_password(password, u.get("password_hash", "")):
                 is_valid, _ = await tenant_resolver.validate_tenant_access(t)
                 if is_valid:
                     valid_matches.append((t, u))
 
         if not valid_matches:
-            # Track failed attempt against the first found tenant
             first_t, first_u = all_matches[0]
             await AuthService._increment_failed_attempts(
                 first_t["company_id"], str(first_u.get("_id", "")), False
@@ -238,8 +322,6 @@ class AuthService:
             return None, "Invalid credentials"
 
         if len(valid_matches) > 1:
-            # Same credentials are valid in multiple companies — return a selection list.
-            # The frontend shows a picker; the user then calls /auth/login-with-tenant.
             logger.info(
                 "Login: multiple tenant matches | identifier=%s | count=%d",
                 identifier, len(valid_matches),
@@ -257,7 +339,6 @@ class AuthService:
                 ],
             }, ""
 
-        # Exactly one valid match — proceed normally
         tenant, user = valid_matches[0]
         return await AuthService._complete_company_login(tenant, user, ip_address, device_info)
 

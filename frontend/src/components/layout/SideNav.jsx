@@ -93,13 +93,14 @@ const PERMISSION_NAV_MAP = [
 /**
  * Build a sectioned nav from the user's actual permission array.
  * A nav item is shown when the user has ANY permission in its `permissions` list.
+ * Pass isOwner=true to bypass filtering (owner sees all nav items).
  */
-const buildPermissionMenu = (permissions) => {
+const buildPermissionMenu = (permissions, isOwner = false) => {
   const perms = new Set(permissions || [])
   const sectionMap = {}
 
   for (const item of PERMISSION_NAV_MAP) {
-    if (!item.permissions.some(p => perms.has(p))) continue
+    if (!isOwner && !item.permissions.some(p => perms.has(p))) continue
     if (!sectionMap[item.section]) sectionMap[item.section] = []
     const isDuplicate = sectionMap[item.section].some(
       (i) => i.path === item.path && JSON.stringify(i.query || {}) === JSON.stringify(item.query || {})
@@ -177,23 +178,9 @@ const SideNav = ({ isCollapsed, onToggle }) => {
       }
     }
 
-    // Designation == "Admin": restrict to exactly Users, Partners, Departments, Designations
-    if (user?.designation === 'Admin') {
-      const perms = new Set(user?.permissions || [])
-      const allowed = ['/users', '/partners', '/departments', '/designations']
-      const adminItems = PERMISSION_NAV_MAP.filter(
-        item => allowed.includes(item.path) && item.permissions.some(p => perms.has(p))
-      )
-      return {
-        flat: [],
-        sections: adminItems.length > 0
-          ? [{ section: 'User Management', items: adminItems }]
-          : [{ section: 'User Management', items: [{ path: '/users', icon: Users, label: 'Users' }] }],
-      }
-    }
-
-    // All non-super-admin, non-partner roles (including admin): strictly permission-driven
-    const sections = buildPermissionMenu(user?.permissions)
+    // All non-super-admin, non-partner roles: strictly permission-driven.
+    // Owners bypass the permission filter and see every nav section.
+    const sections = buildPermissionMenu(user?.permissions, !!user?.isOwner)
     return {
       flat: [],
       sections: sections.length > 0
@@ -335,7 +322,7 @@ const SideNav = ({ isCollapsed, onToggle }) => {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate text-white/90">{user?.fullName || user?.full_name || 'User'}</p>
               <p className="text-xs text-white/40 truncate capitalize">
-                {(user?.role || userRole || 'User').replace(/_/g, ' ')}
+                {isSuperAdmin ? 'Super Admin' : isSeller ? 'Seller' : user?.isOwner ? 'Owner' : (userRole || 'User').replace(/_/g, ' ')}
               </p>
             </div>
             <button onClick={handleLogout} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white/80" title="Logout">

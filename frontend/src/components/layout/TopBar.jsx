@@ -13,13 +13,15 @@ import {
   CreditCard,
   HelpCircle,
 } from 'lucide-react'
-import { logoutUser, selectUser, selectIsSuperAdmin } from '../../store/authSlice'
+import { logoutUser, selectUser, selectIsSuperAdmin, selectIsOwner, selectIsSeller } from '../../store/authSlice'
 
 const TopBar = ({ title, subtitle, actions }) => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const user = useSelector(selectUser)
   const isSuperAdmin = useSelector(selectIsSuperAdmin)
+  const isOwner = useSelector(selectIsOwner)
+  const isSeller = useSelector(selectIsSeller)
   
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
@@ -117,7 +119,7 @@ const TopBar = ({ title, subtitle, actions }) => {
             <div className="hidden md:block text-left">
               <p className="text-sm font-medium text-surface-800">{user?.fullName || 'User'}</p>
               <p className="text-xs text-surface-500 capitalize">
-                {isSuperAdmin ? 'Super Admin' : user?.role?.replace('_', ' ')}
+                {isSuperAdmin ? 'Super Admin' : isSeller ? 'Seller' : isOwner ? 'Owner' : (user?.role || '').replace(/_/g, ' ')}
               </p>
             </div>
             <ChevronDown className={clsx(

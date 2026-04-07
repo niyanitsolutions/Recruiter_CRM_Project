@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -107,12 +107,14 @@ import { Tasks } from './pages/tasks'
 // ─── Permission-aware default landing page ────────────────────────────────────
 // Used for post-login redirect and for bounce-back when a user hits a
 // route they're not allowed to access.
-export const getDefaultRoute = (role, permissions = []) => {
-  if (role === 'admin') return '/dashboard'
-  if (role === 'partner') return '/my-candidates'
+// SINGLE SOURCE OF TRUTH: always derived from permissions, never from role slug.
+export const getDefaultRoute = (role, permissions = [], userType = 'internal') => {
+  // Partner user type always lands on their own portal
+  if (userType === 'partner' || role === 'partner') return '/my-candidates'
 
-  // For every other role, derive the first accessible page from permissions
+  // Permission-first priority — same for every role including admin/owner
   const p = new Set(permissions || [])
+  if (p.has('dashboard:view'))                               return '/dashboard'
   if (p.has('candidates:view'))                              return '/candidates'
   if (p.has('interviews:view'))                              return '/interviews'
   if (p.has('clients:view'))                                 return '/clients'
@@ -134,6 +136,7 @@ const GuestRoute = ({ children }) => {
   const isSuperAdmin   = useSelector(selectIsSuperAdmin)
   const isSeller       = useSelector(selectIsSeller)
   const userRole       = useSelector(selectUserRole)
+  const userType       = useSelector(selectUserType)
   const user           = useSelector(selectUser)
 
   if (isAuthenticated) {
@@ -141,7 +144,7 @@ const GuestRoute = ({ children }) => {
       ? '/super-admin'
       : isSeller
         ? '/seller'
-        : getDefaultRoute(userRole, user?.permissions)
+        : getDefaultRoute(userRole, user?.permissions, userType)
     return <Navigate to={dest} replace />
   }
   return children
@@ -180,7 +183,7 @@ const CompanyRoute = ({ children, allowedRoles = [] }) => {
     const partnerAllowed = allowedRoles.includes('partner') && (userType === 'partner' || userRole === 'partner')
     const roleAllowed    = allowedRoles.some(r => r !== 'partner' && r === userRole)
     if (!partnerAllowed && !roleAllowed) {
-      return <Navigate to={getDefaultRoute(userRole, user?.permissions)} replace />
+      return <Navigate to={getDefaultRoute(userRole, user?.permissions, userType)} replace />
     }
   }
   return children
@@ -188,10 +191,14 @@ const CompanyRoute = ({ children, allowedRoles = [] }) => {
 
 /**
  * Per-route permission guard.
- * Admin, owner, and partner (on their own routes) bypass checks.
- * All other roles must have the specific permission string.
+ * Owner bypasses all checks (company-level superuser).
+ * Partners are confined to their own route block.
+ * All other roles must hold the specific permission string.
+ *
+ * showUnauthorized=true → render an inline "Access Denied" page instead of
+ * silently redirecting (useful for routes the user can navigate TO manually).
  */
-const PermissionRoute = ({ children, permission }) => {
+const PermissionRoute = ({ children, permission, showUnauthorized = false }) => {
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const isSuperAdmin   = useSelector(selectIsSuperAdmin)
   const user           = useSelector(selectUser)
@@ -210,10 +217,48 @@ const PermissionRoute = ({ children, permission }) => {
   // Enforce permission
   const permissionSet = new Set(user?.permissions || [])
   if (permission && !permissionSet.has(permission)) {
-    return <Navigate to={getDefaultRoute(userRole, user?.permissions)} replace />
+    if (showUnauthorized) return <Unauthorized />
+    return <Navigate to={getDefaultRoute(userRole, user?.permissions, userType)} replace />
   }
 
   return children
+}
+
+// ─── Unauthorized Page ────────────────────────────────────────────────────────
+/**
+ * Shown when a user navigates directly to a route their permissions don't cover.
+ * Used via <PermissionRoute showUnauthorized> — provides a clear, actionable
+ * message instead of a silent redirect.
+ */
+const Unauthorized = () => {
+  const nav      = useNavigate()
+  const userRole = useSelector(selectUserRole)
+  const userType = useSelector(selectUserType)
+  const user     = useSelector(selectUser)
+
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center p-8">
+      <div className="text-center max-w-md">
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-100 mb-6">
+          <svg className="w-10 h-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+        </div>
+        <h1 className="text-2xl font-bold text-surface-900 mb-2">Access Denied</h1>
+        <p className="text-surface-500 mb-6">
+          You don't have permission to view this page. Contact your administrator
+          if you believe this is a mistake.
+        </p>
+        <button
+          onClick={() => nav(getDefaultRoute(userRole, user?.permissions, userType), { replace: true })}
+          className="px-6 py-2.5 bg-accent-600 hover:bg-accent-700 text-white font-semibold rounded-xl transition-colors"
+        >
+          Go to Dashboard
+        </button>
+      </div>
+    </div>
+  )
 }
 
 // ─── Error Boundary ────────────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ from app.models.master.tenant import (
     TenantStatus
 )
 from app.models.company.user import UserRole, UserStatus, ROLE_PERMISSIONS
+from app.models.master.global_user import upsert_global_user, ensure_user_company_map
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +262,22 @@ class TenantService:
 
         await company_db.users.insert_one(owner_user)
 
+        # Register in global identity layer (enables O(1) login without DB scanning)
+        global_user_id = await upsert_global_user(
+            master_db,
+            email=owner_email,
+            mobile=owner_mobile,
+            password_hash=tenant_data["owner"]["password_hash"],
+        )
+        await ensure_user_company_map(
+            master_db,
+            global_user_id=global_user_id,
+            company_id=company_id,
+            local_user_id=first_user_id,
+            role="admin",
+            is_owner=is_owner,
+        )
+
         # Create audit log
         await company_db.audit_logs.insert_one({
             "_id": str(uuid.uuid4()),
@@ -463,6 +480,22 @@ class TenantService:
             }
 
             await company_db.users.insert_one(owner_user)
+
+            # Register in global identity layer
+            global_user_id = await upsert_global_user(
+                master_db,
+                email=email,
+                mobile=contact_number,
+                password_hash=hashed_pw,
+            )
+            await ensure_user_company_map(
+                master_db,
+                global_user_id=global_user_id,
+                company_id=company_id,
+                local_user_id=user_id,
+                role="admin",
+                is_owner=is_owner,
+            )
 
             # Audit trail
             await company_db.audit_logs.insert_one({

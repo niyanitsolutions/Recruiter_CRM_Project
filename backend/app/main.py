@@ -15,10 +15,11 @@ import os
 logger = logging.getLogger(__name__)
 
 from app.core.config import settings
-from app.core.database import connect_to_mongo, close_mongo_connection
+from app.core.database import connect_to_mongo, close_mongo_connection, get_master_db
 from app.core.redis import init_redis, close_redis
 from app.services.plan_service import plan_service
 from app.services.subscription_reminder_service import reminder_background_loop
+from app.models.master.global_user import ensure_global_indexes
 
 # ============== Phase 1 - Auth & Tenant Management ==============
 from app.api.v1 import auth, super_admin, tenants, plans, payments
@@ -64,6 +65,8 @@ async def lifespan(app: FastAPI):
     print(" Redis initialized")
     seeded = await plan_service.seed_default_plans()
     print(f" Plans seeded/updated: {seeded}")
+    await ensure_global_indexes(get_master_db())
+    print(" Global user indexes ensured")
     # Start subscription reminder background task (runs every 24 hours)
     reminder_task = asyncio.create_task(reminder_background_loop())
     print(" Subscription reminder scheduler started")

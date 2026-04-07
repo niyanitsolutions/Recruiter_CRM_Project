@@ -8,6 +8,9 @@ from typing import Optional, List, Dict, Tuple
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 import bcrypt
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.models.company.user import (
     UserCreate, UserUpdate, UserProfileUpdate,
@@ -17,6 +20,8 @@ from app.models.company.user import (
 from app.models.company.role import ROLE_DEFAULT_PERMISSIONS, SystemRole, Permission
 from app.services.audit_service import AuditService
 from app.models.company.audit_log import AuditAction, EntityType
+from app.models.master.global_user import upsert_global_user, ensure_user_company_map, sync_global_password
+from app.core.database import get_master_db
 
 
 def _compute_role_type(user: dict) -> str:
@@ -174,7 +179,28 @@ class UserService:
             }
             
             await self.collection.insert_one(user_doc)
-            
+
+            # Register in global identity layer (best-effort — never block user creation)
+            if company_id:
+                try:
+                    master_db = get_master_db()
+                    gu_id = await upsert_global_user(
+                        master_db,
+                        email=user_data.email,
+                        mobile=user_data.mobile,
+                        password_hash=password_hash,
+                    )
+                    await ensure_user_company_map(
+                        master_db,
+                        global_user_id=gu_id,
+                        company_id=company_id,
+                        local_user_id=user_id,
+                        role=user_data.role,
+                        is_owner=False,
+                    )
+                except Exception as _ge:
+                    logger.warning("Global user sync failed for %s: %s", user_data.email, _ge)
+
             # Audit log
             await self.audit_service.log(
                 action=AuditAction.CREATE.value,
@@ -564,7 +590,14 @@ class UserService:
                     }
                 }
             )
-            
+
+            # Sync new password to global identity layer
+            try:
+                master_db = get_master_db()
+                await sync_global_password(master_db, email=user["email"], new_password_hash=new_hash)
+            except Exception as _ge:
+                logger.warning("Global password sync failed for user %s: %s", user_id, _ge)
+
             # Audit log
             await self.audit_service.log(
                 action=AuditAction.PASSWORD_CHANGE.value,
@@ -577,7 +610,7 @@ class UserService:
                 description="Changed own password",
                 ip_address=ip_address
             )
-            
+
             return True, "Password changed successfully"
             
         except Exception as e:
@@ -622,7 +655,14 @@ class UserService:
                     }
                 }
             )
-            
+
+            # Sync new password to global identity layer
+            try:
+                master_db = get_master_db()
+                await sync_global_password(master_db, email=user["email"], new_password_hash=new_hash)
+            except Exception as _ge:
+                logger.warning("Global password sync failed for user %s: %s", user_id, _ge)
+
             # Audit log
             await self.audit_service.log(
                 action=AuditAction.PASSWORD_RESET.value,
