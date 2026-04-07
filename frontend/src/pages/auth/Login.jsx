@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
-import { Mail, Lock, ArrowRight, AlertCircle, Calendar, XCircle, RefreshCw, CheckCircle, UserX } from 'lucide-react'
-import { login, clearError, selectAuth, selectSubscriptionExpired } from '../../store/authSlice'
+import { Mail, Lock, ArrowRight, AlertCircle, Calendar, XCircle, RefreshCw, CheckCircle, UserX, Building2 } from 'lucide-react'
+import { login, loginWithTenant, clearError, clearTenantSelection, selectAuth, selectSubscriptionExpired, selectTenantSelection } from '../../store/authSlice'
 import { Button, Input } from '../../components/common'
 import { formatDateTime } from '../../utils/format'
 import authService from '../../services/authService'
@@ -15,6 +15,7 @@ const Login = () => {
   const navigate = useNavigate()
   const { isLoading } = useSelector(selectAuth)
   const subscriptionExpired = useSelector(selectSubscriptionExpired)
+  const tenantSelection = useSelector(selectTenantSelection)
 
   // "Account Not Found" full-screen state — stores the error message
   const [loginFailed, setLoginFailed] = useState(null)
@@ -23,6 +24,9 @@ const Login = () => {
   const [emailNotVerified, setEmailNotVerified] = useState(null)  // { email, message }
   const [resendLoading, setResendLoading] = useState(false)
   const [resendSent, setResendSent] = useState(false)
+
+  // Tenant selection error
+  const [tenantSelectError, setTenantSelectError] = useState('')
 
   // Inline error for sessionStorage-sourced messages (e.g. api.js interceptor)
   const [inlineError, setInlineError] = useState('')
@@ -49,6 +53,39 @@ const Login = () => {
     }
   }, [])
 
+  const handleTenantSelect = async (company_id) => {
+    if (!tenantSelection) return
+    setTenantSelectError('')
+    const result = await dispatch(loginWithTenant({
+      identifier: tenantSelection.identifier,
+      password:   tenantSelection.password,
+      company_id,
+      remember_me: tenantSelection.remember_me,
+    }))
+    if (loginWithTenant.fulfilled.match(result)) {
+      if (tenantSelection.remember_me) {
+        setSavedEmail(tenantSelection.identifier)
+        setSavedPassword(tenantSelection.password)
+      } else {
+        removeSavedEmail()
+        removeSavedPassword()
+      }
+      if (result.payload.must_change_password) {
+        toast.success('Login successful! Please change your password.')
+        navigate('/change-password')
+        return
+      }
+      toast.success('Login successful!')
+    } else if (loginWithTenant.rejected.match(result)) {
+      const payload = result.payload
+      if (payload && typeof payload === 'object' && payload.type === 'SUBSCRIPTION_EXPIRED') {
+        // subscriptionExpired state already set in Redux — no extra work needed
+      } else {
+        setTenantSelectError(typeof payload === 'string' ? payload : 'Login failed. Please try again.')
+      }
+    }
+  }
+
   const onSubmit = async (data) => {
     setLoginFailed(null)
     setEmailNotVerified(null)
@@ -57,6 +94,9 @@ const Login = () => {
     const result = await dispatch(login({ ...data, remember_me: rememberMe }))
 
     if (login.fulfilled.match(result)) {
+      // Tenant selection required — Redux state is set, screen switches automatically
+      if (result.payload.tenant_selection_required) return
+
       // Save or clear the identifier and password for next visit
       if (rememberMe) {
         setSavedEmail(data.identifier)
@@ -105,6 +145,53 @@ const Login = () => {
     } finally {
       setResendLoading(false)
     }
+  }
+
+  // ── Tenant / company selection screen ────────────────────────────────────
+  if (tenantSelection) {
+    return (
+      <div className="animate-fade-in space-y-5">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-100 mb-4">
+            <Building2 className="w-8 h-8 text-indigo-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-surface-900">Select Company</h2>
+          <p className="text-surface-500 mt-2 text-sm">
+            Your credentials match multiple companies. Choose one to continue.
+          </p>
+        </div>
+
+        {tenantSelectError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {tenantSelectError}
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {tenantSelection.tenants.map((t) => (
+            <button
+              key={t.company_id}
+              onClick={() => handleTenantSelect(t.company_id)}
+              disabled={isLoading}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-surface-200 bg-white hover:bg-surface-50 hover:border-indigo-300 transition-colors text-left disabled:opacity-60"
+            >
+              <div>
+                <p className="font-semibold text-surface-900 text-sm">{t.company_name}</p>
+                <p className="text-xs text-surface-500 capitalize">{t.role}</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-surface-400 flex-shrink-0" />
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => dispatch(clearTenantSelection())}
+          className="w-full px-4 py-3 text-sm text-surface-600 hover:text-surface-800 font-medium transition-colors"
+        >
+          ← Back to Login
+        </button>
+      </div>
+    )
   }
 
   // ── Account Not Found screen ──────────────────────────────────────────────

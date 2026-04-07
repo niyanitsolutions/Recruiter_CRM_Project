@@ -100,6 +100,14 @@ const authService = {
   resendVerification: (email) => {
     return api.post('/auth/resend-verification', { email })
   },
+
+  /**
+   * Second-step login after tenant selection.
+   * Called when /auth/login returns tenant_selection_required=true.
+   */
+  loginWithTenant: (identifier, password, company_id) => {
+    return api.post('/auth/login-with-tenant', { identifier, password, company_id })
+  },
 }
 
 export default authService

@@ -83,9 +83,36 @@ const initialState = {
   subscriptionExpired: null, // { type, isOwner, message, planExpiry, tenantId, companyId }
   forcePasswordChange: false,
   profileCompleted:    null, // null = unknown, true/false from login response
+  tenantSelection:     null, // { tenants: [...], identifier, password } when multi-company
 }
 
 // ── Async thunks ──────────────────────────────────────────────────────────────
+
+export const loginWithTenant = createAsyncThunk(
+  'auth/loginWithTenant',
+  async (credentials, { rejectWithValue }) => {
+    try {
+      const { identifier, password, company_id, remember_me } = credentials
+      const response = await authService.loginWithTenant(identifier, password, company_id)
+      return { ...response.data, remember_me: remember_me !== false }
+    } catch (error) {
+      if (error.response?.status === 402) {
+        const detail = error.response.data?.detail || {}
+        return rejectWithValue({
+          type:       'SUBSCRIPTION_EXPIRED',
+          isOwner:    detail.is_owner    || false,
+          userType:   detail.user_type   || 'tenant',
+          message:    detail.message     || 'Your subscription has expired.',
+          planExpiry: detail.plan_expiry || null,
+          tenantId:   detail.tenant_id   || null,
+          companyId:  detail.company_id  || null,
+        })
+      }
+      const detail = error.response?.data?.detail || 'Login failed. Please try again.'
+      return rejectWithValue(typeof detail === 'string' ? detail : 'Login failed. Please try again.')
+    }
+  }
+)
 
 export const login = createAsyncThunk(
   'auth/login',
@@ -93,6 +120,17 @@ export const login = createAsyncThunk(
     try {
       const { remember_me, ...loginData } = credentials
       const response = await authService.login(loginData)
+      // Backend may return tenant_selection_required instead of tokens
+      if (response.data?.tenant_selection_required) {
+        return {
+          tenant_selection_required: true,
+          tenants:    response.data.tenants || [],
+          message:    response.data.message || '',
+          identifier: loginData.identifier,
+          password:   loginData.password,
+          remember_me: remember_me !== false,
+        }
+      }
       return { ...response.data, remember_me: remember_me !== false }
     } catch (error) {
       if (error.response?.status === 403) {
@@ -222,6 +260,7 @@ const _clearAuth = (state) => {
   state.subscriptionExpired = null
   state.forcePasswordChange = false
   state.profileCompleted    = null
+  state.tenantSelection     = null
   removeToken()
   removeUser()
   removeRefreshToken()
@@ -235,6 +274,7 @@ const authSlice = createSlice({
   reducers: {
     logout: (state) => { _clearAuth(state) },
     clearError: (state) => { state.error = null; state.subscriptionExpired = null },
+    clearTenantSelection: (state) => { state.tenantSelection = null },
     setCredentials: (state, action) => {
       const { user, access_token, refresh_token } = action.payload
       state.user            = user
@@ -261,9 +301,21 @@ const authSlice = createSlice({
         state.subscriptionExpired = null
       })
       .addCase(login.fulfilled, (state, action) => {
-        const remember = action.payload.remember_me !== false
         state.isLoading = false
+        // Multi-tenant selection required — don't log in yet
+        if (action.payload.tenant_selection_required) {
+          state.tenantSelection = {
+            tenants:    action.payload.tenants,
+            message:    action.payload.message,
+            identifier: action.payload.identifier,
+            password:   action.payload.password,
+            remember_me: action.payload.remember_me,
+          }
+          return
+        }
+        const remember = action.payload.remember_me !== false
         state.isAuthenticated = true
+        state.tenantSelection = null
         state.token = action.payload.access_token
         state.forcePasswordChange = !!action.payload.must_change_password
         state.profileCompleted = action.payload.profile_completed !== undefined
@@ -297,6 +349,55 @@ const authSlice = createSlice({
         if (payload && typeof payload === 'object' && payload.type === 'SUBSCRIPTION_EXPIRED') {
           state.subscriptionExpired = payload
           state.error = null  // suppress generic error toast
+        } else {
+          state.error = payload
+          state.subscriptionExpired = null
+        }
+      })
+
+      // ── Login With Tenant (second-step picker) ─────────────────────────────
+      .addCase(loginWithTenant.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
+      .addCase(loginWithTenant.fulfilled, (state, action) => {
+        const remember = action.payload.remember_me !== false
+        state.isLoading = false
+        state.isAuthenticated = true
+        state.tenantSelection = null
+        state.token = action.payload.access_token
+        state.forcePasswordChange = !!action.payload.must_change_password
+        state.profileCompleted = action.payload.profile_completed !== undefined
+          ? action.payload.profile_completed
+          : true
+        state.user = {
+          id:          action.payload.user_id,
+          username:    action.payload.username,
+          fullName:    action.payload.full_name,
+          email:       action.payload.email,
+          role:        action.payload.role,
+          userType:    action.payload.user_type    || 'internal',
+          designation: action.payload.designation  || '',
+          permissions: action.payload.permissions  || [],
+          companyId:   action.payload.company_id   || null,
+          companyName: action.payload.company_name || null,
+          isSuperAdmin: action.payload.is_super_admin || false,
+          isSeller:    action.payload.is_seller    || false,
+          sellerId:    action.payload.seller_id    || null,
+          isOwner:     action.payload.is_owner     || false,
+        }
+        setRememberMe(remember)
+        setToken(action.payload.access_token, remember)
+        setUser(state.user, remember)
+        setRefreshToken(action.payload.refresh_token, remember)
+        localStorage.setItem('last_activity', Date.now().toString())
+      })
+      .addCase(loginWithTenant.rejected, (state, action) => {
+        state.isLoading = false
+        const payload = action.payload
+        if (payload && typeof payload === 'object' && payload.type === 'SUBSCRIPTION_EXPIRED') {
+          state.subscriptionExpired = payload
+          state.error = null
         } else {
           state.error = payload
           state.subscriptionExpired = null
@@ -353,7 +454,7 @@ const authSlice = createSlice({
   },
 })
 
-export const { logout, clearError, setCredentials, clearForcePasswordChange, setProfileCompleted } = authSlice.actions
+export const { logout, clearError, setCredentials, clearForcePasswordChange, setProfileCompleted, clearTenantSelection } = authSlice.actions
 // logoutUser is already exported at declaration (createAsyncThunk)
 
 export default authSlice.reducer
@@ -373,3 +474,4 @@ export const selectUserPermissions    = (state) => state.auth.user?.permissions 
 export const selectSubscriptionExpired  = (state) => state.auth.subscriptionExpired  || null
 export const selectForcePasswordChange  = (state) => state.auth.forcePasswordChange  || false
 export const selectProfileCompleted     = (state) => state.auth.profileCompleted
+export const selectTenantSelection      = (state) => state.auth.tenantSelection
