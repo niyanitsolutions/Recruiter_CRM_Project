@@ -5,7 +5,8 @@ import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import {
   selectIsAuthenticated, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType, selectUser,
-  selectIsInitializing, selectProfileCompleted, initAuth, setProfileCompleted,
+  selectIsInitializing, selectProfileCompleted, selectForcePasswordChange,
+  initAuth, setProfileCompleted, clearForcePasswordChange,
 } from './store/authSlice'
 import { useAutoLogout } from './hooks/useAutoLogout'
 import api from './services/api'
@@ -298,6 +299,115 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// ─── Force Password Change Modal ─────────────────────────────────────────────
+/**
+ * Blocking modal shown when must_change_password=true on login.
+ * The user cannot navigate anywhere until they set a new password.
+ * Uses the same /auth/change-password API endpoint as the voluntary flow.
+ *
+ * No current_password required — admin-assigned passwords are single-use.
+ * After success the forcePasswordChange flag is cleared and navigation resumes.
+ */
+const ForcePasswordModal = () => {
+  const dispatch     = useDispatch()
+  const user         = useSelector(selectUser)
+  const isForced     = useSelector(selectForcePasswordChange)
+  const [saving, setSaving] = useState(false)
+  const [apiError, setApiError] = useState('')
+
+  const { register, handleSubmit, watch, formState: { errors } } = useForm({ mode: 'onBlur' })
+  const newPass = watch('new_password', '')
+
+  if (!isForced) return null
+
+  const onSubmit = async (data) => {
+    setSaving(true)
+    setApiError('')
+    try {
+      // Use admin-reset endpoint so no current_password is needed
+      await api.post('/users/me/force-change-password', {
+        new_password:     data.new_password,
+        confirm_password: data.confirm_password,
+      })
+      toast.success('Password updated! Welcome.')
+      dispatch(clearForcePasswordChange())
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.response?.data?.message || 'Failed to update password.'
+      setApiError(typeof msg === 'string' ? msg : 'Failed to update password.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 animate-fade-in">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-amber-100 mb-3">
+            <svg className="w-7 h-7 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-surface-900">Set Your New Password</h2>
+          <p className="text-surface-500 text-sm mt-1">
+            Hi {user?.fullName || 'there'}, your administrator has assigned a temporary password.
+            Please choose a new one to continue.
+          </p>
+        </div>
+
+        {apiError && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {apiError}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div>
+            <label className="input-label">New Password</label>
+            <input
+              type="password"
+              className={`input ${errors.new_password ? 'border-danger-500' : ''}`}
+              placeholder="Min. 8 characters"
+              {...register('new_password', {
+                required: 'New password is required',
+                minLength: { value: 8, message: 'Minimum 8 characters' },
+                pattern: {
+                  value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+                  message: 'Must include uppercase, lowercase, and a number',
+                },
+              })}
+            />
+            {errors.new_password && <p className="input-error-text mt-1">{errors.new_password.message}</p>}
+          </div>
+
+          <div>
+            <label className="input-label">Confirm New Password</label>
+            <input
+              type="password"
+              className={`input ${errors.confirm_password ? 'border-danger-500' : ''}`}
+              placeholder="Repeat new password"
+              {...register('confirm_password', {
+                required: 'Please confirm your password',
+                validate: v => v === newPass || 'Passwords do not match',
+              })}
+            />
+            {errors.confirm_password && <p className="input-error-text mt-1">{errors.confirm_password.message}</p>}
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full py-3 bg-accent-600 hover:bg-accent-700 disabled:opacity-60 text-white font-semibold rounded-xl transition-colors mt-2"
+          >
+            {saving ? 'Saving…' : 'Set Password & Continue'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── Profile Completion Modal ─────────────────────────────────────────────────
 /**
  * One-time popup shown to users whose profile_completed flag is false.
@@ -325,9 +435,8 @@ const ProfileCompleteModal = () => {
   const [missingFields, setMissingFields] = useState(null)
   const [saving, setSaving]               = useState(false)
 
-  const isAdminLevel = user?.isOwner || user?.role === 'admin' ||
-                       user?.designation === 'Admin' || user?.designation === 'Owner'
-  const shouldCheck  = isAdminLevel && profileCompleted === false
+  // Show to ALL authenticated company users (not super-admin or seller — they have no profile_completed flag)
+  const shouldCheck = !!user?.id && !user?.isSuperAdmin && !user?.isSeller && profileCompleted === false
 
   const { register, handleSubmit, formState: { errors } } = useForm({ mode: 'onBlur' })
 
@@ -487,6 +596,7 @@ function App() {
   return (
     <ErrorBoundary>
     <AuthInitializer>
+    <ForcePasswordModal />
     <ProfileCompleteModal />
     <Routes>
       {/* AUTH — Login & ForgotPassword use the split-panel AuthLayout */}

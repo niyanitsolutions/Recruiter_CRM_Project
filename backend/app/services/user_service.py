@@ -143,6 +143,9 @@ class UserService:
                 "role": user_data.role,
                 "role_id": user_data.role_id,
                 "permissions": role_permissions,
+                # Mark override so _resolve_effective_permissions uses this exact list at login.
+                # Without this, login falls back to ROLE_PERMISSIONS["admin"] which has ALL perms.
+                "override_permissions": user_data.permissions is not None,
                 "user_type": "partner" if user_data.role == "partner" else (user_data.user_type or "internal"),
                 "designation": user_data.designation,
                 "designation_id": user_data.designation_id,
@@ -438,8 +441,19 @@ class UserService:
                         p.value for p in ROLE_DEFAULT_PERMISSIONS.get(role_enum, [])
                     ] if role_enum else []
 
-            # Remove override_permissions if sent (field no longer used)
-            update_dict.pop("override_permissions", None)
+            # Derive override_permissions from what the caller sent.
+            # True  → _resolve_effective_permissions uses this stored list at login.
+            # False → login derives from role doc / ROLE_PERMISSIONS (role-driven fallback).
+            # Must be set BEFORE the pop so we keep the value we compute, not what caller sent.
+            if "permissions" in update_dict:
+                _new_override = True   # explicit permissions list supplied → honour it
+            elif "role" in update_dict:
+                _new_override = False  # role changed, no custom perms → revert to role-driven
+            else:
+                _new_override = None   # neither changed → don't touch the field
+            update_dict.pop("override_permissions", None)  # never let caller set this directly
+            if _new_override is not None:
+                update_dict["override_permissions"] = _new_override
 
             # Auto-derive user_type when role changes (if not explicitly set)
             if "role" in update_dict and "user_type" not in update_dict:

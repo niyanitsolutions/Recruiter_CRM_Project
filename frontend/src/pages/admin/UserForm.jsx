@@ -103,9 +103,17 @@ function computePermissions(dept, level, restrictedMods, additionalDepts) {
   const cfg = DEPT_MODULES[dept]
   if (!cfg) return ['dashboard:view']
 
-  const fullMods  = new Set(cfg.full)
-  const viewMods  = new Set(cfg.view_only)
+  // Owner = full access to every module at every level — no delete restriction, no restrict-modules
+  if (dept === 'owner') {
+    const all = new Set(['dashboard:view'])
+    Object.values(MODULE_PERMS).forEach(perms => perms.forEach(p => all.add(p)))
+    return [...all]
+  }
 
+  const fullMods = new Set(cfg.full)
+  const viewMods = new Set(cfg.view_only)
+
+  // Issue 6: merge additional departments (union of permissions)
   ;(additionalDepts || []).forEach(d => {
     const addCfg = DEPT_MODULES[d]
     if (!addCfg) return
@@ -115,6 +123,7 @@ function computePermissions(dept, level, restrictedMods, additionalDepts) {
 
   const perms = new Set(['dashboard:view'])
 
+  // Issue 7: executive → no delete; manager → all including delete
   fullMods.forEach(mod => {
     ;(MODULE_PERMS[mod] || []).forEach(p => {
       if (level === 'executive' && p.endsWith(':delete')) return
@@ -126,6 +135,7 @@ function computePermissions(dept, level, restrictedMods, additionalDepts) {
     ;(MODULE_PERMS[mod] || []).filter(p => p.endsWith(':view')).forEach(p => perms.add(p))
   })
 
+  // Issue 5: remove all permissions for restricted modules
   ;(restrictedMods || []).forEach(mod => {
     ;(MODULE_PERMS[mod] || []).forEach(p => perms.delete(p))
   })

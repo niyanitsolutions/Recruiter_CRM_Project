@@ -10,6 +10,24 @@ from app.models.company.user import (
     UserResponse, UserListResponse, UserStatus, UserRole,
     ChangePasswordRequest, ResetPasswordByAdmin
 )
+from pydantic import BaseModel, Field, field_validator
+import re as _re
+
+class ForceChangePasswordRequest(BaseModel):
+    """Schema for the first-login forced password reset (no current_password required)."""
+    new_password: str = Field(..., min_length=8, max_length=100)
+    confirm_password: str
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v):
+        if not _re.search(r'[A-Z]', v):
+            raise ValueError('Must contain at least one uppercase letter')
+        if not _re.search(r'[a-z]', v):
+            raise ValueError('Must contain at least one lowercase letter')
+        if not _re.search(r'\d', v):
+            raise ValueError('Must contain at least one digit')
+        return v
 from app.services.user_service import UserService
 from app.core.dependencies import (
     get_current_user, get_company_db, require_permissions
@@ -339,6 +357,55 @@ async def change_own_password(
         "success": True,
         "message": message
     }
+
+
+@router.post("/me/force-change-password")
+async def force_change_own_password(
+    password_data: ForceChangePasswordRequest,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db),
+):
+    """
+    First-login forced password reset — no current_password required.
+    Only valid when must_change_password=True on the user record.
+    Clears must_change_password on success.
+    """
+    import bcrypt
+    from datetime import datetime, timezone
+    from app.models.master.global_user import sync_global_password
+    from app.core.database import get_master_db
+
+    if password_data.new_password != password_data.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+
+    user_id = current_user["id"]
+    user = await db.users.find_one({"_id": user_id, "is_deleted": False})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_hash = bcrypt.hashpw(
+        password_data.new_password.encode("utf-8"),
+        bcrypt.gensalt(rounds=12),
+    ).decode("utf-8")
+
+    await db.users.update_one(
+        {"_id": user_id},
+        {"$set": {
+            "password_hash":      new_hash,
+            "must_change_password": False,
+            "password_changed_at": datetime.now(timezone.utc),
+            "updated_at":         datetime.now(timezone.utc),
+        }},
+    )
+
+    # Sync to global identity layer (best-effort)
+    try:
+        master_db = get_master_db()
+        await sync_global_password(master_db, email=user["email"], new_password_hash=new_hash)
+    except Exception:
+        pass
+
+    return {"success": True, "message": "Password updated successfully"}
 
 
 @router.get("/{user_id}")

@@ -70,11 +70,7 @@ const Login = () => {
         removeSavedEmail()
         removeSavedPassword()
       }
-      if (result.payload.must_change_password) {
-        toast.success('Login successful! Please change your password.')
-        navigate('/change-password')
-        return
-      }
+      // must_change_password → ForcePasswordModal in App.jsx handles it as a blocking modal
       toast.success('Login successful!')
     } else if (loginWithTenant.rejected.match(result)) {
       const payload = result.payload
@@ -106,11 +102,7 @@ const Login = () => {
         removeSavedPassword()
       }
 
-      if (result.payload.must_change_password) {
-        toast.success('Login successful! Please change your password.')
-        navigate('/change-password')
-        return
-      }
+      // must_change_password → ForcePasswordModal in App.jsx handles it as a blocking modal
       toast.success('Login successful!')
     } else if (login.rejected.match(result)) {
       const payload = result.payload
