@@ -225,7 +225,7 @@ async def run(dry_run: bool) -> None:
     logger.info("Global-users migration  |  dry_run=%s", dry_run)
     logger.info("=" * 60)
 
-    client     = AsyncIOMotorClient(settings.MONGODB_URL)
+    client     = AsyncIOMotorClient(settings.MONGODB_URI)
     master_db  = client[settings.MASTER_DB_NAME]
 
     # Ensure indexes exist before writing (idempotent)
