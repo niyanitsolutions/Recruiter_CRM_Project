@@ -58,6 +58,9 @@ services:
     environment:
       # Redis uses the internal Docker network (no port exposed externally)
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     volumes:
       - uploads_data:/app/uploads
     depends_on:

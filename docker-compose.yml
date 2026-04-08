@@ -69,6 +69,9 @@ services:
       # Override to use Docker service names instead of localhost
       MONGODB_URI: mongodb://admin:admin123@mongodb:27017/?authSource=admin
       REDIS_URL: redis://redis:6379/0
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     volumes:
       - uploads_data:/app/uploads
       # Hot reload in dev — remove this line for staging/prod builds

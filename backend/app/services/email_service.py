@@ -106,12 +106,8 @@ def _do_send(cfg: dict, to_email: str, subject: str,
 
     timeout = cfg.get("timeout", settings.SMTP_TIMEOUT)
 
-    logger.info("[SMTP] STEP 1: Connecting to %s:%s (timeout=%ss)", cfg["host"], cfg["port"], timeout)
-    with smtplib.SMTP(cfg["host"], cfg["port"], timeout=timeout) as server:
-        server.ehlo()
-        logger.info("[SMTP] STEP 2: Starting TLS")
-        server.starttls()
-        server.ehlo()
+    logger.info("[SMTP] STEP 1: Connecting to %s:%s via SSL (timeout=%ss)", cfg["host"], cfg["port"], timeout)
+    with smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=timeout) as server:
         logger.info("[SMTP] STEP 3: Logging in as %s", cfg["username"])
         server.login(cfg["username"], cfg["password"])
         logger.info("[SMTP] STEP 4: Sending to %s | subject=%s", to_email, subject)
