@@ -203,7 +203,7 @@ const Login = () => {
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-800">
           <p className="font-semibold mb-1">{loginFailed}</p>
           <p className="text-red-700">
-            Double-check your username / email / mobile and password, or create a new account to get started.
+            Double-check your email / mobile number and password, or create a new account to get started.
           </p>
         </div>
 
@@ -405,8 +405,8 @@ const Login = () => {
       {/* Login Form */}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Input
-          label="Username, Email, or Mobile"
-          placeholder="Enter username, email, or mobile"
+          label="Email or Mobile Number"
+          placeholder="Enter email or mobile number"
           leftIcon={<Mail className="w-4 h-4" />}
           error={errors.identifier?.message}
           {...register('identifier', {
