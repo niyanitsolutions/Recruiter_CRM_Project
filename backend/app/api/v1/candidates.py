@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime, timezone, timedelta
-import uuid, asyncio
+import uuid
 
 from app.models.company.candidate import (
     CandidateCreate, CandidateUpdate, CandidateResponse, CandidateListResponse,
@@ -433,32 +433,47 @@ async def generate_candidate_form_link(
     email_sent = False
     email_enabled = _settings.EMAIL_ENABLED
 
-    if body.email and email_enabled:
-        base = (body.frontend_base_url or "").rstrip("/")
-        form_url = f"{base}/apply/{token}"
-        try:
-            from app.services.email_service import EmailService
-            html = (
-                f"<p>Hello,</p>"
-                f"<p>You have been invited to complete a candidate registration form. "
-                f"Please click the link below to submit your details:</p>"
-                f"<p><a href='{form_url}'>{form_url}</a></p>"
-                f"<p>This link expires in 7 days.</p>"
-                f"<p>Regards,<br/>{current_user.get('full_name', 'The Recruitment Team')}</p>"
+    base = (body.frontend_base_url or "").rstrip("/")
+    form_url = f"{base}/apply/{token}"
+
+    if body.email:
+        if not email_enabled:
+            # EMAIL_ENABLED=False — log clearly, still return the link
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "[CANDIDATE FORM] Email not sent (EMAIL_ENABLED=False). "
+                "to=%s token=%s", body.email, token
             )
-            text = f"Candidate Registration Form\n\n{form_url}\n\nThis link expires in 7 days."
-            email_sent = await asyncio.to_thread(
-                EmailService._send_smtp, body.email, "Candidate Registration Form", html, text
-            )
-        except Exception:
-            pass  # Email failure is never fatal
+        else:
+            try:
+                from app.services.email_service import send_candidate_form_link_email
+                email_sent = await send_candidate_form_link_email(
+                    to_email=body.email,
+                    form_url=form_url,
+                    sent_by_name=current_user.get("full_name", "The Recruitment Team"),
+                    company_name=current_user.get("company_name", ""),
+                    company_id=current_user.get("company_id", ""),
+                )
+            except Exception as _e:
+                import logging as _log
+                _log.getLogger(__name__).error(
+                    "[CANDIDATE FORM] Email send failed. to=%s error=%s", body.email, _e
+                )
+
+    if body.email and email_enabled and not email_sent:
+        msg = "Form link generated but email could not be delivered. Copy the link to share manually."
+    elif email_sent:
+        msg = "Form link sent successfully"
+    else:
+        msg = "Form link generated"
 
     return {
         "success": True,
         "token": token,
+        "form_url": form_url,
         "email_sent": email_sent,
         "email_enabled": email_enabled,
-        "message": "Form link sent successfully" if email_sent else "Form link generated",
+        "message": msg,
     }
 
 

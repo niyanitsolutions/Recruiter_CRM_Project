@@ -1079,14 +1079,25 @@ class AuthService:
         """
         Initiate password reset process.
 
-        Returns:
-            Tuple of (success, message/token)
+        Returns (success, message).
+        • Account found + email sent     → (True,  "Password reset instructions sent …")
+        • Account found + email FAILED   → (False, "Email service unavailable …")
+        • Account not found              → (True,  generic "if an account exists …")
+          (generic message prevents email enumeration)
         """
         master_db = get_master_db()
+        _EMAIL_UNAVAILABLE = (
+            "Email service unavailable. Please try again later or contact support."
+        )
+        _EMAIL_OK = "Password reset instructions sent to your email"
+        _NOT_FOUND = "If an account exists with this email, reset instructions have been sent"
 
         from app.services.email_service import send_password_reset_email as _send_reset
 
-        super_admin = await master_db.super_admins.find_one({"email": email, "is_deleted": False})
+        # ── Super admin ───────────────────────────────────────────────────────
+        super_admin = await master_db.super_admins.find_one(
+            {"email": email, "is_deleted": False}
+        )
         if super_admin:
             reset_token = generate_reset_token()
             await master_db.super_admins.update_one(
@@ -1096,16 +1107,20 @@ class AuthService:
                     "reset_token_expiry": datetime.now(timezone.utc) + timedelta(hours=1),
                 }}
             )
-            try:
-                await _send_reset(
-                    to_email=email,
-                    full_name=super_admin.get("full_name", "Admin"),
-                    reset_token=reset_token,
+            sent = await _send_reset(
+                to_email=email,
+                full_name=super_admin.get("full_name", "Admin"),
+                reset_token=reset_token,
+            )
+            if not sent:
+                logger.error(
+                    "Password reset email FAILED for super_admin %s. "
+                    "Token saved in DB — user can request again.", email
                 )
-            except Exception:
-                pass
-            return True, "Password reset instructions sent to your email"
+                return False, _EMAIL_UNAVAILABLE
+            return True, _EMAIL_OK
 
+        # ── Tenant owner ──────────────────────────────────────────────────────
         tenant = await master_db.tenants.find_one({"owner.email": email})
         if tenant:
             reset_token = generate_reset_token()
@@ -1117,16 +1132,20 @@ class AuthService:
                 }}
             )
             owner = tenant.get("owner", {})
-            try:
-                await _send_reset(
-                    to_email=email,
-                    full_name=owner.get("full_name", ""),
-                    reset_token=reset_token,
+            sent = await _send_reset(
+                to_email=email,
+                full_name=owner.get("full_name", ""),
+                reset_token=reset_token,
+            )
+            if not sent:
+                logger.error(
+                    "Password reset email FAILED for tenant owner %s. "
+                    "Token saved in DB — user can request again.", email
                 )
-            except Exception:
-                pass
-            return True, "Password reset instructions sent to your email"
+                return False, _EMAIL_UNAVAILABLE
+            return True, _EMAIL_OK
 
+        # ── Company users (global scan) ───────────────────────────────────────
         tenants_cursor = master_db.tenants.find({"status": TenantStatus.ACTIVE})
         async for tenant in tenants_cursor:
             company_db = get_company_db(tenant["company_id"])
@@ -1140,17 +1159,22 @@ class AuthService:
                         "reset_token_expiry": datetime.now(timezone.utc) + timedelta(hours=1),
                     }}
                 )
-                try:
-                    await _send_reset(
-                        to_email=email,
-                        full_name=user.get("full_name", ""),
-                        reset_token=reset_token,
+                sent = await _send_reset(
+                    to_email=email,
+                    full_name=user.get("full_name", ""),
+                    reset_token=reset_token,
+                )
+                if not sent:
+                    logger.error(
+                        "Password reset email FAILED for user %s in company %s. "
+                        "Token saved in DB — user can request again.",
+                        email, tenant["company_id"]
                     )
-                except Exception:
-                    pass
-                return True, "Password reset instructions sent to your email"
+                    return False, _EMAIL_UNAVAILABLE
+                return True, _EMAIL_OK
 
-        return True, "If an account exists with this email, reset instructions have been sent"
+        # Account not found — return generic message (anti-enumeration)
+        return True, _NOT_FOUND
 
 
 # Singleton instance

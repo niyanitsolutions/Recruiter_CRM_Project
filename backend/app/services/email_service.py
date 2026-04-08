@@ -1,20 +1,33 @@
 """
 Email Service — Dual SMTP (system + tenant) with fallback and logging.
 
-Routing rules:
-  - SYSTEM emails (auth, verification, password reset) → always system SMTP
-  - BUSINESS emails (invoices, targets, tasks, welcome) → tenant SMTP if configured,
-    fallback to system SMTP on error or if not configured
+Routing rules
+─────────────
+  SYSTEM emails (auth, verification, password reset)
+      → always use system SMTP  (force_system=True)
+  BUSINESS emails (invoices, tasks, targets, welcome, candidates, jobs)
+      → try tenant SMTP first; fall back to system SMTP on error
 
-All sends are logged to master_db.email_logs.
+Every send attempt is logged to master_db.email_logs.
+
+Failure behaviour
+─────────────────
+  • EMAIL_ENABLED = False  → WARNING logged, returns False immediately
+  • Credentials missing    → ERROR logged, returns False immediately
+  • SMTP send error        → ERROR logged with full exception, returns False
+  • Tenant SMTP fails      → WARNING logged, retried automatically via system SMTP
+
+NO silent failures — every failure path writes to logs.
 """
+
+from __future__ import annotations
 
 import asyncio
 import smtplib
 import logging
 from datetime import datetime, timezone
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Optional
 
 from app.core.config import settings
@@ -23,10 +36,32 @@ from app.core.database import get_master_db, get_company_db
 logger = logging.getLogger(__name__)
 
 
-# ── Fernet helper ─────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _effective_from_email() -> str:
+    """Return SMTP_FROM_EMAIL falling back to SMTP_USERNAME when not configured."""
+    return settings.SMTP_FROM_EMAIL.strip() or settings.SMTP_USERNAME.strip()
+
+
+def _smtp_cfg_from_settings() -> dict:
+    return {
+        "host": settings.SMTP_HOST,
+        "port": settings.SMTP_PORT,
+        "username": settings.SMTP_USERNAME.strip(),
+        "password": settings.SMTP_PASSWORD,          # never logged
+        "from_email": _effective_from_email(),
+        "from_name": settings.SMTP_FROM_NAME,
+        "timeout": settings.SMTP_TIMEOUT,
+    }
+
+
+def _credentials_ok(cfg: dict) -> bool:
+    return bool(cfg.get("username")) and bool(cfg.get("password"))
+
+
+# ── Fernet encryption (tenant SMTP passwords) ─────────────────────────────────
 
 def _fernet():
-    """Return Fernet instance, or None if key is not set."""
     if not settings.FERNET_SECRET_KEY:
         return None
     try:
@@ -38,9 +73,7 @@ def _fernet():
 
 def encrypt_password(plain: str) -> str:
     f = _fernet()
-    if not f:
-        return plain
-    return f.encrypt(plain.encode()).decode()
+    return f.encrypt(plain.encode()).decode() if f else plain
 
 
 def decrypt_password(encrypted: str) -> str:
@@ -53,23 +86,14 @@ def decrypt_password(encrypted: str) -> str:
         return encrypted
 
 
-# ── Low-level send ─────────────────────────────────────────────────────────────
+# ── Low-level synchronous SMTP send ───────────────────────────────────────────
 
-def _smtp_cfg_from_settings() -> dict:
-    return {
-        "host": settings.SMTP_HOST,
-        "port": settings.SMTP_PORT,
-        "username": settings.SMTP_USERNAME,
-        "password": settings.SMTP_PASSWORD,
-        "from_email": settings.SMTP_FROM_EMAIL,
-        "from_name": settings.SMTP_FROM_NAME,
-    }
-
-
-def _do_send(cfg: dict, to_email: str, subject: str, html_body: str, text_body: str = "") -> None:
+def _do_send(cfg: dict, to_email: str, subject: str,
+             html_body: str, text_body: str = "") -> None:
     """
-    Synchronous SMTP send.  Raises on failure so callers can fallback.
-    cfg keys: host, port, username, password, from_email, from_name
+    Synchronous SMTP send via STARTTLS.
+    Raises on any failure — callers decide how to handle.
+    NOTE: SMTP password is NEVER included in log output.
     """
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -77,12 +101,14 @@ def _do_send(cfg: dict, to_email: str, subject: str, html_body: str, text_body: 
     msg["To"] = to_email
 
     if text_body:
-        msg.attach(MIMEText(text_body, "plain"))
-    msg.attach(MIMEText(html_body, "html"))
+        msg.attach(MIMEText(text_body, "plain", "utf-8"))
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    with smtplib.SMTP(cfg["host"], cfg["port"], timeout=15) as server:
+    timeout = cfg.get("timeout", 15)
+    with smtplib.SMTP(cfg["host"], cfg["port"], timeout=timeout) as server:
         server.ehlo()
         server.starttls()
+        server.ehlo()
         server.login(cfg["username"], cfg["password"])
         server.sendmail(cfg["from_email"], to_email, msg.as_string())
 
@@ -93,12 +119,12 @@ async def _log_email(
     to: str,
     subject: str,
     event_type: str,
-    smtp_used: str,   # "system" | "tenant" | "none"
+    smtp_used: str,          # "system" | "tenant" | "none"
     success: bool,
     error: str = "",
     company_id: str = "",
 ) -> None:
-    """Fire-and-forget write to master_db.email_logs."""
+    """Fire-and-forget write to master_db.email_logs. Never raises."""
     try:
         master_db = get_master_db()
         await master_db.email_logs.insert_one({
@@ -108,18 +134,18 @@ async def _log_email(
             "smtp_used": smtp_used,
             "company_id": company_id,
             "success": success,
-            "error": error,
+            "error": error[:500] if error else "",   # truncate very long traces
             "created_at": datetime.now(timezone.utc),
         })
     except Exception as exc:
-        logger.debug("Failed to write email log: %s", exc)
+        logger.debug("email_logs write failed: %s", exc)
 
 
-# ── Tenant SMTP config ─────────────────────────────────────────────────────────
+# ── Tenant SMTP config loader ─────────────────────────────────────────────────
 
 async def _get_tenant_smtp(company_id: str) -> Optional[dict]:
     """
-    Load and decrypt tenant SMTP config from company_db.smtp_config.
+    Load and decrypt tenant SMTP from company_db.smtp_config.
     Returns None if not configured or not enabled.
     """
     if not company_id:
@@ -129,20 +155,24 @@ async def _get_tenant_smtp(company_id: str) -> Optional[dict]:
         doc = await db.smtp_config.find_one({"_id": "smtp"})
         if not doc or not doc.get("enabled"):
             return None
+        pwd = decrypt_password(doc.get("password", ""))
+        if not doc.get("username") or not pwd:
+            return None
         return {
             "host": doc["host"],
             "port": int(doc.get("port", 587)),
             "username": doc["username"],
-            "password": decrypt_password(doc["password"]),
-            "from_email": doc.get("from_email", doc["username"]),
+            "password": pwd,
+            "from_email": doc.get("from_email") or doc["username"],
             "from_name": doc.get("from_name", ""),
+            "timeout": settings.SMTP_TIMEOUT,
         }
     except Exception as exc:
-        logger.debug("Could not load tenant SMTP for %s: %s", company_id, exc)
+        logger.debug("Tenant SMTP load failed for %s: %s", company_id, exc)
         return None
 
 
-# ── Core send function ─────────────────────────────────────────────────────────
+# ── Core send function ────────────────────────────────────────────────────────
 
 async def send_email(
     to: str,
@@ -151,67 +181,210 @@ async def send_email(
     text_body: str = "",
     event_type: str = "general",
     *,
-    company_id: str = "",          # when set, tries tenant SMTP first
-    force_system: bool = False,    # auth/system emails always bypass tenant SMTP
+    company_id: str = "",
+    force_system: bool = False,
 ) -> bool:
     """
-    Send an email.  Returns True on success, False on failure/disabled.
+    Send an email.  Returns True on success, False on any failure.
+
+    Every failure is logged — no silent errors.
 
     Routing:
-      - force_system=True OR no company_id  → system SMTP only
-      - company_id provided                 → try tenant SMTP, fallback to system
+      force_system=True  → system SMTP only  (auth emails)
+      company_id set     → try tenant SMTP → fallback to system SMTP
+      neither            → system SMTP only
     """
+    # ── Guard: EMAIL_ENABLED ──────────────────────────────────────────────────
     if not settings.EMAIL_ENABLED:
-        logger.debug("[EMAIL DISABLED] %s → %s", event_type, to)
+        logger.warning(
+            "[EMAIL DISABLED] Skipping send. Set EMAIL_ENABLED=True to enable. "
+            "event=%s to=%s subject=%s", event_type, to, subject
+        )
+        await _log_email(to, subject, event_type, "none", False,
+                         "EMAIL_ENABLED=False", company_id)
         return False
 
     sys_cfg = _smtp_cfg_from_settings()
-    if not sys_cfg["username"]:
-        logger.info("[EMAIL FALLBACK - SMTP not configured] %s → %s", event_type, to)
-        await _log_email(to, subject, event_type, "none", False, "SMTP not configured", company_id)
+
+    # ── Guard: credentials configured ────────────────────────────────────────
+    if not _credentials_ok(sys_cfg):
+        logger.error(
+            "[EMAIL ERROR] System SMTP credentials not configured. "
+            "Set SMTP_USERNAME and SMTP_PASSWORD in .env. "
+            "event=%s to=%s", event_type, to
+        )
+        await _log_email(to, subject, event_type, "none", False,
+                         "SMTP credentials not configured", company_id)
         return False
 
-    # Try tenant SMTP (business emails)
+    # ── Try tenant SMTP (business emails only) ────────────────────────────────
     if company_id and not force_system:
         tenant_cfg = await _get_tenant_smtp(company_id)
         if tenant_cfg:
             try:
-                await asyncio.to_thread(_do_send, tenant_cfg, to, subject, html_body, text_body)
-                logger.info("[EMAIL SENT via tenant] %s → %s | %s", event_type, to, subject)
+                await asyncio.to_thread(
+                    _do_send, tenant_cfg, to, subject, html_body, text_body
+                )
+                logger.info("[EMAIL SENT via tenant SMTP] event=%s to=%s", event_type, to)
                 await _log_email(to, subject, event_type, "tenant", True, "", company_id)
                 return True
+            except smtplib.SMTPAuthenticationError as exc:
+                logger.warning(
+                    "[EMAIL tenant SMTP auth failed, falling back to system] "
+                    "host=%s user=%s error=%s",
+                    tenant_cfg["host"], tenant_cfg["username"], exc
+                )
             except Exception as exc:
-                logger.warning("[EMAIL tenant failed, falling back to system] %s: %s", to, exc)
+                logger.warning(
+                    "[EMAIL tenant SMTP failed, falling back to system] "
+                    "host=%s error=%s", tenant_cfg["host"], exc
+                )
 
-    # System SMTP
+    # ── System SMTP ───────────────────────────────────────────────────────────
     try:
-        await asyncio.to_thread(_do_send, sys_cfg, to, subject, html_body, text_body)
-        logger.info("[EMAIL SENT via system] %s → %s | %s", event_type, to, subject)
+        await asyncio.to_thread(
+            _do_send, sys_cfg, to, subject, html_body, text_body
+        )
+        logger.info("[EMAIL SENT via system SMTP] event=%s to=%s", event_type, to)
         await _log_email(to, subject, event_type, "system", True, "", company_id)
         return True
+
+    except smtplib.SMTPAuthenticationError as exc:
+        msg = (
+            "SMTP authentication failed. "
+            f"Check SMTP_USERNAME and SMTP_PASSWORD in .env. "
+            f"If using Gmail, ensure you are using an App Password (not your account password). "
+            f"host={sys_cfg['host']} user={sys_cfg['username']} error={exc}"
+        )
+        logger.error("[EMAIL ERROR] %s", msg)
+        await _log_email(to, subject, event_type, "system", False, str(exc), company_id)
+        return False
+
+    except smtplib.SMTPConnectError as exc:
+        msg = (
+            f"Cannot connect to SMTP server {sys_cfg['host']}:{sys_cfg['port']}. "
+            f"Check SMTP_HOST and SMTP_PORT. error={exc}"
+        )
+        logger.error("[EMAIL ERROR] %s", msg)
+        await _log_email(to, subject, event_type, "system", False, str(exc), company_id)
+        return False
+
     except Exception as exc:
-        logger.error("[EMAIL ERROR] %s → %s | %s", event_type, to, exc)
+        logger.error(
+            "[EMAIL ERROR] Unexpected failure sending to %s. event=%s error=%s",
+            to, event_type, exc
+        )
         await _log_email(to, subject, event_type, "system", False, str(exc), company_id)
         return False
 
 
-# ── Email templates ───────────────────────────────────────────────────────────
+# ── Startup validator ─────────────────────────────────────────────────────────
+
+def validate_smtp_on_startup() -> None:
+    """
+    Called once at application startup.
+    Logs clear warnings/errors about email configuration without raising.
+    Does NOT attempt a live SMTP connection (that would slow startup).
+    """
+    if not settings.EMAIL_ENABLED:
+        logger.warning(
+            "[EMAIL] Email is DISABLED (EMAIL_ENABLED=False). "
+            "All email sends will be skipped. "
+            "Set EMAIL_ENABLED=True in .env to enable."
+        )
+        return
+
+    missing = []
+    if not settings.SMTP_USERNAME:
+        missing.append("SMTP_USERNAME")
+    if not settings.SMTP_PASSWORD:
+        missing.append("SMTP_PASSWORD")
+
+    if missing:
+        logger.error(
+            "[EMAIL] EMAIL_ENABLED=True but SMTP credentials are missing: %s. "
+            "Email sends will fail until these are set in .env.",
+            ", ".join(missing)
+        )
+        return
+
+    from_email = _effective_from_email()
+    logger.info(
+        "[EMAIL] SMTP configured: host=%s port=%s user=%s from=%s",
+        settings.SMTP_HOST, settings.SMTP_PORT,
+        settings.SMTP_USERNAME, from_email,
+    )
+
+
+# ── SMTP connection test ──────────────────────────────────────────────────────
+
+def test_smtp_connection(cfg: dict) -> tuple[bool, str]:
+    """
+    Synchronous live SMTP test (no email sent).
+    Returns (success, message). Call via asyncio.to_thread from async context.
+    NOTE: password is never included in the returned message.
+    """
+    host = cfg.get("host", settings.SMTP_HOST)
+    port = int(cfg.get("port", settings.SMTP_PORT))
+    username = cfg.get("username", settings.SMTP_USERNAME)
+    password = cfg.get("password", settings.SMTP_PASSWORD)
+    timeout = int(cfg.get("timeout", settings.SMTP_TIMEOUT))
+
+    if not username or not password:
+        return False, "SMTP credentials not provided"
+
+    try:
+        with smtplib.SMTP(host, port, timeout=timeout) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(username, password)
+        return True, f"SMTP connection to {host}:{port} successful"
+    except smtplib.SMTPAuthenticationError:
+        return (
+            False,
+            f"Authentication failed for {username} on {host}:{port}. "
+            "If using Gmail, use an App Password (Google Account → Security → App Passwords).",
+        )
+    except smtplib.SMTPConnectError as exc:
+        return False, f"Cannot connect to {host}:{port} — {exc}"
+    except Exception as exc:
+        return False, str(exc)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  HTML template helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
 _BRAND = settings.SMTP_FROM_NAME or "CRM Platform"
 
 
 def _wrap(body_html: str) -> str:
-    return f"""
-<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#374151">
-  {body_html}
-  <hr style="border:none;border-top:1px solid #E5E7EB;margin:32px 0">
-  <p style="color:#9CA3AF;font-size:12px">
-    This email was sent by {_BRAND}. Do not reply to this email.
-  </p>
-</div>"""
+    """Wrap an HTML snippet in a consistent branded shell."""
+    return f"""<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#F3F4F6;font-family:Arial,sans-serif">
+<div style="max-width:600px;margin:32px auto;background:#fff;border-radius:12px;
+            box-shadow:0 2px 8px rgba(0,0,0,.08);overflow:hidden">
+  <div style="background:#4F46E5;padding:24px 32px">
+    <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700">{_BRAND}</h1>
+  </div>
+  <div style="padding:32px;color:#374151;font-size:14px;line-height:1.6">
+    {body_html}
+  </div>
+  <div style="background:#F9FAFB;padding:16px 32px;border-top:1px solid #E5E7EB;
+              font-size:12px;color:#9CA3AF;text-align:center">
+    This email was sent by {_BRAND}. Do not reply to this message.
+  </div>
+</div>
+</body>
+</html>"""
 
 
-# ── Auth / system emails (force_system=True) ──────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+#  System / auth emails  (force_system=True — always use system SMTP)
+# ─────────────────────────────────────────────────────────────────────────────
 
 async def send_verification_email(
     to_email: str,
@@ -223,25 +396,32 @@ async def send_verification_email(
     verify_url = f"{settings.FRONTEND_URL}/verify-email?token={token}&type={account_type}"
     subject = f"Verify your {_BRAND} account"
     html = _wrap(f"""
-      <h2 style="color:#4F46E5">Welcome to {_BRAND}!</h2>
+      <h2 style="color:#4F46E5;margin-top:0">Verify your email</h2>
       <p>Hi <strong>{full_name}</strong>,</p>
-      <p>Thanks for signing up. Please verify your email address to activate your account.</p>
+      <p>Thanks for signing up. Click the button below to verify your email address
+         and activate your account.</p>
       <div style="text-align:center;margin:32px 0">
         <a href="{verify_url}"
            style="background:#4F46E5;color:#fff;padding:14px 28px;border-radius:8px;
-                  text-decoration:none;font-weight:bold;display:inline-block">
+                  text-decoration:none;font-weight:700;display:inline-block;font-size:14px">
           Verify Email Address
         </a>
       </div>
       <p style="color:#6B7280;font-size:13px">
-        Or copy this link: <a href="{verify_url}">{verify_url}</a>
+        Or copy this link:<br>
+        <a href="{verify_url}" style="color:#4F46E5;word-break:break-all">{verify_url}</a>
       </p>
       <p style="color:#6B7280;font-size:12px">
-        This link expires in <strong>{expire_min} minutes</strong>.
-        If you did not create an account, ignore this email.
+        ⏱ This link expires in <strong>{expire_min} minutes</strong>.
+        If you did not create an account, you can safely ignore this email.
       </p>""")
-    text = f"Hi {full_name},\n\nVerify your email: {verify_url}\nExpires in {expire_min} minutes."
-    return await send_email(to_email, subject, html, text, "email_verification", force_system=True)
+    text = (
+        f"Hi {full_name},\n\nVerify your {_BRAND} account:\n{verify_url}\n\n"
+        f"Expires in {expire_min} minutes."
+    )
+    return await send_email(
+        to_email, subject, html, text, "email_verification", force_system=True
+    )
 
 
 async def send_password_reset_email(
@@ -252,55 +432,72 @@ async def send_password_reset_email(
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
     subject = f"Reset your {_BRAND} password"
     html = _wrap(f"""
-      <h2 style="color:#4F46E5">Password Reset</h2>
+      <h2 style="color:#4F46E5;margin-top:0">Password Reset</h2>
       <p>Hi <strong>{full_name}</strong>,</p>
-      <p>We received a request to reset your password. Click the button below to choose a new one.</p>
+      <p>We received a request to reset your password. Click the button below to
+         choose a new password.</p>
       <div style="text-align:center;margin:32px 0">
         <a href="{reset_url}"
            style="background:#4F46E5;color:#fff;padding:14px 28px;border-radius:8px;
-                  text-decoration:none;font-weight:bold;display:inline-block">
+                  text-decoration:none;font-weight:700;display:inline-block;font-size:14px">
           Reset Password
         </a>
       </div>
-      <p style="color:#6B7280;font-size:12px">
-        This link expires in <strong>1 hour</strong>.
-        If you did not request this, ignore this email.
+      <p style="color:#6B7280;font-size:13px">
+        Or copy this link:<br>
+        <a href="{reset_url}" style="color:#4F46E5;word-break:break-all">{reset_url}</a>
+      </p>
+      <p style="color:#9CA3AF;font-size:12px">
+        ⏱ This link expires in <strong>1 hour</strong>.
+        If you did not request a password reset, you can safely ignore this email.
       </p>""")
-    text = f"Hi {full_name},\n\nReset your password: {reset_url}\nExpires in 1 hour."
-    return await send_email(to_email, subject, html, text, "password_reset", force_system=True)
+    text = (
+        f"Hi {full_name},\n\nReset your {_BRAND} password:\n{reset_url}\n\n"
+        "Expires in 1 hour."
+    )
+    return await send_email(
+        to_email, subject, html, text, "password_reset", force_system=True
+    )
 
 
 async def send_subscription_reminder_email(
     to_email: str,
     full_name: str,
     company_name: str,
-    plan_expiry: Optional[datetime],
+    plan_expiry,
     account_type: str = "tenant",
 ) -> bool:
     expiry_str = plan_expiry.strftime("%d %B %Y") if plan_expiry else "soon"
     login_url = f"{settings.FRONTEND_URL}/login"
     subject = f"Your {_BRAND} subscription expires in 3 days"
     html = _wrap(f"""
-      <div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:16px;margin-bottom:24px;border-radius:4px">
-        <h2 style="color:#92400E;margin:0 0 8px 0">Subscription Expiring Soon</h2>
-        <p style="color:#92400E;margin:0">Your subscription expires in 3 days</p>
+      <div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:16px;
+                  border-radius:4px;margin-bottom:24px">
+        <strong style="color:#92400E">⚠ Subscription expiring in 3 days</strong>
       </div>
       <p>Hi <strong>{full_name}</strong>,</p>
-      <p>Your <strong>{company_name}</strong> subscription expires on
-         <strong style="color:#DC2626">{expiry_str}</strong>.</p>
+      <p>Your <strong>{company_name}</strong> subscription on <strong>{_BRAND}</strong>
+         expires on <strong style="color:#DC2626">{expiry_str}</strong>.</p>
+      <p>Renew before the expiry date to avoid service interruption.</p>
       <div style="text-align:center;margin:32px 0">
         <a href="{login_url}"
            style="background:#F59E0B;color:#fff;padding:14px 32px;border-radius:8px;
-                  text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
+                  text-decoration:none;font-weight:700;font-size:14px;display:inline-block">
           Renew Subscription
         </a>
       </div>""")
-    text = (f"Hi {full_name},\n\nYour {company_name} subscription expires on {expiry_str}.\n"
-            f"Renew at: {login_url}")
-    return await send_email(to_email, subject, html, text, "subscription_reminder", force_system=True)
+    text = (
+        f"Hi {full_name},\n\nYour {company_name} subscription expires on {expiry_str}.\n"
+        f"Renew at: {login_url}"
+    )
+    return await send_email(
+        to_email, subject, html, text, "subscription_reminder", force_system=True
+    )
 
 
-# ── Business emails (use tenant SMTP when available) ──────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+#  Business emails  (tenant SMTP when available, fallback to system)
+# ─────────────────────────────────────────────────────────────────────────────
 
 async def send_welcome_email(
     to_email: str,
@@ -310,32 +507,44 @@ async def send_welcome_email(
     temp_password: Optional[str] = None,
     company_id: str = "",
 ) -> bool:
-    """Welcome email for admin-created accounts (with temp password)."""
+    """Welcome email for admin-created user accounts (includes temp password)."""
     login_url = f"{settings.FRONTEND_URL}/login"
     subject = f"Your {_BRAND} account is ready — {company_name}"
-    creds = (
+    creds_block = (
+        f"""<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;
+                        padding:16px;margin:16px 0">
+          <p style="margin:0 0 8px"><strong>Username:</strong> {username}</p>
+          <p style="margin:0 0 8px"><strong>Temporary Password:</strong>
+            <code style="background:#DCFCE7;padding:2px 8px;border-radius:4px;
+                         font-size:13px">{temp_password}</code>
+          </p>
+          <p style="margin:0;color:#16A34A;font-size:12px">
+            ⚠ You will be prompted to change this password on first login.
+          </p>
+        </div>"""
+        if temp_password else
         f"<p><strong>Username:</strong> {username}</p>"
-        f"<p><strong>Temporary Password:</strong> <code style='background:#F3F4F6;padding:2px 6px;border-radius:4px'>{temp_password}</code></p>"
-        f"<p style='color:#DC2626;font-size:13px'>Please change your password on first login.</p>"
-        if temp_password
-        else f"<p><strong>Username:</strong> {username}</p>"
     )
     html = _wrap(f"""
-      <h2 style="color:#4F46E5">Welcome to {_BRAND}!</h2>
+      <h2 style="color:#4F46E5;margin-top:0">Welcome to {_BRAND}!</h2>
       <p>Hi <strong>{full_name}</strong>,</p>
       <p>Your account for <strong>{company_name}</strong> has been created.</p>
-      {creds}
+      {creds_block}
       <div style="text-align:center;margin:32px 0">
         <a href="{login_url}"
            style="background:#4F46E5;color:#fff;padding:14px 28px;border-radius:8px;
-                  text-decoration:none;font-weight:bold;display:inline-block">
+                  text-decoration:none;font-weight:700;display:inline-block;font-size:14px">
           Login Now
         </a>
       </div>""")
-    text = (f"Hi {full_name},\n\nYour {company_name} account is ready.\n"
-            f"Login at {login_url}\nUsername: {username}"
-            + (f"\nTemporary Password: {temp_password}" if temp_password else ""))
-    return await send_email(to_email, subject, html, text, "user_created", company_id=company_id)
+    text = (
+        f"Hi {full_name},\n\nYour {company_name} account is ready.\n"
+        f"Login at: {login_url}\nUsername: {username}"
+        + (f"\nTemporary Password: {temp_password}" if temp_password else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, "user_created", company_id=company_id
+    )
 
 
 async def send_task_assigned_email(
@@ -350,30 +559,39 @@ async def send_task_assigned_email(
     company_id: str = "",
 ) -> bool:
     login_url = f"{settings.FRONTEND_URL}/tasks"
-    subject = f"New task assigned to you — {task_title}"
-    due_str = f"<p><strong>Due Date:</strong> {due_date}</p>" if due_date else ""
+    subject = f"New task assigned — {task_title}"
+    priority_color = {"high": "#DC2626", "medium": "#D97706", "low": "#059669"}.get(
+        priority.lower(), "#6B7280"
+    )
+    due_line = f"<p style='margin:0 0 6px'><strong>Due:</strong> {due_date}</p>" if due_date else ""
     html = _wrap(f"""
-      <h2 style="color:#4F46E5">New Task Assigned</h2>
+      <h2 style="color:#4F46E5;margin-top:0">New Task Assigned</h2>
       <p>Hi <strong>{assignee_name}</strong>,</p>
-      <p><strong>{assigned_by_name}</strong> has assigned you a new task in <strong>{company_name}</strong>.</p>
-      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:16px 0">
-        <p style="margin:0 0 8px 0"><strong>Task:</strong> {task_title}</p>
-        <p style="margin:0 0 8px 0;color:#6B7280">{task_description or ''}</p>
-        <p style="margin:0 0 8px 0"><strong>Priority:</strong>
-          <span style="color:{'#DC2626' if priority=='high' else '#F59E0B' if priority=='medium' else '#10B981'}">{priority.upper()}</span>
-        </p>
-        {due_str}
+      <p><strong>{assigned_by_name}</strong> has assigned you a task in
+         <strong>{company_name}</strong>.</p>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>Task:</strong> {task_title}</p>
+        {f"<p style='margin:0 0 6px;color:#6B7280'>{task_description}</p>" if task_description else ""}
+        <p style="margin:0 0 6px"><strong>Priority:</strong>
+          <span style="color:{priority_color};font-weight:700">{priority.upper()}</span></p>
+        {due_line}
       </div>
       <div style="text-align:center;margin:24px 0">
         <a href="{login_url}"
            style="background:#4F46E5;color:#fff;padding:12px 24px;border-radius:8px;
-                  text-decoration:none;font-weight:bold;display:inline-block">
+                  text-decoration:none;font-weight:700;display:inline-block">
           View Task
         </a>
       </div>""")
-    text = (f"Hi {assignee_name},\n\n{assigned_by_name} assigned you: {task_title}\n"
-            f"Priority: {priority}" + (f"\nDue: {due_date}" if due_date else ""))
-    return await send_email(to_email, subject, html, text, "task_assigned", company_id=company_id)
+    text = (
+        f"Hi {assignee_name},\n\n{assigned_by_name} assigned you: {task_title}\n"
+        f"Priority: {priority}"
+        + (f"\nDue: {due_date}" if due_date else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, "task_assigned", company_id=company_id
+    )
 
 
 async def send_target_assigned_email(
@@ -390,27 +608,34 @@ async def send_target_assigned_email(
     company_id: str = "",
 ) -> bool:
     login_url = f"{settings.FRONTEND_URL}/targets"
-    subject = f"New target assigned to you — {target_name}"
+    subject = f"New target assigned — {target_name}"
     html = _wrap(f"""
-      <h2 style="color:#4F46E5">New Target Assigned</h2>
+      <h2 style="color:#4F46E5;margin-top:0">New Target Assigned</h2>
       <p>Hi <strong>{assignee_name}</strong>,</p>
-      <p><strong>{assigned_by_name}</strong> has assigned you a new target in <strong>{company_name}</strong>.</p>
-      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:16px 0">
-        <p style="margin:0 0 8px 0"><strong>Target:</strong> {target_name}</p>
-        <p style="margin:0 0 8px 0"><strong>Goal:</strong> {target_value} {unit}</p>
-        <p style="margin:0 0 8px 0"><strong>Period:</strong> {period}</p>
-        <p style="margin:0 0 4px 0"><strong>Duration:</strong> {start_date} → {end_date}</p>
+      <p><strong>{assigned_by_name}</strong> has assigned you a new target in
+         <strong>{company_name}</strong>.</p>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>Target:</strong> {target_name}</p>
+        <p style="margin:0 0 6px"><strong>Goal:</strong>
+          <span style="color:#4F46E5;font-weight:700">{target_value} {unit}</span></p>
+        <p style="margin:0 0 6px"><strong>Period:</strong> {period}</p>
+        <p style="margin:0"><strong>Duration:</strong> {start_date} → {end_date}</p>
       </div>
       <div style="text-align:center;margin:24px 0">
         <a href="{login_url}"
            style="background:#4F46E5;color:#fff;padding:12px 24px;border-radius:8px;
-                  text-decoration:none;font-weight:bold;display:inline-block">
+                  text-decoration:none;font-weight:700;display:inline-block">
           View Target
         </a>
       </div>""")
-    text = (f"Hi {assignee_name},\n\n{assigned_by_name} assigned you: {target_name}\n"
-            f"Goal: {target_value} {unit} | Period: {period}\n{start_date} to {end_date}")
-    return await send_email(to_email, subject, html, text, "target_assigned", company_id=company_id)
+    text = (
+        f"Hi {assignee_name},\n\n{assigned_by_name} assigned: {target_name}\n"
+        f"Goal: {target_value} {unit} | Period: {period}\n{start_date} to {end_date}"
+    )
+    return await send_email(
+        to_email, subject, html, text, "target_assigned", company_id=company_id
+    )
 
 
 async def send_invoice_sent_email(
@@ -424,45 +649,35 @@ async def send_invoice_sent_email(
     company_id: str = "",
 ) -> bool:
     subject = f"Invoice {invoice_number} from {company_name}"
-    due_str = f"<p><strong>Due Date:</strong> {due_date}</p>" if due_date else ""
+    due_line = (
+        f"<p style='margin:0 0 6px'><strong>Due Date:</strong> {due_date}</p>"
+        if due_date else ""
+    )
     html = _wrap(f"""
-      <h2 style="color:#4F46E5">Invoice from {company_name}</h2>
+      <h2 style="color:#4F46E5;margin-top:0">Invoice from {company_name}</h2>
       <p>Dear <strong>{client_name}</strong>,</p>
-      <p>Please find your invoice details below.</p>
-      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:16px 0">
-        <p style="margin:0 0 8px 0"><strong>Invoice #:</strong> {invoice_number}</p>
-        <p style="margin:0 0 8px 0"><strong>Amount:</strong> {currency} {amount:,.2f}</p>
-        {due_str}
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>Invoice #:</strong> {invoice_number}</p>
+        <p style="margin:0 0 6px"><strong>Amount:</strong>
+          <span style="font-size:18px;font-weight:700;color:#4F46E5">
+            {currency} {amount:,.2f}
+          </span>
+        </p>
+        {due_line}
         <p style="margin:0"><strong>From:</strong> {company_name}</p>
       </div>
       <p style="color:#6B7280;font-size:13px">
         Please contact us if you have any questions about this invoice.
       </p>""")
-    text = (f"Invoice {invoice_number} from {company_name}\n"
-            f"Dear {client_name},\nAmount: {currency} {amount:,.2f}"
-            + (f"\nDue: {due_date}" if due_date else ""))
-    return await send_email(to_email, subject, html, text, "invoice_sent", company_id=company_id)
-
-
-# ── Tenant SMTP test ───────────────────────────────────────────────────────────
-
-def test_smtp_connection(cfg: dict) -> tuple[bool, str]:
-    """
-    Synchronous test — call via asyncio.to_thread from an endpoint.
-    Returns (success, message).
-    """
-    try:
-        with smtplib.SMTP(cfg["host"], int(cfg.get("port", 587)), timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(cfg["username"], cfg["password"])
-        return True, "SMTP connection successful"
-    except smtplib.SMTPAuthenticationError:
-        return False, "Authentication failed — check username/password"
-    except smtplib.SMTPConnectError as e:
-        return False, f"Could not connect to {cfg['host']}:{cfg.get('port', 587)} — {e}"
-    except Exception as e:
-        return False, str(e)
+    text = (
+        f"Invoice {invoice_number} from {company_name}\n"
+        f"Dear {client_name},\nAmount: {currency} {amount:,.2f}"
+        + (f"\nDue: {due_date}" if due_date else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, "invoice_sent", company_id=company_id
+    )
 
 
 async def send_candidate_registered_email(
@@ -473,27 +688,68 @@ async def send_candidate_registered_email(
     company_name: str,
     company_id: str = "",
 ) -> bool:
-    """Confirmation email to candidate when they are added to the system."""
-    login_url = f"{settings.FRONTEND_URL}/login"
     subject = f"Your profile has been registered — {company_name}"
-    position_line = (
-        f"<p>You have been shortlisted for the position of <strong>{position_applied}</strong>.</p>"
+    pos_line = (
+        f"<p>You have been considered for the position of <strong>{position_applied}</strong>.</p>"
         if position_applied else ""
     )
     html = _wrap(f"""
-      <h2 style="color:#4F46E5">Profile Registered</h2>
+      <h2 style="color:#4F46E5;margin-top:0">Profile Registered</h2>
       <p>Dear <strong>{candidate_name}</strong>,</p>
       <p>Your profile has been successfully registered with <strong>{company_name}</strong>.</p>
-      {position_line}
-      <p>Our recruiter <strong>{recruiter_name}</strong> will be in touch with you shortly
-         regarding next steps.</p>
+      {pos_line}
+      <p>Our recruiter <strong>{recruiter_name}</strong> will be in touch with you
+         shortly regarding next steps.</p>
       <p style="color:#6B7280;font-size:13px">
-        If you have any questions, please reply to this email or contact your recruiter directly.
+        If you have questions, please reply to this email or contact your recruiter directly.
       </p>""")
-    text = (f"Dear {candidate_name},\n\nYour profile has been registered with {company_name}."
-            + (f"\nPosition: {position_applied}" if position_applied else "")
-            + f"\nRecruiter: {recruiter_name}")
-    return await send_email(to_email, subject, html, text, "candidate_registered", company_id=company_id)
+    text = (
+        f"Dear {candidate_name},\n\nYour profile has been registered with {company_name}."
+        + (f"\nPosition: {position_applied}" if position_applied else "")
+        + f"\nRecruiter: {recruiter_name}"
+    )
+    return await send_email(
+        to_email, subject, html, text, "candidate_registered", company_id=company_id
+    )
+
+
+async def send_candidate_form_link_email(
+    to_email: str,
+    form_url: str,
+    sent_by_name: str,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    """Email the candidate self-registration form link to a prospective candidate."""
+    subject = f"Candidate Registration — {company_name}"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Candidate Registration Form</h2>
+      <p>Hello,</p>
+      <p>You have been invited by <strong>{sent_by_name}</strong> from
+         <strong>{company_name}</strong> to complete a candidate registration form.</p>
+      <p>Click the button below to submit your details:</p>
+      <div style="text-align:center;margin:32px 0">
+        <a href="{form_url}"
+           style="background:#4F46E5;color:#fff;padding:14px 28px;border-radius:8px;
+                  text-decoration:none;font-weight:700;display:inline-block;font-size:14px">
+          Complete Registration
+        </a>
+      </div>
+      <p style="color:#6B7280;font-size:13px">
+        Or copy this link:<br>
+        <a href="{form_url}" style="color:#4F46E5;word-break:break-all">{form_url}</a>
+      </p>
+      <p style="color:#9CA3AF;font-size:12px">
+        ⏱ This link expires in 7 days and can only be used once.
+      </p>""")
+    text = (
+        f"Candidate Registration Form — {company_name}\n\n"
+        f"Invited by {sent_by_name}.\n\nRegister here: {form_url}\n\n"
+        "Link expires in 7 days."
+    )
+    return await send_email(
+        to_email, subject, html, text, "candidate_form_link", company_id=company_id
+    )
 
 
 async def send_interview_scheduled_email(
@@ -510,48 +766,52 @@ async def send_interview_scheduled_email(
     instructions: Optional[str],
     company_id: str = "",
 ) -> bool:
-    """Email to candidate when an interview is scheduled."""
     subject = f"Interview Scheduled — {job_title} at {company_name}"
-    mode_label = interview_mode.replace("_", " ").title()
-    location_label = "Venue" if interview_mode in ("in_person", "walk_in") else "Link"
-    location_line = (
-        f"<p><strong>{location_label}:</strong> {venue_or_link}</p>"
+    mode_label = interview_mode.replace("_", " ").title() if interview_mode else ""
+    loc_label = "Venue" if interview_mode in ("in_person", "walk_in") else "Meeting Link"
+    loc_line = (
+        f"<p style='margin:0 0 6px'><strong>{loc_label}:</strong> {venue_or_link}</p>"
         if venue_or_link else ""
     )
-    interviewers_line = (
-        f"<p><strong>Interviewer(s):</strong> {', '.join(interviewer_names)}</p>"
+    iv_line = (
+        f"<p style='margin:0 0 6px'><strong>Interviewer(s):</strong> {', '.join(interviewer_names)}</p>"
         if interviewer_names else ""
     )
-    instructions_block = (
-        f"<div style='background:#FFF7ED;border-left:3px solid #F59E0B;padding:12px;margin-top:12px;"
-        f"border-radius:4px;font-size:13px;color:#92400E'>"
+    inst_block = (
+        f"<div style='background:#FFF7ED;border-left:3px solid #F59E0B;padding:12px;"
+        f"border-radius:4px;margin-top:16px;font-size:13px;color:#92400E'>"
         f"<strong>Instructions:</strong> {instructions}</div>"
         if instructions else ""
     )
     html = _wrap(f"""
-      <h2 style="color:#4F46E5">Interview Scheduled</h2>
+      <h2 style="color:#4F46E5;margin-top:0">Interview Scheduled ✓</h2>
       <p>Dear <strong>{candidate_name}</strong>,</p>
-      <p>Congratulations! Your interview has been scheduled for the position of
+      <p>Your interview has been scheduled for
          <strong>{job_title}</strong> at <strong>{company_name}</strong>.</p>
-      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:16px 0">
-        <p style="margin:0 0 8px 0"><strong>Date:</strong> {interview_date}</p>
-        <p style="margin:0 0 8px 0"><strong>Time:</strong> {interview_time}</p>
-        <p style="margin:0 0 8px 0"><strong>Duration:</strong> {duration_minutes} minutes</p>
-        <p style="margin:0 0 8px 0"><strong>Mode:</strong> {mode_label}</p>
-        {location_line}
-        {interviewers_line}
+      <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>Date:</strong> {interview_date}</p>
+        <p style="margin:0 0 6px"><strong>Time:</strong> {interview_time}</p>
+        <p style="margin:0 0 6px"><strong>Duration:</strong> {duration_minutes} minutes</p>
+        <p style="margin:0 0 6px"><strong>Mode:</strong> {mode_label}</p>
+        {loc_line}
+        {iv_line}
       </div>
-      {instructions_block}
+      {inst_block}
       <p style="color:#6B7280;font-size:13px;margin-top:16px">
         Please be available 5–10 minutes before the scheduled time.
         If you need to reschedule, contact your recruiter immediately.
       </p>""")
-    text = (f"Dear {candidate_name},\n\nInterview scheduled for {job_title} at {company_name}.\n"
-            f"Date: {interview_date} | Time: {interview_time} | Mode: {mode_label}\n"
-            + (f"Duration: {duration_minutes} min\n" if duration_minutes else "")
-            + (f"Location/Link: {venue_or_link}\n" if venue_or_link else "")
-            + (f"Instructions: {instructions}" if instructions else ""))
-    return await send_email(to_email, subject, html, text, "interview_scheduled", company_id=company_id)
+    text = (
+        f"Interview Scheduled — {job_title} at {company_name}\n"
+        f"Date: {interview_date} | Time: {interview_time} | Mode: {mode_label}\n"
+        + (f"Duration: {duration_minutes} min\n" if duration_minutes else "")
+        + (f"Location: {venue_or_link}\n" if venue_or_link else "")
+        + (f"Instructions: {instructions}" if instructions else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, "interview_scheduled", company_id=company_id
+    )
 
 
 async def send_interview_rescheduled_email(
@@ -566,37 +826,41 @@ async def send_interview_rescheduled_email(
     reason: Optional[str],
     company_id: str = "",
 ) -> bool:
-    """Email to candidate when an interview is rescheduled."""
     subject = f"Interview Rescheduled — {job_title} at {company_name}"
     mode_label = interview_mode.replace("_", " ").title() if interview_mode else ""
-    location_label = "Venue" if interview_mode in ("in_person", "walk_in") else "Link"
-    location_line = (
-        f"<p><strong>{location_label}:</strong> {venue_or_link}</p>"
+    loc_label = "Venue" if interview_mode in ("in_person", "walk_in") else "Meeting Link"
+    loc_line = (
+        f"<p style='margin:0 0 6px'><strong>{loc_label}:</strong> {venue_or_link}</p>"
         if venue_or_link else ""
     )
-    reason_block = (
+    reason_line = (
         f"<p style='color:#6B7280;font-size:13px'><strong>Reason:</strong> {reason}</p>"
         if reason else ""
     )
     html = _wrap(f"""
-      <h2 style="color:#F59E0B">Interview Rescheduled</h2>
+      <h2 style="color:#D97706;margin-top:0">Interview Rescheduled</h2>
       <p>Dear <strong>{candidate_name}</strong>,</p>
       <p>Your interview for <strong>{job_title}</strong> at <strong>{company_name}</strong>
          has been rescheduled. Please note the updated details below.</p>
-      <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:16px;margin:16px 0">
-        <p style="margin:0 0 8px 0"><strong>New Date:</strong> {new_date}</p>
-        <p style="margin:0 0 8px 0"><strong>New Time:</strong> {new_time}</p>
-        <p style="margin:0 0 4px 0"><strong>Mode:</strong> {mode_label}</p>
-        {location_line}
+      <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>New Date:</strong> {new_date}</p>
+        <p style="margin:0 0 6px"><strong>New Time:</strong> {new_time}</p>
+        <p style="margin:0 0 6px"><strong>Mode:</strong> {mode_label}</p>
+        {loc_line}
       </div>
-      {reason_block}
+      {reason_line}
       <p style="color:#6B7280;font-size:13px">
         If this time does not work for you, please contact your recruiter immediately.
       </p>""")
-    text = (f"Dear {candidate_name},\n\nInterview rescheduled: {job_title} at {company_name}.\n"
-            f"New Date: {new_date} | New Time: {new_time}"
-            + (f"\nReason: {reason}" if reason else ""))
-    return await send_email(to_email, subject, html, text, "interview_rescheduled", company_id=company_id)
+    text = (
+        f"Interview Rescheduled — {job_title} at {company_name}\n"
+        f"New Date: {new_date} | New Time: {new_time}"
+        + (f"\nReason: {reason}" if reason else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, "interview_rescheduled", company_id=company_id
+    )
 
 
 async def send_interviewer_assigned_email(
@@ -612,34 +876,38 @@ async def send_interviewer_assigned_email(
     duration_minutes: int,
     company_id: str = "",
 ) -> bool:
-    """Email to interviewer(s) when they are assigned to an interview."""
-    subject = f"You have been assigned as interviewer — {candidate_name} for {job_title}"
+    subject = f"Interview Assignment — {candidate_name} for {job_title}"
     mode_label = interview_mode.replace("_", " ").title() if interview_mode else ""
-    location_label = "Venue" if interview_mode in ("in_person", "walk_in") else "Meeting Link"
-    location_line = (
-        f"<p><strong>{location_label}:</strong> {venue_or_link}</p>"
+    loc_label = "Venue" if interview_mode in ("in_person", "walk_in") else "Meeting Link"
+    loc_line = (
+        f"<p style='margin:0 0 6px'><strong>{loc_label}:</strong> {venue_or_link}</p>"
         if venue_or_link else ""
     )
     html = _wrap(f"""
-      <h2 style="color:#4F46E5">Interview Assignment</h2>
+      <h2 style="color:#4F46E5;margin-top:0">Interview Assignment</h2>
       <p>Hi <strong>{interviewer_name}</strong>,</p>
-      <p>You have been assigned as an interviewer for the following interview at
-         <strong>{company_name}</strong>.</p>
-      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:16px 0">
-        <p style="margin:0 0 8px 0"><strong>Candidate:</strong> {candidate_name}</p>
-        <p style="margin:0 0 8px 0"><strong>Position:</strong> {job_title}</p>
-        <p style="margin:0 0 8px 0"><strong>Date:</strong> {interview_date}</p>
-        <p style="margin:0 0 8px 0"><strong>Time:</strong> {interview_time}</p>
-        <p style="margin:0 0 8px 0"><strong>Duration:</strong> {duration_minutes} minutes</p>
-        <p style="margin:0 0 4px 0"><strong>Mode:</strong> {mode_label}</p>
-        {location_line}
+      <p>You have been assigned as an interviewer at <strong>{company_name}</strong>.</p>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>Candidate:</strong> {candidate_name}</p>
+        <p style="margin:0 0 6px"><strong>Position:</strong> {job_title}</p>
+        <p style="margin:0 0 6px"><strong>Date:</strong> {interview_date}</p>
+        <p style="margin:0 0 6px"><strong>Time:</strong> {interview_time}</p>
+        <p style="margin:0 0 6px"><strong>Duration:</strong> {duration_minutes} minutes</p>
+        <p style="margin:0 0 6px"><strong>Mode:</strong> {mode_label}</p>
+        {loc_line}
       </div>
       <p style="color:#6B7280;font-size:13px">
-        Please review the candidate's profile before the interview. Log in to submit feedback after.
+        Please review the candidate's profile before the interview.
+        Log in to submit feedback after the session.
       </p>""")
-    text = (f"Hi {interviewer_name},\n\nYou are assigned to interview {candidate_name} "
-            f"for {job_title}.\nDate: {interview_date} | Time: {interview_time} | Mode: {mode_label}")
-    return await send_email(to_email, subject, html, text, "interviewer_assigned", company_id=company_id)
+    text = (
+        f"Interview Assignment — {candidate_name} for {job_title}\n"
+        f"Date: {interview_date} | Time: {interview_time} | Mode: {mode_label}"
+    )
+    return await send_email(
+        to_email, subject, html, text, "interviewer_assigned", company_id=company_id
+    )
 
 
 async def send_job_opened_email(
@@ -653,56 +921,108 @@ async def send_job_opened_email(
     created_by_name: str,
     company_id: str = "",
 ) -> bool:
-    """Notify recruiting team when a new job is opened."""
     if not to_emails:
         return False
     login_url = f"{settings.FRONTEND_URL}/jobs"
-    subject = f"New Job Opened: {job_title} [{job_code}]"
+    subject = f"New Job: {job_title} [{job_code}]"
     html = _wrap(f"""
-      <h2 style="color:#4F46E5">New Job Requirement</h2>
-      <p>A new job has been opened in <strong>{company_name}</strong>.</p>
-      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:16px 0">
-        <p style="margin:0 0 8px 0"><strong>Position:</strong> {job_title}</p>
-        <p style="margin:0 0 8px 0"><strong>Client:</strong> {client_name}</p>
-        <p style="margin:0 0 8px 0"><strong>Job Code:</strong> {job_code}</p>
-        <p style="margin:0 0 8px 0"><strong>Location:</strong> {location or 'Not specified'}</p>
-        <p style="margin:0 0 4px 0"><strong>Openings:</strong> {openings}</p>
+      <h2 style="color:#4F46E5;margin-top:0">New Job Requirement</h2>
+      <p>A new job has been opened in <strong>{company_name}</strong>
+         by <strong>{created_by_name}</strong>.</p>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>Position:</strong> {job_title}</p>
+        <p style="margin:0 0 6px"><strong>Client:</strong> {client_name}</p>
+        <p style="margin:0 0 6px"><strong>Code:</strong> {job_code}</p>
+        <p style="margin:0 0 6px"><strong>Location:</strong> {location or 'Not specified'}</p>
+        <p style="margin:0"><strong>Openings:</strong> {openings}</p>
       </div>
-      <p>Created by <strong>{created_by_name}</strong>.</p>
       <div style="text-align:center;margin:24px 0">
         <a href="{login_url}"
            style="background:#4F46E5;color:#fff;padding:12px 24px;border-radius:8px;
-                  text-decoration:none;font-weight:bold;display:inline-block">
+                  text-decoration:none;font-weight:700;display:inline-block">
           View Job
         </a>
       </div>""")
-    text = (f"New Job: {job_title} [{job_code}]\nClient: {client_name}\n"
-            f"Location: {location or 'N/A'} | Openings: {openings}\nBy: {created_by_name}")
-
-    # Send to all recipients; return True if at least one succeeds
-    results = []
-    for email in to_emails:
-        ok = await send_email(email, subject, html, text, "job_opened", company_id=company_id)
-        results.append(ok)
+    text = (
+        f"New Job: {job_title} [{job_code}]\nClient: {client_name}\n"
+        f"Location: {location or 'N/A'} | Openings: {openings}\nBy: {created_by_name}"
+    )
+    results = [
+        await send_email(addr, subject, html, text, "job_opened", company_id=company_id)
+        for addr in to_emails
+    ]
     return any(results)
 
 
-# ── Singleton alias (backwards compat) ────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+#  Backwards-compatibility wrapper
+# ─────────────────────────────────────────────────────────────────────────────
 
 class EmailService:
-    """Thin wrapper kept for imports that use email_service.send_*(...) style."""
+    """
+    Thin class wrapper kept for code that imports via `from email_service import EmailService`.
+    All methods delegate to the module-level async functions above.
+    """
+
+    # --- system emails ---
     send_verification_email = staticmethod(send_verification_email)
     send_password_reset_email = staticmethod(send_password_reset_email)
-    send_welcome_email = staticmethod(send_welcome_email)
     send_subscription_reminder_email = staticmethod(send_subscription_reminder_email)
+
+    # --- business emails ---
+    send_welcome_email = staticmethod(send_welcome_email)
     send_task_assigned_email = staticmethod(send_task_assigned_email)
     send_target_assigned_email = staticmethod(send_target_assigned_email)
     send_invoice_sent_email = staticmethod(send_invoice_sent_email)
     send_candidate_registered_email = staticmethod(send_candidate_registered_email)
+    send_candidate_form_link_email = staticmethod(send_candidate_form_link_email)
     send_interview_scheduled_email = staticmethod(send_interview_scheduled_email)
     send_interview_rescheduled_email = staticmethod(send_interview_rescheduled_email)
     send_interviewer_assigned_email = staticmethod(send_interviewer_assigned_email)
     send_job_opened_email = staticmethod(send_job_opened_email)
+
+    @staticmethod
+    def _send_smtp(
+        to_email: str,
+        subject: str,
+        html_body: str,
+        text_body: str = "",
+    ) -> bool:
+        """
+        DEPRECATED synchronous send using system SMTP.
+        Kept only for backwards-compatibility with legacy call sites.
+        Prefer the async send_email() function for all new code.
+        """
+        if not settings.EMAIL_ENABLED:
+            logger.warning(
+                "[EMAIL DISABLED] _send_smtp called but EMAIL_ENABLED=False. "
+                "to=%s subject=%s", to_email, subject
+            )
+            return False
+        cfg = _smtp_cfg_from_settings()
+        if not _credentials_ok(cfg):
+            logger.error(
+                "[EMAIL ERROR] _send_smtp called but SMTP credentials not configured. "
+                "Set SMTP_USERNAME and SMTP_PASSWORD in .env. to=%s", to_email
+            )
+            return False
+        try:
+            _do_send(cfg, to_email, subject, html_body, text_body)
+            logger.info("[EMAIL SENT via _send_smtp] to=%s subject=%s", to_email, subject)
+            return True
+        except smtplib.SMTPAuthenticationError as exc:
+            logger.error(
+                "[EMAIL ERROR] SMTP auth failed in _send_smtp. "
+                "Use App Password for Gmail. user=%s error=%s",
+                cfg["username"], exc,
+            )
+            return False
+        except Exception as exc:
+            logger.error(
+                "[EMAIL ERROR] _send_smtp failed. to=%s error=%s", to_email, exc
+            )
+            return False
 
 
 email_service = EmailService()

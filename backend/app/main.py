@@ -52,6 +52,9 @@ from app.api.v1 import company_settings
 # ============== Tenant Settings (Phase 6) ==============
 from app.api.v1 import tenant_settings
 
+# ============== Email Test ==============
+from app.api.v1 import email_test
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -67,6 +70,9 @@ async def lifespan(app: FastAPI):
     print(f" Plans seeded/updated: {seeded}")
     await ensure_global_indexes(get_master_db())
     print(" Global user indexes ensured")
+    from app.services.email_service import validate_smtp_on_startup
+    validate_smtp_on_startup()
+    print(" SMTP configuration validated")
     # Start subscription reminder background task (runs every 24 hours)
     reminder_task = asyncio.create_task(reminder_background_loop())
     print(" Subscription reminder scheduler started")
@@ -187,6 +193,7 @@ app.include_router(audit.router, prefix=API_V1_PREFIX, tags=["Advanced Audit"])
 app.include_router(scheduler.router, prefix=API_V1_PREFIX, tags=["Scheduler"])
 app.include_router(export.router, prefix=API_V1_PREFIX, tags=["Export"])
 app.include_router(tasks.router, prefix=API_V1_PREFIX, tags=["Tasks"])
+app.include_router(email_test.router, prefix=API_V1_PREFIX, tags=["Email"])
 
 
 # Serve uploaded files (resumes, etc.)

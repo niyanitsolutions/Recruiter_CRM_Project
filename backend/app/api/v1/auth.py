@@ -303,13 +303,19 @@ async def logout(auth: AuthContext = Depends(get_current_user)):
 @router.post("/forgot-password", response_model=MessageResponse)
 async def forgot_password(request: ForgotPasswordRequest):
     """
-    Initiate password reset process
-    
-    Sends reset instructions to email
+    Initiate password reset process.
+
+    Returns success=True only when email was actually sent (or account not found).
+    Returns success=False with a clear message when the email service is unavailable.
+    Account existence is never revealed (anti-enumeration).
     """
     success, message = await auth_service.initiate_password_reset(request.email)
-    
-    # Always return success to prevent email enumeration
+    if not success:
+        # Email send failed — surface the real error so the user knows to retry
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=message,
+        )
     return {"message": message, "success": True}
 
 
