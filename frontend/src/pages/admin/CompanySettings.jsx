@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Building2, User, CreditCard, Shield, Bell,
+  Building2, User, CreditCard, Shield, Bell, Mail,
   Save, Loader2, Plus, Trash2, MapPin, AlertCircle,
-  CheckCircle, RefreshCw, ChevronUp, ChevronDown,
+  CheckCircle, RefreshCw, ChevronUp, ChevronDown, Eye, EyeOff, Wifi,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
@@ -102,6 +102,7 @@ const TABS = [
   { id: 'subscription',  label: 'Subscription',          icon: CreditCard },
   { id: 'security',      label: 'Security',              icon: Shield },
   { id: 'notifications', label: 'Notifications',         icon: Bell },
+  { id: 'smtp',          label: 'Email (SMTP)',          icon: Mail },
 ]
 
 // ── DEFAULT EMPTY STATES ───────────────────────────────────────────────────
@@ -134,6 +135,14 @@ const CompanySettings = () => {
   const [notifPref, setNotifPref] = useState(DEFAULT_NOTIF.notification_preferences)
   const [subscription, setSubscription] = useState(null)
   const [subLoading,   setSubLoading]   = useState(false)
+
+  // SMTP state
+  const DEFAULT_SMTP = { host: 'smtp.gmail.com', port: 587, username: '', password: '', from_email: '', from_name: '', enabled: true }
+  const [smtp,        setSmtp]        = useState(DEFAULT_SMTP)
+  const [smtpLoaded,  setSmtpLoaded]  = useState(false)
+  const [smtpHasPass, setSmtpHasPass] = useState(false)
+  const [showPass,    setShowPass]    = useState(false)
+  const [smtpTesting, setSmtpTesting] = useState(false)
 
   // ── Load all settings ──────────────────────────────────────────────────
   const loadSettings = useCallback(async () => {
@@ -190,6 +199,28 @@ const CompanySettings = () => {
   useEffect(() => {
     if (activeTab === 'subscription' && !subscription) loadSubscription()
   }, [activeTab, subscription, loadSubscription])
+
+  useEffect(() => {
+    if (activeTab === 'smtp' && !smtpLoaded) {
+      api.get('/company-settings/smtp').then(res => {
+        if (res.data?.data) {
+          const d = res.data.data
+          setSmtp(prev => ({
+            ...prev,
+            host: d.host || prev.host,
+            port: d.port || prev.port,
+            username: d.username || '',
+            from_email: d.from_email || '',
+            from_name: d.from_name || '',
+            enabled: d.enabled ?? true,
+            password: '',   // never returned from server
+          }))
+          setSmtpHasPass(d.has_password || false)
+        }
+        setSmtpLoaded(true)
+      }).catch(() => setSmtpLoaded(true))
+    }
+  }, [activeTab, smtpLoaded])
 
   // ── Save handlers ──────────────────────────────────────────────────────
 
@@ -271,6 +302,77 @@ const CompanySettings = () => {
       ...p,
       [key]: { ...p[key], [channel]: !p[key]?.[channel] },
     }))
+  }
+
+  // ── SMTP handlers ──────────────────────────────────────────────────────
+
+  const testSmtp = async () => {
+    if (!smtp.host || !smtp.username || !smtp.password) {
+      toast.error('Host, username, and password are required to test')
+      return
+    }
+    try {
+      setSmtpTesting(true)
+      await api.post('/company-settings/smtp/test', {
+        host: smtp.host, port: smtp.port,
+        username: smtp.username, password: smtp.password,
+      })
+      toast.success('SMTP connection successful!')
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'SMTP test failed')
+    } finally {
+      setSmtpTesting(false)
+    }
+  }
+
+  const saveSmtp = async () => {
+    if (!smtp.host || !smtp.username) {
+      toast.error('Host and username are required')
+      return
+    }
+    if (!smtp.password && !smtpHasPass) {
+      toast.error('Password is required')
+      return
+    }
+    // If password is blank and we already have one saved, send a sentinel so backend keeps it
+    const payload = {
+      host: smtp.host,
+      port: Number(smtp.port),
+      username: smtp.username,
+      password: smtp.password || '__KEEP__',
+      from_email: smtp.from_email || smtp.username,
+      from_name: smtp.from_name || '',
+      enabled: smtp.enabled,
+    }
+    // Can't save without a real password to test
+    if (payload.password === '__KEEP__') {
+      toast.error('Enter the password to save (it is not stored in the browser)')
+      return
+    }
+    try {
+      setSaving(true)
+      await api.put('/company-settings/smtp', payload)
+      toast.success('SMTP configuration saved and verified')
+      setSmtpHasPass(true)
+      setSmtp(p => ({ ...p, password: '' }))
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to save SMTP config')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deleteSmtp = async () => {
+    if (!window.confirm('Remove tenant SMTP config? Emails will fall back to the system SMTP.')) return
+    try {
+      await api.delete('/company-settings/smtp')
+      toast.success('SMTP configuration removed')
+      setSmtp(DEFAULT_SMTP)
+      setSmtpHasPass(false)
+      setSmtpLoaded(false)
+    } catch {
+      toast.error('Failed to remove SMTP config')
+    }
   }
 
   if (loading) {
@@ -652,6 +754,134 @@ const CompanySettings = () => {
       )}
 
       {/* ── 5. NOTIFICATION PREFERENCES ────────────────────────────────────── */}
+      {/* ── 6. SMTP / EMAIL ─────────────────────────────────────────────────── */}
+      {activeTab === 'smtp' && (
+        <SectionCard title="Email (SMTP) Configuration" icon={Mail}>
+          <div className="space-y-5 max-w-lg">
+            <p className="text-sm text-surface-500">
+              Configure your company's outgoing email server. When set, business emails
+              (invoices, task assignments, targets) will be sent from this account.
+              Auth emails (password reset, verification) always use the system SMTP.
+            </p>
+
+            {smtpHasPass && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                <CheckCircle className="w-4 h-4 shrink-0" />
+                SMTP is currently configured. Enter a new password below to update it.
+              </div>
+            )}
+
+            {/* Enable toggle */}
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="text-sm font-medium text-surface-800">Enable tenant SMTP</p>
+                <p className="text-xs text-surface-400">When off, falls back to system SMTP</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSmtp(p => ({ ...p, enabled: !p.enabled }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+                            ${smtp.enabled ? 'bg-accent-600' : 'bg-surface-300'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow
+                                  transition-transform ${smtp.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="SMTP Host">
+                <Input
+                  value={smtp.host}
+                  onChange={e => setSmtp(p => ({ ...p, host: e.target.value }))}
+                  placeholder="smtp.gmail.com"
+                />
+              </Field>
+              <Field label="Port">
+                <Input
+                  type="number"
+                  value={smtp.port}
+                  onChange={e => setSmtp(p => ({ ...p, port: e.target.value }))}
+                  placeholder="587"
+                />
+              </Field>
+            </div>
+
+            <Field label="Username / Email">
+              <Input
+                value={smtp.username}
+                onChange={e => setSmtp(p => ({ ...p, username: e.target.value }))}
+                placeholder="you@company.com"
+                autoComplete="off"
+              />
+            </Field>
+
+            <Field label={smtpHasPass ? 'New Password (leave blank to keep current)' : 'Password'}>
+              <div className="relative">
+                <Input
+                  type={showPass ? 'text' : 'password'}
+                  value={smtp.password}
+                  onChange={e => setSmtp(p => ({ ...p, password: e.target.value }))}
+                  placeholder={smtpHasPass ? '••••••••' : 'App password or SMTP password'}
+                  autoComplete="new-password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-600"
+                >
+                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="From Email" hint="Shown as sender address">
+                <Input
+                  value={smtp.from_email}
+                  onChange={e => setSmtp(p => ({ ...p, from_email: e.target.value }))}
+                  placeholder="noreply@company.com"
+                />
+              </Field>
+              <Field label="From Name">
+                <Input
+                  value={smtp.from_name}
+                  onChange={e => setSmtp(p => ({ ...p, from_name: e.target.value }))}
+                  placeholder="Company Name"
+                />
+              </Field>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={testSmtp}
+                disabled={smtpTesting}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-surface-300
+                           rounded-lg text-surface-700 hover:bg-surface-50 disabled:opacity-50 transition-colors"
+              >
+                {smtpTesting
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Testing…</>
+                  : <><Wifi className="w-4 h-4" /> Test Connection</>}
+              </button>
+
+              <SaveBtn saving={saving} onClick={saveSmtp} label="Save SMTP" />
+
+              {smtpHasPass && (
+                <button
+                  type="button"
+                  onClick={deleteSmtp}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600
+                             border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" /> Remove
+                </button>
+              )}
+            </div>
+          </div>
+        </SectionCard>
+      )}
+
       {activeTab === 'notifications' && (
         <SectionCard title="Notification Preferences" icon={Bell}>
           <div className="space-y-2">

@@ -40,7 +40,11 @@ class InterviewService:
     async def schedule_interview(
         db: AsyncIOMotorDatabase,
         interview_data: InterviewCreate,
-        scheduled_by: str
+        scheduled_by: str,
+        *,
+        company_id: str = "",
+        company_name: str = "",
+        scheduler_name: str = "",
     ) -> InterviewResponse:
         """Schedule a new interview"""
         # ── Explicit business-logic validations ──────────────────────────────────
@@ -244,6 +248,58 @@ class InterviewService:
             }
         )
 
+        # ── Email notifications (best-effort) ────────────────────────────────────
+        date_str = interview_data.scheduled_date.strftime("%d %b %Y") if interview_data.scheduled_date else ""
+        mode = interview_dict.get("interview_mode", "")
+        venue_or_link = interview_dict.get("meeting_link") or interview_dict.get("venue") or interview_dict.get("address") or ""
+
+        # 1. Candidate confirmation
+        if candidate_email:
+            try:
+                from app.services.email_service import send_interview_scheduled_email
+                await send_interview_scheduled_email(
+                    to_email=candidate_email,
+                    candidate_name=candidate_name or "",
+                    job_title=job_title or "",
+                    company_name=company_name,
+                    interview_date=date_str,
+                    interview_time=interview_data.scheduled_time or "",
+                    interview_mode=mode,
+                    venue_or_link=venue_or_link,
+                    interviewer_names=interviewer_names,
+                    duration_minutes=interview_data.duration_minutes or 60,
+                    instructions=interview_data.instructions,
+                    company_id=company_id,
+                )
+            except Exception as _e:
+                import logging as _log; _log.getLogger(__name__).warning("Interview candidate email failed: %s", _e)
+
+        # 2. Each interviewer notification
+        if interview_data.interviewer_ids:
+            try:
+                from app.services.email_service import send_interviewer_assigned_email
+                interviewers_with_email = await db["users"].find(
+                    {"_id": {"$in": interview_data.interviewer_ids}, "email": {"$exists": True}},
+                    {"_id": 1, "full_name": 1, "email": 1}
+                ).to_list(length=20)
+                for iv in interviewers_with_email:
+                    if iv.get("email"):
+                        await send_interviewer_assigned_email(
+                            to_email=iv["email"],
+                            interviewer_name=iv.get("full_name", ""),
+                            candidate_name=candidate_name or "",
+                            job_title=job_title or "",
+                            company_name=company_name,
+                            interview_date=date_str,
+                            interview_time=interview_data.scheduled_time or "",
+                            interview_mode=mode,
+                            venue_or_link=venue_or_link,
+                            duration_minutes=interview_data.duration_minutes or 60,
+                            company_id=company_id,
+                        )
+            except Exception as _e:
+                import logging as _log; _log.getLogger(__name__).warning("Interviewer email failed: %s", _e)
+
         return await InterviewService.get_interview(db, interview_dict["_id"])
     
     @staticmethod
@@ -359,7 +415,10 @@ class InterviewService:
         db: AsyncIOMotorDatabase,
         interview_id: str,
         reschedule_data: InterviewReschedule,
-        rescheduled_by: str
+        rescheduled_by: str,
+        *,
+        company_id: str = "",
+        company_name: str = "",
     ) -> InterviewResponse:
         """Reschedule an interview"""
         collection = db[InterviewService.COLLECTION]
@@ -405,9 +464,31 @@ class InterviewService:
                 "$push": {"reschedule_history": reschedule_entry}
             }
         )
-        
+
+        # Email candidate about reschedule (best-effort)
+        candidate_email = existing.get("candidate_email")
+        if candidate_email:
+            try:
+                from app.services.email_service import send_interview_rescheduled_email
+                mode = existing.get("interview_mode", "")
+                venue_or_link = existing.get("meeting_link") or existing.get("venue") or existing.get("address") or ""
+                await send_interview_rescheduled_email(
+                    to_email=candidate_email,
+                    candidate_name=existing.get("candidate_name", ""),
+                    job_title=existing.get("job_title", ""),
+                    company_name=company_name,
+                    new_date=reschedule_data.new_date.strftime("%d %b %Y") if reschedule_data.new_date else "",
+                    new_time=reschedule_data.new_time or "",
+                    interview_mode=mode,
+                    venue_or_link=venue_or_link,
+                    reason=reschedule_data.reason,
+                    company_id=company_id,
+                )
+            except Exception as _e:
+                import logging as _log; _log.getLogger(__name__).warning("Reschedule email failed: %s", _e)
+
         return await InterviewService.get_interview(db, interview_id)
-    
+
     @staticmethod
     async def submit_feedback(
         db: AsyncIOMotorDatabase,

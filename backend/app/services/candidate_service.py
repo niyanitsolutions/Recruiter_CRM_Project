@@ -54,7 +54,11 @@ class CandidateService:
         db: AsyncIOMotorDatabase,
         candidate_data: CandidateCreate,
         created_by: str,
-        partner_id: Optional[str] = None
+        partner_id: Optional[str] = None,
+        *,
+        company_id: str = "",
+        company_name: str = "",
+        recruiter_name: str = "",
     ) -> CandidateResponse:
         """Create a new candidate"""
         collection = db[CandidateService.COLLECTION]
@@ -127,6 +131,24 @@ class CandidateService:
             )
         except Exception:
             pass
+
+        # Send registration acknowledgement to candidate (best-effort)
+        candidate_email = candidate_data.email.lower() if candidate_data.email else ""
+        if candidate_email:
+            try:
+                from app.services.email_service import send_candidate_registered_email
+                await send_candidate_registered_email(
+                    to_email=candidate_email,
+                    candidate_name=full_name,
+                    position_applied=getattr(candidate_data, "current_designation", None)
+                                     or getattr(candidate_data, "preferred_role", None),
+                    recruiter_name=recruiter_name or "our team",
+                    company_name=company_name or company_id or "the company",
+                    company_id=company_id,
+                )
+            except Exception as _e:
+                import logging as _log
+                _log.getLogger(__name__).warning("Candidate registration email failed: %s", _e)
 
         return await CandidateService.get_candidate(db, candidate_dict["_id"])
     

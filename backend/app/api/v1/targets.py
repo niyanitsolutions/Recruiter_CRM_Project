@@ -66,7 +66,9 @@ async def create_target(
     return await service.create_target(
         data=data,
         company_id=current_user["company_id"],
-        user_id=current_user["id"]
+        user_id=current_user["id"],
+        company_name=current_user.get("company_name", ""),
+        creator_name=current_user.get("full_name", ""),
     )
 
 

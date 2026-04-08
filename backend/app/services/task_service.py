@@ -38,7 +38,11 @@ class TaskService:
     async def create_task(
         db: AsyncIOMotorDatabase,
         data: TaskCreate,
-        created_by: str
+        created_by: str,
+        *,
+        company_id: str = "",
+        company_name: str = "",
+        creator_name: str = "",
     ) -> TaskResponse:
         users = db["users"]
         creator = await users.find_one({"_id": created_by})
@@ -69,6 +73,33 @@ class TaskService:
         }
         await db[TaskService.COLLECTION].insert_one(doc)
         logger.info("Task created | task=%s | by=%s", doc["_id"], created_by)
+
+        # Send TASK_ASSIGNED email (best-effort)
+        # Skip only when no assignee or assignee is the same person who created the task
+        _assignee_email = assignee.get("email") if assignee else None
+        _assignee_id = data.assigned_to
+        if _assignee_email and _assignee_id and _assignee_id != created_by:
+            try:
+                from app.services.email_service import send_task_assigned_email
+                due_str = data.due_date.strftime("%d %b %Y") if data.due_date else None
+                # Resolve creator name: prefer explicit param > DB doc > fallback string
+                _by_name = (creator_name
+                            or (creator.get("full_name") if creator else None)
+                            or "a team member")
+                await send_task_assigned_email(
+                    to_email=_assignee_email,
+                    assignee_name=assignee.get("full_name", ""),
+                    task_title=data.title,
+                    task_description=data.description or "",
+                    due_date=due_str,
+                    priority=data.priority.value,
+                    assigned_by_name=_by_name,
+                    company_name=company_name,
+                    company_id=company_id,
+                )
+            except Exception as _e:
+                logger.warning("Task email failed for %s: %s", _assignee_email, _e)
+
         return TaskService._to_response(doc)
 
     @staticmethod

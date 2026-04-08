@@ -200,6 +200,7 @@ async def create_user(
         created_by_role=current_user["role"],
         ip_address=get_client_ip(request),
         company_id=current_user.get("company_id"),
+        company_name=current_user.get("company_name", ""),
     )
 
     if not success:
@@ -382,6 +383,15 @@ async def force_change_own_password(
     user = await db.users.find_one({"_id": user_id, "is_deleted": False})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # SECURITY: this endpoint is ONLY valid for users whose admin flagged must_change_password.
+    # Rejecting other callers prevents it from being used as a password-change shortcut that
+    # bypasses the current-password verification required by /me/change-password.
+    if not user.get("must_change_password"):
+        raise HTTPException(
+            status_code=403,
+            detail="Password change is not required for your account. Use /me/change-password instead.",
+        )
 
     new_hash = bcrypt.hashpw(
         password_data.new_password.encode("utf-8"),

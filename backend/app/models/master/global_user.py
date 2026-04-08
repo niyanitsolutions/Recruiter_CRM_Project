@@ -124,6 +124,22 @@ async def ensure_global_indexes(master_db) -> None:
         [("local_user_id", 1), ("company_id", 1)],
         name="ucm_local_company_idx",
     )
+    # email_logs — query index for dashboard/reporting
+    await master_db.email_logs.create_index(
+        [("company_id", 1), ("created_at", -1)],
+        name="email_logs_company_date",
+    )
+    # email_logs — TTL: auto-delete logs older than 90 days
+    await master_db.email_logs.create_index(
+        [("created_at", 1)],
+        expireAfterSeconds=60 * 60 * 24 * 90,   # 90 days
+        name="email_logs_ttl_90d",
+    )
+    # email_logs — quickly find failures for alerting
+    await master_db.email_logs.create_index(
+        [("success", 1), ("created_at", -1)],
+        name="email_logs_success_date",
+    )
 
 
 async def upsert_global_user(

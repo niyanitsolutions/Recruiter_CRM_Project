@@ -160,7 +160,10 @@ async def create_candidate(
         db=db,
         candidate_data=candidate_data,
         created_by=current_user["id"],
-        partner_id=partner_id
+        partner_id=partner_id,
+        company_id=current_user.get("company_id", ""),
+        company_name=current_user.get("company_name", ""),
+        recruiter_name=current_user.get("full_name", ""),
     )
     
     return {"success": True, "message": "Candidate created successfully", "data": candidate}

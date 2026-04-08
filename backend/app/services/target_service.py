@@ -31,7 +31,10 @@ class TargetService:
         self,
         data: CreateTargetRequest,
         company_id: str,
-        user_id: str
+        user_id: str,
+        *,
+        company_name: str = "",
+        creator_name: str = "",
     ) -> TargetResponse:
         """Create a new target"""
         # Get assigned user name if individual target
@@ -68,7 +71,35 @@ class TargetService:
         }
         
         await self.targets.insert_one(target)
-        
+
+        # Send TARGET_ASSIGNED email for individual targets (best-effort)
+        if data.scope.value == "individual" and data.assigned_to and data.assigned_to != user_id:
+            try:
+                assignee_doc = await self.db.users.find_one({"_id": data.assigned_to})
+                if assignee_doc and assignee_doc.get("email"):
+                    from app.services.email_service import send_target_assigned_email
+                    # Resolve assigner name: explicit param > DB lookup > fallback
+                    _by_name = creator_name or "a manager"
+                    if not _by_name or _by_name == "a manager":
+                        creator_doc = await self.db.users.find_one({"_id": user_id}, {"full_name": 1})
+                        _by_name = (creator_doc.get("full_name") if creator_doc else None) or "a manager"
+                    await send_target_assigned_email(
+                        to_email=assignee_doc["email"],
+                        assignee_name=assignee_doc.get("full_name", ""),
+                        target_name=data.name,
+                        target_value=data.target_value,
+                        unit=data.unit,
+                        period=data.period.value,
+                        start_date=str(data.start_date),
+                        end_date=str(data.end_date),
+                        assigned_by_name=_by_name,
+                        company_name=company_name or company_id,
+                        company_id=company_id,
+                    )
+            except Exception as _e:
+                import logging as _logging
+                _logging.getLogger(__name__).warning("Target email failed: %s", _e)
+
         return await self._to_response(target)
     
     async def get_target(

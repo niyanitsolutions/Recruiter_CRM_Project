@@ -936,9 +936,8 @@ class TenantService:
         from datetime import timedelta
         from app.core.config import settings as _settings
         token = secrets.token_urlsafe(32)
-        expiry = datetime.now(timezone.utc) + timedelta(
-            hours=_settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS
-        )
+        expire_minutes = getattr(_settings, "EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES", 15)
+        expiry = datetime.now(timezone.utc) + timedelta(minutes=expire_minutes)
         await master_db.tenants.update_one(
             {"_id": tenant_id},
             {"$set": {
@@ -948,8 +947,8 @@ class TenantService:
         )
         owner = tenant.get("owner", {})
         try:
-            from app.services.email_service import EmailService
-            await EmailService.send_verification_email(
+            from app.services.email_service import send_verification_email
+            await send_verification_email(
                 to_email=owner.get("email", ""),
                 full_name=owner.get("full_name", ""),
                 token=token,

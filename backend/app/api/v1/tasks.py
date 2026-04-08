@@ -41,7 +41,12 @@ async def create_task(
     db=Depends(get_company_db),
 ):
     """Create a new task. The authenticated user becomes the creator."""
-    task = await TaskService.create_task(db, data, current_user["id"])
+    task = await TaskService.create_task(
+        db, data, current_user["id"],
+        company_id=current_user.get("company_id", ""),
+        company_name=current_user.get("company_name", ""),
+        creator_name=current_user.get("full_name", ""),
+    )
     return {"success": True, "data": task}
 
 

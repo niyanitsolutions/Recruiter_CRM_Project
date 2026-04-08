@@ -41,9 +41,19 @@ async def _resolve_effective_permissions(user: dict, role_doc: Optional[dict], d
     """
     # ── Step 1-3: resolve base permissions ────────────────────────────────────
 
-    if bool(user.get("override_permissions")):
-        # Individual override: use exactly what's stored (even if [])
-        perms = set(user.get("permissions") or [])
+    # SAFEGUARD: owners MUST NOT use override_permissions.
+    # The is_owner flag provides full API bypass via require_permissions(); the
+    # JWT permissions list only drives the frontend sidebar — which also checks
+    # isOwner independently.  Honouring override_permissions for an owner could
+    # silently restrict their JWT to a partial list, confusing the UI.
+    is_owner = bool(user.get("is_owner"))
+
+    if bool(user.get("override_permissions")) and not is_owner:
+        # Individual override: use exactly what's stored.
+        # SAFETY: guarantee dashboard:view is always present so the sidebar
+        # never ends up completely empty even if an empty list was stored.
+        stored = set(user.get("permissions") or [])
+        perms  = stored if stored else set()
     elif role_doc and role_doc.get("permissions"):
         # Role document in DB — always reflects the latest role settings
         perms = set(role_doc["permissions"])
@@ -908,6 +918,13 @@ class AuthService:
             if AuthService._is_token_revoked(token_iat, user.get("logout_at")):
                 return None, "Session expired. Please log in again."
 
+            # SAFEGUARD: for owners, force override_permissions=False before permission
+            # resolution so a stale DB field can never restrict their JWT to a partial list.
+            # _resolve_effective_permissions already skips the override branch for owners,
+            # but clearing it here makes the intent explicit and guards against future changes.
+            if user.get("is_owner"):
+                user = {**user, "override_permissions": False}
+
             role_name = user.get("role", "admin")
 
             # Always fetch role doc — needed to merge base+override permissions correctly
@@ -1035,7 +1052,8 @@ class AuthService:
             return True, "Email is already verified. Please log in."
 
         token = secrets.token_urlsafe(32)
-        expiry = now + timedelta(hours=_settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS)
+        expire_minutes = getattr(_settings, "EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES", 15)
+        expiry = now + timedelta(minutes=expire_minutes)
         await master_db.tenants.update_one(
             {"_id": tenant["_id"]},
             {"$set": {
@@ -1045,8 +1063,8 @@ class AuthService:
         )
         owner = tenant.get("owner", {})
         try:
-            from app.services.email_service import EmailService
-            await EmailService.send_verification_email(
+            from app.services.email_service import send_verification_email
+            await send_verification_email(
                 to_email=owner.get("email", ""),
                 full_name=owner.get("full_name", ""),
                 token=token,
@@ -1066,18 +1084,26 @@ class AuthService:
         """
         master_db = get_master_db()
 
+        from app.services.email_service import send_password_reset_email as _send_reset
+
         super_admin = await master_db.super_admins.find_one({"email": email, "is_deleted": False})
         if super_admin:
             reset_token = generate_reset_token()
             await master_db.super_admins.update_one(
                 {"_id": super_admin["_id"]},
-                {
-                    "$set": {
-                        "reset_token": reset_token,
-                        "reset_token_expiry": datetime.now(timezone.utc) + timedelta(hours=1)
-                    }
-                }
+                {"$set": {
+                    "reset_token": reset_token,
+                    "reset_token_expiry": datetime.now(timezone.utc) + timedelta(hours=1),
+                }}
             )
+            try:
+                await _send_reset(
+                    to_email=email,
+                    full_name=super_admin.get("full_name", "Admin"),
+                    reset_token=reset_token,
+                )
+            except Exception:
+                pass
             return True, "Password reset instructions sent to your email"
 
         tenant = await master_db.tenants.find_one({"owner.email": email})
@@ -1085,13 +1111,20 @@ class AuthService:
             reset_token = generate_reset_token()
             await master_db.tenants.update_one(
                 {"_id": tenant["_id"]},
-                {
-                    "$set": {
-                        "owner.reset_token": reset_token,
-                        "owner.reset_token_expiry": datetime.now(timezone.utc) + timedelta(hours=1)
-                    }
-                }
+                {"$set": {
+                    "owner.reset_token": reset_token,
+                    "owner.reset_token_expiry": datetime.now(timezone.utc) + timedelta(hours=1),
+                }}
             )
+            owner = tenant.get("owner", {})
+            try:
+                await _send_reset(
+                    to_email=email,
+                    full_name=owner.get("full_name", ""),
+                    reset_token=reset_token,
+                )
+            except Exception:
+                pass
             return True, "Password reset instructions sent to your email"
 
         tenants_cursor = master_db.tenants.find({"status": TenantStatus.ACTIVE})
@@ -1102,13 +1135,19 @@ class AuthService:
                 reset_token = generate_reset_token()
                 await company_db.users.update_one(
                     {"_id": user["_id"]},
-                    {
-                        "$set": {
-                            "reset_token": reset_token,
-                            "reset_token_expiry": datetime.now(timezone.utc) + timedelta(hours=1)
-                        }
-                    }
+                    {"$set": {
+                        "reset_token": reset_token,
+                        "reset_token_expiry": datetime.now(timezone.utc) + timedelta(hours=1),
+                    }}
                 )
+                try:
+                    await _send_reset(
+                        to_email=email,
+                        full_name=user.get("full_name", ""),
+                        reset_token=reset_token,
+                    )
+                except Exception:
+                    pass
                 return True, "Password reset instructions sent to your email"
 
         return True, "If an account exists with this email, reset instructions have been sent"

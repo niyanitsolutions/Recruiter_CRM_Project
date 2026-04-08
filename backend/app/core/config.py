@@ -60,7 +60,13 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "noreply@crm.example.com"
     SMTP_FROM_NAME: str = "CRM Platform"
     EMAIL_VERIFICATION_ENABLED: bool = True
-    EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS: int = 24
+    # Token expiry in minutes (15 min default, kept for compat with hours field)
+    EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS: int = 1  # legacy field, use MINUTES below
+    EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 15
+
+    # Fernet symmetric key for encrypting tenant SMTP passwords in the DB.
+    # Generate once: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    FERNET_SECRET_KEY: str = ""
 
     # Frontend URL (used to build verification / reset links)
     FRONTEND_URL: str = "http://localhost:5173"

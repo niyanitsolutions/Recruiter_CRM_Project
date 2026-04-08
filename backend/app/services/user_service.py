@@ -53,6 +53,7 @@ class UserService:
         created_by_role: str,
         ip_address: Optional[str] = None,
         company_id: Optional[str] = None,
+        company_name: str = "",
     ) -> Tuple[bool, str, Optional[Dict]]:
         """Create a new user in the company"""
         try:
@@ -119,7 +120,12 @@ class UserService:
                 else:
                     role_enum = SystemRole(user_data.role) if user_data.role in [r.value for r in SystemRole] else None
                     role_permissions = [p.value for p in ROLE_DEFAULT_PERMISSIONS.get(role_enum, [])] if role_enum else []
-            
+
+            # SAFEGUARD: when override will be active and the resolved list is empty,
+            # guarantee at minimum dashboard:view so the sidebar is never completely blank.
+            if user_data.permissions is not None and not role_permissions:
+                role_permissions = ["dashboard:view"]
+
             # Create user document
             user_id = str(ObjectId())
             now = datetime.now(timezone.utc)
@@ -217,12 +223,27 @@ class UserService:
                 description=f"Created new user: {user_data.full_name} ({user_data.username})",
                 ip_address=ip_address
             )
-            
+
+            # Send welcome email with credentials (best-effort, non-blocking)
+            try:
+                from app.services.email_service import send_welcome_email
+                if user_data.email:
+                    await send_welcome_email(
+                        to_email=user_data.email,
+                        full_name=user_data.full_name,
+                        username=user_data.username,
+                        company_name=company_name or company_id or "your company",
+                        temp_password=user_data.password,
+                        company_id=company_id or "",
+                    )
+            except Exception as _email_err:
+                logger.warning("Welcome email failed for %s: %s", user_data.email, _email_err)
+
             # Return user without password
             user_doc.pop("password_hash", None)
             user_doc["id"] = user_doc.pop("_id")
             user_doc["role_name"] = get_role_display_name(user_data.role)
-            
+
             return True, "User created successfully", user_doc
             
         except Exception as e:
@@ -444,13 +465,26 @@ class UserService:
             # Derive override_permissions from what the caller sent.
             # True  → _resolve_effective_permissions uses this stored list at login.
             # False → login derives from role doc / ROLE_PERMISSIONS (role-driven fallback).
-            # Must be set BEFORE the pop so we keep the value we compute, not what caller sent.
+            # Must be computed BEFORE the pop so we keep the value we calculate, not what caller sent.
             if "permissions" in update_dict:
                 _new_override = True   # explicit permissions list supplied → honour it
             elif "role" in update_dict:
                 _new_override = False  # role changed, no custom perms → revert to role-driven
             else:
                 _new_override = None   # neither changed → don't touch the field
+
+            # SAFEGUARD 1 — owners must never have override_permissions=True.
+            # Their access is governed solely by the is_owner flag; _resolve_effective_permissions
+            # skips the override branch for owners, so setting it True would be a no-op at
+            # runtime but could confuse future audits.
+            if existing.get("is_owner") and _new_override is True:
+                _new_override = False
+
+            # SAFEGUARD 2 — when override is active (True) and the permission list is empty,
+            # guarantee dashboard:view so the sidebar is never completely blank.
+            if _new_override is True and "permissions" in update_dict and not update_dict["permissions"]:
+                update_dict["permissions"] = ["dashboard:view"]
+
             update_dict.pop("override_permissions", None)  # never let caller set this directly
             if _new_override is not None:
                 update_dict["override_permissions"] = _new_override

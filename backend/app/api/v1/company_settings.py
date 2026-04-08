@@ -53,6 +53,16 @@ class NotificationsUpdateRequest(BaseModel):
     notification_preferences: NotificationPreferences
 
 
+class SmtpConfigRequest(BaseModel):
+    host: str
+    port: int = 587
+    username: str
+    password: str           # plain text — will be encrypted before storage
+    from_email: Optional[str] = None
+    from_name: Optional[str] = None
+    enabled: bool = True
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _settings_to_dict(settings_obj) -> dict:
@@ -203,3 +213,93 @@ async def update_notifications(
     update = CompanySettingsUpdate(notification_preferences=data.notification_preferences)
     updated = await SettingsService.update_company_settings(db, update, current_user["id"])
     return {"success": True, "message": "Notification preferences updated", "data": _settings_to_dict(updated)}
+
+
+# ── SMTP Configuration ────────────────────────────────────────────────────────
+
+@router.get("/smtp")
+async def get_smtp_config(
+    current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
+    db=Depends(get_company_db),
+):
+    """Get current tenant SMTP configuration (password masked)."""
+    doc = await db.smtp_config.find_one({"_id": "smtp"})
+    if not doc:
+        return {"success": True, "data": None}
+    return {
+        "success": True,
+        "data": {
+            "host": doc.get("host"),
+            "port": doc.get("port", 587),
+            "username": doc.get("username"),
+            "from_email": doc.get("from_email"),
+            "from_name": doc.get("from_name"),
+            "enabled": doc.get("enabled", True),
+            "has_password": bool(doc.get("password")),
+        },
+    }
+
+
+@router.put("/smtp")
+async def save_smtp_config(
+    data: SmtpConfigRequest,
+    current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
+    db=Depends(get_company_db),
+):
+    """Save (upsert) tenant SMTP configuration. Tests connection before saving."""
+    import asyncio
+    from app.services.email_service import encrypt_password, test_smtp_connection
+
+    cfg = {
+        "host": data.host,
+        "port": data.port,
+        "username": data.username,
+        "password": data.password,
+    }
+    ok, msg = await asyncio.to_thread(test_smtp_connection, cfg)
+    if not ok:
+        raise HTTPException(status_code=400, detail=f"SMTP test failed: {msg}")
+
+    from datetime import datetime, timezone
+    await db.smtp_config.update_one(
+        {"_id": "smtp"},
+        {"$set": {
+            "_id": "smtp",
+            "host": data.host,
+            "port": data.port,
+            "username": data.username,
+            "password": encrypt_password(data.password),
+            "from_email": data.from_email or data.username,
+            "from_name": data.from_name or "",
+            "enabled": data.enabled,
+            "updated_at": datetime.now(timezone.utc),
+            "updated_by": current_user.get("id"),
+        }},
+        upsert=True,
+    )
+    return {"success": True, "message": "SMTP configuration saved and verified"}
+
+
+@router.delete("/smtp")
+async def delete_smtp_config(
+    current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
+    db=Depends(get_company_db),
+):
+    """Remove tenant SMTP config (will fall back to system SMTP)."""
+    await db.smtp_config.delete_one({"_id": "smtp"})
+    return {"success": True, "message": "SMTP configuration removed"}
+
+
+@router.post("/smtp/test")
+async def test_smtp_config(
+    data: SmtpConfigRequest,
+    current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
+):
+    """Test an SMTP config without saving it."""
+    import asyncio
+    from app.services.email_service import test_smtp_connection
+    cfg = {"host": data.host, "port": data.port, "username": data.username, "password": data.password}
+    ok, msg = await asyncio.to_thread(test_smtp_connection, cfg)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"success": True, "message": msg}

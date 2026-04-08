@@ -135,7 +135,10 @@ async def create_job(
         job = await JobService.create_job(
             db=db,
             job_data=job_data,
-            created_by=current_user["id"]
+            created_by=current_user["id"],
+            company_id=current_user.get("company_id", ""),
+            company_name=current_user.get("company_name", ""),
+            created_by_name=current_user.get("full_name", ""),
         )
         return {"success": True, "message": "Job created successfully", "data": job}
     except HTTPException:

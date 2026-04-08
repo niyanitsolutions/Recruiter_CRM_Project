@@ -128,9 +128,11 @@ async def schedule_interview(
     interview = await InterviewService.schedule_interview(
         db=db,
         interview_data=interview_data,
-        scheduled_by=current_user["id"]
+        scheduled_by=current_user["id"],
+        company_id=current_user.get("company_id", ""),
+        company_name=current_user.get("company_name", ""),
+        scheduler_name=current_user.get("full_name", ""),
     )
-    
     return {"success": True, "message": "Interview scheduled successfully", "data": interview}
 
 
@@ -186,9 +188,10 @@ async def reschedule_interview(
         db=db,
         interview_id=interview_id,
         reschedule_data=reschedule_data,
-        rescheduled_by=current_user["id"]
+        rescheduled_by=current_user["id"],
+        company_id=current_user.get("company_id", ""),
+        company_name=current_user.get("company_name", ""),
     )
-    
     return {"success": True, "message": "Interview rescheduled successfully", "data": interview}
 
 
