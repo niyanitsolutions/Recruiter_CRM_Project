@@ -91,6 +91,9 @@ const AdminDashboard = () => {
   const permissions = useSelector(selectUserPermissions)
   const perms       = new Set(permissions)
 
+  // UI-level role gate — owner (JWT flag) or admin role only
+  const isAdminOrOwner = user?.isOwner || user?.role === 'admin'
+
   const [loading,           setLoading]           = useState(true)
   const [dashboardData,     setDashboardData]     = useState(null)
   const [recruitStats,      setRecruitStats]      = useState(null)
@@ -224,13 +227,15 @@ const AdminDashboard = () => {
       </div>
 
       {/* Subscription expiry / seat banner */}
-      <SubscriptionBanner
-        seatStatus={seatStatus}
-        onUpgrade={() => setShowUpgradeModal(true)}
-      />
+      {isAdminOrOwner && (
+        <SubscriptionBanner
+          seatStatus={seatStatus}
+          onUpgrade={() => setShowUpgradeModal(true)}
+        />
+      )}
 
       {/* Subscription info card */}
-      {seatStatus && (
+      {isAdminOrOwner && seatStatus && (
         <div className="bg-white rounded-xl border border-surface-100 shadow-sm p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -290,7 +295,7 @@ const AdminDashboard = () => {
       )}
 
       {/* Bottom panels — Recent Activity + Users by Role */}
-      {(has('audit:view') || has('users:view')) && (
+      {isAdminOrOwner && (has('audit:view') || has('users:view')) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Recent Activity */}
           {has('audit:view') && (
@@ -342,7 +347,7 @@ const AdminDashboard = () => {
       )}
 
       {/* Hiring Funnel */}
-      {has('candidates:view') && recruitStats && (() => {
+      {isAdminOrOwner && has('candidates:view') && recruitStats && (() => {
         const funnel = [
           { label: 'Applied',     value: recruitStats.applied     || 0, color: '#6366f1' },
           { label: 'Screening',   value: recruitStats.screening   || 0, color: '#8b5cf6' },
@@ -425,7 +430,7 @@ const AdminDashboard = () => {
       />
 
       {/* Activity Overview */}
-      {has('audit:view') && activity_stats && (
+      {isAdminOrOwner && has('audit:view') && activity_stats && (
         <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-6">
           <h2 className="text-lg font-semibold text-surface-900 mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-surface-400" />
