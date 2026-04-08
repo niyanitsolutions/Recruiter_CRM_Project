@@ -105,16 +105,22 @@ def _do_send(cfg: dict, to_email: str, subject: str,
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     timeout = cfg.get("timeout", settings.SMTP_TIMEOUT)
-    logger.debug("[SMTP] Connecting to %s:%s (timeout=%ss)…", cfg["host"], cfg["port"], timeout)
+
+    logger.info("[SMTP] STEP 1: Connecting to %s:%s (timeout=%ss)", cfg["host"], cfg["port"], timeout)
     with smtplib.SMTP(cfg["host"], cfg["port"], timeout=timeout) as server:
         server.ehlo()
+        logger.info("[SMTP] STEP 2: Starting TLS")
         server.starttls()
         server.ehlo()
-        logger.debug("[SMTP] Logging in as %s", cfg["username"])
+        logger.info("[SMTP] STEP 3: Logging in as %s", cfg["username"])
         server.login(cfg["username"], cfg["password"])
-        logger.debug("[SMTP] Sending to %s", to_email)
-        server.sendmail(cfg["from_email"], to_email, msg.as_string())
-        logger.debug("[SMTP] Delivered to %s", to_email)
+        logger.info("[SMTP] STEP 4: Sending to %s | subject=%s", to_email, subject)
+        result = server.sendmail(cfg["from_email"], to_email, msg.as_string())
+        # sendmail returns a dict of {recipient: (code, msg)} for FAILED recipients.
+        # An empty dict {} means all recipients were accepted.
+        if result:
+            raise Exception(f"SMTP rejected recipient(s): {result}")
+        logger.info("[SMTP] STEP 5: Delivered successfully | to=%s | smtp_result=%s", to_email, result)
 
 
 # ── Email log ─────────────────────────────────────────────────────────────────
