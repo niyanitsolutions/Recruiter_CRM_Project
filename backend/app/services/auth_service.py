@@ -1062,16 +1062,13 @@ class AuthService:
             }}
         )
         owner = tenant.get("owner", {})
-        try:
-            from app.services.email_service import send_verification_email
-            await send_verification_email(
-                to_email=owner.get("email", ""),
-                full_name=owner.get("full_name", ""),
-                token=token,
-                account_type="tenant",
-            )
-        except Exception:
-            pass
+        from app.services.email_service import send_verification_email, _fire_email
+        _fire_email(send_verification_email(
+            to_email=owner.get("email", ""),
+            full_name=owner.get("full_name", ""),
+            token=token,
+            account_type="tenant",
+        ))
         return True, "If an unverified account exists with this email, a new link has been sent."
 
     @staticmethod

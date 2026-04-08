@@ -2,7 +2,7 @@
 Candidates API - Phase 3
 Handles candidate management with AI resume parsing and keyword search
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime, timezone, timedelta
@@ -407,6 +407,7 @@ class FormLinkRequest(BaseModel):
 
 @router.post("/generate-form-link")
 async def generate_candidate_form_link(
+    background_tasks: BackgroundTasks,
     body: FormLinkRequest = FormLinkRequest(),
     current_user: dict = Depends(get_current_user),
     db=Depends(get_company_db),
@@ -445,25 +446,21 @@ async def generate_candidate_form_link(
                 "to=%s token=%s", body.email, token
             )
         else:
-            try:
-                from app.services.email_service import send_candidate_form_link_email
-                email_sent = await send_candidate_form_link_email(
-                    to_email=body.email,
-                    form_url=form_url,
-                    sent_by_name=current_user.get("full_name", "The Recruitment Team"),
-                    company_name=current_user.get("company_name", ""),
-                    company_id=current_user.get("company_id", ""),
-                )
-            except Exception as _e:
-                import logging as _log
-                _log.getLogger(__name__).error(
-                    "[CANDIDATE FORM] Email send failed. to=%s error=%s", body.email, _e
-                )
+            from app.services.email_service import send_candidate_form_link_email
+            background_tasks.add_task(
+                send_candidate_form_link_email,
+                to_email=body.email,
+                form_url=form_url,
+                sent_by_name=current_user.get("full_name", "The Recruitment Team"),
+                company_name=current_user.get("company_name", ""),
+                company_id=current_user.get("company_id", ""),
+            )
+            email_sent = True
 
-    if body.email and email_enabled and not email_sent:
-        msg = "Form link generated but email could not be delivered. Copy the link to share manually."
-    elif email_sent:
+    if email_sent:
         msg = "Form link sent successfully"
+    elif body.email and email_enabled:
+        msg = "Form link generated — email queued for delivery"
     else:
         msg = "Form link generated"
 

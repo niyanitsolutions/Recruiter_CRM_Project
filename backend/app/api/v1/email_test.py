@@ -60,7 +60,7 @@ async def test_email(
         "password":   body.password or sys_cfg["password"],
         "from_email": sys_cfg["from_email"],
         "from_name":  sys_cfg["from_name"],
-        "timeout":    sys_cfg.get("timeout", 15),
+        "timeout":    sys_cfg.get("timeout", settings.SMTP_TIMEOUT),
     }
 
     # Guard: EMAIL_ENABLED

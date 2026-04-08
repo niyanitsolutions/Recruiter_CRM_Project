@@ -80,13 +80,13 @@ class TaskService:
         _assignee_id = data.assigned_to
         if _assignee_email and _assignee_id and _assignee_id != created_by:
             try:
-                from app.services.email_service import send_task_assigned_email
+                from app.services.email_service import send_task_assigned_email, _fire_email
                 due_str = data.due_date.strftime("%d %b %Y") if data.due_date else None
                 # Resolve creator name: prefer explicit param > DB doc > fallback string
                 _by_name = (creator_name
                             or (creator.get("full_name") if creator else None)
                             or "a team member")
-                await send_task_assigned_email(
+                _fire_email(send_task_assigned_email(
                     to_email=_assignee_email,
                     assignee_name=assignee.get("full_name", ""),
                     task_title=data.title,
@@ -96,9 +96,9 @@ class TaskService:
                     assigned_by_name=_by_name,
                     company_name=company_name,
                     company_id=company_id,
-                )
+                ))
             except Exception as _e:
-                logger.warning("Task email failed for %s: %s", _assignee_email, _e)
+                logger.warning("Task email scheduling failed for %s: %s", _assignee_email, _e)
 
         return TaskService._to_response(doc)
 

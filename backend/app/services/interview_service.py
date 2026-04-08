@@ -256,8 +256,8 @@ class InterviewService:
         # 1. Candidate confirmation
         if candidate_email:
             try:
-                from app.services.email_service import send_interview_scheduled_email
-                await send_interview_scheduled_email(
+                from app.services.email_service import send_interview_scheduled_email, _fire_email
+                _fire_email(send_interview_scheduled_email(
                     to_email=candidate_email,
                     candidate_name=candidate_name or "",
                     job_title=job_title or "",
@@ -270,21 +270,21 @@ class InterviewService:
                     duration_minutes=interview_data.duration_minutes or 60,
                     instructions=interview_data.instructions,
                     company_id=company_id,
-                )
+                ))
             except Exception as _e:
-                import logging as _log; _log.getLogger(__name__).warning("Interview candidate email failed: %s", _e)
+                import logging as _log; _log.getLogger(__name__).warning("Interview candidate email scheduling failed: %s", _e)
 
         # 2. Each interviewer notification
         if interview_data.interviewer_ids:
             try:
-                from app.services.email_service import send_interviewer_assigned_email
+                from app.services.email_service import send_interviewer_assigned_email, _fire_email
                 interviewers_with_email = await db["users"].find(
                     {"_id": {"$in": interview_data.interviewer_ids}, "email": {"$exists": True}},
                     {"_id": 1, "full_name": 1, "email": 1}
                 ).to_list(length=20)
                 for iv in interviewers_with_email:
                     if iv.get("email"):
-                        await send_interviewer_assigned_email(
+                        _fire_email(send_interviewer_assigned_email(
                             to_email=iv["email"],
                             interviewer_name=iv.get("full_name", ""),
                             candidate_name=candidate_name or "",
@@ -296,9 +296,9 @@ class InterviewService:
                             venue_or_link=venue_or_link,
                             duration_minutes=interview_data.duration_minutes or 60,
                             company_id=company_id,
-                        )
+                        ))
             except Exception as _e:
-                import logging as _log; _log.getLogger(__name__).warning("Interviewer email failed: %s", _e)
+                import logging as _log; _log.getLogger(__name__).warning("Interviewer email scheduling failed: %s", _e)
 
         return await InterviewService.get_interview(db, interview_dict["_id"])
     
@@ -469,10 +469,10 @@ class InterviewService:
         candidate_email = existing.get("candidate_email")
         if candidate_email:
             try:
-                from app.services.email_service import send_interview_rescheduled_email
+                from app.services.email_service import send_interview_rescheduled_email, _fire_email
                 mode = existing.get("interview_mode", "")
                 venue_or_link = existing.get("meeting_link") or existing.get("venue") or existing.get("address") or ""
-                await send_interview_rescheduled_email(
+                _fire_email(send_interview_rescheduled_email(
                     to_email=candidate_email,
                     candidate_name=existing.get("candidate_name", ""),
                     job_title=existing.get("job_title", ""),
@@ -483,9 +483,9 @@ class InterviewService:
                     venue_or_link=venue_or_link,
                     reason=reschedule_data.reason,
                     company_id=company_id,
-                )
+                ))
             except Exception as _e:
-                import logging as _log; _log.getLogger(__name__).warning("Reschedule email failed: %s", _e)
+                import logging as _log; _log.getLogger(__name__).warning("Reschedule email scheduling failed: %s", _e)
 
         return await InterviewService.get_interview(db, interview_id)
 

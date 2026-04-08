@@ -77,13 +77,13 @@ class TargetService:
             try:
                 assignee_doc = await self.db.users.find_one({"_id": data.assigned_to})
                 if assignee_doc and assignee_doc.get("email"):
-                    from app.services.email_service import send_target_assigned_email
+                    from app.services.email_service import send_target_assigned_email, _fire_email
                     # Resolve assigner name: explicit param > DB lookup > fallback
                     _by_name = creator_name or "a manager"
                     if not _by_name or _by_name == "a manager":
                         creator_doc = await self.db.users.find_one({"_id": user_id}, {"full_name": 1})
                         _by_name = (creator_doc.get("full_name") if creator_doc else None) or "a manager"
-                    await send_target_assigned_email(
+                    _fire_email(send_target_assigned_email(
                         to_email=assignee_doc["email"],
                         assignee_name=assignee_doc.get("full_name", ""),
                         target_name=data.name,
@@ -95,10 +95,10 @@ class TargetService:
                         assigned_by_name=_by_name,
                         company_name=company_name or company_id,
                         company_id=company_id,
-                    )
+                    ))
             except Exception as _e:
                 import logging as _logging
-                _logging.getLogger(__name__).warning("Target email failed: %s", _e)
+                _logging.getLogger(__name__).warning("Target email scheduling failed: %s", _e)
 
         return await self._to_response(target)
     

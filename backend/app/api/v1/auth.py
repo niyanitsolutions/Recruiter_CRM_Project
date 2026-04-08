@@ -3,7 +3,7 @@ Authentication API Endpoints
 Login, registration, and token management
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status, Depends, Request
 from typing import Optional
 from pydantic import BaseModel
 import logging
@@ -301,22 +301,19 @@ async def logout(auth: AuthContext = Depends(get_current_user)):
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
-async def forgot_password(request: ForgotPasswordRequest):
+async def forgot_password(request: ForgotPasswordRequest, background_tasks: BackgroundTasks):
     """
     Initiate password reset process.
 
-    Returns success=True only when email was actually sent (or account not found).
-    Returns success=False with a clear message when the email service is unavailable.
+    Responds immediately (<1 s). Token generation and email delivery happen in the
+    background so SMTP latency never delays the HTTP response.
     Account existence is never revealed (anti-enumeration).
     """
-    success, message = await auth_service.initiate_password_reset(request.email)
-    if not success:
-        # Email send failed — surface the real error so the user knows to retry
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=message,
-        )
-    return {"message": message, "success": True}
+    background_tasks.add_task(auth_service.initiate_password_reset, request.email)
+    return {
+        "message": "If an account exists with this email, reset instructions have been sent",
+        "success": True,
+    }
 
 
 @router.post("/reset-password", response_model=MessageResponse)

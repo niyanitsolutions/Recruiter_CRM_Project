@@ -224,20 +224,17 @@ class UserService:
                 ip_address=ip_address
             )
 
-            # Send welcome email with credentials (best-effort, non-blocking)
-            try:
-                from app.services.email_service import send_welcome_email
-                if user_data.email:
-                    await send_welcome_email(
-                        to_email=user_data.email,
-                        full_name=user_data.full_name,
-                        username=user_data.username,
-                        company_name=company_name or company_id or "your company",
-                        temp_password=user_data.password,
-                        company_id=company_id or "",
-                    )
-            except Exception as _email_err:
-                logger.warning("Welcome email failed for %s: %s", user_data.email, _email_err)
+            # Send welcome email with credentials (fire-and-forget — never blocks user creation)
+            if user_data.email:
+                from app.services.email_service import send_welcome_email as _send_welcome, _fire_email
+                _fire_email(_send_welcome(
+                    to_email=user_data.email,
+                    full_name=user_data.full_name,
+                    username=user_data.username,
+                    company_name=company_name or company_id or "your company",
+                    temp_password=user_data.password,
+                    company_id=company_id or "",
+                ))
 
             # Return user without password
             user_doc.pop("password_hash", None)

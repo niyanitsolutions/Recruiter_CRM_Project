@@ -104,13 +104,17 @@ def _do_send(cfg: dict, to_email: str, subject: str,
         msg.attach(MIMEText(text_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    timeout = cfg.get("timeout", 15)
+    timeout = cfg.get("timeout", settings.SMTP_TIMEOUT)
+    logger.debug("[SMTP] Connecting to %s:%s (timeout=%ss)…", cfg["host"], cfg["port"], timeout)
     with smtplib.SMTP(cfg["host"], cfg["port"], timeout=timeout) as server:
         server.ehlo()
         server.starttls()
         server.ehlo()
+        logger.debug("[SMTP] Logging in as %s", cfg["username"])
         server.login(cfg["username"], cfg["password"])
+        logger.debug("[SMTP] Sending to %s", to_email)
         server.sendmail(cfg["from_email"], to_email, msg.as_string())
+        logger.debug("[SMTP] Delivered to %s", to_email)
 
 
 # ── Email log ─────────────────────────────────────────────────────────────────
@@ -123,6 +127,7 @@ async def _log_email(
     success: bool,
     error: str = "",
     company_id: str = "",
+    attempts: int = 1,
 ) -> None:
     """Fire-and-forget write to master_db.email_logs. Never raises."""
     try:
@@ -134,11 +139,26 @@ async def _log_email(
             "smtp_used": smtp_used,
             "company_id": company_id,
             "success": success,
+            "attempts": attempts,
             "error": error[:500] if error else "",   # truncate very long traces
             "created_at": datetime.now(timezone.utc),
         })
     except Exception as exc:
         logger.debug("email_logs write failed: %s", exc)
+
+
+# ── Fire-and-forget helper (service-layer use) ────────────────────────────────
+
+def _fire_email(coro) -> None:
+    """
+    Schedule an email coroutine as a non-blocking background task.
+    Use in service-layer code where FastAPI BackgroundTasks is not available.
+    All errors are caught and logged inside send_email() — no silent failures.
+    """
+    try:
+        asyncio.get_running_loop().create_task(coro)
+    except RuntimeError:
+        logger.warning("[EMAIL] Cannot schedule background email — no running event loop")
 
 
 # ── Tenant SMTP config loader ─────────────────────────────────────────────────
@@ -240,42 +260,54 @@ async def send_email(
                     "host=%s error=%s", tenant_cfg["host"], exc
                 )
 
-    # ── System SMTP ───────────────────────────────────────────────────────────
-    try:
-        await asyncio.to_thread(
-            _do_send, sys_cfg, to, subject, html_body, text_body
-        )
-        logger.info("[EMAIL SENT via system SMTP] event=%s to=%s", event_type, to)
-        await _log_email(to, subject, event_type, "system", True, "", company_id)
-        return True
+    # ── System SMTP with retry ────────────────────────────────────────────────
+    _MAX_RETRIES = 3
+    _last_exc: Optional[Exception] = None
 
-    except smtplib.SMTPAuthenticationError as exc:
-        msg = (
-            "SMTP authentication failed. "
-            f"Check SMTP_USERNAME and SMTP_PASSWORD in .env. "
-            f"If using Gmail, ensure you are using an App Password (not your account password). "
-            f"host={sys_cfg['host']} user={sys_cfg['username']} error={exc}"
-        )
-        logger.error("[EMAIL ERROR] %s", msg)
-        await _log_email(to, subject, event_type, "system", False, str(exc), company_id)
-        return False
+    for _attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            await asyncio.to_thread(_do_send, sys_cfg, to, subject, html_body, text_body)
+            logger.info(
+                "[EMAIL SENT via system SMTP] event=%s to=%s attempts=%d",
+                event_type, to, _attempt,
+            )
+            await _log_email(
+                to, subject, event_type, "system", True, "", company_id, attempts=_attempt
+            )
+            return True
 
-    except smtplib.SMTPConnectError as exc:
-        msg = (
-            f"Cannot connect to SMTP server {sys_cfg['host']}:{sys_cfg['port']}. "
-            f"Check SMTP_HOST and SMTP_PORT. error={exc}"
-        )
-        logger.error("[EMAIL ERROR] %s", msg)
-        await _log_email(to, subject, event_type, "system", False, str(exc), company_id)
-        return False
+        except smtplib.SMTPAuthenticationError as exc:
+            # Never retry auth failures — credentials won't change between attempts
+            logger.error(
+                "[EMAIL ERROR] SMTP authentication failed (no retry). "
+                "Check SMTP_USERNAME/SMTP_PASSWORD. If Gmail, use an App Password. "
+                "host=%s user=%s error=%s",
+                sys_cfg["host"], sys_cfg["username"], exc,
+            )
+            await _log_email(
+                to, subject, event_type, "system", False, str(exc), company_id, attempts=_attempt
+            )
+            return False
 
-    except Exception as exc:
-        logger.error(
-            "[EMAIL ERROR] Unexpected failure sending to %s. event=%s error=%s",
-            to, event_type, exc
-        )
-        await _log_email(to, subject, event_type, "system", False, str(exc), company_id)
-        return False
+        except Exception as exc:
+            _last_exc = exc
+            logger.warning(
+                "[EMAIL] Attempt %d/%d failed for %s. event=%s error=%s",
+                _attempt, _MAX_RETRIES, to, event_type, exc,
+            )
+            if _attempt < _MAX_RETRIES:
+                await asyncio.sleep(1)
+
+    # All retries exhausted
+    _error_msg = str(_last_exc) if _last_exc else "Unknown error"
+    logger.error(
+        "[EMAIL ERROR] All %d attempts failed for %s. event=%s last_error=%s",
+        _MAX_RETRIES, to, event_type, _error_msg,
+    )
+    await _log_email(
+        to, subject, event_type, "system", False, _error_msg, company_id, attempts=_MAX_RETRIES
+    )
+    return False
 
 
 # ── Startup validator ─────────────────────────────────────────────────────────

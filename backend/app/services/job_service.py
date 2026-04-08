@@ -148,7 +148,8 @@ class JobService:
             )
             team_emails = [u["email"] async for u in team_cursor if u.get("email")]
             if team_emails:
-                await send_job_opened_email(
+                from app.services.email_service import _fire_email
+                _fire_email(send_job_opened_email(
                     to_emails=team_emails,
                     job_title=job_data.title,
                     client_name=job_dict.get("client_name", ""),
@@ -158,10 +159,10 @@ class JobService:
                     company_name=company_name or company_id or "the company",
                     created_by_name=created_by_name,
                     company_id=company_id,
-                )
+                ))
         except Exception as _e:
             import logging as _log
-            _log.getLogger(__name__).warning("Job opened email failed: %s", _e)
+            _log.getLogger(__name__).warning("Job opened email scheduling failed: %s", _e)
 
         return await JobService.get_job(db, job_dict["_id"])
     
