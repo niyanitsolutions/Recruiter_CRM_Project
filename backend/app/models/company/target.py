@@ -139,6 +139,7 @@ class TargetModel(BaseModel):
     scope: TargetScope = TargetScope.INDIVIDUAL
     assigned_to: Optional[str] = None  # user_id for individual, team_id for team
     assigned_to_name: Optional[str] = None
+    department: Optional[str] = None
     
     # Period
     period: TargetPeriod
@@ -231,6 +232,7 @@ class CreateTargetRequest(BaseModel):
     target_type: TargetType
     scope: TargetScope = TargetScope.INDIVIDUAL
     assigned_to: Optional[str] = None
+    department: Optional[str] = None
     period: TargetPeriod
     start_date: date
     end_date: date

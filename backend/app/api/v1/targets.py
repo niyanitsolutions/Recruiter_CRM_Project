@@ -82,12 +82,13 @@ async def list_targets(
     assigned_to: Optional[str] = None,
     status: Optional[TargetStatus] = None,
     active_only: bool = False,
+    department: Optional[str] = None,
     current_user: dict = Depends(require_permissions(["targets:view"])),
     db = Depends(get_company_db)
 ):
     """List targets with filters"""
     service = TargetService(db)
-    
+
     return await service.list_targets(
         company_id=current_user["company_id"],
         page=page,
@@ -97,7 +98,8 @@ async def list_targets(
         scope=scope,
         assigned_to=assigned_to,
         status=status,
-        active_only=active_only
+        active_only=active_only,
+        department=department
     )
 
 

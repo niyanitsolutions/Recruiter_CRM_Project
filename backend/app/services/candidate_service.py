@@ -125,7 +125,7 @@ class CandidateService:
                 entity_id=candidate_dict["_id"],
                 entity_name=full_name,
                 user_id=created_by,
-                user_name="",
+                user_name=recruiter_name,
                 user_role="",
                 description=f"Candidate created: {full_name}",
             )
@@ -171,6 +171,14 @@ class CandidateService:
                 detail="Candidate not found"
             )
         
+        # Resolve partner name if a partner_id is set
+        partner_name = None
+        partner_id = candidate.get("partner_id")
+        if partner_id:
+            partner_doc = await db.users.find_one({"_id": partner_id, "is_deleted": False}, {"full_name": 1})
+            if partner_doc:
+                partner_name = partner_doc.get("full_name")
+
         return CandidateResponse(
             id=candidate["_id"],
             first_name=candidate["first_name"],
@@ -178,11 +186,13 @@ class CandidateService:
             full_name=candidate.get("full_name"),
             email=candidate["email"],
             mobile=candidate["mobile"],
+            alternate_mobile=candidate.get("alternate_mobile"),
             date_of_birth=candidate.get("date_of_birth"),
             gender=candidate.get("gender"),
             current_city=candidate.get("current_city"),
             current_state=candidate.get("current_state"),
             total_experience_years=candidate.get("total_experience_years"),
+            total_experience_months=candidate.get("total_experience_months"),
             current_company=candidate.get("current_company"),
             current_designation=candidate.get("current_designation"),
             current_ctc=candidate.get("current_ctc"),
@@ -193,11 +203,18 @@ class CandidateService:
             education=candidate.get("education", []),
             work_experience=candidate.get("work_experience", []),
             highest_qualification=candidate.get("highest_qualification"),
+            percentage=candidate.get("percentage"),
+            preferred_locations=candidate.get("preferred_locations", []),
+            willing_to_relocate=bool(candidate.get("willing_to_relocate", False)),
             resume_url=candidate.get("resume_url"),
             photo_url=candidate.get("photo_url"),
             resume_parsed=candidate.get("resume_parsed", False),
+            linkedin_url=candidate.get("linkedin_url"),
+            portfolio_url=candidate.get("portfolio_url"),
+            notes=candidate.get("notes"),
             source=candidate.get("source", "direct"),
-            partner_id=candidate.get("partner_id"),
+            partner_id=partner_id,
+            partner_name=partner_name,
             status=_normalize_status(candidate.get("status", "active")),
             assigned_to=candidate.get("assigned_to"),
             current_job_id=candidate.get("current_job_id"),
@@ -398,7 +415,8 @@ class CandidateService:
         db: AsyncIOMotorDatabase,
         candidate_id: str,
         update_data: CandidateUpdate,
-        updated_by: str
+        updated_by: str,
+        user_name: str = ""
     ) -> CandidateResponse:
         """Update a candidate"""
         collection = db[CandidateService.COLLECTION]
@@ -480,7 +498,7 @@ class CandidateService:
                 entity_id=candidate_id,
                 entity_name=existing.get("full_name", ""),
                 user_id=updated_by,
-                user_name="",
+                user_name=user_name,
                 user_role="",
                 description=f"Candidate updated: {existing.get('full_name', '')}",
             )
@@ -495,7 +513,8 @@ class CandidateService:
         candidate_id: str,
         new_status: str,
         updated_by: str,
-        remarks: Optional[str] = None
+        remarks: Optional[str] = None,
+        user_name: str = ""
     ) -> CandidateResponse:
         """Update candidate global status (only 'active' or 'blacklisted' allowed)"""
         if new_status not in ("active", "blacklisted"):
@@ -541,7 +560,7 @@ class CandidateService:
                 entity_id=candidate_id,
                 entity_name=existing.get("full_name", ""),
                 user_id=updated_by,
-                user_name="",
+                user_name=user_name,
                 user_role="",
                 description=f"Status changed from {old_status} to {new_status}",
             )
@@ -555,7 +574,8 @@ class CandidateService:
         db: AsyncIOMotorDatabase,
         candidate_id: str,
         assigned_to: str,
-        assigned_by: str
+        assigned_by: str,
+        user_name: str = ""
     ) -> CandidateResponse:
         """Assign candidate to a coordinator"""
         collection = db[CandidateService.COLLECTION]
@@ -605,7 +625,7 @@ class CandidateService:
                 entity_id=candidate_id,
                 entity_name=existing.get("full_name", ""),
                 user_id=assigned_by,
-                user_name="",
+                user_name=user_name,
                 user_role="",
                 description=f"Assigned to {assignee.get('full_name', assigned_to)}",
             )
@@ -618,7 +638,8 @@ class CandidateService:
     async def delete_candidate(
         db: AsyncIOMotorDatabase,
         candidate_id: str,
-        deleted_by: str
+        deleted_by: str,
+        user_name: str = ""
     ) -> bool:
         """Soft delete a candidate"""
         collection = db[CandidateService.COLLECTION]
@@ -669,7 +690,7 @@ class CandidateService:
                 entity_id=candidate_id,
                 entity_name=existing.get("full_name", ""),
                 user_id=deleted_by,
-                user_name="",
+                user_name=user_name,
                 user_role="",
                 description=f"Candidate deleted: {existing.get('full_name', '')}",
             )

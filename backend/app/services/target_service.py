@@ -128,11 +128,12 @@ class TargetService:
         scope: Optional[TargetScope] = None,
         assigned_to: Optional[str] = None,
         status: Optional[TargetStatus] = None,
-        active_only: bool = False
+        active_only: bool = False,
+        department: Optional[str] = None
     ) -> TargetListResponse:
         """List targets with filters"""
         query = {"company_id": company_id, "is_deleted": False}
-        
+
         if target_type:
             query["target_type"] = target_type.value
         if period:
@@ -143,6 +144,8 @@ class TargetService:
             query["assigned_to"] = assigned_to
         if status:
             query["status"] = status.value
+        if department:
+            query["department"] = department
         if active_only:
             today = date.today().isoformat()
             query["start_date"] = {"$lte": today}

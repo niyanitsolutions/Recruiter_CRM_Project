@@ -4,6 +4,9 @@ import { ArrowLeft, Save, Plus, Trash2, Sparkles, Upload } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import candidateService from '../../services/candidateService'
 
+const EMPTY_EDU = () => ({ degree: '', field_of_study: '', institution: '', from_year: '', to_year: '', percentage: '' })
+const EMPTY_EXP = () => ({ company_name: '', designation: '', start_date: '', end_date: '', is_current: false })
+
 const CandidateForm = () => {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -21,6 +24,10 @@ const CandidateForm = () => {
   const [pendingResumeFile, setPendingResumeFile] = useState(null)
   const [isFresher, setIsFresher] = useState(false)
   const [errors, setErrors] = useState({})
+
+  // Array states
+  const [education, setEducation] = useState([EMPTY_EDU()])
+  const [workExperience, setWorkExperience] = useState([EMPTY_EXP()])
 
   // Refs for scroll-to-error
   const resumeRef = useRef(null)
@@ -45,24 +52,16 @@ const CandidateForm = () => {
     willing_to_relocate: false,
     total_experience_years: 0,
     total_experience_months: 0,
-    current_company: '',
-    current_designation: '',
     current_ctc: '',
     expected_ctc: '',
     notice_period: 'immediate',
-    last_working_day: '',
-    highest_education: '',
-    specialization: '',
-    university: '',
-    graduation_year: '',
     skills: [],
-    certifications: [],
-    percentage: '',
     source: 'direct',
     linkedin_url: '',
     portfolio_url: '',
     summary: '',
-    status: 'active'
+    status: 'active',
+    resume_url: ''
   })
 
   const [newSkill, setNewSkill] = useState('')
@@ -94,18 +93,59 @@ const CandidateForm = () => {
       const response = await candidateService.getCandidate(id)
       if (response.data) {
         const data = response.data
-        const edu = data.education?.[0] || {}
+
+        // Map education array
+        if (data.education?.length) {
+          setEducation(data.education.map(e => ({
+            degree: e.degree || '',
+            field_of_study: e.field_of_study || '',
+            institution: e.institution || '',
+            from_year: e.from_year || '',
+            to_year: e.to_year || e.year_of_passing || '',
+            percentage: e.percentage ?? ''
+          })))
+        }
+
+        // Map work experience array
+        if (data.work_experience?.length) {
+          setWorkExperience(data.work_experience.map(w => ({
+            company_name: w.company_name || '',
+            designation: w.designation || '',
+            start_date: w.start_date || '',
+            end_date: w.end_date || '',
+            is_current: w.is_current || false
+          })))
+          // If candidate has work experience, they're not a fresher
+          setIsFresher(false)
+        } else if (!data.current_company) {
+          setIsFresher(true)
+        }
+
         setFormData(prev => ({
           ...prev,
-          ...data,
-          skills: data.skill_tags || [],
+          first_name: data.first_name || '',
+          last_name: data.last_name || '',
+          email: data.email || '',
+          mobile: data.mobile || '',
+          alternate_mobile: data.alternate_mobile || '',
+          date_of_birth: data.date_of_birth || '',
+          gender: data.gender || '',
+          current_city: data.current_city || '',
+          current_state: data.current_state || '',
           preferred_locations: data.preferred_locations || [],
-          percentage: data.percentage ?? '',
-          summary: data.notes || '',
-          highest_education: edu.degree || '',
-          specialization: edu.field_of_study || '',
-          university: edu.institution || '',
-          graduation_year: edu.year_of_passing || ''
+          willing_to_relocate: data.willing_to_relocate || false,
+          total_experience_years: data.total_experience_years || 0,
+          total_experience_months: data.total_experience_months || 0,
+          current_ctc: data.current_ctc ?? '',
+          expected_ctc: data.expected_ctc ?? '',
+          notice_period: data.notice_period || 'immediate',
+          skills: data.skill_tags || [],
+          source: data.source || 'direct',
+          linkedin_url: data.linkedin_url || '',
+          portfolio_url: data.portfolio_url || '',
+          summary: data.notes || data.summary || '',
+          status: data.status || 'active',
+          resume_url: data.resume_url || ''
         }))
       }
     } catch (error) {
@@ -119,8 +159,34 @@ const CandidateForm = () => {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
-    // Clear error on change
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
+  }
+
+  // Education helpers
+  const updateEducation = (index, field, value) => {
+    setEducation(prev => prev.map((e, i) => i === index ? { ...e, [field]: value } : e))
+    if (errors.education) setErrors(prev => ({ ...prev, education: '' }))
+  }
+  const addEducation = () => setEducation(prev => [...prev, EMPTY_EDU()])
+  const removeEducation = (index) => {
+    if (education.length === 1) return
+    setEducation(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Work experience helpers
+  const updateExperience = (index, field, value) => {
+    setWorkExperience(prev => prev.map((e, i) => {
+      if (i !== index) return e
+      const updated = { ...e, [field]: value }
+      if (field === 'is_current' && value) updated.end_date = ''
+      return updated
+    }))
+    if (errors.work_experience) setErrors(prev => ({ ...prev, work_experience: '' }))
+  }
+  const addExperience = () => setWorkExperience(prev => [...prev, EMPTY_EXP()])
+  const removeExperience = (index) => {
+    if (workExperience.length === 1) return
+    setWorkExperience(prev => prev.filter((_, i) => i !== index))
   }
 
   const addSkill = () => {
@@ -130,10 +196,7 @@ const CandidateForm = () => {
       if (errors.skills) setErrors(prev => ({ ...prev, skills: '' }))
     }
   }
-
-  const removeSkill = (skill) => {
-    setFormData(prev => ({ ...prev, skills: prev.skills.filter(s => s !== skill) }))
-  }
+  const removeSkill = (skill) => setFormData(prev => ({ ...prev, skills: prev.skills.filter(s => s !== skill) }))
 
   const addLocation = () => {
     if (newLocation.trim() && !formData.preferred_locations.includes(newLocation.trim())) {
@@ -142,10 +205,7 @@ const CandidateForm = () => {
       if (errors.preferred_locations) setErrors(prev => ({ ...prev, preferred_locations: '' }))
     }
   }
-
-  const removeLocation = (location) => {
-    setFormData(prev => ({ ...prev, preferred_locations: prev.preferred_locations.filter(l => l !== location) }))
-  }
+  const removeLocation = (location) => setFormData(prev => ({ ...prev, preferred_locations: prev.preferred_locations.filter(l => l !== location) }))
 
   const handleResumeUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -172,14 +232,27 @@ const CandidateForm = () => {
             email: p.email || prev.email,
             mobile: p.mobile || prev.mobile,
             skills: p.skills?.length ? p.skills : prev.skills,
-            highest_education: p.education_degree || prev.highest_education,
-            university: p.institution || prev.university,
-            graduation_year: p.graduation_year || prev.graduation_year,
             current_city: p.current_city || prev.current_city,
             total_experience_years: p.experience_years != null ? p.experience_years : prev.total_experience_years,
-            current_company: p.current_company || prev.current_company,
-            current_designation: p.current_designation || prev.current_designation,
           }))
+          // Auto-fill first education entry if parsed
+          if (p.education_degree || p.institution || p.graduation_year) {
+            setEducation(prev => prev.map((e, i) => i === 0 ? {
+              ...e,
+              degree: p.education_degree || e.degree,
+              institution: p.institution || e.institution,
+              to_year: p.graduation_year || e.to_year
+            } : e))
+          }
+          // Auto-fill first work experience if parsed
+          if (p.current_company || p.current_designation) {
+            setWorkExperience(prev => prev.map((e, i) => i === 0 ? {
+              ...e,
+              company_name: p.current_company || e.company_name,
+              designation: p.current_designation || e.designation,
+              is_current: true
+            } : e))
+          }
           if (p.first_name || p.email) toast.success('Resume parsed — form auto-filled')
           if (p.raw_text) setResumeText(p.raw_text)
         }
@@ -205,10 +278,7 @@ const CandidateForm = () => {
   }
 
   const handleParseResume = async () => {
-    if (!resumeText.trim()) {
-      toast.error('Please paste resume text')
-      return
-    }
+    if (!resumeText.trim()) { toast.error('Please paste resume text'); return }
     try {
       setParsing(true)
       const response = await candidateService.parseResume(resumeText, isEdit ? id : null)
@@ -222,18 +292,13 @@ const CandidateForm = () => {
           mobile: parsed.mobile || prev.mobile,
           skills: parsed.skills || prev.skills,
           total_experience_years: parsed.experience_years || prev.total_experience_years,
-          current_company: parsed.current_company || prev.current_company,
-          current_designation: parsed.current_designation || prev.current_designation,
           summary: parsed.summary || prev.summary
         }))
         toast.success(`Resume parsed with ${response.data.confidence || 0}% confidence`)
         setShowResumeParser(false)
       }
-    } catch {
-      toast.error('Failed to parse resume')
-    } finally {
-      setParsing(false)
-    }
+    } catch { toast.error('Failed to parse resume') }
+    finally { setParsing(false) }
   }
 
   const MOBILE_RE = /^[6-9]\d{9}$/
@@ -242,13 +307,18 @@ const CandidateForm = () => {
     const errs = {}
     if (!formData.gender) errs.gender = 'Gender is required'
     if (!formData.date_of_birth) errs.date_of_birth = 'Date of birth is required'
-    if (!formData.highest_education) errs.highest_education = 'Highest education is required'
+    // Education: first entry must have degree, from_year, to_year
+    const firstEdu = education[0]
+    if (!firstEdu?.degree) errs.education = 'Degree is required'
+    else if (!firstEdu?.from_year) errs.education = 'From Year is required for education'
+    else if (!firstEdu?.to_year) errs.education = 'To Year is required for education'
     if (formData.skills.length === 0) errs.skills = 'At least one skill is required'
     if (formData.preferred_locations.length === 0) errs.preferred_locations = 'At least one preferred location is required'
     if (!isEdit && !pendingResumeFile) errs.resume = 'Resume is required'
     if (!isFresher) {
-      if (!formData.current_company.trim()) errs.current_company = 'Current company is required'
-      if (!formData.current_designation.trim()) errs.current_designation = 'Current designation is required'
+      const firstExp = workExperience[0]
+      if (!firstExp?.company_name?.trim()) errs.work_experience = 'Company name is required'
+      else if (!firstExp?.designation?.trim()) errs.work_experience = 'Designation is required'
     }
     return errs
   }
@@ -258,11 +328,10 @@ const CandidateForm = () => {
       { key: 'resume', ref: resumeRef },
       { key: 'gender', ref: genderRef },
       { key: 'date_of_birth', ref: dobRef },
-      { key: 'highest_education', ref: educationRef },
+      { key: 'education', ref: educationRef },
       { key: 'skills', ref: skillsRef },
       { key: 'preferred_locations', ref: locationsRef },
-      { key: 'current_company', ref: professionalRef },
-      { key: 'current_designation', ref: professionalRef },
+      { key: 'work_experience', ref: professionalRef },
     ]
     for (const { key, ref } of order) {
       if (errs[key] && ref?.current) {
@@ -274,22 +343,15 @@ const CandidateForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-
     if (!formData.first_name.trim() || !formData.email.trim()) {
-      toast.error('First name and email are required')
-      return
+      toast.error('First name and email are required'); return
     }
-    if (!formData.mobile) {
-      toast.error('Mobile number is required')
-      return
-    }
+    if (!formData.mobile) { toast.error('Mobile number is required'); return }
     if (!MOBILE_RE.test(formData.mobile.replace(/\D/g, ''))) {
-      toast.error('Mobile number must start with 6–9 and be 10 digits.')
-      return
+      toast.error('Mobile number must start with 6–9 and be 10 digits.'); return
     }
     if (formData.alternate_mobile && !MOBILE_RE.test(formData.alternate_mobile.replace(/\D/g, ''))) {
-      toast.error('Alternate mobile must start with 6–9 and be 10 digits.')
-      return
+      toast.error('Alternate mobile must start with 6–9 and be 10 digits.'); return
     }
 
     const validationErrors = validate()
@@ -303,16 +365,33 @@ const CandidateForm = () => {
 
     try {
       setSaving(true)
-
       const toFloat = (v) => (v !== '' && v !== null && v !== undefined) ? Number(v) : null
       const toInt = (v) => (v !== '' && v !== null && v !== undefined) ? parseInt(v, 10) : null
 
-      const education = formData.highest_education ? [{
-        degree: formData.highest_education,
-        field_of_study: formData.specialization || null,
-        institution: formData.university || 'Not specified',
-        year_of_passing: toInt(formData.graduation_year)
-      }] : []
+      const eduPayload = education
+        .filter(e => e.degree)
+        .map(e => ({
+          degree: e.degree,
+          field_of_study: e.field_of_study || null,
+          institution: e.institution || null,
+          from_year: toInt(e.from_year),
+          to_year: toInt(e.to_year),
+          year_of_passing: toInt(e.to_year),
+          percentage: toFloat(e.percentage)
+        }))
+
+      const expPayload = isFresher ? [] : workExperience
+        .filter(e => e.company_name)
+        .map(e => ({
+          company_name: e.company_name,
+          designation: e.designation || null,
+          start_date: e.start_date || null,
+          end_date: e.is_current ? null : (e.end_date || null),
+          is_current: e.is_current || false
+        }))
+
+      // Derive current_company / current_designation from work experience
+      const currentExp = expPayload.find(e => e.is_current) || expPayload[expPayload.length - 1]
 
       const payload = {
         first_name: formData.first_name,
@@ -326,20 +405,22 @@ const CandidateForm = () => {
         current_state: formData.current_state || null,
         total_experience_years: isFresher ? 0 : toFloat(formData.total_experience_years),
         total_experience_months: isFresher ? 0 : toInt(formData.total_experience_months),
-        current_company: isFresher ? null : (formData.current_company || null),
-        current_designation: isFresher ? null : (formData.current_designation || null),
+        current_company: isFresher ? null : (currentExp?.company_name || null),
+        current_designation: isFresher ? null : (currentExp?.designation || null),
         current_ctc: isFresher ? null : toFloat(formData.current_ctc),
         expected_ctc: toFloat(formData.expected_ctc),
         notice_period: isFresher ? 'immediate' : (formData.notice_period || null),
         skills: formData.skills.map(s => ({ name: s })),
         skill_tags: formData.skills,
-        education,
+        education: eduPayload,
+        work_experience: expPayload,
         source: formData.source,
         notes: formData.summary || null,
         preferred_locations: formData.preferred_locations,
         willing_to_relocate: formData.willing_to_relocate,
-        percentage: toFloat(formData.percentage),
         status: formData.status,
+        linkedin_url: formData.linkedin_url || null,
+        portfolio_url: formData.portfolio_url || null,
         tags: []
       }
 
@@ -547,30 +628,73 @@ const CandidateForm = () => {
               className="w-4 h-4 rounded border-surface-300 text-accent-600 focus:ring-accent-500" />
             <span className="text-sm font-medium text-surface-700">I am a Fresher (no professional experience)</span>
           </label>
-          {isFresher && <p className="text-xs text-surface-400 mt-1 ml-7">Professional details section will be skipped</p>}
+          {isFresher && <p className="text-xs text-surface-400 mt-1 ml-7">Professional / Work Experience section will be skipped</p>}
         </div>
 
-        {/* Professional Information */}
+        {/* Work Experience */}
         {!isFresher && (
           <div ref={professionalRef} className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
-            <h2 className="text-lg font-semibold text-surface-900 mb-4">Professional Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-surface-900">Work Experience <span className="text-red-500">*</span></h2>
+              <button type="button" onClick={addExperience}
+                className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-800 font-medium">
+                <Plus className="w-4 h-4" /> Add Experience
+              </button>
+            </div>
+            {errors.work_experience && <p className={`${errCls} mb-3`}>{errors.work_experience}</p>}
+            <div className="space-y-4">
+              {workExperience.map((exp, index) => (
+                <div key={index} className="border border-surface-200 rounded-lg p-4 relative">
+                  {workExperience.length > 1 && (
+                    <button type="button" onClick={() => removeExperience(index)}
+                      className="absolute top-3 right-3 text-red-400 hover:text-red-600">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 mb-1">
+                        Company Name {index === 0 && <span className="text-red-500">*</span>}
+                      </label>
+                      <input type="text" value={exp.company_name}
+                        onChange={e => updateExperience(index, 'company_name', e.target.value)}
+                        className="input w-full" placeholder="e.g., Infosys Ltd." />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 mb-1">
+                        Designation {index === 0 && <span className="text-red-500">*</span>}
+                      </label>
+                      <input type="text" value={exp.designation}
+                        onChange={e => updateExperience(index, 'designation', e.target.value)}
+                        className="input w-full" placeholder="e.g., Software Engineer" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 mb-1">Start Date</label>
+                      <input type="date" value={exp.start_date}
+                        onChange={e => updateExperience(index, 'start_date', e.target.value)}
+                        className="input w-full" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 mb-1">End Date</label>
+                      <input type="date" value={exp.end_date} disabled={exp.is_current}
+                        onChange={e => updateExperience(index, 'end_date', e.target.value)}
+                        className={`input w-full ${exp.is_current ? 'opacity-50' : ''}`} />
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 mt-3">
+                    <input type="checkbox" checked={exp.is_current}
+                      onChange={e => updateExperience(index, 'is_current', e.target.checked)}
+                      className="rounded border-surface-300 text-primary-600 focus:ring-primary-500" />
+                    <span className="text-sm text-surface-600">Currently working here</span>
+                  </label>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-surface-100">
               <div>
                 <label className="block text-sm font-medium text-surface-700 mb-1">Total Experience (Years)</label>
                 <input type="number" name="total_experience_years" value={formData.total_experience_years}
                   onChange={handleChange} className="input w-full" min="0" max="50" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">Current Company <span className="text-red-500">*</span></label>
-                <input type="text" name="current_company" value={formData.current_company} onChange={handleChange}
-                  className={inputErrCls('current_company')} />
-                {errors.current_company && <p className={errCls}>{errors.current_company}</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">Current Designation <span className="text-red-500">*</span></label>
-                <input type="text" name="current_designation" value={formData.current_designation} onChange={handleChange}
-                  className={inputErrCls('current_designation')} />
-                {errors.current_designation && <p className={errCls}>{errors.current_designation}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-surface-700 mb-1">Current CTC (LPA)</label>
@@ -615,40 +739,78 @@ const CandidateForm = () => {
 
         {/* Education */}
         <div ref={educationRef} className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
-          <h2 className="text-lg font-semibold text-surface-900 mb-4">Education</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">Highest Education <span className="text-red-500">*</span></label>
-              <select name="highest_education" value={formData.highest_education} onChange={handleChange} className={inputErrCls('highest_education')}>
-                <option value="">Select</option>
-                <option value="high_school">High School</option>
-                <option value="diploma">Diploma</option>
-                <option value="bachelors">Bachelor's Degree</option>
-                <option value="masters">Master's Degree</option>
-                <option value="phd">PhD</option>
-              </select>
-              {errors.highest_education && <p className={errCls}>{errors.highest_education}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">Specialization</label>
-              <input type="text" name="specialization" value={formData.specialization} onChange={handleChange}
-                className="input w-full" placeholder="e.g., Computer Science" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">University/College</label>
-              <input type="text" name="university" value={formData.university} onChange={handleChange} className="input w-full" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">Graduation Year</label>
-              <input type="number" name="graduation_year" value={formData.graduation_year} onChange={handleChange}
-                className="input w-full" min="1970" max="2030" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">Aggregate Percentage / CGPA (%)</label>
-              <input type="number" name="percentage" value={formData.percentage} onChange={handleChange}
-                className="input w-full" step="0.01" min="0" max="100" placeholder="e.g. 72.5" />
-              <p className="text-xs text-surface-400 mt-1">Used for eligibility matching</p>
-            </div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-surface-900">Education <span className="text-red-500">*</span></h2>
+            <button type="button" onClick={addEducation}
+              className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-800 font-medium">
+              <Plus className="w-4 h-4" /> Add Education
+            </button>
+          </div>
+          {errors.education && <p className={`${errCls} mb-3`}>{errors.education}</p>}
+          <div className="space-y-4">
+            {education.map((edu, index) => (
+              <div key={index} className="border border-surface-200 rounded-lg p-4 relative">
+                {education.length > 1 && (
+                  <button type="button" onClick={() => removeEducation(index)}
+                    className="absolute top-3 right-3 text-red-400 hover:text-red-600">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 mb-1">
+                      Degree {index === 0 && <span className="text-red-500">*</span>}
+                    </label>
+                    <select value={edu.degree} onChange={e => updateEducation(index, 'degree', e.target.value)}
+                      className="input w-full">
+                      <option value="">Select</option>
+                      <option value="High School">High School</option>
+                      <option value="Diploma">Diploma</option>
+                      <option value="Bachelor's">Bachelor's Degree</option>
+                      <option value="Master's">Master's Degree</option>
+                      <option value="PhD">PhD</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 mb-1">Field of Study / Specialization</label>
+                    <input type="text" value={edu.field_of_study}
+                      onChange={e => updateEducation(index, 'field_of_study', e.target.value)}
+                      className="input w-full" placeholder="e.g., Computer Science" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 mb-1">University / College</label>
+                    <input type="text" value={edu.institution}
+                      onChange={e => updateEducation(index, 'institution', e.target.value)}
+                      className="input w-full" placeholder="e.g., Anna University" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 mb-1">
+                      Percentage / CGPA
+                    </label>
+                    <input type="number" value={edu.percentage}
+                      onChange={e => updateEducation(index, 'percentage', e.target.value)}
+                      className="input w-full" step="0.01" min="0" max="100" placeholder="e.g., 72.5" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 mb-1">
+                      From Year {index === 0 && <span className="text-red-500">*</span>}
+                    </label>
+                    <input type="number" value={edu.from_year}
+                      onChange={e => updateEducation(index, 'from_year', e.target.value)}
+                      className="input w-full" min="1970" max="2030" placeholder="e.g., 2018" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-surface-700 mb-1">
+                      To Year {index === 0 && <span className="text-red-500">*</span>}
+                    </label>
+                    <input type="number" value={edu.to_year}
+                      onChange={e => updateEducation(index, 'to_year', e.target.value)}
+                      className="input w-full" min="1970" max="2030" placeholder="e.g., 2022" />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

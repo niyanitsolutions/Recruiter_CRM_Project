@@ -8,7 +8,7 @@ import {
   ChevronDown, Download, RefreshCw, Eye, AlertTriangle,
   Monitor, Smartphone, Globe, LogIn, LogOut
 } from 'lucide-react';
-import auditAdvancedService from '../../services/auditAdvancedService';
+import auditService from '../../services/auditAdvancedService';
 
 const AuditLogsPage = () => {
   const [activeTab, setActiveTab] = useState('logs');

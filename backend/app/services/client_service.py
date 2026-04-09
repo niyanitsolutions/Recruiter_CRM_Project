@@ -27,7 +27,8 @@ class ClientService:
     async def create_client(
         db: AsyncIOMotorDatabase,
         client_data: ClientCreate,
-        created_by: str
+        created_by: str,
+        user_name: str = ""
     ) -> ClientResponse:
         """Create a new client"""
         collection = db[ClientService.COLLECTION]
@@ -81,7 +82,7 @@ class ClientService:
                 entity_id=client_dict["_id"],
                 entity_name=client_data.name,
                 user_id=created_by,
-                user_name="",
+                user_name=user_name,
                 user_role="",
                 description=f"Client created: {client_data.name}",
             )
@@ -202,7 +203,8 @@ class ClientService:
         db: AsyncIOMotorDatabase,
         client_id: str,
         update_data: ClientUpdate,
-        updated_by: str
+        updated_by: str,
+        user_name: str = ""
     ) -> ClientResponse:
         """Update a client"""
         collection = db[ClientService.COLLECTION]
@@ -270,7 +272,7 @@ class ClientService:
                 entity_id=client_id,
                 entity_name=existing["name"],
                 user_id=updated_by,
-                user_name="",
+                user_name=user_name,
                 user_role="",
                 description=f"Client updated: {existing['name']}",
             )
@@ -283,7 +285,8 @@ class ClientService:
     async def delete_client(
         db: AsyncIOMotorDatabase,
         client_id: str,
-        deleted_by: str
+        deleted_by: str,
+        user_name: str = ""
     ) -> bool:
         """Soft delete a client"""
         collection = db[ClientService.COLLECTION]
@@ -335,7 +338,7 @@ class ClientService:
                 entity_id=client_id,
                 entity_name=existing["name"],
                 user_id=deleted_by,
-                user_name="",
+                user_name=user_name,
                 user_role="",
                 description=f"Client deleted: {existing['name']}",
             )

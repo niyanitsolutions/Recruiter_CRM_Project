@@ -23,6 +23,7 @@ const TargetsPage = () => {
     type: '',
     period: '',
     status: '',
+    department: '',
     activeOnly: true
   });
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -36,7 +37,10 @@ const TargetsPage = () => {
       setLoading(true);
       
       const params = {
-        ...filters,
+        target_type: filters.type || undefined,
+        period: filters.period || undefined,
+        status: filters.status || undefined,
+        department: filters.department || undefined,
         active_only: filters.activeOnly
       };
 
@@ -204,6 +208,19 @@ const TargetsPage = () => {
             <option value="achieved">Achieved</option>
             <option value="exceeded">Exceeded</option>
             <option value="missed">Missed</option>
+          </select>
+
+          <select
+            value={filters.department}
+            onChange={(e) => setFilters({ ...filters, department: e.target.value })}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Departments</option>
+            <option value="recruitment">Recruitment</option>
+            <option value="hr">HR</option>
+            <option value="accounts">Accounts</option>
+            <option value="admin">Admin</option>
+            <option value="partner">Partner</option>
           </select>
 
           <label className="inline-flex items-center gap-2 text-sm text-gray-600">

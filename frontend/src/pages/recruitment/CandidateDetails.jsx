@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import {
   User, ArrowLeft, Edit, Mail, Phone, MapPin, Briefcase,
   Calendar, Clock, GraduationCap, ExternalLink, FileText,
@@ -8,10 +9,12 @@ import {
 import { toast } from 'react-hot-toast'
 import candidateService from '../../services/candidateService'
 import applicationService from '../../services/applicationService'
+import { selectUserType } from '../../store/authSlice'
 
 const CandidateDetails = () => {
   const navigate = useNavigate()
   const { id } = useParams()
+  const userType = useSelector(selectUserType)
   const [loading, setLoading] = useState(true)
   const [candidate, setCandidate] = useState(null)
   const [applications, setApplications] = useState([])
@@ -225,25 +228,43 @@ const CandidateDetails = () => {
           {/* Education */}
           <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
             <h2 className="text-lg font-semibold text-surface-900 mb-4">Education</h2>
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-lg bg-indigo-100 flex items-center justify-center">
-                <GraduationCap className="w-6 h-6 text-indigo-600" />
+            {(candidate.education || []).length > 0 ? (
+              <div className="space-y-4">
+                {candidate.education.map((edu, i) => (
+                  <div key={i} className="flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                      <GraduationCap className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-surface-900">
+                        {edu.degree || 'Not specified'}
+                        {edu.field_of_study ? ` — ${edu.field_of_study}` : ''}
+                      </p>
+                      {edu.institution && (
+                        <p className="text-surface-600">{edu.institution}</p>
+                      )}
+                      <p className="text-sm text-surface-500">
+                        {edu.from_year && edu.to_year
+                          ? `${edu.from_year} – ${edu.to_year}`
+                          : edu.to_year || edu.year_of_passing
+                          ? `Graduated: ${edu.to_year || edu.year_of_passing}`
+                          : 'Not Specified'}
+                      </p>
+                      {edu.percentage != null && (
+                        <p className="text-sm text-surface-500">Score: {edu.percentage}%</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div>
-                <p className="font-medium text-surface-900">
-                  {candidate.highest_education?.replace('_', ' ') || 'Not specified'}
-                </p>
-                {candidate.specialization && (
-                  <p className="text-surface-600">{candidate.specialization}</p>
-                )}
-                {candidate.university && (
-                  <p className="text-sm text-surface-500">{candidate.university}</p>
-                )}
-                {candidate.graduation_year && (
-                  <p className="text-sm text-surface-500">Graduated: {candidate.graduation_year}</p>
-                )}
+            ) : (
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                  <GraduationCap className="w-5 h-5 text-indigo-600" />
+                </div>
+                <p className="text-surface-500 mt-2">No education details added</p>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Summary */}
@@ -265,6 +286,12 @@ const CandidateDetails = () => {
                 <p className="text-sm text-surface-500">Source</p>
                 <p className="font-medium text-surface-900 capitalize">{candidate.source || '-'}</p>
               </div>
+              {candidate.partner_name && (
+                <div>
+                  <p className="text-sm text-surface-500">Partner</p>
+                  <p className="font-medium text-surface-900">Partner ({candidate.partner_name})</p>
+                </div>
+              )}
               <div>
                 <p className="text-sm text-surface-500">Created</p>
                 <p className="font-medium text-surface-900">
@@ -320,13 +347,15 @@ const CandidateDetails = () => {
           <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
             <h2 className="text-lg font-semibold text-surface-900 mb-4">Actions</h2>
             <div className="space-y-2">
-              <Link
-                to={`/interviews/schedule?candidate_id=${id}`}
-                className="w-full btn-secondary justify-center flex items-center gap-2"
-              >
-                <Calendar className="w-4 h-4" />
-                Schedule Interview
-              </Link>
+              {userType !== 'partner' && (
+                <Link
+                  to={`/interviews/schedule?candidate_id=${id}`}
+                  className="w-full btn-secondary justify-center flex items-center gap-2"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Schedule Interview
+                </Link>
+              )}
               <button
                 onClick={() => navigate(`/candidates/${id}/edit`)}
                 className="w-full btn-secondary justify-center flex items-center gap-2"

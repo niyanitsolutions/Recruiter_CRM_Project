@@ -56,6 +56,19 @@ def _fmt(val) -> str:
     return str(val)
 
 
+def _fmt_skills(skills) -> str:
+    """Convert skills list (list of dicts or strings) to a comma-separated string."""
+    if not skills:
+        return ""
+    names = []
+    for s in skills:
+        if isinstance(s, dict):
+            names.append(s.get("name", str(s)))
+        else:
+            names.append(str(s))
+    return ", ".join(names)
+
+
 def _filename(module: str, fmt: str) -> str:
     return f"{module}_{datetime.now().strftime('%Y-%m-%d')}.{fmt}"
 
@@ -109,10 +122,22 @@ def _pdf_response(title: str, headers: list, rows: list, module: str) -> Streami
 
     col_count = len(headers)
     usable_width = page[0] - 2 * cm
-    col_width = usable_width / col_count
+    # Distribute widths: wider columns for name/email/skills, narrower for status/dates
+    base_width = usable_width / col_count
+    if col_count > 0:
+        col_widths = [base_width] * col_count
+        # Give extra space to text-heavy columns (name, email, skills) and shrink narrow ones
+        if col_count >= 4:
+            wide_cols = min(3, col_count)
+            narrow_cols = col_count - wide_cols
+            wide_w = usable_width * 0.55 / wide_cols
+            narrow_w = usable_width * 0.45 / max(narrow_cols, 1) if narrow_cols else base_width
+            col_widths = [wide_w] * wide_cols + [narrow_w] * narrow_cols
+    else:
+        col_widths = [base_width]
 
     table_data = [headers] + rows
-    t = Table(table_data, colWidths=[col_width] * col_count, repeatRows=1)
+    t = Table(table_data, colWidths=col_widths, repeatRows=1)
     t.setStyle(TableStyle([
         ("BACKGROUND",    (0, 0), (-1, 0),  colors.HexColor("#4F46E5")),
         ("TEXTCOLOR",     (0, 0), (-1, 0),  colors.white),
@@ -193,10 +218,10 @@ async def export_candidates(
             _fmt(doc.get("full_name")),
             _fmt(doc.get("email")),
             _fmt(doc.get("mobile")),
-            _fmt(doc.get("skills")),
-            _fmt(doc.get("experience_years")),
+            _fmt_skills(doc.get("skills")),
+            _fmt(doc.get("total_experience_years")),
             _fmt(doc.get("current_company")),
-            _fmt(doc.get("location")),
+            _fmt(doc.get("current_city")),
             _fmt(doc.get("notice_period")),
             _fmt(doc.get("status")),
             _fmt(doc.get("source")),

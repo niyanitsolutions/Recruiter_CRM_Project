@@ -81,7 +81,8 @@ async def create_client(
     client = await ClientService.create_client(
         db=db,
         client_data=client_data,
-        created_by=current_user["id"]
+        created_by=current_user["id"],
+        user_name=current_user.get("full_name", "")
     )
     
     return {"success": True, "message": "Client created successfully", "data": client}
@@ -112,7 +113,8 @@ async def update_client(
         db=db,
         client_id=client_id,
         update_data=update_data,
-        updated_by=current_user["id"]
+        updated_by=current_user["id"],
+        user_name=current_user.get("full_name", "")
     )
     
     return {"success": True, "message": "Client updated successfully", "data": client}
@@ -129,7 +131,8 @@ async def delete_client(
     await ClientService.delete_client(
         db=db,
         client_id=client_id,
-        deleted_by=current_user["id"]
+        deleted_by=current_user["id"],
+        user_name=current_user.get("full_name", "")
     )
     
     return {"success": True, "message": "Client deleted successfully"}

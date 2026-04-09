@@ -66,7 +66,9 @@ class EducationItem(BaseModel):
     field_of_study: Optional[str] = None
     institution: str
     university: Optional[str] = None
-    year_of_passing: Optional[int] = None
+    from_year: Optional[int] = None        # Start year of study
+    to_year: Optional[int] = None          # End / graduation year
+    year_of_passing: Optional[int] = None  # Legacy alias for to_year
     percentage: Optional[float] = None
     grade: Optional[str] = None
 
@@ -394,41 +396,52 @@ class CandidateResponse(BaseModel):
     full_name: Optional[str]
     email: str
     mobile: str
-    
+    alternate_mobile: Optional[str] = None
+
     date_of_birth: Optional[date]
     gender: Optional[str]
     current_city: Optional[str]
     current_state: Optional[str]
-    
+
     total_experience_years: Optional[float]
+    total_experience_months: Optional[int] = None
     current_company: Optional[str]
     current_designation: Optional[str]
     current_ctc: Optional[float]
     expected_ctc: Optional[float]
     notice_period: Optional[str]
-    
+
     skills: List[SkillItem]
     skill_tags: List[str]
     education: List[EducationItem]
     work_experience: List[WorkExperienceItem]
     highest_qualification: Optional[str]
-    
+    percentage: Optional[float] = None
+
+    preferred_locations: List[str] = Field(default_factory=list)
+    willing_to_relocate: bool = False
+
     resume_url: Optional[str]
     photo_url: Optional[str]
     resume_parsed: bool
-    
+
+    linkedin_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
+    notes: Optional[str] = None
+
     source: str
     partner_id: Optional[str]
+    partner_name: Optional[str] = None
     status: str
     assigned_to: Optional[str]
-    
+
     current_job_id: Optional[str]
     current_job_title: Optional[str]
     current_stage: Optional[str]
-    
+
     total_applications: int
     total_interviews: int
-    
+
     tags: List[str]
     created_at: datetime
 
@@ -452,6 +465,8 @@ class CandidateListResponse(BaseModel):
     assigned_to: Optional[str]
     assigned_to_name: Optional[str] = None
     resume_url: Optional[str] = None
+    partner_id: Optional[str] = None
+    partner_name: Optional[str] = None
     total_applications: int = 0
     current_job_title: Optional[str]
     current_stage: Optional[str]

@@ -54,6 +54,7 @@ class JobService:
         company_id: str = "",
         company_name: str = "",
         created_by_name: str = "",
+        user_name: str = "",
     ) -> JobResponse:
         """Create a new job"""
         collection = db[JobService.COLLECTION]
@@ -126,7 +127,7 @@ class JobService:
                 entity_id=job_dict["_id"],
                 entity_name=job_data.title,
                 user_id=created_by,
-                user_name="",
+                user_name=user_name,
                 user_role="",
                 description=f"Job created: {job_data.title}",
             )
@@ -290,7 +291,7 @@ class JobService:
         }
     
     @staticmethod
-    async def update_job(db: AsyncIOMotorDatabase, job_id: str, update_data: JobUpdate, updated_by: str) -> JobResponse:
+    async def update_job(db: AsyncIOMotorDatabase, job_id: str, update_data: JobUpdate, updated_by: str, user_name: str = "") -> JobResponse:
         """Update a job"""
         collection = db[JobService.COLLECTION]
         
@@ -337,7 +338,7 @@ class JobService:
                 entity_id=job_id,
                 entity_name=existing["title"],
                 user_id=updated_by,
-                user_name="",
+                user_name=user_name,
                 user_role="",
                 description=f"Job updated: {existing['title']}",
             )
@@ -347,7 +348,7 @@ class JobService:
         return await JobService.get_job(db, job_id)
     
     @staticmethod
-    async def delete_job(db: AsyncIOMotorDatabase, job_id: str, deleted_by: str) -> bool:
+    async def delete_job(db: AsyncIOMotorDatabase, job_id: str, deleted_by: str, user_name: str = "") -> bool:
         """Soft delete a job"""
         collection = db[JobService.COLLECTION]
         
@@ -380,7 +381,7 @@ class JobService:
                 entity_id=job_id,
                 entity_name=existing["title"],
                 user_id=deleted_by,
-                user_name="",
+                user_name=user_name,
                 user_role="",
                 description=f"Job deleted: {existing['title']}",
             )

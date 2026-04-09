@@ -455,6 +455,7 @@ const Candidates = () => {
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Experience</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Skills</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Notice</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Partner</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Applied Jobs</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Status</th>
                 <th className="text-right px-4 py-3 text-sm font-medium text-surface-600">Actions</th>
@@ -505,6 +506,11 @@ const Candidates = () => {
                   <td className="px-4 py-4">
                     <span className="text-sm text-surface-600">
                       {candidate.notice_period?.replace('_', ' ') || '-'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4">
+                    <span className="text-sm text-surface-600">
+                      {candidate.partner_name || '—'}
                     </span>
                   </td>
                   <td className="px-4 py-4">

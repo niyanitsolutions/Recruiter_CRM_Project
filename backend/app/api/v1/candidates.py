@@ -409,7 +409,8 @@ async def update_candidate(
         db=db,
         candidate_id=candidate_id,
         update_data=update_data,
-        updated_by=current_user["id"]
+        updated_by=current_user["id"],
+        user_name=current_user.get("full_name", "")
     )
     
     return {"success": True, "message": "Candidate updated successfully", "data": candidate}
@@ -430,7 +431,8 @@ async def update_candidate_status(
         candidate_id=candidate_id,
         new_status=status,
         updated_by=current_user["id"],
-        remarks=remarks
+        remarks=remarks,
+        user_name=current_user.get("full_name", "")
     )
     
     return {"success": True, "message": f"Status updated to {status}", "data": candidate}
@@ -449,7 +451,8 @@ async def assign_candidate(
         db=db,
         candidate_id=candidate_id,
         assigned_to=assigned_to,
-        assigned_by=current_user["id"]
+        assigned_by=current_user["id"],
+        user_name=current_user.get("full_name", "")
     )
     
     return {"success": True, "message": "Candidate assigned successfully", "data": candidate}
@@ -466,7 +469,8 @@ async def delete_candidate(
     await CandidateService.delete_candidate(
         db=db,
         candidate_id=candidate_id,
-        deleted_by=current_user["id"]
+        deleted_by=current_user["id"],
+        user_name=current_user.get("full_name", "")
     )
     
     return {"success": True, "message": "Candidate deleted successfully"}

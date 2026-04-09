@@ -139,6 +139,7 @@ async def create_job(
             company_id=current_user.get("company_id", ""),
             company_name=current_user.get("company_name", ""),
             created_by_name=current_user.get("full_name", ""),
+            user_name=current_user.get("full_name", ""),
         )
         return {"success": True, "message": "Job created successfully", "data": job}
     except HTTPException:
@@ -172,7 +173,8 @@ async def update_job(
         db=db,
         job_id=job_id,
         update_data=update_data,
-        updated_by=current_user["id"]
+        updated_by=current_user["id"],
+        user_name=current_user.get("full_name", "")
     )
     
     return {"success": True, "message": "Job updated successfully", "data": job}
@@ -210,7 +212,8 @@ async def delete_job(
     await JobService.delete_job(
         db=db,
         job_id=job_id,
-        deleted_by=current_user["id"]
+        deleted_by=current_user["id"],
+        user_name=current_user.get("full_name", "")
     )
     
     return {"success": True, "message": "Job deleted successfully"}
