@@ -11,7 +11,8 @@ import OrgTree from '../../components/OrgTree'
 // ── Department-based permission system ───────────────────────────────────────
 
 const MODULE_PERMS = {
-  users:              ['users:view','users:create','users:edit','users:delete'],
+  users:              ['users:view','users:create','users:edit','users:delete','users:manage_roles'],
+  roles:              ['roles:view','roles:create','roles:edit','roles:delete'],
   partners:           ['partners:view','partners:create','partners:edit','partners:delete'],
   departments:        ['departments:view','departments:create','departments:edit','departments:delete'],
   designations:       ['designations:view','designations:create','designations:edit','designations:delete'],
@@ -31,21 +32,23 @@ const MODULE_PERMS = {
   reports:            ['reports:view','reports:export'],
   crm_settings:       ['crm_settings:view','crm_settings:edit'],
   audit:              ['audit:view','audit:sessions','audit:alerts','audit:admin'],
+  notifications:      ['notifications:create'],
 }
 
 const MODULE_LABELS = {
-  users: 'Users', partners: 'Partners', departments: 'Departments',
+  users: 'Users', roles: 'Roles', partners: 'Partners', departments: 'Departments',
   designations: 'Designations', clients: 'Clients', jobs: 'Jobs',
   interviews: 'Interviews', interview_settings: 'Interview Settings',
   onboards: 'Onboards', candidates: 'Candidates', accounts: 'Accounts',
   payouts: 'Payouts', invoices: 'Invoices', imports: 'Imports',
   exports: 'Exports', targets: 'Targets', analytics: 'Analytics',
   reports: 'Reports', crm_settings: 'CRM Settings', audit: 'Audit',
+  notifications: 'Notifications',
 }
 
 const DEPT_MODULES = {
   owner:                { full: Object.keys(MODULE_PERMS), view_only: [] },
-  admin:                { full: ['users','partners','departments','designations','clients','jobs','interviews','interview_settings','candidates','onboards','imports','exports','targets','analytics','crm_settings','audit'], view_only: ['reports'] },
+  admin:                { full: ['users','roles','partners','departments','designations','clients','jobs','interviews','interview_settings','candidates','onboards','accounts','payouts','invoices','imports','exports','targets','analytics','crm_settings','audit','notifications'], view_only: ['reports'] },
   client_coordinator:   { full: ['clients','jobs','interviews','interview_settings','onboards'], view_only: ['candidates','reports'] },
   candidate_coordinator:{ full: ['candidates','interviews','interview_settings'], view_only: ['jobs','clients','onboards','reports'] },
   recruiter:            { full: ['candidates','interviews','clients','jobs'], view_only: ['onboards','reports'] },
