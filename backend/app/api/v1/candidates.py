@@ -238,6 +238,13 @@ async def extract_resume_file(
             text = content.decode("utf-8", errors="ignore")
 
     # ── Parse extracted text ──────────────────────────────────────────────────
+    return _parse_resume_text(text)
+
+
+def _parse_resume_text(text: str) -> dict:
+    """Shared resume text parser used by both auth and public extract endpoints."""
+    import re
+
     email_m = re.search(r"[\w.\-+]+@[\w.\-]+\.\w{2,}", text)
     email = email_m.group() if email_m else None
 
@@ -266,6 +273,66 @@ async def extract_resume_file(
     text_lower = text.lower()
     found_skills = [s.title() for s in COMMON_SKILLS if s in text_lower]
 
+    # Education degree
+    EDU_MAP = [
+        ("ph.d", "phd"), ("phd", "phd"), ("doctorate", "phd"),
+        ("m.tech", "masters"), ("m.e.", "masters"), ("mba", "masters"),
+        ("m.sc", "masters"), ("m.s.", "masters"), ("master", "masters"),
+        ("b.tech", "bachelors"), ("b.e.", "bachelors"), ("b.sc", "bachelors"),
+        ("b.com", "bachelors"), ("b.a.", "bachelors"), ("btech", "bachelors"),
+        ("bachelor", "bachelors"), ("be ", "bachelors"), ("b.e ", "bachelors"),
+        ("diploma", "diploma"),
+        ("12th", "high_school"), ("hsc", "high_school"), ("ssc", "high_school"),
+        ("high school", "high_school"),
+    ]
+    education_degree = None
+    for kw, val in EDU_MAP:
+        if kw in text_lower:
+            education_degree = val
+            break
+
+    # Institution name
+    inst_m = re.search(
+        r"([A-Z][A-Za-z ]{3,50}(?:University|College|Institute|School|IIT|NIT|BITS|VIT)(?:[A-Za-z ,]+)?)",
+        text,
+    )
+    institution = inst_m.group(1).strip() if inst_m else None
+
+    # Graduation year — take the most recent plausible year
+    year_matches = re.findall(r"\b(19[7-9]\d|20[0-2]\d)\b", text)
+    graduation_year = int(year_matches[-1]) if year_matches else None
+
+    # Experience years
+    exp_m = re.search(
+        r"(\d+(?:\.\d+)?)\s*\+?\s*years?\s*(?:of\s*)?(?:experience|exp\.?)",
+        text_lower,
+    )
+    experience_years = float(exp_m.group(1)) if exp_m else None
+
+    # Current company — look for common patterns
+    company_m = re.search(
+        r"(?:currently\s+(?:working\s+at|employed\s+at)|working\s+at|employer)[:\s]+([A-Z][A-Za-z0-9 &.,]+)",
+        text,
+        re.IGNORECASE,
+    )
+    current_company = company_m.group(1).strip() if company_m else None
+
+    # Current designation
+    desig_m = re.search(
+        r"(?:designation|position|role|title)[:\s]+([A-Z][A-Za-z0-9 ]+)",
+        text,
+        re.IGNORECASE,
+    )
+    current_designation = desig_m.group(1).strip() if desig_m else None
+
+    # Current city — look for "Location:" or "City:" patterns
+    city_m = re.search(
+        r"(?:location|city|residing in|based in|address)[:\s]+([A-Z][a-zA-Z ]{2,30})",
+        text,
+        re.IGNORECASE,
+    )
+    current_city = city_m.group(1).strip() if city_m else None
+
     return {
         "success": True,
         "data": {
@@ -274,8 +341,15 @@ async def extract_resume_file(
             "email": email,
             "mobile": re.sub(r"\D", "", mobile)[-10:] if mobile else None,
             "skills": found_skills,
+            "education_degree": education_degree,
+            "institution": institution,
+            "graduation_year": graduation_year,
+            "experience_years": experience_years,
+            "current_company": current_company,
+            "current_designation": current_designation,
+            "current_city": current_city,
             "raw_text": text[:3000],
-        }
+        },
     }
 
 
@@ -476,6 +550,45 @@ async def generate_candidate_form_link(
 
 # ── Public endpoints (no auth) ────────────────────────────────────────────────
 
+@public_router.post("/extract-resume")
+async def public_extract_resume_file(file: UploadFile = File(...)):
+    """
+    Public endpoint — no auth.
+    Upload a resume file, extract text, and return parsed candidate fields for form auto-fill.
+    """
+    import io, os
+
+    ALLOWED = {".pdf", ".doc", ".docx", ".txt"}
+    _, ext = os.path.splitext((file.filename or "").lower())
+    if ext not in ALLOWED:
+        raise HTTPException(status_code=400, detail="Only PDF, DOCX, DOC, or TXT files are supported.")
+
+    content = await file.read()
+    text = ""
+
+    if ext == ".txt":
+        text = content.decode("utf-8", errors="ignore")
+    elif ext == ".docx":
+        try:
+            import zipfile, xml.etree.ElementTree as ET
+            with zipfile.ZipFile(io.BytesIO(content)) as z:
+                with z.open("word/document.xml") as xml_file:
+                    tree = ET.parse(xml_file)
+                    texts = [node.text for node in tree.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t") if node.text]
+                    text = " ".join(texts)
+        except Exception:
+            text = ""
+    elif ext in (".pdf", ".doc"):
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(content))
+            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception:
+            text = content.decode("utf-8", errors="ignore")
+
+    return _parse_resume_text(text)
+
+
 @public_router.get("/candidate-form/{token}")
 async def get_candidate_form_meta(token: str):
     """Validate a form token and return minimal metadata (used by the public form page)."""
@@ -579,6 +692,68 @@ async def submit_candidate_form(token: str, data: dict):
 
     await company_db.candidates.insert_one(candidate)
     # Mark token as used
-    await company_db.candidate_form_tokens.update_one({"_id": token}, {"$set": {"used": True, "used_at": now}})
+    await company_db.candidate_form_tokens.update_one(
+        {"_id": token},
+        {"$set": {"used": True, "used_at": now, "candidate_id": candidate_id}},
+    )
 
-    return {"success": True, "message": "Thank you! Your details have been submitted."}
+    return {
+        "success": True,
+        "message": "Thank you! Your details have been submitted.",
+        "candidate_id": candidate_id,
+    }
+
+
+@public_router.post("/candidate-form/{token}/resume")
+async def public_upload_candidate_resume(token: str, candidate_id: str, file: UploadFile = File(...)):
+    """
+    Public endpoint — no auth.
+    Upload a resume file for a candidate created via a form link.
+    Validates that the token was used and the candidate_id matches.
+    """
+    import os
+
+    from app.core.database import get_master_db as _master, get_company_db as _cdb
+
+    master_db = _master()
+    tenants = await master_db.tenants.find({}, {"company_id": 1}).to_list(length=500)
+    company_db = None
+    for t in tenants:
+        cid = t.get("company_id")
+        if not cid:
+            continue
+        cdb = _cdb(cid)
+        doc = await cdb.candidate_form_tokens.find_one({"_id": token})
+        if doc:
+            if not doc.get("used") or doc.get("candidate_id") != candidate_id:
+                raise HTTPException(status_code=403, detail="Invalid upload request.")
+            company_db = cdb
+            break
+
+    if not company_db:
+        raise HTTPException(status_code=404, detail="Invalid token.")
+
+    ALLOWED = {".pdf", ".doc", ".docx"}
+    MAX_SIZE = 5 * 1024 * 1024
+    _, ext = os.path.splitext((file.filename or "").lower())
+    if ext not in ALLOWED:
+        raise HTTPException(status_code=400, detail="Only PDF, DOC, DOCX files are allowed.")
+
+    content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise HTTPException(status_code=400, detail="File too large. Maximum 5 MB.")
+
+    upload_dir = "uploads/resumes"
+    os.makedirs(upload_dir, exist_ok=True)
+    unique_name = f"{candidate_id}_{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(upload_dir, unique_name)
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    resume_url = f"/uploads/resumes/{unique_name}"
+    await company_db.candidates.update_one(
+        {"_id": candidate_id},
+        {"$set": {"resume_url": resume_url}},
+    )
+
+    return {"success": True, "resume_url": resume_url}

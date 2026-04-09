@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { User, ArrowLeft, Save, Plus, Trash2, Sparkles, Upload } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Upload } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import candidateService from '../../services/candidateService'
 
@@ -19,6 +19,17 @@ const CandidateForm = () => {
   const [resumeText, setResumeText] = useState('')
   const [showResumeParser, setShowResumeParser] = useState(false)
   const [pendingResumeFile, setPendingResumeFile] = useState(null)
+  const [isFresher, setIsFresher] = useState(false)
+  const [errors, setErrors] = useState({})
+
+  // Refs for scroll-to-error
+  const resumeRef = useRef(null)
+  const genderRef = useRef(null)
+  const dobRef = useRef(null)
+  const educationRef = useRef(null)
+  const skillsRef = useRef(null)
+  const locationsRef = useRef(null)
+  const professionalRef = useRef(null)
 
   const [formData, setFormData] = useState({
     first_name: '',
@@ -59,9 +70,7 @@ const CandidateForm = () => {
 
   useEffect(() => {
     loadDropdowns()
-    if (isEdit) {
-      loadCandidate()
-    }
+    if (isEdit) loadCandidate()
   }, [id])
 
   const loadDropdowns = async () => {
@@ -109,44 +118,33 @@ const CandidateForm = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }))
+    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
+    // Clear error on change
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
   }
 
   const addSkill = () => {
     if (newSkill.trim() && !formData.skills.includes(newSkill.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        skills: [...prev.skills, newSkill.trim()]
-      }))
+      setFormData(prev => ({ ...prev, skills: [...prev.skills, newSkill.trim()] }))
       setNewSkill('')
+      if (errors.skills) setErrors(prev => ({ ...prev, skills: '' }))
     }
   }
 
   const removeSkill = (skill) => {
-    setFormData(prev => ({
-      ...prev,
-      skills: prev.skills.filter(s => s !== skill)
-    }))
+    setFormData(prev => ({ ...prev, skills: prev.skills.filter(s => s !== skill) }))
   }
 
   const addLocation = () => {
     if (newLocation.trim() && !formData.preferred_locations.includes(newLocation.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        preferred_locations: [...prev.preferred_locations, newLocation.trim()]
-      }))
+      setFormData(prev => ({ ...prev, preferred_locations: [...prev.preferred_locations, newLocation.trim()] }))
       setNewLocation('')
+      if (errors.preferred_locations) setErrors(prev => ({ ...prev, preferred_locations: '' }))
     }
   }
 
   const removeLocation = (location) => {
-    setFormData(prev => ({
-      ...prev,
-      preferred_locations: prev.preferred_locations.filter(l => l !== location)
-    }))
+    setFormData(prev => ({ ...prev, preferred_locations: prev.preferred_locations.filter(l => l !== location) }))
   }
 
   const handleResumeUpload = async (e) => {
@@ -161,7 +159,7 @@ const CandidateForm = () => {
     }
     if (!isEdit) {
       setPendingResumeFile(file)
-      // Auto-parse the resume to pre-fill the form
+      if (errors.resume) setErrors(prev => ({ ...prev, resume: '' }))
       try {
         setParsing(true)
         const res = await candidateService.parseResumeFile(file)
@@ -174,17 +172,25 @@ const CandidateForm = () => {
             email: p.email || prev.email,
             mobile: p.mobile || prev.mobile,
             skills: p.skills?.length ? p.skills : prev.skills,
+            highest_education: p.education_degree || prev.highest_education,
+            university: p.institution || prev.university,
+            graduation_year: p.graduation_year || prev.graduation_year,
+            current_city: p.current_city || prev.current_city,
+            total_experience_years: p.experience_years != null ? p.experience_years : prev.total_experience_years,
+            current_company: p.current_company || prev.current_company,
+            current_designation: p.current_designation || prev.current_designation,
           }))
           if (p.first_name || p.email) toast.success('Resume parsed — form auto-filled')
           if (p.raw_text) setResumeText(p.raw_text)
         }
       } catch {
-        // Parsing failure is non-fatal — user still has the file set
+        // non-fatal
       } finally {
         setParsing(false)
       }
       return
     }
+    // Edit mode: upload directly
     try {
       setResumeUploading(true)
       const res = await candidateService.uploadResume(id, file)
@@ -203,11 +209,9 @@ const CandidateForm = () => {
       toast.error('Please paste resume text')
       return
     }
-
     try {
       setParsing(true)
       const response = await candidateService.parseResume(resumeText, isEdit ? id : null)
-      
       if (response.data) {
         const parsed = response.data
         setFormData(prev => ({
@@ -225,7 +229,7 @@ const CandidateForm = () => {
         toast.success(`Resume parsed with ${response.data.confidence || 0}% confidence`)
         setShowResumeParser(false)
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to parse resume')
     } finally {
       setParsing(false)
@@ -234,6 +238,40 @@ const CandidateForm = () => {
 
   const MOBILE_RE = /^[6-9]\d{9}$/
 
+  const validate = () => {
+    const errs = {}
+    if (!formData.gender) errs.gender = 'Gender is required'
+    if (!formData.date_of_birth) errs.date_of_birth = 'Date of birth is required'
+    if (!formData.highest_education) errs.highest_education = 'Highest education is required'
+    if (formData.skills.length === 0) errs.skills = 'At least one skill is required'
+    if (formData.preferred_locations.length === 0) errs.preferred_locations = 'At least one preferred location is required'
+    if (!isEdit && !pendingResumeFile) errs.resume = 'Resume is required'
+    if (!isFresher) {
+      if (!formData.current_company.trim()) errs.current_company = 'Current company is required'
+      if (!formData.current_designation.trim()) errs.current_designation = 'Current designation is required'
+    }
+    return errs
+  }
+
+  const scrollToFirstError = (errs) => {
+    const order = [
+      { key: 'resume', ref: resumeRef },
+      { key: 'gender', ref: genderRef },
+      { key: 'date_of_birth', ref: dobRef },
+      { key: 'highest_education', ref: educationRef },
+      { key: 'skills', ref: skillsRef },
+      { key: 'preferred_locations', ref: locationsRef },
+      { key: 'current_company', ref: professionalRef },
+      { key: 'current_designation', ref: professionalRef },
+    ]
+    for (const { key, ref } of order) {
+      if (errs[key] && ref?.current) {
+        ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        break
+      }
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
 
@@ -241,7 +279,6 @@ const CandidateForm = () => {
       toast.error('First name and email are required')
       return
     }
-
     if (!formData.mobile) {
       toast.error('Mobile number is required')
       return
@@ -255,14 +292,21 @@ const CandidateForm = () => {
       return
     }
 
+    const validationErrors = validate()
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors)
+      scrollToFirstError(validationErrors)
+      toast.error(`Please fix ${Object.keys(validationErrors).length} required field(s) before submitting`)
+      return
+    }
+    setErrors({})
+
     try {
       setSaving(true)
 
-      // Helper: empty string → null for numeric fields
       const toFloat = (v) => (v !== '' && v !== null && v !== undefined) ? Number(v) : null
       const toInt = (v) => (v !== '' && v !== null && v !== undefined) ? parseInt(v, 10) : null
 
-      // Build education array from flat form fields
       const education = formData.highest_education ? [{
         degree: formData.highest_education,
         field_of_study: formData.specialization || null,
@@ -276,20 +320,17 @@ const CandidateForm = () => {
         email: formData.email,
         mobile: formData.mobile,
         alternate_mobile: formData.alternate_mobile || null,
-        // Empty string → null so Pydantic Optional[date] doesn't choke
         date_of_birth: formData.date_of_birth || null,
         gender: formData.gender || null,
         current_city: formData.current_city || null,
         current_state: formData.current_state || null,
-        total_experience_years: toFloat(formData.total_experience_years),
-        total_experience_months: toInt(formData.total_experience_months),
-        current_company: formData.current_company || null,
-        current_designation: formData.current_designation || null,
-        // Empty string → null so Pydantic Optional[float] doesn't choke
-        current_ctc: toFloat(formData.current_ctc),
+        total_experience_years: isFresher ? 0 : toFloat(formData.total_experience_years),
+        total_experience_months: isFresher ? 0 : toInt(formData.total_experience_months),
+        current_company: isFresher ? null : (formData.current_company || null),
+        current_designation: isFresher ? null : (formData.current_designation || null),
+        current_ctc: isFresher ? null : toFloat(formData.current_ctc),
         expected_ctc: toFloat(formData.expected_ctc),
-        notice_period: formData.notice_period || null,
-        // Convert string[] → SkillItem[] so Pydantic List[SkillItem] validates
+        notice_period: isFresher ? 'immediate' : (formData.notice_period || null),
         skills: formData.skills.map(s => ({ name: s })),
         skill_tags: formData.skills,
         education,
@@ -347,84 +388,54 @@ const CandidateForm = () => {
     )
   }
 
+  const errCls = 'text-red-500 text-xs mt-1'
+  const inputErrCls = (field) => errors[field] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/candidates')}
-            className="p-2 hover:bg-surface-100 rounded-lg transition-colors"
-          >
+          <button onClick={() => navigate('/candidates')} className="p-2 hover:bg-surface-100 rounded-lg transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-surface-900">
-              {isEdit ? 'Edit Candidate' : 'Add Candidate'}
-            </h1>
-            <p className="text-surface-500">
-              {isEdit ? 'Update candidate profile' : 'Create a new candidate profile'}
-            </p>
+            <h1 className="text-2xl font-bold text-surface-900">{isEdit ? 'Edit Candidate' : 'Add Candidate'}</h1>
+            <p className="text-surface-500">{isEdit ? 'Update candidate profile' : 'Create a new candidate profile'}</p>
           </div>
         </div>
-        
-        <button
-          onClick={() => setShowResumeParser(!showResumeParser)}
-          className="btn-secondary flex items-center gap-2"
-        >
+        <button onClick={() => setShowResumeParser(!showResumeParser)} className="btn-secondary flex items-center gap-2">
           <Sparkles className="w-4 h-4" />
           AI Resume Parser
         </button>
       </div>
 
-      {/* Resume Parser */}
+      {/* AI Resume Parser panel */}
       {showResumeParser && (
         <div className="bg-gradient-to-r from-accent-50 to-primary-50 rounded-xl border border-accent-200 p-6 mb-6">
           <div className="flex items-center gap-2 mb-4">
             <Sparkles className="w-5 h-5 text-accent-600" />
             <h2 className="text-lg font-semibold text-surface-900">AI Resume Parser</h2>
           </div>
-          <p className="text-sm text-surface-600 mb-4">
-            Paste the resume text below and our AI will extract candidate information automatically.
-          </p>
-          <textarea
-            value={resumeText}
-            onChange={(e) => setResumeText(e.target.value)}
-            className="input w-full h-48 mb-4"
-            placeholder="Paste resume text here..."
-          />
+          <p className="text-sm text-surface-600 mb-4">Paste the resume text below and our AI will extract candidate information automatically.</p>
+          <textarea value={resumeText} onChange={(e) => setResumeText(e.target.value)} className="input w-full h-48 mb-4" placeholder="Paste resume text here..." />
           <div className="flex justify-end gap-3">
-            <button
-              onClick={() => setShowResumeParser(false)}
-              className="btn-secondary"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleParseResume}
-              disabled={parsing}
-              className="btn-primary flex items-center gap-2"
-            >
-              {parsing ? (
-                <>
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                  Parsing...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  Parse Resume
-                </>
-              )}
+            <button onClick={() => setShowResumeParser(false)} className="btn-secondary">Cancel</button>
+            <button onClick={handleParseResume} disabled={parsing} className="btn-primary flex items-center gap-2">
+              {parsing ? <><div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>Parsing...</> : <><Sparkles className="w-4 h-4" />Parse Resume</>}
             </button>
           </div>
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+
         {/* Resume Upload */}
-        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
-          <h2 className="text-lg font-semibold text-surface-900 mb-4">Resume</h2>
+        <div ref={resumeRef} className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
+          <h2 className="text-lg font-semibold text-surface-900 mb-1">
+            Resume {!isEdit && <span className="text-red-500">*</span>}
+          </h2>
+          {!isEdit && <p className="text-xs text-surface-400 mb-4">Uploading a resume will auto-fill education, skills, experience and city fields</p>}
           {isEdit ? (
             <div className="space-y-3">
               {formData.resume_url ? (
@@ -435,44 +446,19 @@ const CandidateForm = () => {
                     <p className="text-xs text-surface-500 truncate">{formData.resume_url.split('/').pop()}</p>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
-                    <a
-                      href={formData.resume_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary-600 hover:text-primary-800 font-medium"
-                    >
-                      View
-                    </a>
-                    <a
-                      href={formData.resume_url}
-                      download
-                      className="text-xs text-primary-600 hover:text-primary-800 font-medium"
-                    >
-                      Download
-                    </a>
+                    <a href={formData.resume_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:text-primary-800 font-medium">View</a>
+                    <a href={formData.resume_url} download className="text-xs text-primary-600 hover:text-primary-800 font-medium">Download</a>
                   </div>
                 </div>
               ) : (
                 <p className="text-sm text-surface-500">No resume uploaded yet.</p>
               )}
               <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  {formData.resume_url ? 'Replace Resume' : 'Upload Resume'}
-                </label>
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleResumeUpload}
-                  disabled={resumeUploading}
-                  className="block w-full text-sm text-surface-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 disabled:opacity-50"
-                />
+                <label className="block text-sm font-medium text-surface-700 mb-1">{formData.resume_url ? 'Replace Resume' : 'Upload Resume'}</label>
+                <input type="file" accept=".pdf,.doc,.docx" onChange={handleResumeUpload} disabled={resumeUploading}
+                  className="block w-full text-sm text-surface-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 disabled:opacity-50" />
                 <p className="text-xs text-surface-400 mt-1">PDF, DOC, DOCX — max 5 MB</p>
-                {resumeUploading && (
-                  <p className="text-xs text-primary-600 mt-1 flex items-center gap-1">
-                    <span className="animate-spin inline-block w-3 h-3 border border-primary-500 border-t-transparent rounded-full" />
-                    Uploading…
-                  </p>
-                )}
+                {resumeUploading && <p className="text-xs text-primary-600 mt-1 flex items-center gap-1"><span className="animate-spin inline-block w-3 h-3 border border-primary-500 border-t-transparent rounded-full" />Uploading…</p>}
               </div>
             </div>
           ) : (
@@ -484,27 +470,20 @@ const CandidateForm = () => {
                     <p className="text-sm font-medium text-surface-700 truncate">{pendingResumeFile.name}</p>
                     <p className="text-xs text-surface-500">Will be uploaded after saving</p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setPendingResumeFile(null)}
-                    className="text-xs text-red-500 hover:text-red-700 font-medium flex-shrink-0"
-                  >
-                    Remove
-                  </button>
+                  <button type="button" onClick={() => { setPendingResumeFile(null); setErrors(prev => ({ ...prev, resume: 'Resume is required' })) }}
+                    className="text-xs text-red-500 hover:text-red-700 font-medium flex-shrink-0">Remove</button>
                 </div>
               )}
-              <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">
-                  {pendingResumeFile ? 'Change Resume' : 'Upload Resume'} <span className="text-surface-400 font-normal">(optional)</span>
-                </label>
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleResumeUpload}
-                  className="block w-full text-sm text-surface-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-                />
-                <p className="text-xs text-surface-400 mt-1">PDF, DOC, DOCX — max 5 MB</p>
-              </div>
+              {parsing && (
+                <p className="text-xs text-accent-600 flex items-center gap-1">
+                  <span className="animate-spin inline-block w-3 h-3 border border-accent-500 border-t-transparent rounded-full" />
+                  Parsing resume…
+                </p>
+              )}
+              <input type="file" accept=".pdf,.doc,.docx" onChange={handleResumeUpload}
+                className={`block w-full text-sm text-surface-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 ${errors.resume ? 'border border-red-400 rounded-lg' : ''}`} />
+              <p className="text-xs text-surface-400">PDF, DOC, DOCX — max 5 MB</p>
+              {errors.resume && <p className={errCls}>{errors.resume}</p>}
             </div>
           )}
         </div>
@@ -512,290 +491,135 @@ const CandidateForm = () => {
         {/* Basic Information */}
         <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
           <h2 className="text-lg font-semibold text-surface-900 mb-4">Basic Information</h2>
-          
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                First Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="first_name"
-                value={formData.first_name}
-                onChange={handleChange}
-                className="input w-full"
-                required
-              />
+              <label className="block text-sm font-medium text-surface-700 mb-1">First Name <span className="text-red-500">*</span></label>
+              <input type="text" name="first_name" value={formData.first_name} onChange={handleChange} className="input w-full" required />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Last Name
-              </label>
-              <input
-                type="text"
-                name="last_name"
-                value={formData.last_name}
-                onChange={handleChange}
-                className="input w-full"
-              />
+              <label className="block text-sm font-medium text-surface-700 mb-1">Last Name</label>
+              <input type="text" name="last_name" value={formData.last_name} onChange={handleChange} className="input w-full" />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Email <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="input w-full"
-                required
-              />
+              <label className="block text-sm font-medium text-surface-700 mb-1">Email <span className="text-red-500">*</span></label>
+              <input type="email" name="email" value={formData.email} onChange={handleChange} className="input w-full" required />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Mobile <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="tel"
-                name="mobile"
-                value={formData.mobile}
-                onChange={handleChange}
-                className="input w-full"
-                required
-              />
+              <label className="block text-sm font-medium text-surface-700 mb-1">Mobile <span className="text-red-500">*</span></label>
+              <input type="tel" name="mobile" value={formData.mobile} onChange={handleChange} className="input w-full" required />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Alternate Mobile
-              </label>
-              <input
-                type="tel"
-                name="alternate_mobile"
-                value={formData.alternate_mobile}
-                onChange={handleChange}
-                className="input w-full"
-              />
+              <label className="block text-sm font-medium text-surface-700 mb-1">Alternate Mobile</label>
+              <input type="tel" name="alternate_mobile" value={formData.alternate_mobile} onChange={handleChange} className="input w-full" />
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Date of Birth
-              </label>
-              <input
-                type="date"
-                name="date_of_birth"
-                value={formData.date_of_birth}
-                onChange={handleChange}
-                className="input w-full"
-              />
+            <div ref={dobRef}>
+              <label className="block text-sm font-medium text-surface-700 mb-1">Date of Birth <span className="text-red-500">*</span></label>
+              <input type="date" name="date_of_birth" value={formData.date_of_birth} onChange={handleChange} className={inputErrCls('date_of_birth')} />
+              {errors.date_of_birth && <p className={errCls}>{errors.date_of_birth}</p>}
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Gender
-              </label>
-              <select
-                name="gender"
-                value={formData.gender}
-                onChange={handleChange}
-                className="input w-full"
-              >
+            <div ref={genderRef}>
+              <label className="block text-sm font-medium text-surface-700 mb-1">Gender <span className="text-red-500">*</span></label>
+              <select name="gender" value={formData.gender} onChange={handleChange} className={inputErrCls('gender')}>
                 <option value="">Select</option>
                 <option value="male">Male</option>
                 <option value="female">Female</option>
                 <option value="other">Other</option>
               </select>
+              {errors.gender && <p className={errCls}>{errors.gender}</p>}
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Current City
-              </label>
-              <input
-                type="text"
-                name="current_city"
-                value={formData.current_city}
-                onChange={handleChange}
-                className="input w-full"
-              />
+              <label className="block text-sm font-medium text-surface-700 mb-1">Current City</label>
+              <input type="text" name="current_city" value={formData.current_city} onChange={handleChange} className="input w-full" />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Source
-              </label>
-              <select
-                name="source"
-                value={formData.source}
-                onChange={handleChange}
-                className="input w-full"
-              >
-                {sources.map(s => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
+              <label className="block text-sm font-medium text-surface-700 mb-1">Source</label>
+              <select name="source" value={formData.source} onChange={handleChange} className="input w-full">
+                {sources.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
           </div>
+        </div>
+
+        {/* I am a fresher checkbox */}
+        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-4">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" checked={isFresher} onChange={e => setIsFresher(e.target.checked)}
+              className="w-4 h-4 rounded border-surface-300 text-accent-600 focus:ring-accent-500" />
+            <span className="text-sm font-medium text-surface-700">I am a Fresher (no professional experience)</span>
+          </label>
+          {isFresher && <p className="text-xs text-surface-400 mt-1 ml-7">Professional details section will be skipped</p>}
         </div>
 
         {/* Professional Information */}
-        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
-          <h2 className="text-lg font-semibold text-surface-900 mb-4">Professional Information</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Total Experience (Years)
-              </label>
-              <input
-                type="number"
-                name="total_experience_years"
-                value={formData.total_experience_years}
-                onChange={handleChange}
-                className="input w-full"
-                min="0"
-                max="50"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Current Company
-              </label>
-              <input
-                type="text"
-                name="current_company"
-                value={formData.current_company}
-                onChange={handleChange}
-                className="input w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Current Designation
-              </label>
-              <input
-                type="text"
-                name="current_designation"
-                value={formData.current_designation}
-                onChange={handleChange}
-                className="input w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Current CTC (LPA)
-              </label>
-              <input
-                type="number"
-                name="current_ctc"
-                value={formData.current_ctc}
-                onChange={handleChange}
-                className="input w-full"
-                step="0.1"
-                min="0"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Expected CTC (LPA)
-              </label>
-              <input
-                type="number"
-                name="expected_ctc"
-                value={formData.expected_ctc}
-                onChange={handleChange}
-                className="input w-full"
-                step="0.1"
-                min="0"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Notice Period
-              </label>
-              <select
-                name="notice_period"
-                value={formData.notice_period}
-                onChange={handleChange}
-                className="input w-full"
-              >
-                {noticePeriods.map(n => (
-                  <option key={n.value} value={n.value}>{n.label}</option>
-                ))}
-              </select>
+        {!isFresher && (
+          <div ref={professionalRef} className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
+            <h2 className="text-lg font-semibold text-surface-900 mb-4">Professional Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">Total Experience (Years)</label>
+                <input type="number" name="total_experience_years" value={formData.total_experience_years}
+                  onChange={handleChange} className="input w-full" min="0" max="50" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">Current Company <span className="text-red-500">*</span></label>
+                <input type="text" name="current_company" value={formData.current_company} onChange={handleChange}
+                  className={inputErrCls('current_company')} />
+                {errors.current_company && <p className={errCls}>{errors.current_company}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">Current Designation <span className="text-red-500">*</span></label>
+                <input type="text" name="current_designation" value={formData.current_designation} onChange={handleChange}
+                  className={inputErrCls('current_designation')} />
+                {errors.current_designation && <p className={errCls}>{errors.current_designation}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">Current CTC (LPA)</label>
+                <input type="number" name="current_ctc" value={formData.current_ctc} onChange={handleChange}
+                  className="input w-full" step="0.1" min="0" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">Expected CTC (LPA)</label>
+                <input type="number" name="expected_ctc" value={formData.expected_ctc} onChange={handleChange}
+                  className="input w-full" step="0.1" min="0" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">Notice Period</label>
+                <select name="notice_period" value={formData.notice_period} onChange={handleChange} className="input w-full">
+                  {noticePeriods.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+                </select>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Skills */}
-        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
-          <h2 className="text-lg font-semibold text-surface-900 mb-4">Skills</h2>
-          
+        <div ref={skillsRef} className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
+          <h2 className="text-lg font-semibold text-surface-900 mb-1">Skills <span className="text-red-500">*</span></h2>
+          {errors.skills && <p className={`${errCls} mb-3`}>{errors.skills}</p>}
           <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              value={newSkill}
-              onChange={(e) => setNewSkill(e.target.value)}
+            <input type="text" value={newSkill} onChange={(e) => setNewSkill(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
-              className="input flex-1"
-              placeholder="Add a skill..."
-            />
-            <button
-              type="button"
-              onClick={addSkill}
-              className="btn-secondary"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+              className="input flex-1" placeholder="Add a skill..." />
+            <button type="button" onClick={addSkill} className="btn-secondary"><Plus className="w-4 h-4" /></button>
           </div>
-          
           <div className="flex flex-wrap gap-2">
             {formData.skills.map((skill, index) => (
-              <span
-                key={index}
-                className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm flex items-center gap-2"
-              >
+              <span key={index} className="px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm flex items-center gap-2">
                 {skill}
-                <button
-                  type="button"
-                  onClick={() => removeSkill(skill)}
-                  className="hover:text-primary-900"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
+                <button type="button" onClick={() => removeSkill(skill)} className="hover:text-primary-900"><Trash2 className="w-3 h-3" /></button>
               </span>
             ))}
-            {formData.skills.length === 0 && (
-              <p className="text-surface-500 text-sm">No skills added</p>
-            )}
+            {formData.skills.length === 0 && <p className="text-surface-500 text-sm">No skills added</p>}
           </div>
         </div>
 
         {/* Education */}
-        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
+        <div ref={educationRef} className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
           <h2 className="text-lg font-semibold text-surface-900 mb-4">Education</h2>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Highest Education
-              </label>
-              <select
-                name="highest_education"
-                value={formData.highest_education}
-                onChange={handleChange}
-                className="input w-full"
-              >
+              <label className="block text-sm font-medium text-surface-700 mb-1">Highest Education <span className="text-red-500">*</span></label>
+              <select name="highest_education" value={formData.highest_education} onChange={handleChange} className={inputErrCls('highest_education')}>
                 <option value="">Select</option>
                 <option value="high_school">High School</option>
                 <option value="diploma">Diploma</option>
@@ -803,118 +627,51 @@ const CandidateForm = () => {
                 <option value="masters">Master's Degree</option>
                 <option value="phd">PhD</option>
               </select>
+              {errors.highest_education && <p className={errCls}>{errors.highest_education}</p>}
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Specialization
-              </label>
-              <input
-                type="text"
-                name="specialization"
-                value={formData.specialization}
-                onChange={handleChange}
-                className="input w-full"
-                placeholder="e.g., Computer Science"
-              />
+              <label className="block text-sm font-medium text-surface-700 mb-1">Specialization</label>
+              <input type="text" name="specialization" value={formData.specialization} onChange={handleChange}
+                className="input w-full" placeholder="e.g., Computer Science" />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                University/College
-              </label>
-              <input
-                type="text"
-                name="university"
-                value={formData.university}
-                onChange={handleChange}
-                className="input w-full"
-              />
+              <label className="block text-sm font-medium text-surface-700 mb-1">University/College</label>
+              <input type="text" name="university" value={formData.university} onChange={handleChange} className="input w-full" />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Graduation Year
-              </label>
-              <input
-                type="number"
-                name="graduation_year"
-                value={formData.graduation_year}
-                onChange={handleChange}
-                className="input w-full"
-                min="1970"
-                max="2030"
-              />
+              <label className="block text-sm font-medium text-surface-700 mb-1">Graduation Year</label>
+              <input type="number" name="graduation_year" value={formData.graduation_year} onChange={handleChange}
+                className="input w-full" min="1970" max="2030" />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Aggregate Percentage / CGPA (%)
-              </label>
-              <input
-                type="number"
-                name="percentage"
-                value={formData.percentage}
-                onChange={handleChange}
-                className="input w-full"
-                step="0.01"
-                min="0"
-                max="100"
-                placeholder="e.g. 72.5"
-              />
+              <label className="block text-sm font-medium text-surface-700 mb-1">Aggregate Percentage / CGPA (%)</label>
+              <input type="number" name="percentage" value={formData.percentage} onChange={handleChange}
+                className="input w-full" step="0.01" min="0" max="100" placeholder="e.g. 72.5" />
               <p className="text-xs text-surface-400 mt-1">Used for eligibility matching</p>
             </div>
           </div>
         </div>
 
         {/* Preferred Locations */}
-        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
-          <h2 className="text-lg font-semibold text-surface-900 mb-4">Preferred Locations</h2>
-          
+        <div ref={locationsRef} className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
+          <h2 className="text-lg font-semibold text-surface-900 mb-1">Preferred Locations <span className="text-red-500">*</span></h2>
+          {errors.preferred_locations && <p className={`${errCls} mb-3`}>{errors.preferred_locations}</p>}
           <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              value={newLocation}
-              onChange={(e) => setNewLocation(e.target.value)}
+            <input type="text" value={newLocation} onChange={(e) => setNewLocation(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLocation())}
-              className="input flex-1"
-              placeholder="Add a location..."
-            />
-            <button
-              type="button"
-              onClick={addLocation}
-              className="btn-secondary"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+              className="input flex-1" placeholder="Add a location..." />
+            <button type="button" onClick={addLocation} className="btn-secondary"><Plus className="w-4 h-4" /></button>
           </div>
-          
           <div className="flex flex-wrap gap-2 mb-4">
             {formData.preferred_locations.map((location, index) => (
-              <span
-                key={index}
-                className="px-3 py-1 bg-surface-100 text-surface-700 rounded-full text-sm flex items-center gap-2"
-              >
+              <span key={index} className="px-3 py-1 bg-surface-100 text-surface-700 rounded-full text-sm flex items-center gap-2">
                 {location}
-                <button
-                  type="button"
-                  onClick={() => removeLocation(location)}
-                  className="hover:text-surface-900"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
+                <button type="button" onClick={() => removeLocation(location)} className="hover:text-surface-900"><Trash2 className="w-3 h-3" /></button>
               </span>
             ))}
           </div>
-
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="willing_to_relocate"
-              checked={formData.willing_to_relocate}
-              onChange={handleChange}
-              className="rounded"
-            />
+            <input type="checkbox" name="willing_to_relocate" checked={formData.willing_to_relocate} onChange={handleChange} className="rounded" />
             <span className="text-sm text-surface-600">Willing to relocate</span>
           </label>
         </div>
@@ -922,143 +679,46 @@ const CandidateForm = () => {
         {/* Links & Summary */}
         <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
           <h2 className="text-lg font-semibold text-surface-900 mb-4">Additional Information</h2>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                LinkedIn URL
-              </label>
-              <input
-                type="url"
-                name="linkedin_url"
-                value={formData.linkedin_url}
-                onChange={handleChange}
-                className="input w-full"
-                placeholder="https://linkedin.com/in/..."
-              />
+              <label className="block text-sm font-medium text-surface-700 mb-1">LinkedIn URL</label>
+              <input type="url" name="linkedin_url" value={formData.linkedin_url} onChange={handleChange}
+                className="input w-full" placeholder="https://linkedin.com/in/..." />
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Portfolio URL
-              </label>
-              <input
-                type="url"
-                name="portfolio_url"
-                value={formData.portfolio_url}
-                onChange={handleChange}
-                className="input w-full"
-                placeholder="https://..."
-              />
+              <label className="block text-sm font-medium text-surface-700 mb-1">Portfolio URL</label>
+              <input type="url" name="portfolio_url" value={formData.portfolio_url} onChange={handleChange}
+                className="input w-full" placeholder="https://..." />
             </div>
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-surface-700 mb-1">
-              Summary / Notes
-            </label>
-            <textarea
-              name="summary"
-              value={formData.summary}
-              onChange={handleChange}
-              className="input w-full"
-              rows={4}
-              placeholder="Brief summary about the candidate..."
-            />
-          </div>
-
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-surface-700 mb-1">
-              Resume <span className="text-surface-400 font-normal">(PDF, DOC, DOCX — max 5 MB)</span>
-            </label>
-            {isEdit && formData.resume_url && (
-              <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-lg border border-surface-200 mb-2">
-                <Upload className="w-5 h-5 text-primary-500 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-surface-700 truncate">Resume on file</p>
-                  <p className="text-xs text-surface-500 truncate">{formData.resume_url.split('/').pop()}</p>
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
-                  <a href={formData.resume_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:text-primary-800 font-medium">View</a>
-                  <a href={formData.resume_url} download className="text-xs text-primary-600 hover:text-primary-800 font-medium">Download</a>
-                </div>
-              </div>
-            )}
-            {!isEdit && pendingResumeFile && (
-              <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-lg border border-surface-200 mb-2">
-                <Upload className="w-5 h-5 text-primary-500 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-surface-700 truncate">{pendingResumeFile.name}</p>
-                  <p className="text-xs text-surface-500">Will be uploaded after saving</p>
-                </div>
-                <button type="button" onClick={() => setPendingResumeFile(null)} className="text-xs text-red-500 hover:text-red-700 font-medium flex-shrink-0">Remove</button>
-              </div>
-            )}
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx"
-              onChange={handleResumeUpload}
-              disabled={resumeUploading}
-              className="block w-full text-sm text-surface-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 disabled:opacity-50"
-            />
-            {resumeUploading && (
-              <p className="text-xs text-primary-600 mt-1 flex items-center gap-1">
-                <span className="animate-spin inline-block w-3 h-3 border border-primary-500 border-t-transparent rounded-full" />
-                Uploading…
-              </p>
-            )}
+            <label className="block text-sm font-medium text-surface-700 mb-1">Summary / Notes</label>
+            <textarea name="summary" value={formData.summary} onChange={handleChange} className="input w-full" rows={4}
+              placeholder="Brief summary about the candidate..." />
           </div>
         </div>
 
         {/* Status */}
         <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
           <h2 className="text-lg font-semibold text-surface-900 mb-4">Status</h2>
-
           <div className="max-w-xs">
-            <select
-              name="status"
-              value={formData.status}
-              onChange={handleChange}
-              className="input w-full"
-            >
+            <select name="status" value={formData.status} onChange={handleChange} className="input w-full">
               {(statuses.length
                 ? statuses
-                : [
-                    { value: 'active', label: 'Active' },
-                    { value: 'blacklisted', label: 'Blacklisted' }
-                  ]
-              ).map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
+                : [{ value: 'active', label: 'Active' }, { value: 'blacklisted', label: 'Blacklisted' }]
+              ).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </div>
         </div>
 
         {/* Actions */}
         <div className="flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={() => navigate('/candidates')}
-            className="btn-secondary"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="btn-primary flex items-center gap-2"
-          >
-            {saving ? (
-              <>
-                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                {isEdit ? 'Update Candidate' : 'Create Candidate'}
-              </>
-            )}
+          <button type="button" onClick={() => navigate('/candidates')} className="btn-secondary">Cancel</button>
+          <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2">
+            {saving
+              ? <><div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>Saving...</>
+              : <><Save className="w-4 h-4" />{isEdit ? 'Update Candidate' : 'Create Candidate'}</>
+            }
           </button>
         </div>
       </form>

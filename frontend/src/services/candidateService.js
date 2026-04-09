@@ -102,13 +102,35 @@ const candidateService = {
     return response.data
   },
 
-  // Extract & parse a resume file for form auto-fill (no candidate_id needed)
+  // Extract & parse a resume file for form auto-fill (auth required)
   parseResumeFile: async (file) => {
     const fd = new FormData()
     fd.append('file', file)
     const response = await api.post('/candidates/extract-resume', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
+    return response.data
+  },
+
+  // Extract & parse a resume file for public form auto-fill (no auth)
+  parseResumeFilePublic: async (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const response = await api.post('/public/extract-resume', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
+
+  // Upload resume after public form submission
+  uploadResumePublic: async (token, candidateId, file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const response = await api.post(
+      `/public/candidate-form/${token}/resume?candidate_id=${candidateId}`,
+      fd,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    )
     return response.data
   },
 
