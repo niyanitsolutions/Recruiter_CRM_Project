@@ -2,9 +2,10 @@
 MongoDB Database Connection Manager
 Handles master_db and dynamic company_db connections with tenant isolation
 """
+from __future__ import annotations
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-from typing import Optional
+from typing import Any, ClassVar
 import logging
 
 from app.core.config import settings, get_company_db_name
@@ -23,7 +24,7 @@ class DatabaseManager:
     - Complete tenant isolation
     """
     
-    client: Optional[AsyncIOMotorClient] = None
+    client: ClassVar[Any] = None
     
     @classmethod
     async def connect(cls):
@@ -89,9 +90,9 @@ class DatabaseManager:
         # Create required collections with indexes
         collections_config = {
             "users": [
-                {"keys": [("email", 1)], "unique": True},
-                {"keys": [("mobile", 1)], "unique": True},
-                {"keys": [("username", 1)], "unique": True},
+                {"keys": [("email", 1)], "unique": True, "sparse": True},
+                {"keys": [("mobile", 1)], "unique": True, "sparse": True},
+                {"keys": [("username", 1)], "unique": True, "sparse": True},
                 {"keys": [("role", 1)]},
                 {"keys": [("is_deleted", 1)]},
             ],
@@ -118,10 +119,11 @@ class DatabaseManager:
             for index_config in indexes:
                 await collection.create_index(
                     index_config["keys"],
-                    unique=index_config.get("unique", False)
+                    unique=index_config.get("unique", False),
+                    sparse=index_config.get("sparse", False),
                 )
         
-        logger.info(f"✅ Company database created: company_{company_id}_db")
+        logger.info("✅ Company database created: company_%s_db", company_id)
         return db
     
     @classmethod
@@ -134,7 +136,7 @@ class DatabaseManager:
             raise RuntimeError("Database not connected. Call connect() first.")
         db_name = get_company_db_name(company_id)
         await cls.client.drop_database(db_name)
-        logger.warning(f"⚠️ Company database deleted: {db_name}")
+        logger.warning("⚠️ Company database deleted: %s", db_name)
 
 
 # Convenience functions

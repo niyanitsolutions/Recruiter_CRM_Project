@@ -216,6 +216,17 @@ async def send_email(
       company_id set     → try tenant SMTP → fallback to system SMTP
       neither            → system SMTP only
     """
+    # ── Guard: recipient must be present ─────────────────────────────────────
+    to = (to or "").strip()
+    if not to:
+        logger.error(
+            "[EMAIL ERROR] Recipient email is empty — refusing to send. "
+            "event=%s subject=%s company_id=%s", event_type, subject, company_id
+        )
+        await _log_email("", subject, event_type, "none", False,
+                         "Recipient email is empty", company_id)
+        return False
+
     # ── Guard: EMAIL_ENABLED ──────────────────────────────────────────────────
     if not settings.EMAIL_ENABLED:
         logger.warning(
@@ -243,6 +254,16 @@ async def send_email(
     if company_id and not force_system:
         tenant_cfg = await _get_tenant_smtp(company_id)
         if tenant_cfg:
+            _t_from = tenant_cfg["from_email"]
+            if _t_from == to:
+                logger.warning(
+                    "[EMAIL] FROM and TO are the same address (%s) — sending anyway (edge case). "
+                    "event=%s", to, event_type
+                )
+            logger.info(
+                "[EMAIL] FROM=%s TO=%s SMTP=tenant event=%s",
+                _t_from, to, event_type,
+            )
             try:
                 await asyncio.to_thread(
                     _do_send, tenant_cfg, to, subject, html_body, text_body
@@ -265,6 +286,16 @@ async def send_email(
     # ── System SMTP with retry ────────────────────────────────────────────────
     _MAX_RETRIES = 3
     _last_exc: Optional[Exception] = None
+    _s_from = sys_cfg["from_email"]
+    if _s_from == to:
+        logger.warning(
+            "[EMAIL] FROM and TO are the same address (%s) — sending anyway (edge case). "
+            "event=%s", to, event_type
+        )
+    logger.info(
+        "[EMAIL] FROM=%s TO=%s SMTP=system event=%s",
+        _s_from, to, event_type,
+    )
 
     for _attempt in range(1, _MAX_RETRIES + 1):
         try:
