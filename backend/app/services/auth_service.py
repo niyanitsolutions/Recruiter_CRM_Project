@@ -411,18 +411,11 @@ class AuthService:
             return None, "Your account is inactive. Please contact your administrator."
 
         # ── Concurrent session check ──────────────────────────────────────────
-        # Use user_active_sessions collection (keyed by user_id as _id) for
-        # reliable O(1) lookup — avoids user_id string-format mismatch issues
-        # that can occur when querying the sessions collection by user_id.
-        _user_id_early = str(user.get("_id") or user.get("id", ""))
-        if not force_login and _user_id_early:
-            _master_check = get_master_db()
-            _now_check    = datetime.now(timezone.utc)
-            _active_slot  = await _master_check.user_active_sessions.find_one(
-                {"_id": _user_id_early}
-            )
-            if _active_slot and _active_slot.get("expires_at", _now_check) > _now_check:
-                return None, "ACTIVE_SESSION|This account is already active on another device."
+        # Check active_session_token directly on the user document. If it is
+        # set, another device currently holds an active session for this user.
+        # force_login=True skips this check and takes over the session.
+        if not force_login and user.get("active_session_token"):
+            return None, "ACTIVE_SESSION|This account is already active on another device."
 
         # ── Subscription expiry ───────────────────────────────────────────────
         plan_expiry = tenant.get("plan_expiry")
@@ -467,15 +460,28 @@ class AuthService:
             user_id, "company_user", company_id,
             ip_address=ip_address, device_info=device_info,
         )
-        # Track active session per-user for concurrent login detection.
-        # Uses user_id as _id so lookup is always O(1) by primary key.
-        _slot_expiry = datetime.now(timezone.utc) + timedelta(hours=24)
-        _master_slot = get_master_db()
-        await _master_slot.user_active_sessions.replace_one(
-            {"_id": user_id},
-            {"_id": user_id, "jti": session_id, "expires_at": _slot_expiry},
-            upsert=True,
-        )
+        # Persist active session token on user document for concurrent login detection.
+        # Cleared on logout so a fresh login is always allowed after logout.
+        _raw_user_id = user.get("_id") or user.get("id")
+        _now_st = datetime.now(timezone.utc)
+        if user.get("is_owner", False):
+            # Owners may be stored in company_db.users (primary) or master_db.tenants.owner
+            _ores = await company_db.users.update_one(
+                {"_id": _raw_user_id},
+                {"$set": {"active_session_token": session_id, "active_session_at": _now_st}},
+            )
+            if _ores.matched_count == 0:
+                # Owner only in master_db.tenants — update owner subdocument
+                _mdb = get_master_db()
+                await _mdb.tenants.update_one(
+                    {"company_id": company_id},
+                    {"$set": {"owner.active_session_token": session_id, "owner.active_session_at": _now_st}},
+                )
+        else:
+            await company_db.users.update_one(
+                {"_id": _raw_user_id},
+                {"$set": {"active_session_token": session_id, "active_session_at": _now_st}},
+            )
         token_data["jti"] = session_id
         access_token  = create_access_token(token_data)
         refresh_token = create_refresh_token(
@@ -843,13 +849,28 @@ class AuthService:
             master_db = get_master_db()
             await master_db.tenants.update_one(
                 {"company_id": company_id},
-                {"$set": {"owner.logout_at": now}}
+                {"$set": {
+                    "owner.logout_at": now,
+                    "owner.active_session_token": None,
+                    "owner.active_session_at": None,
+                }}
+            )
+            # Clear the session token on the owner's record in company_db.users too
+            # (owners are looked up from company_db.users on the next login)
+            _co_db_owner = get_company_db(company_id)
+            await _co_db_owner.users.update_one(
+                {"_id": user_id},
+                {"$set": {"active_session_token": None, "active_session_at": None}},
             )
         elif company_id:
             company_db = get_company_db(company_id)
             await company_db.users.update_one(
                 {"_id": user_id},
-                {"$set": {"logout_at": now}}
+                {"$set": {
+                    "logout_at": now,
+                    "active_session_token": None,
+                    "active_session_at": None,
+                }}
             )
 
     @staticmethod

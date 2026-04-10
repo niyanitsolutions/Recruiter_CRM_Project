@@ -73,6 +73,10 @@ class UserModel(BaseModel):
     status: str = Field(default=UserStatus.ACTIVE.value)
     is_owner: bool = Field(default=False)  # Company owner flag
     
+    # Active session tracking (concurrent login prevention)
+    active_session_token: Optional[str] = None   # Set on login, cleared on logout
+    active_session_at: Optional[datetime] = None  # Timestamp when session was established
+
     # Login Info
     last_login: Optional[datetime] = None
     last_login_ip: Optional[str] = None

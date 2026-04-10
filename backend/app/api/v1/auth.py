@@ -5,7 +5,7 @@ Login, registration, and token management
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status, Depends, Request
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import logging
 import re
 
@@ -289,6 +289,41 @@ async def refresh_token(request: RefreshTokenRequest):
             detail=error
         )
     
+    return result
+
+
+class ForceLogoutAndLoginRequest(BaseModel):
+    identifier: str = Field(..., min_length=3, description="Username, email, or mobile number")
+    password: str   = Field(..., min_length=1)
+    company_code: Optional[str] = None
+
+
+@router.post("/force-logout-and-login")
+async def force_logout_and_login(data: ForceLogoutAndLoginRequest, request: Request):
+    """
+    Force-logout any existing session and immediately log in on the current device.
+
+    Called when the user clicks "Logout Other Device and Continue" on the
+    concurrent-session conflict modal.  Internally identical to a normal login
+    with force_login=True — verifies credentials, clears the existing
+    active_session_token on the user document, then issues fresh tokens.
+    """
+    result, error = await auth_service.login(
+        data.identifier, data.password,
+        request=request,
+        company_code=data.company_code,
+        force_login=True,
+    )
+
+    if error:
+        if "ACTIVE_SESSION" in error:
+            # Should not normally reach here with force_login=True, but guard anyway
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"active_session": True, "message": error.split("|", 1)[1]},
+            )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=error)
+
     return result
 
 

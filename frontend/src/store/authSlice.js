@@ -171,6 +171,20 @@ export const login = createAsyncThunk(
   }
 )
 
+export const forceLogoutAndLogin = createAsyncThunk(
+  'auth/forceLogoutAndLogin',
+  async (credentials, { rejectWithValue }) => {
+    try {
+      const { remember_me, ...loginData } = credentials
+      const response = await authService.forceLogoutAndLogin(loginData)
+      return { ...response.data, remember_me: remember_me !== false }
+    } catch (error) {
+      const detail = error.response?.data?.detail || 'Login failed. Please try again.'
+      return rejectWithValue(typeof detail === 'string' ? detail : 'Login failed. Please try again.')
+    }
+  }
+)
+
 export const register = createAsyncThunk(
   'auth/register',
   async (registrationData, { rejectWithValue }) => {
@@ -413,6 +427,48 @@ const authSlice = createSlice({
         }
       })
 
+      // ── Force Logout and Login (concurrent-session takeover) ──────────────
+      .addCase(forceLogoutAndLogin.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
+      .addCase(forceLogoutAndLogin.fulfilled, (state, action) => {
+        const remember = action.payload.remember_me !== false
+        state.isLoading = false
+        state.isAuthenticated = true
+        state.tenantSelection = null
+        state.token = action.payload.access_token
+        state.forcePasswordChange = !!action.payload.must_change_password
+        state.profileCompleted = action.payload.profile_completed !== undefined
+          ? action.payload.profile_completed
+          : true
+        state.user = {
+          id:          action.payload.user_id,
+          username:    action.payload.username,
+          fullName:    action.payload.full_name,
+          email:       action.payload.email,
+          role:        action.payload.role,
+          userType:    action.payload.user_type    || 'internal',
+          designation: action.payload.designation  || '',
+          permissions: action.payload.permissions  || [],
+          companyId:   action.payload.company_id   || null,
+          companyName: action.payload.company_name || null,
+          isSuperAdmin: action.payload.is_super_admin || false,
+          isSeller:    action.payload.is_seller    || false,
+          sellerId:    action.payload.seller_id    || null,
+          isOwner:     action.payload.is_owner     || false,
+        }
+        setRememberMe(remember)
+        setToken(action.payload.access_token, remember)
+        setUser(state.user, remember)
+        setRefreshToken(action.payload.refresh_token, remember)
+        localStorage.setItem('last_activity', Date.now().toString())
+      })
+      .addCase(forceLogoutAndLogin.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload
+      })
+
       // ── Register ───────────────────────────────────────────────────────────
       .addCase(register.pending, (state) => {
         state.isLoading = true
@@ -464,7 +520,7 @@ const authSlice = createSlice({
 })
 
 export const { logout, clearError, setCredentials, clearForcePasswordChange, setProfileCompleted, clearTenantSelection } = authSlice.actions
-// logoutUser is already exported at declaration (createAsyncThunk)
+// Async thunks exported at declaration: logoutUser, forceLogoutAndLogin
 
 export default authSlice.reducer
 

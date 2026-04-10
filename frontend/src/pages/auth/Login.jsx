@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { Mail, Lock, ArrowRight, AlertCircle, Calendar, XCircle, RefreshCw, CheckCircle, UserX, Building2 } from 'lucide-react'
-import { login, loginWithTenant, clearError, clearTenantSelection, selectAuth, selectSubscriptionExpired, selectTenantSelection } from '../../store/authSlice'
+import { login, loginWithTenant, forceLogoutAndLogin, clearError, clearTenantSelection, selectAuth, selectSubscriptionExpired, selectTenantSelection } from '../../store/authSlice'
 import { Button, Input } from '../../components/common'
 import { formatDateTime } from '../../utils/format'
 import authService from '../../services/authService'
@@ -153,7 +153,7 @@ const Login = () => {
     setForceLoginLoading(true)
     const { identifier, password } = activeSessionModal
     try {
-      await dispatch(login({ identifier, password, force_login: true, remember_me: rememberMe })).unwrap()
+      await dispatch(forceLogoutAndLogin({ identifier, password, remember_me: rememberMe })).unwrap()
       setActiveSessionModal(null)
       if (rememberMe) {
         setSavedEmail(identifier)
@@ -424,7 +424,7 @@ const Login = () => {
               </div>
               <h3 className="text-lg font-bold text-gray-900">Account Already Active</h3>
               <p className="text-sm text-gray-600 mt-2">
-                This account is already logged in on another device. Do you want to log out from that device and continue here?
+                This account is currently active on another device. Would you like to logout from that device and login here instead?
               </p>
             </div>
             <div className="flex flex-col gap-3 mt-5">
@@ -433,7 +433,7 @@ const Login = () => {
                 disabled={forceLoginLoading}
                 className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-60"
               >
-                {forceLoginLoading ? 'Logging in…' : 'Logout & Continue'}
+                {forceLoginLoading ? 'Logging in…' : 'Logout Other Device and Continue'}
               </button>
               <button
                 onClick={() => setActiveSessionModal(null)}

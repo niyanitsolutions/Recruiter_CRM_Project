@@ -17,6 +17,14 @@ const authService = {
   },
 
   /**
+   * Force-logout any existing session on another device, then log in here.
+   * Called when the user confirms the concurrent-session conflict modal.
+   */
+  forceLogoutAndLogin: (credentials) => {
+    return api.post('/auth/force-logout-and-login', credentials)
+  },
+
+  /**
    * Register a new company (subscription flow)
    */
   register: (data) => {
