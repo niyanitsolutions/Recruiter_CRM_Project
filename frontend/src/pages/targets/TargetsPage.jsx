@@ -142,7 +142,7 @@ const TargetsPage = () => {
                 <TrendingUp className="w-5 h-5 text-purple-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">{summary.achievement_rate || 0}%</p>
+                <p className="text-2xl font-bold text-gray-900">{summary.overall_achievement_rate || 0}%</p>
                 <p className="text-sm text-gray-500">Achievement Rate</p>
               </div>
             </div>
@@ -298,6 +298,7 @@ const CreateTargetModal = ({ onClose, onCreated }) => {
     target_value: '',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
+    department: '',
     assigned_to: '',
     description: ''
   });
@@ -412,6 +413,24 @@ const CreateTargetModal = ({ onClose, onCreated }) => {
                 required
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Department
+            </label>
+            <select
+              value={formData.department}
+              onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Department</option>
+              <option value="recruitment">Recruitment</option>
+              <option value="hr">HR</option>
+              <option value="accounts">Accounts</option>
+              <option value="admin">Admin</option>
+              <option value="partner">Partner</option>
+            </select>
           </div>
 
           <div>

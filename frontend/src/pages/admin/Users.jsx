@@ -61,8 +61,10 @@ const UserActions = ({ user, onEdit, onDelete, onStatusChange, onResetPassword }
   const handleOpen = () => {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect()
+      const menuHeight = 220
+      const openUpward = rect.bottom + menuHeight > window.innerHeight
       setDropdownPos({
-        top: rect.bottom + 4,
+        top: openUpward ? rect.top - menuHeight : rect.bottom + 4,
         right: window.innerWidth - rect.right,
       })
     }

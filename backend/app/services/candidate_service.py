@@ -372,7 +372,18 @@ class CandidateService:
             )
             users = await users_cursor.to_list(length=len(user_ids))
             users_map = {u["_id"]: u["full_name"] for u in users}
-        
+
+        # Get partner names
+        partner_ids = [c.get("partner_id") for c in candidates if c.get("partner_id")]
+        partner_map = {}
+        if partner_ids:
+            partners_cursor = db["users"].find(
+                {"_id": {"$in": partner_ids}},
+                {"_id": 1, "full_name": 1}
+            )
+            partners = await partners_cursor.to_list(length=len(partner_ids))
+            partner_map = {p["_id"]: p["full_name"] for p in partners}
+
         # Format response
         result = []
         for candidate in candidates:
@@ -393,6 +404,8 @@ class CandidateService:
                 status=_normalize_status(candidate.get("status", "active")),
                 assigned_to=candidate.get("assigned_to"),
                 assigned_to_name=users_map.get(candidate.get("assigned_to")),
+                partner_id=candidate.get("partner_id"),
+                partner_name=partner_map.get(candidate.get("partner_id")),
                 resume_url=candidate.get("resume_url"),
                 total_applications=candidate.get("total_applications", 0),
                 current_job_title=candidate.get("current_job_title"),

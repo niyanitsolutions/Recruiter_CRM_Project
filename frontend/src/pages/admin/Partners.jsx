@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import usePermissions from '../../hooks/usePermissions'
 import {
@@ -37,15 +37,38 @@ const StatusBadge = ({ status }) => {
 // Partner Actions Dropdown
 const PartnerActions = ({ partner, onEdit, onDelete, onStatusChange, onResetPassword }) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
+  const buttonRef = useRef(null)
   const { has } = usePermissions()
 
   const canEdit   = has('partners:edit')
   const canDelete = has('partners:delete')
 
+  useEffect(() => {
+    if (!isOpen) return
+    const close = () => setIsOpen(false)
+    window.addEventListener('scroll', close, true)
+    return () => window.removeEventListener('scroll', close, true)
+  }, [isOpen])
+
+  const handleOpen = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      const menuHeight = 220
+      const openUpward = rect.bottom + menuHeight > window.innerHeight
+      setDropdownPos({
+        top: openUpward ? rect.top - menuHeight : rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      })
+    }
+    setIsOpen(prev => !prev)
+  }
+
   return (
-    <div className="relative">
+    <div>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        ref={buttonRef}
+        onClick={handleOpen}
         className="p-2 hover:bg-surface-100 rounded-lg transition-colors"
       >
         <MoreVertical className="w-4 h-4 text-surface-500" />
@@ -53,11 +76,15 @@ const PartnerActions = ({ partner, onEdit, onDelete, onStatusChange, onResetPass
 
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-surface-200 py-1 z-20">
+          <div className="fixed inset-0 z-[9998]" onClick={() => setIsOpen(false)} />
+          <div
+            style={{ top: dropdownPos.top, right: dropdownPos.right }}
+            className="fixed w-48 bg-white rounded-lg shadow-lg border border-surface-200 py-1 z-[9999]"
+          >
             <Link
               to={`/partners/${partner.id}`}
               className="flex items-center gap-2 px-4 py-2 text-sm text-surface-700 hover:bg-surface-50"
+              onClick={() => setIsOpen(false)}
             >
               <Eye className="w-4 h-4" /> View Details
             </Link>

@@ -165,7 +165,8 @@ const CandidateForm = () => {
   // Education helpers
   const updateEducation = (index, field, value) => {
     setEducation(prev => prev.map((e, i) => i === index ? { ...e, [field]: value } : e))
-    if (errors.education) setErrors(prev => ({ ...prev, education: '' }))
+    const errKey = `edu_${index}_${field}`
+    if (errors[errKey]) setErrors(prev => ({ ...prev, [errKey]: '' }))
   }
   const addEducation = () => setEducation(prev => [...prev, EMPTY_EDU()])
   const removeEducation = (index) => {
@@ -181,7 +182,8 @@ const CandidateForm = () => {
       if (field === 'is_current' && value) updated.end_date = ''
       return updated
     }))
-    if (errors.work_experience) setErrors(prev => ({ ...prev, work_experience: '' }))
+    const errKey = `exp_${index}_${field}`
+    if (errors[errKey]) setErrors(prev => ({ ...prev, [errKey]: '' }))
   }
   const addExperience = () => setWorkExperience(prev => [...prev, EMPTY_EXP()])
   const removeExperience = (index) => {
@@ -307,38 +309,45 @@ const CandidateForm = () => {
     const errs = {}
     if (!formData.gender) errs.gender = 'Gender is required'
     if (!formData.date_of_birth) errs.date_of_birth = 'Date of birth is required'
-    // Education: first entry must have degree, from_year, to_year
-    const firstEdu = education[0]
-    if (!firstEdu?.degree) errs.education = 'Degree is required'
-    else if (!firstEdu?.from_year) errs.education = 'From Year is required for education'
-    else if (!firstEdu?.to_year) errs.education = 'To Year is required for education'
     if (formData.skills.length === 0) errs.skills = 'At least one skill is required'
     if (formData.preferred_locations.length === 0) errs.preferred_locations = 'At least one preferred location is required'
     if (!isEdit && !pendingResumeFile) errs.resume = 'Resume is required'
+
+    // Education: all fields required for every entry
+    education.forEach((edu, i) => {
+      if (!edu.degree) errs[`edu_${i}_degree`] = 'Degree is required'
+      if (!edu.field_of_study?.trim()) errs[`edu_${i}_field_of_study`] = 'Specialization is required'
+      if (!edu.institution?.trim()) errs[`edu_${i}_institution`] = 'University/College is required'
+      if (edu.percentage === '' || edu.percentage === null || edu.percentage === undefined) errs[`edu_${i}_percentage`] = 'Percentage is required'
+      if (!edu.from_year) errs[`edu_${i}_from_year`] = 'From year is required'
+      if (!edu.to_year) errs[`edu_${i}_to_year`] = 'To year is required'
+    })
+
+    // Work experience: all fields required for every entry
     if (!isFresher) {
-      const firstExp = workExperience[0]
-      if (!firstExp?.company_name?.trim()) errs.work_experience = 'Company name is required'
-      else if (!firstExp?.designation?.trim()) errs.work_experience = 'Designation is required'
+      workExperience.forEach((exp, i) => {
+        if (!exp.company_name?.trim()) errs[`exp_${i}_company_name`] = 'Company name is required'
+        if (!exp.designation?.trim()) errs[`exp_${i}_designation`] = 'Designation is required'
+        if (!exp.start_date) errs[`exp_${i}_start_date`] = 'Start date is required'
+        if (!exp.is_current && !exp.end_date) errs[`exp_${i}_end_date`] = 'End date is required'
+      })
+      if (formData.current_ctc === '' || formData.current_ctc === null || formData.current_ctc === undefined) errs.current_ctc = 'Current CTC is required'
+      if (formData.expected_ctc === '' || formData.expected_ctc === null || formData.expected_ctc === undefined) errs.expected_ctc = 'Expected CTC is required'
     }
+
     return errs
   }
 
   const scrollToFirstError = (errs) => {
-    const order = [
-      { key: 'resume', ref: resumeRef },
-      { key: 'gender', ref: genderRef },
-      { key: 'date_of_birth', ref: dobRef },
-      { key: 'education', ref: educationRef },
-      { key: 'skills', ref: skillsRef },
-      { key: 'preferred_locations', ref: locationsRef },
-      { key: 'work_experience', ref: professionalRef },
-    ]
-    for (const { key, ref } of order) {
-      if (errs[key] && ref?.current) {
-        ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        break
-      }
-    }
+    const hasEduErr = Object.keys(errs).some(k => k.startsWith('edu_'))
+    const hasExpErr = Object.keys(errs).some(k => k.startsWith('exp_'))
+    if (errs.resume && resumeRef.current) { resumeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
+    if (errs.gender && genderRef.current) { genderRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
+    if (errs.date_of_birth && dobRef.current) { dobRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
+    if ((hasExpErr || errs.current_ctc || errs.expected_ctc) && professionalRef.current) { professionalRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
+    if (errs.skills && skillsRef.current) { skillsRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
+    if (hasEduErr && educationRef.current) { educationRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
+    if (errs.preferred_locations && locationsRef.current) { locationsRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); return }
   }
 
   const handleSubmit = async (e) => {
@@ -641,7 +650,6 @@ const CandidateForm = () => {
                 <Plus className="w-4 h-4" /> Add Experience
               </button>
             </div>
-            {errors.work_experience && <p className={`${errCls} mb-3`}>{errors.work_experience}</p>}
             <div className="space-y-4">
               {workExperience.map((exp, index) => (
                 <div key={index} className="border border-surface-200 rounded-lg p-4 relative">
@@ -654,31 +662,37 @@ const CandidateForm = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-surface-700 mb-1">
-                        Company Name {index === 0 && <span className="text-red-500">*</span>}
+                        Company Name <span className="text-red-500">*</span>
                       </label>
                       <input type="text" value={exp.company_name}
                         onChange={e => updateExperience(index, 'company_name', e.target.value)}
-                        className="input w-full" placeholder="e.g., Infosys Ltd." />
+                        className={errors[`exp_${index}_company_name`] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'}
+                        placeholder="e.g., Infosys Ltd." />
+                      {errors[`exp_${index}_company_name`] && <p className={errCls}>{errors[`exp_${index}_company_name`]}</p>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-surface-700 mb-1">
-                        Designation {index === 0 && <span className="text-red-500">*</span>}
+                        Designation <span className="text-red-500">*</span>
                       </label>
                       <input type="text" value={exp.designation}
                         onChange={e => updateExperience(index, 'designation', e.target.value)}
-                        className="input w-full" placeholder="e.g., Software Engineer" />
+                        className={errors[`exp_${index}_designation`] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'}
+                        placeholder="e.g., Software Engineer" />
+                      {errors[`exp_${index}_designation`] && <p className={errCls}>{errors[`exp_${index}_designation`]}</p>}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-surface-700 mb-1">Start Date</label>
+                      <label className="block text-sm font-medium text-surface-700 mb-1">Start Date <span className="text-red-500">*</span></label>
                       <input type="date" value={exp.start_date}
                         onChange={e => updateExperience(index, 'start_date', e.target.value)}
-                        className="input w-full" />
+                        className={errors[`exp_${index}_start_date`] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'} />
+                      {errors[`exp_${index}_start_date`] && <p className={errCls}>{errors[`exp_${index}_start_date`]}</p>}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-surface-700 mb-1">End Date</label>
+                      <label className="block text-sm font-medium text-surface-700 mb-1">End Date {!exp.is_current && <span className="text-red-500">*</span>}</label>
                       <input type="date" value={exp.end_date} disabled={exp.is_current}
                         onChange={e => updateExperience(index, 'end_date', e.target.value)}
-                        className={`input w-full ${exp.is_current ? 'opacity-50' : ''}`} />
+                        className={`${errors[`exp_${index}_end_date`] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'} ${exp.is_current ? 'opacity-50' : ''}`} />
+                      {errors[`exp_${index}_end_date`] && <p className={errCls}>{errors[`exp_${index}_end_date`]}</p>}
                     </div>
                   </div>
                   <label className="flex items-center gap-2 mt-3">
@@ -692,19 +706,21 @@ const CandidateForm = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-surface-100">
               <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">Total Experience (Years)</label>
+                <label className="block text-sm font-medium text-surface-700 mb-1">Total Experience (Years) <span className="text-red-500">*</span></label>
                 <input type="number" name="total_experience_years" value={formData.total_experience_years}
                   onChange={handleChange} className="input w-full" min="0" max="50" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">Current CTC (LPA)</label>
+                <label className="block text-sm font-medium text-surface-700 mb-1">Current CTC (LPA) <span className="text-red-500">*</span></label>
                 <input type="number" name="current_ctc" value={formData.current_ctc} onChange={handleChange}
-                  className="input w-full" step="0.1" min="0" />
+                  className={inputErrCls('current_ctc')} step="0.1" min="0" />
+                {errors.current_ctc && <p className={errCls}>{errors.current_ctc}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">Expected CTC (LPA)</label>
+                <label className="block text-sm font-medium text-surface-700 mb-1">Expected CTC (LPA) <span className="text-red-500">*</span></label>
                 <input type="number" name="expected_ctc" value={formData.expected_ctc} onChange={handleChange}
-                  className="input w-full" step="0.1" min="0" />
+                  className={inputErrCls('expected_ctc')} step="0.1" min="0" />
+                {errors.expected_ctc && <p className={errCls}>{errors.expected_ctc}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-surface-700 mb-1">Notice Period</label>
@@ -746,7 +762,6 @@ const CandidateForm = () => {
               <Plus className="w-4 h-4" /> Add Education
             </button>
           </div>
-          {errors.education && <p className={`${errCls} mb-3`}>{errors.education}</p>}
           <div className="space-y-4">
             {education.map((edu, index) => (
               <div key={index} className="border border-surface-200 rounded-lg p-4 relative">
@@ -759,10 +774,10 @@ const CandidateForm = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-surface-700 mb-1">
-                      Degree {index === 0 && <span className="text-red-500">*</span>}
+                      Degree <span className="text-red-500">*</span>
                     </label>
                     <select value={edu.degree} onChange={e => updateEducation(index, 'degree', e.target.value)}
-                      className="input w-full">
+                      className={errors[`edu_${index}_degree`] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'}>
                       <option value="">Select</option>
                       <option value="High School">High School</option>
                       <option value="Diploma">Diploma</option>
@@ -771,42 +786,53 @@ const CandidateForm = () => {
                       <option value="PhD">PhD</option>
                       <option value="Other">Other</option>
                     </select>
+                    {errors[`edu_${index}_degree`] && <p className={errCls}>{errors[`edu_${index}_degree`]}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-surface-700 mb-1">Field of Study / Specialization</label>
+                    <label className="block text-sm font-medium text-surface-700 mb-1">Field of Study / Specialization <span className="text-red-500">*</span></label>
                     <input type="text" value={edu.field_of_study}
                       onChange={e => updateEducation(index, 'field_of_study', e.target.value)}
-                      className="input w-full" placeholder="e.g., Computer Science" />
+                      className={errors[`edu_${index}_field_of_study`] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'}
+                      placeholder="e.g., Computer Science" />
+                    {errors[`edu_${index}_field_of_study`] && <p className={errCls}>{errors[`edu_${index}_field_of_study`]}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-surface-700 mb-1">University / College</label>
+                    <label className="block text-sm font-medium text-surface-700 mb-1">University / College <span className="text-red-500">*</span></label>
                     <input type="text" value={edu.institution}
                       onChange={e => updateEducation(index, 'institution', e.target.value)}
-                      className="input w-full" placeholder="e.g., Anna University" />
+                      className={errors[`edu_${index}_institution`] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'}
+                      placeholder="e.g., Anna University" />
+                    {errors[`edu_${index}_institution`] && <p className={errCls}>{errors[`edu_${index}_institution`]}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-surface-700 mb-1">
-                      Percentage / CGPA
+                      Percentage / CGPA <span className="text-red-500">*</span>
                     </label>
                     <input type="number" value={edu.percentage}
                       onChange={e => updateEducation(index, 'percentage', e.target.value)}
-                      className="input w-full" step="0.01" min="0" max="100" placeholder="e.g., 72.5" />
+                      className={errors[`edu_${index}_percentage`] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'}
+                      step="0.01" min="0" max="100" placeholder="e.g., 72.5" />
+                    {errors[`edu_${index}_percentage`] && <p className={errCls}>{errors[`edu_${index}_percentage`]}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-surface-700 mb-1">
-                      From Year {index === 0 && <span className="text-red-500">*</span>}
+                      From Year <span className="text-red-500">*</span>
                     </label>
                     <input type="number" value={edu.from_year}
                       onChange={e => updateEducation(index, 'from_year', e.target.value)}
-                      className="input w-full" min="1970" max="2030" placeholder="e.g., 2018" />
+                      className={errors[`edu_${index}_from_year`] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'}
+                      min="1970" max="2030" placeholder="e.g., 2018" />
+                    {errors[`edu_${index}_from_year`] && <p className={errCls}>{errors[`edu_${index}_from_year`]}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-surface-700 mb-1">
-                      To Year {index === 0 && <span className="text-red-500">*</span>}
+                      To Year <span className="text-red-500">*</span>
                     </label>
                     <input type="number" value={edu.to_year}
                       onChange={e => updateEducation(index, 'to_year', e.target.value)}
-                      className="input w-full" min="1970" max="2030" placeholder="e.g., 2022" />
+                      className={errors[`edu_${index}_to_year`] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'}
+                      min="1970" max="2030" placeholder="e.g., 2022" />
+                    {errors[`edu_${index}_to_year`] && <p className={errCls}>{errors[`edu_${index}_to_year`]}</p>}
                   </div>
                 </div>
               </div>

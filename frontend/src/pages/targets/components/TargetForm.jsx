@@ -19,6 +19,7 @@ const TargetForm = ({
     target_value: '',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
+    department: '',
     scope: 'individual',
     assigned_to: '',
     description: '',
@@ -193,6 +194,25 @@ const TargetForm = ({
           />
           {errors.end_date && <p className="text-sm text-red-600 mt-1">{errors.end_date}</p>}
         </div>
+      </div>
+
+      {/* Department */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Department
+        </label>
+        <select
+          value={formData.department}
+          onChange={(e) => handleChange('department', e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">Select Department</option>
+          <option value="recruitment">Recruitment</option>
+          <option value="hr">HR</option>
+          <option value="accounts">Accounts</option>
+          <option value="admin">Admin</option>
+          <option value="partner">Partner</option>
+        </select>
       </div>
 
       {/* Scope */}
