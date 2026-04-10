@@ -458,6 +458,325 @@ async def assign_candidate(
     return {"success": True, "message": "Candidate assigned successfully", "data": candidate}
 
 
+
+# ── Bulk import helpers (shared by preview + import endpoints) ───────────────
+
+_IMPORT_FIELD_MAP = {
+    # name variations
+    "first_name": "first_name", "first name": "first_name", "firstname": "first_name",
+    "last_name": "last_name", "last name": "last_name", "lastname": "last_name",
+    "full_name": "full_name", "full name": "full_name", "name": "full_name",
+    # contact
+    "email": "email", "email address": "email",
+    "mobile": "mobile", "phone": "mobile", "contact": "mobile", "mobile number": "mobile",
+    "alternate_mobile": "alternate_mobile", "alternate mobile": "alternate_mobile",
+    # personal
+    "date_of_birth": "date_of_birth", "dob": "date_of_birth", "date of birth": "date_of_birth",
+    "gender": "gender",
+    # location
+    "current_city": "current_city", "city": "current_city", "current city": "current_city",
+    "current_state": "current_state", "state": "current_state", "current state": "current_state",
+    "current_country": "current_country", "country": "current_country",
+    # professional
+    "total_experience_years": "total_experience_years", "experience": "total_experience_years",
+    "total experience": "total_experience_years", "experience years": "total_experience_years",
+    "current_company": "current_company", "company": "current_company", "current company": "current_company",
+    "current_designation": "current_designation", "designation": "current_designation",
+    "current designation": "current_designation", "job title": "current_designation",
+    "current_ctc": "current_ctc", "ctc": "current_ctc", "current ctc": "current_ctc",
+    "expected_ctc": "expected_ctc", "expected ctc": "expected_ctc",
+    "notice_period": "notice_period", "notice period": "notice_period",
+    # skills
+    "skills": "skill_tags", "skill_tags": "skill_tags", "skill tags": "skill_tags",
+    # education (flat)
+    "degree": "edu_degree", "education": "edu_degree", "qualification": "edu_degree",
+    "field_of_study": "edu_field", "field of study": "edu_field", "specialization": "edu_field",
+    "institution": "edu_institution", "university": "edu_institution", "college": "edu_institution",
+    "from_year": "edu_from_year", "from year": "edu_from_year", "graduation from": "edu_from_year",
+    "to_year": "edu_to_year", "to year": "edu_to_year", "graduation year": "edu_to_year",
+    "year_of_passing": "edu_to_year", "passing year": "edu_to_year",
+    "percentage": "edu_percentage", "academic percentage": "edu_percentage",
+    # preferences
+    "willing_to_relocate": "willing_to_relocate", "willing to relocate": "willing_to_relocate",
+    "preferred_locations": "preferred_locations", "preferred locations": "preferred_locations",
+    # source
+    "source": "source",
+    # misc
+    "linkedin_url": "linkedin_url", "linkedin": "linkedin_url",
+    "summary": "notes", "notes": "notes",
+}
+
+
+def _parse_import_file(content: bytes, ext: str) -> list:
+    """Parse uploaded file bytes into a list of raw dicts."""
+    import io, csv
+    rows = []
+    if ext == ".csv":
+        text = content.decode("utf-8-sig", errors="ignore")
+        reader = csv.DictReader(io.StringIO(text))
+        rows = [dict(r) for r in reader]
+    elif ext in (".xlsx", ".xls"):
+        try:
+            import openpyxl
+            import io as _io
+            wb = openpyxl.load_workbook(_io.BytesIO(content), read_only=True, data_only=True)
+            ws = wb.active
+            headers = []
+            for i, row in enumerate(ws.iter_rows(values_only=True)):
+                if i == 0:
+                    headers = [str(c).strip() if c is not None else "" for c in row]
+                else:
+                    if all(v is None for v in row):
+                        continue
+                    rows.append({headers[j]: (str(row[j]).strip() if row[j] is not None else "") for j in range(len(headers))})
+        except ImportError:
+            raise HTTPException(status_code=400, detail="openpyxl is required for Excel import.")
+    elif ext == ".pdf":
+        try:
+            from pypdf import PdfReader
+            import io as _io
+            reader = PdfReader(_io.BytesIO(content))
+            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception:
+            text = content.decode("utf-8", errors="ignore")
+        current: dict = {}
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                if current:
+                    rows.append(current)
+                    current = {}
+                continue
+            if ":" in line:
+                k, _, v = line.partition(":")
+                current[k.strip()] = v.strip()
+        if current:
+            rows.append(current)
+    return rows
+
+
+def _map_import_row(raw: dict) -> dict:
+    mapped = {}
+    for k, v in raw.items():
+        key = _IMPORT_FIELD_MAP.get(k.lower().strip())
+        if key:
+            mapped[key] = v
+    return mapped
+
+
+@router.post("/bulk-import/preview")
+async def preview_bulk_import(
+    file: UploadFile = File(...),
+    db = Depends(get_company_db),
+    _: bool = Depends(require_permissions(["candidates:create"]))
+):
+    """
+    Parse file and return a preview of rows with validation status.
+    Does NOT insert anything into the database.
+    """
+    import os
+    _, ext = os.path.splitext((file.filename or "").lower())
+    if ext not in {".xlsx", ".xls", ".csv", ".pdf"}:
+        raise HTTPException(status_code=400, detail="Only .xlsx, .xls, .csv, or .pdf files are supported.")
+
+    content = await file.read()
+    raw_rows = _parse_import_file(content, ext)
+    mapped_rows = [_map_import_row(r) for r in raw_rows]
+
+    # Collect emails for a bulk duplicate check
+    candidate_emails = [m["email"].strip().lower() for m in mapped_rows if m.get("email")]
+    existing_emails: set = set()
+    if candidate_emails:
+        cursor = db["candidates"].find(
+            {"email": {"$in": candidate_emails}, "is_deleted": False},
+            {"email": 1}
+        )
+        async for doc in cursor:
+            existing_emails.add(doc["email"])
+
+    preview_rows = []
+    for idx, m in enumerate(mapped_rows, start=2):
+        errors = []
+        if not m.get("email"):
+            errors.append("Missing email")
+        if not m.get("mobile"):
+            errors.append("Missing mobile")
+
+        email = m.get("email", "").strip().lower()
+        is_duplicate = bool(email and email in existing_emails)
+
+        first = m.get("first_name", "").strip()
+        last = m.get("last_name", "").strip()
+        full = m.get("full_name", "").strip() or f"{first} {last}".strip()
+
+        preview_rows.append({
+            "row": idx,
+            "fields": {
+                "full_name": full,
+                "email": m.get("email", ""),
+                "mobile": m.get("mobile", ""),
+                "current_company": m.get("current_company", ""),
+                "current_designation": m.get("current_designation", ""),
+                "total_experience_years": m.get("total_experience_years", ""),
+                "current_city": m.get("current_city", ""),
+                "skill_tags": m.get("skill_tags", ""),
+                "source": m.get("source", ""),
+            },
+            "errors": errors,
+            "is_duplicate": is_duplicate,
+            "valid": len(errors) == 0 and not is_duplicate,
+        })
+
+    valid_count = sum(1 for r in preview_rows if r["valid"])
+    return {
+        "success": True,
+        "total": len(preview_rows),
+        "valid": valid_count,
+        "rows": preview_rows,
+    }
+
+
+@router.post("/bulk-import")
+async def bulk_import_candidates(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db),
+    _: bool = Depends(require_permissions(["candidates:create"]))
+):
+    """
+    Bulk import candidates from Excel (.xlsx/.xls), CSV, or PDF.
+    Returns inserted count, skipped duplicates, and failed rows with reasons.
+    """
+    import os
+    from datetime import datetime, timezone
+
+    _, ext = os.path.splitext((file.filename or "").lower())
+    if ext not in {".xlsx", ".xls", ".csv", ".pdf"}:
+        raise HTTPException(status_code=400, detail="Only .xlsx, .xls, .csv, or .pdf files are supported.")
+
+    content = await file.read()
+    rows = _parse_import_file(content, ext)
+
+    # ── Insert rows ──────────────────────────────────────────────────────────
+    inserted = 0
+    skipped_duplicates = []
+    failed = []
+    now = datetime.now(timezone.utc)
+    partner_id = current_user["id"] if current_user.get("role") == "partner" else None
+
+    for idx, raw_row in enumerate(rows, start=2):  # start=2 → data begins at row 2
+        m = _map_import_row(raw_row)
+
+        # Mandatory fields check
+        if not m.get("email") or not m.get("mobile"):
+            failed.append({"row": idx, "reason": "Missing required fields: email and mobile"})
+            continue
+
+        email = m["email"].strip().lower()
+
+        # Duplicate check
+        existing = await db["candidates"].find_one({"email": email, "is_deleted": False})
+        if existing:
+            skipped_duplicates.append(email)
+            continue
+
+        # Build name
+        if m.get("full_name") and not m.get("first_name"):
+            parts = m["full_name"].split(None, 1)
+            first_name = parts[0]
+            last_name = parts[1] if len(parts) > 1 else None
+        else:
+            first_name = m.get("first_name", "").strip() or email.split("@")[0]
+            last_name = m.get("last_name") or None
+
+        # Skills
+        raw_skills = m.get("skill_tags", "")
+        skill_tags = [s.strip() for s in raw_skills.split(",") if s.strip()] if raw_skills else []
+
+        # Education
+        education = []
+        if m.get("edu_degree"):
+            edu = {"degree": m["edu_degree"], "institution": m.get("edu_institution", "")}
+            if m.get("edu_field"): edu["field_of_study"] = m["edu_field"]
+            if m.get("edu_from_year"):
+                try: edu["from_year"] = int(m["edu_from_year"])
+                except ValueError: pass
+            if m.get("edu_to_year"):
+                try: edu["to_year"] = int(m["edu_to_year"]); edu["year_of_passing"] = edu["to_year"]
+                except ValueError: pass
+            if m.get("edu_percentage"):
+                try: edu["percentage"] = float(m["edu_percentage"])
+                except ValueError: pass
+            education.append(edu)
+
+        # Numeric coercions
+        def _float(v):
+            try: return float(v) if v else None
+            except (ValueError, TypeError): return None
+
+        # Preferred locations
+        raw_locs = m.get("preferred_locations", "")
+        preferred_locations = [l.strip() for l in raw_locs.split(",") if l.strip()] if raw_locs else []
+
+        # Willing to relocate
+        wtr_raw = str(m.get("willing_to_relocate", "")).lower()
+        willing_to_relocate = wtr_raw in ("yes", "true", "1", "y")
+
+        import uuid as _uuid
+        doc = {
+            "_id": str(_uuid.uuid4()),
+            "first_name": first_name,
+            "last_name": last_name,
+            "full_name": f"{first_name} {last_name}".strip() if last_name else first_name,
+            "email": email,
+            "mobile": m.get("mobile", "").strip(),
+            "alternate_mobile": m.get("alternate_mobile") or None,
+            "date_of_birth": m.get("date_of_birth") or None,
+            "gender": m.get("gender") or None,
+            "current_city": m.get("current_city") or None,
+            "current_state": m.get("current_state") or None,
+            "current_country": m.get("current_country") or "India",
+            "total_experience_years": _float(m.get("total_experience_years")),
+            "current_company": m.get("current_company") or None,
+            "current_designation": m.get("current_designation") or None,
+            "current_ctc": _float(m.get("current_ctc")),
+            "expected_ctc": _float(m.get("expected_ctc")),
+            "notice_period": m.get("notice_period") or None,
+            "skill_tags": skill_tags,
+            "skills": [{"name": s} for s in skill_tags],
+            "education": education,
+            "work_experience": [],
+            "source": m.get("source") or "direct",
+            "linkedin_url": m.get("linkedin_url") or None,
+            "notes": m.get("notes") or None,
+            "preferred_locations": preferred_locations,
+            "willing_to_relocate": willing_to_relocate,
+            "status": "active",
+            "partner_id": partner_id,
+            "created_by": current_user["id"],
+            "created_at": now,
+            "is_deleted": False,
+            "total_applications": 0,
+            "total_interviews": 0,
+        }
+
+        try:
+            await db["candidates"].insert_one(doc)
+            inserted += 1
+        except Exception as e:
+            failed.append({"row": idx, "email": email, "reason": str(e)})
+
+    return {
+        "success": True,
+        "inserted": inserted,
+        "skipped_duplicates": len(skipped_duplicates),
+        "duplicate_emails": skipped_duplicates,
+        "failed": len(failed),
+        "failed_rows": failed,
+        "message": f"Import complete: {inserted} inserted, {len(skipped_duplicates)} duplicates skipped, {len(failed)} failed.",
+    }
+
+
 @router.delete("/{candidate_id}")
 async def delete_candidate(
     candidate_id: str,

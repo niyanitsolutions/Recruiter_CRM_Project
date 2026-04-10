@@ -3,9 +3,17 @@ import api from './api'
 const authService = {
   /**
    * Login with identifier (username/email/mobile) and password
+   * Pass force_login: true to take over an existing active session
    */
   login: (credentials) => {
     return api.post('/auth/login', credentials)
+  },
+
+  /**
+   * Force-login: revoke existing session and log in on this device
+   */
+  forceLogin: (credentials) => {
+    return api.post('/auth/login', { ...credentials, force_login: true })
   },
 
   /**

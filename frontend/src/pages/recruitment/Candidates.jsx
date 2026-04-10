@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Users, Plus, Search, Filter, Eye, Edit, Trash2,
-  Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2, Send
+  Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2, Send, Upload
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -10,6 +10,7 @@ import candidateService from '../../services/candidateService'
 import applicationService from '../../services/applicationService'
 import usePermissions from '../../hooks/usePermissions'
 import ExportModal from '../../components/common/ExportModal'
+import CandidateImportModal from '../../components/common/CandidateImportModal'
 import { selectUserType } from '../../store/authSlice'
 
 const Candidates = () => {
@@ -38,6 +39,7 @@ const Candidates = () => {
   const [noticePeriods, setNoticePeriods] = useState([])
 
   const [exportOpen, setExportOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [formLinkModal, setFormLinkModal] = useState(false)
   const [formLinkEmail, setFormLinkEmail] = useState('')
   const [generatingLink, setGeneratingLink] = useState(false)
@@ -270,6 +272,15 @@ const Candidates = () => {
             >
               <Link2 className="w-4 h-4" />
               Send Form Link
+            </button>
+          )}
+          {has('candidates:create') && (
+            <button
+              onClick={() => setImportOpen(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              Import
             </button>
           )}
           {has('candidates:create') && (
@@ -732,6 +743,14 @@ const Candidates = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Import Modal */}
+      {importOpen && (
+        <CandidateImportModal
+          onClose={() => setImportOpen(false)}
+          onImported={loadCandidates}
+        />
       )}
 
       {/* Export Modal */}

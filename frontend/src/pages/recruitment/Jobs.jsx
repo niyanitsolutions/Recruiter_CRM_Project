@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Briefcase, Plus, Search, Filter, Eye, Edit, Trash2,
-  Building2, MapPin, Users, Clock, AlertCircle, Download
+  Building2, MapPin, Users, Clock, AlertCircle, Download, Upload
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
 import jobService from '../../services/jobService'
 import usePermissions from '../../hooks/usePermissions'
 import ExportModal from '../../components/common/ExportModal'
+import JobImportModal from '../../components/common/JobImportModal'
 import { selectUserType } from '../../store/authSlice'
 
 const Jobs = () => {
@@ -32,6 +33,7 @@ const Jobs = () => {
   const [workModes, setWorkModes] = useState([])
   const [priorities, setPriorities] = useState([])
   const [exportOpen, setExportOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   useEffect(() => {
     loadDropdowns()
@@ -130,6 +132,15 @@ const Jobs = () => {
             >
               <Download className="w-4 h-4" />
               Export
+            </button>
+          )}
+          {has('jobs:create') && (
+            <button
+              onClick={() => setImportOpen(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              Import
             </button>
           )}
           {has('jobs:create') && (
@@ -369,6 +380,13 @@ const Jobs = () => {
           </div>
         </div>
       )}
+      {importOpen && (
+        <JobImportModal
+          onClose={() => setImportOpen(false)}
+          onImported={loadJobs}
+        />
+      )}
+
       <ExportModal
         isOpen={exportOpen}
         onClose={() => setExportOpen(false)}

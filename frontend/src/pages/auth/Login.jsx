@@ -31,6 +31,10 @@ const Login = () => {
   // Inline error for sessionStorage-sourced messages (e.g. api.js interceptor)
   const [inlineError, setInlineError] = useState('')
 
+  // Active session conflict modal
+  const [activeSessionModal, setActiveSessionModal] = useState(null)  // { identifier, password }
+  const [forceLoginLoading, setForceLoginLoading] = useState(false)
+
   // Remember Me — pre-populate from saved preference
   const savedEmail = getSavedEmail()
   const savedPassword = getSavedPassword()
@@ -107,7 +111,12 @@ const Login = () => {
     } else if (login.rejected.match(result)) {
       const payload = result.payload
 
-      if (payload && typeof payload === 'object' && payload.email_not_verified) {
+      if (payload && typeof payload === 'object' && payload.type === 'ACTIVE_SESSION') {
+        // Account active on another device — show takeover modal
+        setActiveSessionModal({ identifier: data.identifier, password: data.password })
+        dispatch(clearError())
+
+      } else if (payload && typeof payload === 'object' && payload.email_not_verified) {
         // Email-not-verified has its own dedicated screen
         setEmailNotVerified({ email: payload.email, message: payload.message })
 
@@ -136,6 +145,30 @@ const Login = () => {
       setResendSent(true)  // always show success (privacy)
     } finally {
       setResendLoading(false)
+    }
+  }
+
+  const handleForceLogin = async () => {
+    if (!activeSessionModal) return
+    setForceLoginLoading(true)
+    const { identifier, password } = activeSessionModal
+    try {
+      await dispatch(login({ identifier, password, force_login: true, remember_me: rememberMe })).unwrap()
+      setActiveSessionModal(null)
+      if (rememberMe) {
+        setSavedEmail(identifier)
+        setSavedPassword(password)
+      } else {
+        removeSavedEmail()
+        removeSavedPassword()
+      }
+      toast.success('Login successful!')
+    } catch (err) {
+      setActiveSessionModal(null)
+      const msg = typeof err === 'string' ? err : 'Login failed. Please try again.'
+      setLoginFailed(msg)
+    } finally {
+      setForceLoginLoading(false)
     }
   }
 
@@ -375,6 +408,43 @@ const Login = () => {
         >
           ← Back to Login
         </button>
+      </div>
+    )
+  }
+
+  // ── Active session conflict modal ────────────────────────────────────────
+  if (activeSessionModal) {
+    return (
+      <div className="animate-fade-in space-y-5">
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-auto">
+            <div className="text-center mb-4">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-amber-100 mb-3">
+                <AlertCircle className="w-7 h-7 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Account Already Active</h3>
+              <p className="text-sm text-gray-600 mt-2">
+                This account is already logged in on another device. Do you want to log out from that device and continue here?
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 mt-5">
+              <button
+                onClick={handleForceLogin}
+                disabled={forceLoginLoading}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-60"
+              >
+                {forceLoginLoading ? 'Logging in…' : 'Logout & Continue'}
+              </button>
+              <button
+                onClick={() => setActiveSessionModal(null)}
+                disabled={forceLoginLoading}
+                className="w-full py-2.5 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }

@@ -63,10 +63,16 @@ async def login(data: LoginRequest, request: Request):
     and replaced by the new session (new device always wins).
     """
     result, error = await auth_service.login(
-        data.identifier, data.password, request=request, company_code=data.company_code
+        data.identifier, data.password, request=request, company_code=data.company_code,
+        force_login=data.force_login,
     )
 
     if error:
+        if "ACTIVE_SESSION" in error:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"active_session": True, "message": error.split("|", 1)[1]},
+            )
         if "EMAIL_NOT_VERIFIED" in error:
             # Format: "EMAIL_NOT_VERIFIED|{email}|{message}"
             parts = error.split("|", 2)
@@ -148,9 +154,15 @@ async def login_with_tenant(data: TenantLoginRequest, request: Request):
         password=data.password,
         company_id=data.company_id,
         request=request,
+        force_login=data.force_login,
     )
 
     if error:
+        if "ACTIVE_SESSION" in error:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"active_session": True, "message": error.split("|", 1)[1]},
+            )
         if "SUBSCRIPTION_EXPIRED" in error:
             is_owner = error.startswith("SUBSCRIPTION_EXPIRED_OWNER")
             parts = error.split("|", 2)

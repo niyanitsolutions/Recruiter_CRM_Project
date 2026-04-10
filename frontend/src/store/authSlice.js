@@ -133,6 +133,15 @@ export const login = createAsyncThunk(
       }
       return { ...response.data, remember_me: remember_me !== false }
     } catch (error) {
+      if (error.response?.status === 409) {
+        const detail = error.response.data?.detail || {}
+        if (detail.active_session) {
+          return rejectWithValue({
+            type: 'ACTIVE_SESSION',
+            message: detail.message || 'This account is already active on another device.',
+          })
+        }
+      }
       if (error.response?.status === 403) {
         const detail = error.response.data?.detail || {}
         if (detail.email_not_verified) {

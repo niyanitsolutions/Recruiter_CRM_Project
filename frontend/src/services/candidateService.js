@@ -143,6 +143,26 @@ const candidateService = {
     })
     return response.data
   },
+
+  // Preview bulk import — parse file and return rows with validation, no insert
+  bulkImportPreview: async (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const response = await api.post('/candidates/bulk-import/preview', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
+
+  // Bulk import — parse and insert valid rows
+  bulkImport: async (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const response = await api.post('/candidates/bulk-import', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
 }
 
 export default candidateService

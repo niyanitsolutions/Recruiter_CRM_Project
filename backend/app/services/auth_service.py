@@ -107,7 +107,7 @@ class AuthService:
     """
 
     @staticmethod
-    async def login(identifier: str, password: str, request=None, company_code: Optional[str] = None) -> Tuple[Optional[dict], str]:
+    async def login(identifier: str, password: str, request=None, company_code: Optional[str] = None, force_login: bool = False) -> Tuple[Optional[dict], str]:
         """
         Authenticate user and return tokens.
 
@@ -118,8 +118,10 @@ class AuthService:
           2. Role document in company DB   → role's current permissions.
           3. Hardcoded ROLE_PERMISSIONS    → last-resort defaults.
 
-        Session policy: If a session already exists it is automatically revoked
-        and a new session is created (new device always wins).
+        Session policy: If force_login=False and an active session exists for
+        the user, returns an ACTIVE_SESSION error so the frontend can prompt the
+        user to confirm taking over the session.  If force_login=True the
+        existing session is revoked and the new login proceeds normally.
 
         Returns:
             Tuple of (login_response, error_message)
@@ -174,7 +176,7 @@ class AuthService:
                 logger.warning("Login failed (wrong password) | company=%s | identifier=%s", company_code, identifier)
                 return None, "Invalid credentials"
 
-            return await AuthService._complete_company_login(tenant, user, ip_address, device_info)
+            return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login)
 
         # GLOBAL PATH (no company_code)
         # ── Fast path: global_users index (O(1), no per-tenant scanning) ─────
@@ -261,7 +263,7 @@ class AuthService:
                     }, ""
 
                 tenant, user = valid_matches[0]
-                return await AuthService._complete_company_login(tenant, user, ip_address, device_info)
+                return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login)
 
         # ── Legacy fallback: O(N) scan for users not yet in global_users ─────
         # Covers tenants registered before the global_users migration was run.
@@ -306,7 +308,7 @@ class AuthService:
                 logger.warning("Login failed (wrong password) owner | identifier=%s", identifier)
                 return None, "Invalid credentials"
 
-            return await AuthService._complete_company_login(owner_tenant, user, ip_address, device_info)
+            return await AuthService._complete_company_login(owner_tenant, user, ip_address, device_info, force_login=force_login)
 
         # Step 2 — scan all company DBs (O(N) — only reached for unmigrated tenants)
         all_matches = await tenant_resolver.find_all_company_user_matches(identifier)
@@ -350,7 +352,7 @@ class AuthService:
             }, ""
 
         tenant, user = valid_matches[0]
-        return await AuthService._complete_company_login(tenant, user, ip_address, device_info)
+        return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login)
 
     @staticmethod
     async def login_with_tenant(
@@ -358,6 +360,7 @@ class AuthService:
         password: str,
         company_id: str,
         request=None,
+        force_login: bool = False,
     ) -> Tuple[Optional[dict], str]:
         """
         Scoped login after the user has selected a tenant from the picker.
@@ -367,8 +370,20 @@ class AuthService:
         duplication.
         """
         return await AuthService.login(
-            identifier, password, request=request, company_code=company_id
+            identifier, password, request=request, company_code=company_id, force_login=force_login
         )
+
+    @staticmethod
+    async def _check_active_session(user_id: str) -> bool:
+        """Return True if the user has an active unexpired session."""
+        master_db = get_master_db()
+        now = datetime.now(timezone.utc)
+        session = await master_db.sessions.find_one({
+            "user_id": user_id,
+            "is_active": True,
+            "expires_at": {"$gt": now},
+        })
+        return session is not None
 
     @staticmethod
     async def _complete_company_login(
@@ -376,6 +391,7 @@ class AuthService:
         user: dict,
         ip_address: str = "",
         device_info: str = "",
+        force_login: bool = False,
     ) -> Tuple[Optional[dict], str]:
         """
         Shared finalization for every company-user login path.
@@ -393,6 +409,14 @@ class AuthService:
             return None, "Your account has been suspended. Please contact your administrator."
         if user.get("status") == UserStatus.INACTIVE:
             return None, "Your account is inactive. Please contact your administrator."
+
+        # ── Concurrent session check ──────────────────────────────────────────
+        # Derive user_id early so we can check sessions before creating tokens.
+        _user_id_early = str(user.get("_id") or user.get("id", ""))
+        if not force_login and _user_id_early:
+            has_active = await AuthService._check_active_session(_user_id_early)
+            if has_active:
+                return None, "ACTIVE_SESSION|This account is already active on another device."
 
         # ── Subscription expiry ───────────────────────────────────────────────
         plan_expiry = tenant.get("plan_expiry")

@@ -13,6 +13,7 @@ const JobForm = () => {
 
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [errors, setErrors] = useState({})
   const [clients, setClients] = useState([])
   const [statuses, setStatuses] = useState([])
   const [jobTypes, setJobTypes] = useState([])
@@ -136,6 +137,30 @@ const JobForm = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }))
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: undefined }))
+  }
+
+  const validate = () => {
+    const e = {}
+    // Location
+    if (!formData.city.trim()) e.city = 'City is required'
+    if (!formData.state.trim()) e.state = 'State is required'
+    if (!formData.country.trim()) e.country = 'Country is required'
+    // Compensation
+    if (formData.salary_min === '' || formData.salary_min === null) e.salary_min = 'Min salary is required'
+    if (formData.salary_max === '' || formData.salary_max === null) e.salary_max = 'Max salary is required'
+    // Eligibility Criteria
+    if (formData.experience_max === '' || formData.experience_max === null) e.experience_max = 'Max experience is required'
+    if (!formData.notice_period_max) e.notice_period_max = 'Notice period is required'
+    if (formData.ctc_max === '' || formData.ctc_max === null) e.ctc_max = 'Max CTC is required'
+    if (formData.min_percentage === '' || formData.min_percentage === null) e.min_percentage = 'Min percentage is required'
+    if (!formData.pipeline_id) e.pipeline_id = 'Interview pipeline is required'
+    if (formData.mandatory_skills.length === 0) e.mandatory_skills = 'At least one mandatory skill is required'
+    // Job Description
+    if (!formData.description.trim()) e.description = 'Description is required'
+    if (!formData.requirements.trim()) e.requirements = 'Requirements are required'
+    if (!formData.responsibilities.trim()) e.responsibilities = 'Responsibilities are required'
+    return e
   }
 
   const addSkill = (type) => {
@@ -166,11 +191,19 @@ const JobForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
+
     if (!formData.title.trim() || !formData.client_id) {
       toast.error('Title and Client are required')
       return
     }
+
+    const validationErrors = validate()
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors)
+      toast.error('Please fill in all required fields')
+      return
+    }
+    setErrors({})
 
     try {
       setSaving(true)
@@ -406,41 +439,44 @@ const JobForm = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                City
+                City <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 name="city"
                 value={formData.city}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.city ? 'border-red-400' : ''}`}
               />
+              {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                State
+                State <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 name="state"
                 value={formData.state}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.state ? 'border-red-400' : ''}`}
               />
+              {errors.state && <p className="text-red-500 text-xs mt-1">{errors.state}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                Country
+                Country <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 name="country"
                 value={formData.country}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.country ? 'border-red-400' : ''}`}
               />
+              {errors.country && <p className="text-red-500 text-xs mt-1">{errors.country}</p>}
             </div>
           </div>
         </div>
@@ -452,32 +488,34 @@ const JobForm = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                Min Salary (LPA)
+                Min Salary (LPA) <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
                 name="salary_min"
                 value={formData.salary_min}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.salary_min ? 'border-red-400' : ''}`}
                 step="0.5"
                 min="0"
               />
+              {errors.salary_min && <p className="text-red-500 text-xs mt-1">{errors.salary_min}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                Max Salary (LPA)
+                Max Salary (LPA) <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
                 name="salary_max"
                 value={formData.salary_max}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.salary_max ? 'border-red-400' : ''}`}
                 step="0.5"
                 min="0"
               />
+              {errors.salary_max && <p className="text-red-500 text-xs mt-1">{errors.salary_max}</p>}
             </div>
 
             <div>
@@ -520,88 +558,95 @@ const JobForm = () => {
 
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                Max Experience (Years)
+                Max Experience (Years) <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
                 name="experience_max"
                 value={formData.experience_max}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.experience_max ? 'border-red-400' : ''}`}
                 min="0"
               />
+              {errors.experience_max && <p className="text-red-500 text-xs mt-1">{errors.experience_max}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                Max Notice Period
+                Max Notice Period <span className="text-red-500">*</span>
               </label>
               <select
                 name="notice_period_max"
                 value={formData.notice_period_max}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.notice_period_max ? 'border-red-400' : ''}`}
               >
-                <option value="">Any</option>
+                <option value="">Select notice period</option>
                 <option value="immediate">Immediate</option>
                 <option value="15_days">15 Days</option>
                 <option value="30_days">30 Days</option>
                 <option value="60_days">60 Days</option>
                 <option value="90_days">90 Days</option>
               </select>
+              {errors.notice_period_max && <p className="text-red-500 text-xs mt-1">{errors.notice_period_max}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                Max Current CTC (LPA)
+                Max Current CTC (LPA) <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
                 name="ctc_max"
                 value={formData.ctc_max}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.ctc_max ? 'border-red-400' : ''}`}
                 step="0.5"
                 min="0"
-                placeholder="Leave empty for no limit"
+                placeholder="e.g. 20"
               />
+              {errors.ctc_max && <p className="text-red-500 text-xs mt-1">{errors.ctc_max}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                Min. Academic Percentage (%)
+                Min. Academic Percentage (%) <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
                 name="min_percentage"
                 value={formData.min_percentage}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.min_percentage ? 'border-red-400' : ''}`}
                 step="0.1"
                 min="0"
                 max="100"
                 placeholder="e.g. 60"
               />
-              <p className="text-xs text-surface-400 mt-1">Candidates below this % will be auto-rejected</p>
+              {errors.min_percentage
+                ? <p className="text-red-500 text-xs mt-1">{errors.min_percentage}</p>
+                : <p className="text-xs text-surface-400 mt-1">Candidates below this % will be auto-rejected</p>
+              }
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                Interview Pipeline
+                Interview Pipeline <span className="text-red-500">*</span>
               </label>
               <select
                 name="pipeline_id"
                 value={formData.pipeline_id}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.pipeline_id ? 'border-red-400' : ''}`}
               >
-                <option value="">No pipeline / Use global stages</option>
+                <option value="">Select a pipeline</option>
                 {pipelines.map(p => (
                   <option key={p.id} value={p.id}>
                     {p.name} ({p.stage_count} stages){p.is_default ? ' — Default' : ''}
                   </option>
                 ))}
               </select>
+              {errors.pipeline_id && <p className="text-red-500 text-xs mt-1">{errors.pipeline_id}</p>}
             </div>
 
             <div>
@@ -624,7 +669,7 @@ const JobForm = () => {
           {/* Mandatory Skills */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-surface-700 mb-2">
-              Mandatory Skills
+              Mandatory Skills <span className="text-red-500">*</span>
             </label>
             <div className="flex gap-2 mb-2">
               <input
@@ -660,6 +705,7 @@ const JobForm = () => {
                 </span>
               ))}
             </div>
+            {errors.mandatory_skills && <p className="text-red-500 text-xs mt-2">{errors.mandatory_skills}</p>}
           </div>
 
           {/* Optional Skills */}
@@ -711,44 +757,47 @@ const JobForm = () => {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                Description
+                Description <span className="text-red-500">*</span>
               </label>
               <textarea
                 name="description"
                 value={formData.description}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.description ? 'border-red-400' : ''}`}
                 rows={4}
                 placeholder="Job description..."
               />
+              {errors.description && <p className="text-red-500 text-xs mt-1">{errors.description}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                Requirements
+                Requirements <span className="text-red-500">*</span>
               </label>
               <textarea
                 name="requirements"
                 value={formData.requirements}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.requirements ? 'border-red-400' : ''}`}
                 rows={4}
                 placeholder="Job requirements..."
               />
+              {errors.requirements && <p className="text-red-500 text-xs mt-1">{errors.requirements}</p>}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                Responsibilities
+                Responsibilities <span className="text-red-500">*</span>
               </label>
               <textarea
                 name="responsibilities"
                 value={formData.responsibilities}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.responsibilities ? 'border-red-400' : ''}`}
                 rows={4}
                 placeholder="Key responsibilities..."
               />
+              {errors.responsibilities && <p className="text-red-500 text-xs mt-1">{errors.responsibilities}</p>}
             </div>
           </div>
         </div>

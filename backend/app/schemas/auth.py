@@ -29,6 +29,10 @@ class LoginRequest(BaseModel):
         None,
         description="Company code for tenant-scoped login (recommended for non-owners)"
     )
+    force_login: bool = Field(
+        False,
+        description="If True, revoke any existing session and log in on this device"
+    )
 
 
 class SuperAdminLoginRequest(BaseModel):
@@ -144,6 +148,7 @@ class TenantLoginRequest(BaseModel):
     identifier: str = Field(..., min_length=3, description="Username, email, or mobile")
     password: str   = Field(..., min_length=1)
     company_id: str = Field(..., description="The company_id the user selected")
+    force_login: bool = Field(False, description="If True, revoke any existing session")
 
 
 class TenantSelectionResponse(BaseModel):
