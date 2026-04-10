@@ -595,7 +595,7 @@ const Users = () => {
                       ) : user.designation === 'Admin' ? (
                         <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">Admin</span>
                       ) : (
-                        <span className="text-surface-600 text-sm">{user.department || user.designation || '-'}</span>
+                        <span className="text-surface-600 text-sm">{user.designation || '-'}</span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-surface-600">
