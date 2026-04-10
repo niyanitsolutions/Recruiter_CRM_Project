@@ -411,11 +411,17 @@ class AuthService:
             return None, "Your account is inactive. Please contact your administrator."
 
         # ── Concurrent session check ──────────────────────────────────────────
-        # Derive user_id early so we can check sessions before creating tokens.
+        # Use user_active_sessions collection (keyed by user_id as _id) for
+        # reliable O(1) lookup — avoids user_id string-format mismatch issues
+        # that can occur when querying the sessions collection by user_id.
         _user_id_early = str(user.get("_id") or user.get("id", ""))
         if not force_login and _user_id_early:
-            has_active = await AuthService._check_active_session(_user_id_early)
-            if has_active:
+            _master_check = get_master_db()
+            _now_check    = datetime.now(timezone.utc)
+            _active_slot  = await _master_check.user_active_sessions.find_one(
+                {"_id": _user_id_early}
+            )
+            if _active_slot and _active_slot.get("expires_at", _now_check) > _now_check:
                 return None, "ACTIVE_SESSION|This account is already active on another device."
 
         # ── Subscription expiry ───────────────────────────────────────────────
@@ -460,6 +466,15 @@ class AuthService:
         session_id = await AuthService._create_session(
             user_id, "company_user", company_id,
             ip_address=ip_address, device_info=device_info,
+        )
+        # Track active session per-user for concurrent login detection.
+        # Uses user_id as _id so lookup is always O(1) by primary key.
+        _slot_expiry = datetime.now(timezone.utc) + timedelta(hours=24)
+        _master_slot = get_master_db()
+        await _master_slot.user_active_sessions.replace_one(
+            {"_id": user_id},
+            {"_id": user_id, "jti": session_id, "expires_at": _slot_expiry},
+            upsert=True,
         )
         token_data["jti"] = session_id
         access_token  = create_access_token(token_data)
@@ -758,12 +773,15 @@ class AuthService:
 
     @staticmethod
     async def _revoke_sessions(user_id: str) -> None:
-        """Mark all active sessions for user_id as inactive."""
+        """Mark all active sessions for user_id as inactive and clear the active-session slot."""
         master_db = get_master_db()
         await master_db.sessions.update_many(
             {"user_id": user_id, "is_active": True},
             {"$set": {"is_active": False}},
         )
+        # Clear the per-user active-session slot so force-login / logout
+        # allows a fresh login from any device.
+        await master_db.user_active_sessions.delete_one({"_id": user_id})
 
     @staticmethod
     def _is_token_revoked(token_iat, user_logout_at) -> bool:
