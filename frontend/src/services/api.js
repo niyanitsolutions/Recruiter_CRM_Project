@@ -46,6 +46,21 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config
 
+    // ── 401: Session ended by another device ─────────────────────────────────
+    // Must be checked before the retry/refresh logic below so it is never
+    // confused with a normal token-expiry 401 and never triggers a refresh attempt.
+    if (error.response?.status === 401) {
+      const _detail = error.response.data?.detail
+      if (_detail && typeof _detail === 'object' && _detail.sessionExpired === true) {
+        sessionStorage.setItem(
+          'login_error',
+          _detail.message || 'Your session was ended because this account logged in on another device.'
+        )
+        _logout()
+        return Promise.reject(error)
+      }
+    }
+
     // ── 401 Unauthorized ──────────────────────────────────────────────────────
     if (error.response?.status === 401 && !originalRequest._retry) {
       // A 401 on the login endpoint itself just means wrong credentials —

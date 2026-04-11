@@ -220,7 +220,9 @@ def _parse_jobs_file(content: bytes, ext: str) -> list:
                         continue
                     rows.append({headers[j]: (str(row[j]).strip() if row[j] is not None else "") for j in range(len(headers))})
         except ImportError:
-            raise HTTPException(status_code=400, detail="openpyxl is required for Excel import.")
+            raise HTTPException(status_code=400, detail="openpyxl is not installed on the server. Please contact your administrator.")
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {exc}. Please save your file as .xlsx (Excel Workbook) and try again.")
     elif ext == ".pdf":
         try:
             from pypdf import PdfReader  # type: ignore[import-untyped]

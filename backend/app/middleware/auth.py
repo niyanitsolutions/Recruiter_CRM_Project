@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import logging
 
 from app.core.security import verify_access_token
-from app.core.database import get_master_db
+from app.core.database import get_master_db, get_company_db
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +110,43 @@ async def get_current_user(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Session has expired or been terminated. Please log in again.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    # ── Active session token validation for company users ────────────────────
+    # Compares the JWT's jti against the active_session_token stored on the
+    # user document. When a new device force-logs in, active_session_token is
+    # overwritten with the new session's jti. Any request from the old device
+    # (carrying the previous jti) will fail this check and receive a 401 with
+    # sessionExpired=True, causing the frontend to redirect to login.
+    _company_id = payload.get("company_id")
+    _is_super_admin = payload.get("is_super_admin", False)
+    _is_seller      = payload.get("is_seller", False)
+    if jti and not _is_super_admin and not _is_seller and _company_id:
+        _cdb  = get_company_db(_company_id)
+        _udoc = await _cdb.users.find_one(
+            {"_id": payload.get("sub")},
+            {"active_session_token": 1},
+        )
+        if _udoc is None:
+            # Owner may only exist in master_db.tenants (no company_db users record)
+            _mdb2   = get_master_db()
+            _tenant = await _mdb2.tenants.find_one({"company_id": _company_id})
+            _active_token = (
+                _tenant.get("owner", {}).get("active_session_token")
+                if _tenant else None
+            )
+        else:
+            _active_token = _udoc.get("active_session_token")
+
+        # Only enforce if active_session_token is set (allows pre-feature sessions through)
+        if _active_token and _active_token != jti:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "sessionExpired": True,
+                    "message": "Your session has been ended because the account logged in on another device.",
+                },
                 headers={"WWW-Authenticate": "Bearer"},
             )
 

@@ -34,6 +34,9 @@ bson==0.5.10
 # PDF Generation
 reportlab==4.1.0
 
+# Excel / Spreadsheet
+openpyxl==3.1.2
+
 # Resume Parsing (text extraction)
 pypdf==4.2.0
 python-docx==1.1.2
