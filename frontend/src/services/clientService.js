@@ -48,6 +48,26 @@ const clientService = {
     const response = await api.get('/clients/types')
     return response.data
   },
+
+  // Bulk import preview — parse file, return rows with validation status
+  bulkImportPreview: async (file) => {
+    const form = new FormData()
+    form.append('file', file)
+    const response = await api.post('/clients/bulk-import/preview', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
+
+  // Bulk import — insert valid rows into the database
+  bulkImport: async (file) => {
+    const form = new FormData()
+    form.append('file', file)
+    const response = await api.post('/clients/bulk-import', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  },
 }
 
 export default clientService

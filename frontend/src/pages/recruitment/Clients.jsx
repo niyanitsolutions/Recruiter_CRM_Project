@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Building2, Plus, Search, Filter, MoreVertical,
-  Edit, Trash2, Eye, Phone, Mail, MapPin, Briefcase, Download
+  Edit, Trash2, Eye, Phone, Mail, MapPin, Briefcase, Download, Upload
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import clientService from '../../services/clientService'
 import usePermissions from '../../hooks/usePermissions'
 import ExportModal from '../../components/common/ExportModal'
+import ClientImportModal from '../../components/common/ClientImportModal'
 
 const Clients = () => {
   const navigate = useNavigate()
@@ -26,6 +27,7 @@ const Clients = () => {
   const [statuses, setStatuses] = useState([])
   const [types, setTypes] = useState([])
   const [exportOpen, setExportOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   useEffect(() => {
     loadDropdowns()
@@ -120,6 +122,15 @@ const Clients = () => {
             >
               <Download className="w-4 h-4" />
               Export
+            </button>
+          )}
+          {has('clients:create') && (
+            <button
+              onClick={() => setImportOpen(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              Import
             </button>
           )}
           {has('clients:create') && (
@@ -373,6 +384,16 @@ const Clients = () => {
           </div>
         )}
       />
+
+      {importOpen && (
+        <ClientImportModal
+          onClose={() => setImportOpen(false)}
+          onImported={() => {
+            loadClients()
+            toast.success('Clients imported successfully!')
+          }}
+        />
+      )}
     </div>
   )
 }
