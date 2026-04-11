@@ -112,12 +112,13 @@ const InterviewForm = () => {
   const loadCandidatesForJob = async (jobId) => {
     try {
       setLoadingCandidates(true)
-      const allRes = await applicationService.getApplications({ job_id: jobId, page_size: 200 })
+      const allRes = await applicationService.getApplications({ job_id: jobId, page_size: 100 })
       const apps = allRes.data || []
       setAllApplications(apps)
       setActiveApplications(apps.filter(a => !['rejected', 'withdrawn'].includes(a.status)))
     } catch (err) {
       console.error('Failed to load candidates:', err)
+      toast.error('Failed to load candidates for this job')
     } finally {
       setLoadingCandidates(false)
     }
