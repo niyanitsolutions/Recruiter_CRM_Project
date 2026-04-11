@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Calendar, Plus, Eye, Clock, User,
-  XCircle, Download
+  XCircle, Download, MessageSquare
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import interviewService from '../../services/interviewService'
