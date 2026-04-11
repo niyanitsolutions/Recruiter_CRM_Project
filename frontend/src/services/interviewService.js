@@ -98,6 +98,12 @@ const interviewService = {
     const response = await api.get('/interviews/results')
     return response.data
   },
+
+  // Submit round result (Pass / Fail / On Hold)
+  submitRoundResult: async (interviewId, data) => {
+    const response = await api.put(`/interviews/${interviewId}/round-result`, data)
+    return response.data
+  },
 }
 
 export default interviewService

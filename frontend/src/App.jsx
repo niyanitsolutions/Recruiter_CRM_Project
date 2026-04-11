@@ -68,6 +68,7 @@ import {
   ApplicationDetail,
   Interviews,
   InterviewForm,
+  InterviewDetail,
   FeedbackForm
 } from './pages/recruitment'
 
@@ -741,7 +742,7 @@ function App() {
         <Route path="/interviews/schedule"
           element={<PermissionRoute permission="interviews:schedule"><InterviewForm /></PermissionRoute>} />
         <Route path="/interviews/:id"
-          element={<PermissionRoute permission="interviews:view"><InterviewForm /></PermissionRoute>} />
+          element={<PermissionRoute permission="interviews:view"><InterviewDetail /></PermissionRoute>} />
         <Route path="/interviews/:id/feedback"
           element={<PermissionRoute permission="interviews:update_status"><FeedbackForm /></PermissionRoute>} />
 

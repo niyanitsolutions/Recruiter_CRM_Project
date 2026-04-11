@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Calendar, Plus, Search, Filter, Eye, Edit,
-  Video, Phone, MapPin, Clock, User, CheckCircle,
-  XCircle, AlertCircle, MessageSquare, Download
+  Calendar, Plus, Eye, Clock, User,
+  XCircle, Download
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import interviewService from '../../services/interviewService'
@@ -100,26 +99,6 @@ const Interviews = () => {
       no_show: 'bg-gray-100 text-gray-800'
     }
     return colors[status] || 'bg-gray-100 text-gray-800'
-  }
-
-  const getResultBadge = (result) => {
-    const colors = {
-      pending: 'bg-gray-100 text-gray-600',
-      passed: 'bg-green-100 text-green-800',
-      failed: 'bg-red-100 text-red-800',
-      on_hold: 'bg-yellow-100 text-yellow-800'
-    }
-    return colors[result] || 'bg-gray-100 text-gray-800'
-  }
-
-  const getModeIcon = (mode) => {
-    const icons = {
-      video: Video,
-      phone: Phone,
-      in_person: MapPin
-    }
-    const Icon = icons[mode] || Video
-    return <Icon className="w-4 h-4" />
   }
 
   const currentData = activeTab === 'today' 
@@ -252,61 +231,88 @@ const Interviews = () => {
             <thead className="bg-surface-50 border-b border-surface-200">
               <tr>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Candidate</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Job</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Job / Company</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Pipeline</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Stage</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Schedule</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Mode</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Status</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Last Round</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Overall Status</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Progress</th>
                 <th className="text-right px-4 py-3 text-sm font-medium text-surface-600">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-100">
               {currentData.map(interview => (
-                <tr key={interview.id} className="hover:bg-surface-50 transition-colors">
+                <tr
+                  key={interview.id}
+                  className="hover:bg-surface-50 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/interviews/${interview.id}`)}
+                >
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
+                      <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
                         <User className="w-4 h-4 text-primary-600" />
                       </div>
                       <div>
                         <p className="font-medium text-surface-900">{interview.candidate_name}</p>
-                        <p className="text-sm text-surface-500">{interview.client_name}</p>
+                        <p className="text-xs text-surface-400">
+                          {interview.scheduled_date
+                            ? new Date(interview.scheduled_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                            : '—'}
+                          {interview.scheduled_time && ` · ${interview.scheduled_time}`}
+                        </p>
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-4">
-                    <p className="text-sm text-surface-900">{interview.job_title}</p>
+                    <p className="text-sm font-medium text-surface-900">{interview.job_title}</p>
+                    <p className="text-xs text-surface-500">{interview.client_name}</p>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="text-sm text-surface-600">{interview.stage_name}</span>
+                    <span className="text-sm text-surface-600">{interview.pipeline_name || '—'}</span>
                   </td>
                   <td className="px-4 py-4">
-                    <div className="text-sm">
-                      <p className="text-surface-900">
-                        {new Date(interview.scheduled_date).toLocaleDateString()}
-                      </p>
-                      <p className="text-surface-500">{interview.scheduled_time}</p>
-                    </div>
+                    <span className="text-sm text-surface-700">{interview.current_round_name || interview.stage_name || '—'}</span>
                   </td>
                   <td className="px-4 py-4">
-                    <div className="flex items-center gap-1 text-sm text-surface-600">
-                      {getModeIcon(interview.interview_mode)}
-                      <span className="capitalize">{interview.interview_mode?.replace('_', ' ')}</span>
-                    </div>
+                    {interview.last_round_result ? (
+                      <span className="text-xs text-surface-600">{interview.last_round_result}</span>
+                    ) : (
+                      <span className="text-xs text-surface-400">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-4">
-                    <div className="flex flex-col gap-1">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium inline-block w-fit ${getStatusBadge(interview.status)}`}>
-                        {interview.status?.replace('_', ' ')}
-                      </span>
-                      {interview.result && interview.result !== 'pending' && (
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium inline-block w-fit ${getResultBadge(interview.result)}`}>
-                          {interview.result}
-                        </span>
-                      )}
-                    </div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium inline-block w-fit ${getStatusBadge(interview.overall_status || interview.status)}`}>
+                      {(interview.overall_status || interview.status)?.replace('_', ' ')}
+                    </span>
                   </td>
                   <td className="px-4 py-4">
+                    {interview.total_rounds > 0 ? (
+                      <div>
+                        <p className="text-xs text-surface-600">
+                          Round {Math.min(interview.current_round_index + 1, interview.total_rounds)} of {interview.total_rounds}
+                        </p>
+                        <div className="flex gap-0.5 mt-1">
+                          {Array.from({ length: interview.total_rounds }).map((_, i) => (
+                            <div
+                              key={i}
+                              className={`h-1.5 flex-1 rounded-full ${
+                                i < interview.current_round_index
+                                  ? 'bg-green-400'
+                                  : i === interview.current_round_index && !['selected','failed'].includes(interview.overall_status)
+                                  ? 'bg-primary-400'
+                                  : interview.overall_status === 'selected'
+                                  ? 'bg-green-400'
+                                  : 'bg-surface-200'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-surface-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => navigate(`/interviews/${interview.id}`)}
@@ -315,16 +321,7 @@ const Interviews = () => {
                       >
                         <Eye className="w-4 h-4 text-surface-500" />
                       </button>
-                      {has('interviews:update_status') && !interview.feedback_submitted && interview.status !== 'cancelled' && (
-                        <button
-                          onClick={() => navigate(`/interviews/${interview.id}/feedback`)}
-                          className="p-2 hover:bg-primary-50 rounded-lg transition-colors"
-                          title="Submit Feedback"
-                        >
-                          <MessageSquare className="w-4 h-4 text-primary-500" />
-                        </button>
-                      )}
-                      {has('interviews:update_status') && ['scheduled', 'confirmed', 'rescheduled'].includes(interview.status) && (
+                      {has('interviews:update_status') && ['scheduled', 'confirmed', 'rescheduled', 'in_progress'].includes(interview.status) && (
                         <button
                           onClick={() => handleCancel(interview.id)}
                           className="p-2 hover:bg-red-50 rounded-lg transition-colors"

@@ -8,6 +8,7 @@ from datetime import date, timezone
 
 from app.models.company.interview import (
     InterviewCreate, InterviewUpdate, InterviewReschedule, InterviewFeedbackSubmit,
+    RoundResultSubmit,
     InterviewResponse, InterviewListResponse, InterviewStatus, InterviewMode, InterviewResult
 )
 from app.services.interview_service import InterviewService
@@ -212,6 +213,24 @@ async def submit_feedback(
     )
     
     return {"success": True, "message": "Feedback submitted successfully", "data": interview}
+
+
+@router.put("/{interview_id}/round-result")
+async def submit_round_result(
+    interview_id: str,
+    result_data: RoundResultSubmit,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db),
+    _: bool = Depends(require_permissions(["interviews:update_status"]))
+):
+    """Submit Pass / Fail / On Hold for the current active round"""
+    interview = await InterviewService.submit_round_result(
+        db=db,
+        interview_id=interview_id,
+        result_data=result_data,
+        submitted_by=current_user["id"],
+    )
+    return {"success": True, "message": "Round result saved", "data": interview}
 
 
 @router.put("/{interview_id}/cancel")

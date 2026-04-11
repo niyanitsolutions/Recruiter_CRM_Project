@@ -26,4 +26,5 @@ export { default as ApplicationDetail } from './ApplicationDetail'
 // Interviews
 export { default as Interviews } from './Interviews'
 export { default as InterviewForm } from './InterviewForm'
+export { default as InterviewDetail } from './InterviewDetail'
 export { default as FeedbackForm } from './FeedbackForm'
