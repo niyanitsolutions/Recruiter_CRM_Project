@@ -150,6 +150,10 @@ const CandidateImportModal = ({ onClose, onImported }) => {
                       <th className="text-left px-3 py-2 font-medium text-surface-600 whitespace-nowrap">Designation</th>
                       <th className="text-left px-3 py-2 font-medium text-surface-600 whitespace-nowrap">Exp (yrs)</th>
                       <th className="text-left px-3 py-2 font-medium text-surface-600 whitespace-nowrap">City</th>
+                      <th className="text-left px-3 py-2 font-medium text-surface-600 whitespace-nowrap">Cur. CTC</th>
+                      <th className="text-left px-3 py-2 font-medium text-surface-600 whitespace-nowrap">Exp. CTC</th>
+                      <th className="text-left px-3 py-2 font-medium text-surface-600 whitespace-nowrap">Notice</th>
+                      <th className="text-left px-3 py-2 font-medium text-surface-600 whitespace-nowrap">Skills</th>
                       <th className="text-left px-3 py-2 font-medium text-surface-600 whitespace-nowrap">Status</th>
                     </tr>
                   </thead>
@@ -170,6 +174,12 @@ const CandidateImportModal = ({ onClose, onImported }) => {
                         <td className="px-3 py-2 text-surface-600">{row.fields.current_designation || '—'}</td>
                         <td className="px-3 py-2 text-surface-600 text-center">{row.fields.total_experience_years || '—'}</td>
                         <td className="px-3 py-2 text-surface-600">{row.fields.current_city || '—'}</td>
+                        <td className="px-3 py-2 text-surface-600 text-right">{row.fields.current_ctc || '—'}</td>
+                        <td className="px-3 py-2 text-surface-600 text-right">{row.fields.expected_ctc || '—'}</td>
+                        <td className="px-3 py-2 text-surface-600 whitespace-nowrap">{row.fields.notice_period || '—'}</td>
+                        <td className="px-3 py-2 text-surface-600 max-w-[160px] truncate" title={row.fields.skill_tags || ''}>
+                          {row.fields.skill_tags || '—'}
+                        </td>
                         <td className="px-3 py-2">{rowBadge(row)}</td>
                       </tr>
                     ))}

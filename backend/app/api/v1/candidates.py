@@ -462,49 +462,137 @@ async def assign_candidate(
 # ── Bulk import helpers (shared by preview + import endpoints) ───────────────
 
 _IMPORT_FIELD_MAP = {
-    # name variations
-    "first_name": "first_name", "first name": "first_name", "firstname": "first_name",
-    "last_name": "last_name", "last name": "last_name", "lastname": "last_name",
-    "full_name": "full_name", "full name": "full_name", "name": "full_name",
-    # contact
-    "email": "email", "email address": "email",
-    "mobile": "mobile", "phone": "mobile", "contact": "mobile", "mobile number": "mobile",
-    "alternate_mobile": "alternate_mobile", "alternate mobile": "alternate_mobile",
-    # personal
-    "date_of_birth": "date_of_birth", "dob": "date_of_birth", "date of birth": "date_of_birth",
-    "gender": "gender",
-    # location
-    "current_city": "current_city", "city": "current_city", "current city": "current_city",
-    "current_state": "current_state", "state": "current_state", "current state": "current_state",
-    "current_country": "current_country", "country": "current_country",
-    # professional
-    "total_experience_years": "total_experience_years", "experience": "total_experience_years",
-    "total experience": "total_experience_years", "experience years": "total_experience_years",
-    "current_company": "current_company", "company": "current_company", "current company": "current_company",
-    "current_designation": "current_designation", "designation": "current_designation",
-    "current designation": "current_designation", "job title": "current_designation",
-    "current_ctc": "current_ctc", "ctc": "current_ctc", "current ctc": "current_ctc",
-    "expected_ctc": "expected_ctc", "expected ctc": "expected_ctc",
-    "notice_period": "notice_period", "notice period": "notice_period",
-    # skills
+    # ── Name ──────────────────────────────────────────────────────────────────
+    "first name": "first_name", "first_name": "first_name", "firstname": "first_name",
+    "fname": "first_name",
+    "last name": "last_name", "last_name": "last_name", "lastname": "last_name",
+    "lname": "last_name", "surname": "last_name",
+    "full name": "full_name", "full_name": "full_name", "name": "full_name",
+    "candidate name": "full_name", "candidate_name": "full_name",
+    # ── Contact ───────────────────────────────────────────────────────────────
+    "email": "email", "email address": "email", "email id": "email",
+    "email_id": "email", "e mail": "email", "e-mail": "email",
+    "mobile": "mobile", "phone": "mobile", "contact": "mobile",
+    "mobile number": "mobile", "mobile no": "mobile", "mobile_no": "mobile",
+    "phone number": "mobile", "phone no": "mobile", "phone_no": "mobile",
+    "contact number": "mobile", "contact no": "mobile", "contact_no": "mobile",
+    "cell": "mobile", "cell number": "mobile", "cell no": "mobile",
+    "alternate mobile": "alternate_mobile", "alternate_mobile": "alternate_mobile",
+    "alt mobile": "alternate_mobile", "alternate phone": "alternate_mobile",
+    "other mobile": "alternate_mobile", "other phone": "alternate_mobile",
+    # ── Personal ──────────────────────────────────────────────────────────────
+    "date of birth": "date_of_birth", "date_of_birth": "date_of_birth",
+    "dob": "date_of_birth", "birth date": "date_of_birth", "birthdate": "date_of_birth",
+    "gender": "gender", "sex": "gender",
+    # ── Location ──────────────────────────────────────────────────────────────
+    "current city": "current_city", "current_city": "current_city",
+    "city": "current_city", "current location": "current_city",
+    "current_location": "current_city", "location": "current_city",
+    "base location": "current_city", "base_location": "current_city",
+    "residing city": "current_city", "place": "current_city",
+    "hometown": "current_city", "present location": "current_city",
+    "current state": "current_state", "current_state": "current_state",
+    "state": "current_state",
+    "current country": "current_country", "current_country": "current_country",
+    "country": "current_country",
+    # ── Experience ────────────────────────────────────────────────────────────
+    "experience": "total_experience_years",
+    "total experience": "total_experience_years",
+    "total_experience_years": "total_experience_years",
+    "experience years": "total_experience_years",
+    "years of experience": "total_experience_years",
+    "work experience": "total_experience_years",
+    "total exp": "total_experience_years",
+    "relevant experience": "total_experience_years",
+    "experience in years": "total_experience_years",
+    "exp in years": "total_experience_years",
+    "exp in yrs": "total_experience_years",
+    "yrs of exp": "total_experience_years",
+    "exp": "total_experience_years",
+    # ── Company / Designation ─────────────────────────────────────────────────
+    "current company": "current_company", "current_company": "current_company",
+    "company": "current_company", "employer": "current_company",
+    "current employer": "current_company", "company name": "current_company",
+    "organization": "current_company", "organisation": "current_company",
+    "current organization": "current_company", "current organisation": "current_company",
+    "current designation": "current_designation", "current_designation": "current_designation",
+    "designation": "current_designation", "job title": "current_designation",
+    "position": "current_designation", "current position": "current_designation",
+    "role": "current_designation", "current role": "current_designation",
+    "title": "current_designation", "profile": "current_designation",
+    # ── CTC / Salary ──────────────────────────────────────────────────────────
+    "current ctc": "current_ctc", "current_ctc": "current_ctc",
+    "ctc": "current_ctc", "current salary": "current_ctc",
+    "salary": "current_ctc", "present ctc": "current_ctc",
+    "present salary": "current_ctc", "annual salary": "current_ctc",
+    "annual ctc": "current_ctc", "fixed ctc": "current_ctc",
+    "gross salary": "current_ctc", "total ctc": "current_ctc",
+    "expected ctc": "expected_ctc", "expected_ctc": "expected_ctc",
+    "expected salary": "expected_ctc", "expectation": "expected_ctc",
+    "ectc": "expected_ctc", "exp ctc": "expected_ctc",
+    "desired ctc": "expected_ctc", "desired salary": "expected_ctc",
+    # ── Notice Period ─────────────────────────────────────────────────────────
+    "notice period": "notice_period", "notice_period": "notice_period",
+    "notice": "notice_period", "np": "notice_period",
+    "joining time": "notice_period", "availability": "notice_period",
+    "serving notice": "notice_period", "notice period days": "notice_period",
+    # ── Skills ────────────────────────────────────────────────────────────────
+    "key skills": "skill_tags", "key_skills": "skill_tags",
     "skills": "skill_tags", "skill_tags": "skill_tags", "skill tags": "skill_tags",
-    # education (flat)
+    "technical skills": "skill_tags", "core skills": "skill_tags",
+    "primary skills": "skill_tags", "skillset": "skill_tags",
+    "expertise": "skill_tags", "skill set": "skill_tags",
+    "technologies": "skill_tags", "tech stack": "skill_tags",
+    "technologies known": "skill_tags", "tools": "skill_tags",
+    "key competencies": "skill_tags", "competencies": "skill_tags",
+    # ── Education ─────────────────────────────────────────────────────────────
     "degree": "edu_degree", "education": "edu_degree", "qualification": "edu_degree",
-    "field_of_study": "edu_field", "field of study": "edu_field", "specialization": "edu_field",
-    "institution": "edu_institution", "university": "edu_institution", "college": "edu_institution",
-    "from_year": "edu_from_year", "from year": "edu_from_year", "graduation from": "edu_from_year",
-    "to_year": "edu_to_year", "to year": "edu_to_year", "graduation year": "edu_to_year",
-    "year_of_passing": "edu_to_year", "passing year": "edu_to_year",
+    "highest qualification": "edu_degree", "educational qualification": "edu_degree",
+    "field of study": "edu_field", "field_of_study": "edu_field",
+    "specialization": "edu_field", "stream": "edu_field", "branch": "edu_field",
+    "institution": "edu_institution", "university": "edu_institution",
+    "college": "edu_institution", "institute": "edu_institution",
+    "from year": "edu_from_year", "from_year": "edu_from_year",
+    "graduation from": "edu_from_year",
+    "to year": "edu_to_year", "to_year": "edu_to_year",
+    "graduation year": "edu_to_year", "year_of_passing": "edu_to_year",
+    "passing year": "edu_to_year", "year of passing": "edu_to_year",
     "percentage": "edu_percentage", "academic percentage": "edu_percentage",
-    # preferences
-    "willing_to_relocate": "willing_to_relocate", "willing to relocate": "willing_to_relocate",
-    "preferred_locations": "preferred_locations", "preferred locations": "preferred_locations",
-    # source
-    "source": "source",
-    # misc
-    "linkedin_url": "linkedin_url", "linkedin": "linkedin_url",
-    "summary": "notes", "notes": "notes",
+    "marks": "edu_percentage", "cgpa": "edu_percentage",
+    # ── Preferences ───────────────────────────────────────────────────────────
+    "willing to relocate": "willing_to_relocate",
+    "willing_to_relocate": "willing_to_relocate",
+    "relocation": "willing_to_relocate", "open to relocation": "willing_to_relocate",
+    "preferred locations": "preferred_locations",
+    "preferred_locations": "preferred_locations",
+    "preferred location": "preferred_locations",
+    # ── Source ────────────────────────────────────────────────────────────────
+    "source": "source", "candidate source": "source", "sourced from": "source",
+    # ── Links ─────────────────────────────────────────────────────────────────
+    "linkedin": "linkedin_url", "linkedin_url": "linkedin_url",
+    "linkedin profile": "linkedin_url", "linkedin url": "linkedin_url",
+    # ── Notes ─────────────────────────────────────────────────────────────────
+    "summary": "notes", "notes": "notes", "remarks": "notes",
+    "comments": "notes", "profile summary": "notes", "about": "notes",
 }
+
+# Pre-built sorted list (longest key first) for partial / suffix-stripped matching
+_IMPORT_MAP_SORTED = sorted(_IMPORT_FIELD_MAP.keys(), key=len, reverse=True)
+
+
+def _normalize_header(raw_key: str) -> str:
+    """
+    Normalise an Excel/CSV column header for fuzzy matching:
+      - lowercase + strip
+      - remove parenthetical noise  e.g. "(LPA)", "(Yrs)", "(in years)"
+      - replace punctuation with spaces
+      - collapse consecutive spaces
+    """
+    import re as _re
+    k = raw_key.lower().strip()
+    k = _re.sub(r'\s*\([^)]*\)', '', k)   # strip "(…)"
+    k = _re.sub(r'[^a-z0-9 ]', ' ', k)   # keep only letters, digits, spaces
+    return _re.sub(r'\s+', ' ', k).strip()
 
 
 def _parse_import_file(content: bytes, ext: str) -> list:
@@ -558,11 +646,37 @@ def _parse_import_file(content: bytes, ext: str) -> list:
 
 
 def _map_import_row(raw: dict) -> dict:
+    """
+    Map raw Excel/CSV column headers to canonical field names.
+
+    Resolution order per column header:
+      1. Exact match against _IMPORT_FIELD_MAP (after lower+strip)
+      2. Exact match after full normalization (strip parens/punct)
+      3. Longest-prefix fuzzy match from _IMPORT_MAP_SORTED
+    """
     mapped = {}
     for k, v in raw.items():
-        key = _IMPORT_FIELD_MAP.get(k.lower().strip())
-        if key:
-            mapped[key] = v
+        # Pass 1 — exact match (cheap, handles already-clean headers)
+        canon = _IMPORT_FIELD_MAP.get(k.lower().strip())
+
+        if canon is None:
+            # Pass 2 — exact match on normalized form
+            norm = _normalize_header(k)
+            canon = _IMPORT_FIELD_MAP.get(norm)
+
+        if canon is None and norm:
+            # Pass 3 — longest key that is a word-boundary substring of norm
+            for candidate_key in _IMPORT_MAP_SORTED:
+                # Accept if normalized key is contained in normalized header
+                # (handles "current ctc (lpa)" → "current ctc", etc.)
+                if candidate_key in norm or norm in candidate_key:
+                    canon = _IMPORT_FIELD_MAP[candidate_key]
+                    break
+
+        if canon and canon not in mapped:
+            # First match wins — prevents a shorter fuzzy match from overwriting
+            # a better exact match that was already stored
+            mapped[canon] = v
     return mapped
 
 
@@ -621,6 +735,9 @@ async def preview_bulk_import(
                 "current_designation": m.get("current_designation", ""),
                 "total_experience_years": m.get("total_experience_years", ""),
                 "current_city": m.get("current_city", ""),
+                "current_ctc": m.get("current_ctc", ""),
+                "expected_ctc": m.get("expected_ctc", ""),
+                "notice_period": m.get("notice_period", ""),
                 "skill_tags": m.get("skill_tags", ""),
                 "source": m.get("source", ""),
             },
