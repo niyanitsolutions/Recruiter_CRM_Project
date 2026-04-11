@@ -191,29 +191,43 @@ class ClientResponse(BaseModel):
     """Client response schema"""
     id: str
     name: str
-    code: Optional[str]
+    code: Optional[str] = None
     client_type: str
-    industry: Optional[str]
-    website: Optional[str]
-    
-    city: Optional[str]
-    state: Optional[str]
-    country: Optional[str]
-    
-    email: Optional[str]
-    phone: Optional[str]
-    contact_persons: List[ContactPerson]
-    
-    commission_percentage: float
+    industry: Optional[str] = None
+    website: Optional[str] = None
 
-    total_jobs: int
-    active_jobs: int
-    total_placements: int
+    # Address
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    zip_code: Optional[str] = None
 
+    # Contact
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    contact_persons: List[ContactPerson] = Field(default_factory=list)
+
+    # Business
+    gstin: Optional[str] = None
+    pan: Optional[str] = None
+    commission_percentage: float = 8.33
+    payment_terms: Optional[int] = None
+    agreement_start: Optional[datetime] = None
+    agreement_end: Optional[datetime] = None
+
+    # Stats
+    total_jobs: int = 0
+    active_jobs: int = 0
+    total_placements: int = 0
+
+    # Status
     status: str
     rejection_reason: Optional[str] = None
     rejected_at: Optional[datetime] = None
     rejected_by: Optional[str] = None
+    notes: Optional[str] = None
+
     created_at: datetime
 
 

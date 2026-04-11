@@ -277,10 +277,11 @@ async def preview_bulk_import_jobs(
     if client_names:
         cursor = db["clients"].find(
             {"is_deleted": {"$ne": True}},
-            {"_id": 1, "company_name": 1}
+            {"_id": 1, "name": 1}
         )
         async for doc in cursor:
-            client_map[doc["company_name"].strip().lower()] = str(doc["_id"])
+            if doc.get("name"):
+                client_map[doc["name"].strip().lower()] = str(doc["_id"])
 
     preview_rows = []
     for idx, m in enumerate(mapped_rows, start=2):
@@ -339,9 +340,10 @@ async def bulk_import_jobs(
 
     # Build client lookup
     client_map: dict = {}
-    cursor = db["clients"].find({"is_deleted": {"$ne": True}}, {"_id": 1, "company_name": 1})
+    cursor = db["clients"].find({"is_deleted": {"$ne": True}}, {"_id": 1, "name": 1})
     async for doc in cursor:
-        client_map[doc["company_name"].strip().lower()] = str(doc["_id"])
+        if doc.get("name"):
+            client_map[doc["name"].strip().lower()] = str(doc["_id"])
 
     inserted = 0
     failed = []
