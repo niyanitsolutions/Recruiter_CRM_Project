@@ -7,7 +7,6 @@ import {
 import { toast } from 'react-hot-toast'
 import interviewService from '../../services/interviewService'
 import applicationService from '../../services/applicationService'
-import matchingService from '../../services/matchingService'
 import jobService from '../../services/jobService'
 import pipelineService from '../../services/pipelineService'
 import userService from '../../services/userService'
@@ -28,14 +27,13 @@ const InterviewForm = () => {
 
   // Candidate selection
   const [manualMode, setManualMode] = useState(false)
-  const [eligibleApplications, setEligibleApplications] = useState([])  // {id, candidate_name, candidate_id}
-  const [allApplications, setAllApplications] = useState([])
+  const [activeApplications, setActiveApplications] = useState([])   // non-rejected/withdrawn
+  const [allApplications, setAllApplications] = useState([])         // all (for manual mode)
   const [eligibilityWarning, setEligibilityWarning] = useState('')
   const [loadingCandidates, setLoadingCandidates] = useState(false)
 
   const [formData, setFormData] = useState({
-    application_id: prefillApplicationId || '',  // manual mode
-    candidate_id: '',                             // auto mode (from matching_results)
+    application_id: prefillApplicationId || '',
     job_id: '',
     stage_id: '',
     interview_mode: 'video',
@@ -63,7 +61,7 @@ const InterviewForm = () => {
       setEligibilityWarning('')
     } else {
       setStages([])
-      setEligibleApplications([])
+      setActiveApplications([])
       setAllApplications([])
     }
   }, [formData.job_id])
@@ -114,15 +112,10 @@ const InterviewForm = () => {
   const loadCandidatesForJob = async (jobId) => {
     try {
       setLoadingCandidates(true)
-
-      // Auto mode: eligible candidates from matching_results (score >= 60, percentage OK)
-      // Only candidates who also have an application are returned (needed for scheduling)
-      const eligRes = await matchingService.getEligibleForInterview(jobId)
-      setEligibleApplications(eligRes.data || [])
-
-      // Manual mode: all applications for the job (any status)
       const allRes = await applicationService.getApplications({ job_id: jobId, page_size: 200 })
-      setAllApplications(allRes.data || [])
+      const apps = allRes.data || []
+      setAllApplications(apps)
+      setActiveApplications(apps.filter(a => !['rejected', 'withdrawn'].includes(a.status)))
     } catch (err) {
       console.error('Failed to load candidates:', err)
     } finally {
@@ -135,14 +128,10 @@ const InterviewForm = () => {
     setFormData(prev => ({ ...prev, [name]: value }))
 
     if (name === 'application_id' && manualMode) {
-      // Check eligibility: find this application's candidate_id in eligibleApplications
       const selectedApp = allApplications.find(a => a.id === value)
-      const isEligible = eligibleApplications.some(
-        c => c.candidate_id === selectedApp?.candidate_id
-      )
       setEligibilityWarning(
-        value && !isEligible
-          ? 'Candidate does not meet job eligibility criteria.'
+        value && ['rejected', 'withdrawn'].includes(selectedApp?.status)
+          ? 'This candidate has been rejected or withdrawn from this job.'
           : ''
       )
     }
@@ -161,13 +150,12 @@ const InterviewForm = () => {
     e.preventDefault()
 
     // Field-specific validation with clear messages
-    const candidateSelected = manualMode ? formData.application_id : formData.candidate_id
     if (!formData.job_id) {
       toast.error('Please select a job')
       return
     }
-    if (!candidateSelected) {
-      toast.error(manualMode ? 'Please select a candidate application' : 'Please select an eligible candidate')
+    if (!formData.application_id) {
+      toast.error('Please select a candidate')
       return
     }
     if (stages.length === 0) {
@@ -207,12 +195,7 @@ const InterviewForm = () => {
         instructions: formData.instructions || undefined,
       }
 
-      if (manualMode) {
-        payload.application_id = formData.application_id
-      } else {
-        payload.candidate_id = formData.candidate_id
-        payload.job_id = formData.job_id
-      }
+      payload.application_id = formData.application_id
 
       await interviewService.scheduleInterview(payload)
       toast.success('Interview scheduled successfully')
@@ -275,7 +258,7 @@ const InterviewForm = () => {
             >
               <option value="">Select Job</option>
               {jobs.map(j => (
-                <option key={j.id} value={j.id}>{j.title} — {j.client_name || ''}</option>
+                <option key={j.value} value={j.value}>{j.title} — {j.client_name || ''}</option>
               ))}
             </select>
           </div>
@@ -297,8 +280,8 @@ const InterviewForm = () => {
                   className="flex items-center gap-1 text-xs text-surface-500 hover:text-primary-600"
                 >
                   {manualMode
-                    ? <><ToggleRight className="w-4 h-4 text-primary-600" /> Manual mode ON</>
-                    : <><ToggleLeft className="w-4 h-4" /> Auto (eligible only)</>}
+                    ? <><ToggleRight className="w-4 h-4 text-primary-600" /> Showing all (incl. rejected)</>
+                    : <><ToggleLeft className="w-4 h-4" /> Active applicants only</>}
                 </button>
               </div>
 
@@ -321,18 +304,18 @@ const InterviewForm = () => {
                   ))}
                 </select>
               ) : (
-                /* Auto mode — eligible candidates from matching_results, by candidate_id */
+                /* Default mode — active (non-rejected/withdrawn) applications */
                 <select
-                  name="candidate_id"
-                  value={formData.candidate_id}
+                  name="application_id"
+                  value={formData.application_id}
                   onChange={handleChange}
                   className="input w-full"
                   required
                 >
-                  <option value="">Select eligible candidate ({eligibleApplications.length})</option>
-                  {eligibleApplications.map(c => (
-                    <option key={c.candidate_id} value={c.candidate_id}>
-                      {c.candidate_name} — Score: {c.final_score}%
+                  <option value="">Select candidate ({activeApplications.length})</option>
+                  {activeApplications.map(a => (
+                    <option key={a.id} value={a.id}>
+                      {a.candidate_name}
                     </option>
                   ))}
                 </select>
@@ -345,9 +328,9 @@ const InterviewForm = () => {
                 </div>
               )}
 
-              {!manualMode && eligibleApplications.length === 0 && !loadingCandidates && (
+              {!manualMode && activeApplications.length === 0 && !loadingCandidates && (
                 <p className="text-sm text-amber-600 mt-2">
-                  No eligible candidates for this job. Run matching first, or switch to manual mode.
+                  No active candidates for this job. Switch to manual mode to see all applications.
                 </p>
               )}
             </>

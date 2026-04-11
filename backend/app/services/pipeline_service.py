@@ -219,6 +219,26 @@ class PipelineService:
             # Fall back to default pipeline
             doc = await collection.find_one({"is_default": True, "is_deleted": False})
         if not doc:
+            # Final fallback: build synthetic stages from interview_settings_ext round_types
+            settings_doc = await db.tenant_settings.find_one({"key": "interview_settings_ext"})
+            if settings_doc:
+                round_types = settings_doc.get("round_types", [])
+                enabled = [r for r in round_types if r.get("is_enabled", True)]
+                if enabled:
+                    return [
+                        {
+                            "id": f"round_{i + 1}",
+                            "stage_name": r.get("name", f"Round {i + 1}"),
+                            "order": i + 1,
+                            "mode": "video",
+                            "duration": 60,
+                            "is_mandatory": True,
+                            "requires_feedback": True,
+                            "auto_advance": False,
+                            "auto_reject": False,
+                        }
+                        for i, r in enumerate(enabled)
+                    ]
             return []
         stages = sorted(doc.get("stages", []), key=lambda s: s.get("order", 0))
         return stages

@@ -546,5 +546,5 @@ class JobService:
             code = j.get("job_code") or ""
             client = j.get("client_name") or ""
             label = f"{code} - {title} ({client})" if code else f"{title} ({client})"
-            result.append({"value": j["_id"], "label": label.strip(" -()"), "title": title})
+            result.append({"value": j["_id"], "label": label.strip(" -()"), "title": title, "client_name": client})
         return result
