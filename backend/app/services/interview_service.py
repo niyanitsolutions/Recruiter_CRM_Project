@@ -433,6 +433,7 @@ class InterviewService:
         interview_id: str,
         result_data: RoundResultSubmit,
         submitted_by: str,
+        company_id: str = "",
     ) -> InterviewResponse:
         """Submit result for the current active round and advance the pipeline."""
         collection = db[InterviewService.COLLECTION]
@@ -499,20 +500,33 @@ class InterviewService:
                 if interview.get("application_id"):
                     try:
                         onboard_doc = {
-                            "_id": str(ObjectId()),
+                            "id": str(ObjectId()),
+                            "company_id": company_id,
                             "candidate_id": interview["candidate_id"],
                             "candidate_name": interview.get("candidate_name"),
                             "candidate_email": interview.get("candidate_email"),
                             "candidate_mobile": interview.get("candidate_mobile"),
-                            "application_id": interview.get("application_id"),
+                            "application_id": interview.get("application_id", ""),
                             "interview_id": interview_id,
                             "job_id": interview["job_id"],
                             "job_title": interview.get("job_title"),
-                            "client_id": interview.get("client_id"),
+                            "client_id": interview.get("client_id") or "",
                             "client_name": interview.get("client_name"),
+                            "offer_ctc": 0.0,
+                            "offer_designation": "",
+                            "offer_location": "",
+                            "offer_released_date": date.today().isoformat(),
                             "status": "offer_released",
+                            "days_at_client": 0,
+                            "payout_days_required": 45,
+                            "documents_required": [],
+                            "documents": [],
+                            "documents_verified": False,
+                            "payout_eligible": False,
+                            "status_history": [],
                             "created_by": submitted_by,
                             "created_at": now,
+                            "updated_at": now,
                             "is_deleted": False,
                         }
                         await db["onboards"].insert_one(onboard_doc)
@@ -903,3 +917,35 @@ class InterviewService:
             "cancelled": by_status.get("cancelled", 0),
             "pending_feedback": pending_feedback
         }
+
+    # ── get_selected_candidates ──────────────────────────────────────────────
+
+    @staticmethod
+    async def get_selected_candidates(db: AsyncIOMotorDatabase) -> List[Dict]:
+        """Return interviews with overall_status=selected for the Release Offer dropdown."""
+        collection = db[InterviewService.COLLECTION]
+        cursor = collection.find(
+            {"overall_status": "selected", "is_deleted": False},
+            {
+                "_id": 1, "candidate_id": 1, "candidate_name": 1,
+                "candidate_email": 1, "candidate_mobile": 1,
+                "application_id": 1, "job_id": 1, "job_title": 1,
+                "client_id": 1, "client_name": 1,
+            }
+        ).sort("updated_at", -1)
+        interviews = await cursor.to_list(length=200)
+        return [
+            {
+                "interview_id": iv["_id"],
+                "candidate_id": iv.get("candidate_id"),
+                "candidate_name": iv.get("candidate_name"),
+                "candidate_email": iv.get("candidate_email"),
+                "candidate_mobile": iv.get("candidate_mobile"),
+                "application_id": iv.get("application_id"),
+                "job_id": iv.get("job_id"),
+                "job_title": iv.get("job_title"),
+                "client_id": iv.get("client_id"),
+                "client_name": iv.get("client_name"),
+            }
+            for iv in interviews
+        ]

@@ -118,6 +118,8 @@ const Applications = () => {
       screening: 'bg-yellow-100 text-yellow-800',
       shortlisted: 'bg-purple-100 text-purple-800',
       interview: 'bg-indigo-100 text-indigo-800',
+      next_round: 'bg-indigo-200 text-indigo-900',
+      selected: 'bg-green-600 text-white',
       offered: 'bg-orange-100 text-orange-800',
       offer_accepted: 'bg-green-100 text-green-800',
       offer_declined: 'bg-pink-100 text-pink-800',

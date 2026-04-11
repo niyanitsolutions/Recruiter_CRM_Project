@@ -38,10 +38,10 @@ class ContactPerson(BaseModel):
     def validate_mobile(cls, v):
         if not v:
             return v
-        cleaned = re.sub(r'[^0-9]', '', v)
-        if not re.match(r'^[6-9]\d{9}$', cleaned):
-            raise ValueError('Mobile number must start with 6–9 and be 10 digits')
-        return cleaned
+        cleaned = re.sub(r'[^0-9]', '', str(v))
+        if re.match(r'^[6-9]\d{9}$', cleaned):
+            return cleaned
+        return v  # Return as-is for non-Indian or legacy numbers
 
 
 class ClientModel(BaseModel):
@@ -242,6 +242,8 @@ class ClientListResponse(BaseModel):
     active_jobs: int
     total_placements: int
     status: str
+    rejection_reason: Optional[str] = None
+    rejected_at: Optional[datetime] = None
 
 
 # Client type display names

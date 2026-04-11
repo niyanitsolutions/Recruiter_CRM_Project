@@ -118,6 +118,17 @@ async def get_interview_results(current_user: dict = Depends(get_current_user)):
     return {"success": True, "data": results}
 
 
+@router.get("/selected-candidates")
+async def get_selected_candidates(
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db),
+    _: bool = Depends(require_permissions(["interviews:view"]))
+):
+    """Get candidates who passed all interview rounds (for Release Offer dropdown)"""
+    candidates = await InterviewService.get_selected_candidates(db)
+    return {"success": True, "data": candidates}
+
+
 @router.post("/")
 async def schedule_interview(
     interview_data: InterviewCreate,
@@ -229,6 +240,7 @@ async def submit_round_result(
         interview_id=interview_id,
         result_data=result_data,
         submitted_by=current_user["id"],
+        company_id=current_user.get("company_id", ""),
     )
     return {"success": True, "message": "Round result saved", "data": interview}
 

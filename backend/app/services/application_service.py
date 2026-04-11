@@ -285,9 +285,26 @@ class ApplicationService:
         skip = (page - 1) * page_size
         cursor = collection.find(query).sort("applied_at", -1).skip(skip).limit(page_size)
         applications = await cursor.to_list(length=page_size)
-        
+
+        # Fetch interview records for all applications in one query
+        app_ids = [app["_id"] for app in applications]
+        interviews_cursor = db["interviews"].find(
+            {"application_id": {"$in": app_ids}, "is_deleted": False}
+        )
+        interviews_list = await interviews_cursor.to_list(length=len(app_ids))
+        interview_by_app = {iv["application_id"]: iv for iv in interviews_list}
+
         result = []
         for app in applications:
+            # Dynamically derive current stage from interview rounds
+            interview = interview_by_app.get(app["_id"])
+            dynamic_stage_name = None
+            if interview:
+                rounds = interview.get("rounds", [])
+                idx = interview.get("current_round_index", 0)
+                if rounds and idx < len(rounds):
+                    dynamic_stage_name = rounds[idx].get("round_name")
+
             result.append(ApplicationListResponse(
                 id=app["_id"],
                 candidate_id=app["candidate_id"],
@@ -300,7 +317,7 @@ class ApplicationService:
                 partner_name=app.get("partner_name"),
                 status=app.get("status", "applied"),
                 status_display=get_application_status_display(app.get("status", "applied")),
-                current_stage_name=app.get("current_stage_name"),
+                current_stage_name=dynamic_stage_name or app.get("current_stage_name"),
                 total_interviews=app.get("total_interviews", 0),
                 eligibility_score=app.get("eligibility_score"),
                 assigned_to_name=app.get("assigned_to_name"),

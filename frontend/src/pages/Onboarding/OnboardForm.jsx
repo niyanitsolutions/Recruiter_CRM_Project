@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Calendar, DollarSign, MapPin, FileText } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { onboardService, candidateService, jobService, clientService } from '../../services'
+import { onboardService } from '../../services'
+import interviewService from '../../services/interviewService'
 
 const OnboardForm = () => {
   const { id } = useParams()
@@ -11,9 +12,7 @@ const OnboardForm = () => {
 
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [candidates, setCandidates] = useState([])
-  const [jobs, setJobs] = useState([])
-  const [clients, setClients] = useState([])
+  const [selectedCandidates, setSelectedCandidates] = useState([])
   
   const [formData, setFormData] = useState({
     candidate_id: '',
@@ -53,16 +52,10 @@ const OnboardForm = () => {
 
   const fetchDropdowns = async () => {
     try {
-      const [candidatesRes, jobsRes, clientsRes] = await Promise.all([
-        candidateService.getCandidates({ page_size: 100 }),
-        jobService.getJobs({ page_size: 100, status: 'open' }),
-        clientService.getClients({ page_size: 100 })
-      ])
-      setCandidates(candidatesRes.data || [])
-      setJobs(jobsRes.data || [])
-      setClients(clientsRes.data || [])
+      const res = await interviewService.getSelectedCandidates()
+      setSelectedCandidates(res.data || [])
     } catch (error) {
-      console.error('Error fetching dropdowns:', error)
+      console.error('Error fetching selected candidates:', error)
     }
   }
 
@@ -88,17 +81,19 @@ const OnboardForm = () => {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  const handleJobChange = (e) => {
-    const jobId = e.target.value
-    const job = jobs.find(j => j.id === jobId)
-    if (job) {
+  const handleCandidateSelect = (e) => {
+    const candidateId = e.target.value
+    const selected = selectedCandidates.find(c => c.candidate_id === candidateId)
+    if (selected) {
       setFormData(prev => ({
         ...prev,
-        job_id: jobId,
-        client_id: job.client_id,
-        offer_designation: job.title,
-        offer_location: job.location || ''
+        candidate_id: selected.candidate_id,
+        application_id: selected.application_id || '',
+        job_id: selected.job_id || '',
+        client_id: selected.client_id || '',
       }))
+    } else {
+      setFormData(prev => ({ ...prev, candidate_id: candidateId }))
     }
   }
 
@@ -167,39 +162,50 @@ const OnboardForm = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                Candidate *
+                Candidate <span className="text-red-500">*</span>
               </label>
-              <select
-                name="candidate_id"
-                value={formData.candidate_id}
-                onChange={handleChange}
-                required
-                disabled={isEdit}
-                className="w-full px-4 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-surface-100"
-              >
-                <option value="">Select Candidate</option>
-                {candidates.map(c => (
-                  <option key={c.id} value={c.id}>{c.full_name} - {c.email}</option>
-                ))}
-              </select>
+              {isEdit ? (
+                <input
+                  type="text"
+                  value={formData.candidate_name || formData.candidate_id}
+                  disabled
+                  className="w-full px-4 py-2 border border-surface-300 rounded-lg bg-surface-100"
+                />
+              ) : (
+                <select
+                  value={formData.candidate_id}
+                  onChange={handleCandidateSelect}
+                  required
+                  className="w-full px-4 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Select selected candidate ({selectedCandidates.length})</option>
+                  {selectedCandidates.map(c => (
+                    <option key={c.candidate_id} value={c.candidate_id}>
+                      {c.candidate_name} — {c.job_title}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {!isEdit && selectedCandidates.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">No selected candidates yet. Complete an interview first.</p>
+              )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Job *
-              </label>
-              <select
-                name="job_id"
-                value={formData.job_id}
-                onChange={handleJobChange}
-                required
-                disabled={isEdit}
-                className="w-full px-4 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-primary-500 disabled:bg-surface-100"
-              >
-                <option value="">Select Job</option>
-                {jobs.map(j => (
-                  <option key={j.id} value={j.id}>{j.title} - {j.client_name}</option>
-                ))}
-              </select>
+              <label className="block text-sm font-medium text-surface-700 mb-1">Job / Client</label>
+              {formData.job_id ? (
+                <div className="px-4 py-2 border border-surface-200 rounded-lg bg-surface-50 text-sm text-surface-700">
+                  <p className="font-medium">
+                    {formData.job_title || selectedCandidates.find(c => c.candidate_id === formData.candidate_id)?.job_title || formData.job_id}
+                  </p>
+                  <p className="text-surface-500 text-xs">
+                    {formData.client_name || selectedCandidates.find(c => c.candidate_id === formData.candidate_id)?.client_name || ''}
+                  </p>
+                </div>
+              ) : (
+                <div className="px-4 py-2 border border-surface-200 rounded-lg bg-surface-50 text-sm text-surface-400">
+                  Auto-filled when candidate is selected
+                </div>
+              )}
             </div>
           </div>
         </div>

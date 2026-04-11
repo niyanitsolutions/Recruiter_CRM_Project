@@ -104,6 +104,12 @@ const interviewService = {
     const response = await api.put(`/interviews/${interviewId}/round-result`, data)
     return response.data
   },
+
+  // Get candidates who passed all rounds (for Release Offer dropdown)
+  getSelectedCandidates: async () => {
+    const response = await api.get('/interviews/selected-candidates')
+    return response.data
+  },
 }
 
 export default interviewService

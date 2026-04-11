@@ -196,7 +196,9 @@ class ClientService:
                 city=client.get("city"),
                 active_jobs=client.get("active_jobs", 0),
                 total_placements=client.get("total_placements", 0),
-                status=client.get("status", "active")
+                status=client.get("status", "active"),
+                rejection_reason=client.get("rejection_reason"),
+                rejected_at=client.get("rejected_at"),
             ))
         
         return {
