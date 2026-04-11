@@ -90,8 +90,61 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"}
         )
 
-    # Validate session (jti) — enforces single active session per user
     jti = payload.get("jti")
+    _company_id    = payload.get("company_id")
+    _is_super_admin = payload.get("is_super_admin", False)
+    _is_seller      = payload.get("is_seller", False)
+    _user_sub       = payload.get("sub")
+
+    # ── STEP 1: active_session_token check (company users only) ─────────────
+    # Must run BEFORE the sessions-table check so that a force-login kick-out
+    # is detected here and returns {"sessionExpired": True} — not the plain
+    # string that sessions-table would return after _revoke_sessions() marks
+    # the old session inactive.
+    #
+    # Flow when Device B force-logs in:
+    #   • _revoke_sessions()     → Device A's sessions row is is_active=False
+    #   • active_session_token   → overwritten with Device B's jti (UUID_B)
+    #   → Device A's next request: jti=UUID_A  ≠  active_session_token=UUID_B
+    #                               ↳ caught HERE, returns sessionExpired=True ✓
+    #   → Sessions-table check is never reached for Device A ✓
+    if jti and not _is_super_admin and not _is_seller and _company_id:
+        _cdb  = get_company_db(_company_id)
+        _udoc = await _cdb.users.find_one(
+            {"_id": _user_sub},
+            {"active_session_token": 1},
+        )
+        if _udoc is None:
+            # Owner may only exist in master_db.tenants (no company_db users row)
+            _mdb2   = get_master_db()
+            _tenant = await _mdb2.tenants.find_one({"company_id": _company_id})
+            _active_token = (
+                _tenant.get("owner", {}).get("active_session_token")
+                if _tenant else None
+            )
+        else:
+            _active_token = _udoc.get("active_session_token")
+
+        # Only enforce when a token has been recorded (skips pre-feature sessions)
+        if _active_token and _active_token != jti:
+            logger.warning(
+                "[SESSION] Force-login kick-out detected | user=%s | "
+                "jwt_jti=%s | db_active=%s",
+                _user_sub, jti, _active_token,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "sessionExpired": True,
+                    "message": "Your session has been ended because the account logged in on another device.",
+                },
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    # ── STEP 2: sessions-table check — enforces expiry and explicit revocation ─
+    # Reached only when the active_session_token check passed (tokens matched),
+    # so this path handles: (a) naturally expired sessions, (b) sessions revoked
+    # by the user's own explicit logout on the same device.
     if jti:
         master_db = get_master_db()
         now = datetime.now(timezone.utc)
@@ -103,50 +156,13 @@ async def get_current_user(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         session_expires = session.get("expires_at", now)
-        # Motor returns naive datetimes; normalize to UTC-aware for comparison
+        # Motor returns naive datetimes; normalise to UTC-aware for comparison
         if session_expires and session_expires.tzinfo is None:
             session_expires = session_expires.replace(tzinfo=timezone.utc)
         if session_expires < now:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Session has expired or been terminated. Please log in again.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-    # ── Active session token validation for company users ────────────────────
-    # Compares the JWT's jti against the active_session_token stored on the
-    # user document. When a new device force-logs in, active_session_token is
-    # overwritten with the new session's jti. Any request from the old device
-    # (carrying the previous jti) will fail this check and receive a 401 with
-    # sessionExpired=True, causing the frontend to redirect to login.
-    _company_id = payload.get("company_id")
-    _is_super_admin = payload.get("is_super_admin", False)
-    _is_seller      = payload.get("is_seller", False)
-    if jti and not _is_super_admin and not _is_seller and _company_id:
-        _cdb  = get_company_db(_company_id)
-        _udoc = await _cdb.users.find_one(
-            {"_id": payload.get("sub")},
-            {"active_session_token": 1},
-        )
-        if _udoc is None:
-            # Owner may only exist in master_db.tenants (no company_db users record)
-            _mdb2   = get_master_db()
-            _tenant = await _mdb2.tenants.find_one({"company_id": _company_id})
-            _active_token = (
-                _tenant.get("owner", {}).get("active_session_token")
-                if _tenant else None
-            )
-        else:
-            _active_token = _udoc.get("active_session_token")
-
-        # Only enforce if active_session_token is set (allows pre-feature sessions through)
-        if _active_token and _active_token != jti:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={
-                    "sessionExpired": True,
-                    "message": "Your session has been ended because the account logged in on another device.",
-                },
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
