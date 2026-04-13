@@ -1,4 +1,5 @@
 import re
+import logging
 """
 Client Service - Phase 3
 Business logic for client (hiring company) management
@@ -110,6 +111,22 @@ class ClientService:
                 detail="Client not found"
             )
         
+        # Compute live active job count
+        live_active_jobs = await db["jobs"].count_documents({
+            "client_id": client_id,
+            "status": {"$in": ["open", "on_hold"]},
+            "is_deleted": False
+        })
+        live_total_jobs = await db["jobs"].count_documents({
+            "client_id": client_id,
+            "is_deleted": False
+        })
+
+        # Resolve city — may be top-level or inside address dict
+        city_val = client.get("city")
+        if not city_val and isinstance(client.get("address"), dict):
+            city_val = client["address"].get("city")
+
         return ClientResponse(
             id=client["_id"],
             name=client["name"],
@@ -118,7 +135,7 @@ class ClientService:
             industry=client.get("industry"),
             website=client.get("website"),
             address=client.get("address"),
-            city=client.get("city"),
+            city=city_val,
             state=client.get("state"),
             country=client.get("country", "India"),
             zip_code=client.get("zip_code"),
@@ -131,8 +148,8 @@ class ClientService:
             payment_terms=client.get("payment_terms"),
             agreement_start=client.get("agreement_start"),
             agreement_end=client.get("agreement_end"),
-            total_jobs=client.get("total_jobs", 0),
-            active_jobs=client.get("active_jobs", 0),
+            total_jobs=live_total_jobs,
+            active_jobs=live_active_jobs,
             total_placements=client.get("total_placements", 0),
             status=client.get("status", "active"),
             rejection_reason=client.get("rejection_reason"),
@@ -184,17 +201,35 @@ class ClientService:
         cursor = collection.find(query).sort("created_at", -1).skip(skip).limit(page_size)
         clients = await cursor.to_list(length=page_size)
         
+        # Compute live job counts for this page of clients
+        client_ids = [c["_id"] for c in clients]
+        job_counts: Dict[str, int] = {}
+        if client_ids:
+            pipeline = [
+                {"$match": {
+                    "client_id": {"$in": client_ids},
+                    "status": {"$in": ["open", "on_hold"]},
+                    "is_deleted": False
+                }},
+                {"$group": {"_id": "$client_id", "count": {"$sum": 1}}}
+            ]
+            async for doc in db["jobs"].aggregate(pipeline):
+                job_counts[doc["_id"]] = doc["count"]
+
         # Format response
         result = []
+        _log = logging.getLogger("client_service")
         for client in clients:
+            live_active_jobs = job_counts.get(client["_id"], 0)
+            _log.info("CLIENT LIST | %s | active_jobs=%d", client["name"], live_active_jobs)
             result.append(ClientListResponse(
                 id=client["_id"],
                 name=client["name"],
                 code=client.get("code"),
                 client_type=client.get("client_type", "direct"),
                 industry=client.get("industry"),
-                city=client.get("city"),
-                active_jobs=client.get("active_jobs", 0),
+                city=client.get("city") or (client["address"].get("city") if isinstance(client.get("address"), dict) else None),
+                active_jobs=live_active_jobs,
                 total_placements=client.get("total_placements", 0),
                 status=client.get("status", "active"),
                 rejection_reason=client.get("rejection_reason"),
