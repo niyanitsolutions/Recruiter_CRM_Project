@@ -9,6 +9,7 @@ import {
   Edit,
   Trash2,
   Eye,
+  EyeOff,
   UserCheck,
   UserX,
   Key,
@@ -181,6 +182,7 @@ const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel, confirmTex
 const ResetPasswordDialog = ({ isOpen, user, onConfirm, onCancel }) => {
   const [password, setPassword] = useState('')
   const [mustChange, setMustChange] = useState(true)
+  const [showPassword, setShowPassword] = useState(false)
 
   if (!isOpen) return null
 
@@ -190,19 +192,28 @@ const ResetPasswordDialog = ({ isOpen, user, onConfirm, onCancel }) => {
       <div className="relative bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
         <h3 className="text-lg font-semibold text-surface-900">Reset Password</h3>
         <p className="mt-2 text-surface-600">Reset password for {user?.full_name}</p>
-        
+
         <div className="mt-4 space-y-4">
           <div>
             <label className="block text-sm font-medium text-surface-700 mb-1">
               New Password
             </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
-              placeholder="Enter new password"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 pr-10 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                placeholder="Enter new password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(prev => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-600"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
           <label className="flex items-center gap-2">
             <input
@@ -581,7 +592,7 @@ const Users = () => {
                         <div>
                           <p className="font-medium text-surface-900">
                             {user.full_name}
-                            {user.is_owner && (
+                            {(user.is_owner || user.role === 'owner') && (
                               <span className="ml-2 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded">Owner</span>
                             )}
                           </p>
@@ -590,7 +601,7 @@ const Users = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {user.designation === 'Owner' || user.is_owner ? (
+                      {user.designation === 'Owner' || user.is_owner || user.role === 'owner' ? (
                         <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">Owner</span>
                       ) : user.designation === 'Admin' ? (
                         <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">Admin</span>

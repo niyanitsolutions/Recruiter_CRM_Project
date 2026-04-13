@@ -11,28 +11,29 @@ import OrgTree from '../../components/OrgTree'
 // ── Department-based permission system ───────────────────────────────────────
 
 const MODULE_PERMS = {
-  users:              ['users:view','users:create','users:edit','users:delete','users:manage_roles'],
-  roles:              ['roles:view','roles:create','roles:edit','roles:delete'],
-  partners:           ['partners:view','partners:create','partners:edit','partners:delete'],
-  departments:        ['departments:view','departments:create','departments:edit','departments:delete'],
-  designations:       ['designations:view','designations:create','designations:edit','designations:delete'],
-  clients:            ['clients:view','clients:create','clients:edit','clients:delete'],
-  jobs:               ['jobs:view','jobs:create','jobs:edit','jobs:delete'],
-  interviews:         ['interviews:view','interviews:schedule','interviews:update_status'],
-  interview_settings: ['interview_settings:view','interview_settings:create','interview_settings:edit','interview_settings:delete'],
-  onboards:           ['onboards:view','onboards:create','onboards:edit'],
-  candidates:         ['candidates:view','candidates:create','candidates:edit','candidates:delete','candidates:assign'],
-  accounts:           ['accounts:view','accounts:invoices','accounts:payouts'],
-  payouts:            ['payouts:view','payouts:edit'],
-  invoices:           ['invoices:view','invoices:approve'],
-  imports:            ['imports:view','imports:create'],
-  exports:            ['exports:view','exports:create'],
-  targets:            ['targets:view','targets:create','targets:edit','targets:delete','targets:admin'],
-  analytics:          ['analytics:view','analytics:edit'],
-  reports:            ['reports:view','reports:export'],
-  crm_settings:       ['crm_settings:view','crm_settings:edit'],
-  audit:              ['audit:view','audit:sessions','audit:alerts','audit:admin'],
-  notifications:      ['notifications:create'],
+  users:                   ['users:view','users:create','users:edit','users:delete','users:manage_roles'],
+  roles:                   ['roles:view','roles:create','roles:edit','roles:delete'],
+  partners:                ['partners:view','partners:create','partners:edit','partners:delete'],
+  departments:             ['departments:view','departments:create','departments:edit','departments:delete'],
+  designations:            ['designations:view','designations:create','designations:edit','designations:delete'],
+  clients:                 ['clients:view','clients:create','clients:edit','clients:delete'],
+  jobs:                    ['jobs:view','jobs:create','jobs:edit','jobs:delete'],
+  interviews:              ['interviews:view','interviews:schedule','interviews:update_status'],
+  interviews_no_schedule:  ['interviews:view','interviews:update_status'],
+  interview_settings:      ['interview_settings:view','interview_settings:create','interview_settings:edit','interview_settings:delete'],
+  onboards:                ['onboards:view','onboards:create','onboards:edit'],
+  candidates:              ['candidates:view','candidates:create','candidates:edit','candidates:delete','candidates:assign'],
+  accounts:                ['accounts:view','accounts:invoices','accounts:payouts'],
+  payouts:                 ['payouts:view','payouts:edit'],
+  invoices:                ['invoices:view','invoices:approve'],
+  imports:                 ['imports:view','imports:create'],
+  exports:                 ['exports:view','exports:create'],
+  targets:                 ['targets:view','targets:create','targets:edit','targets:delete','targets:admin'],
+  analytics:               ['analytics:view','analytics:edit'],
+  reports:                 ['reports:view','reports:export'],
+  crm_settings:            ['crm_settings:view','crm_settings:edit'],
+  audit:                   ['audit:view','audit:sessions','audit:alerts','audit:admin'],
+  notifications:           ['notifications:create'],
 }
 
 const MODULE_LABELS = {
@@ -50,8 +51,8 @@ const DEPT_MODULES = {
   owner:                { full: Object.keys(MODULE_PERMS), view_only: [] },
   admin:                { full: ['users','roles','partners','departments','designations','clients','jobs','interviews','interview_settings','candidates','onboards','accounts','payouts','invoices','imports','exports','targets','analytics','crm_settings','audit','notifications'], view_only: ['reports'] },
   client_coordinator:   { full: ['clients','jobs','interviews','interview_settings','onboards'], view_only: ['candidates','reports'] },
-  candidate_coordinator:{ full: ['candidates','interviews','interview_settings'], view_only: ['jobs','clients','onboards','reports'] },
-  recruiter:            { full: ['candidates','interviews','clients','jobs'], view_only: ['onboards','reports'] },
+  candidate_coordinator:{ full: ['candidates','interviews_no_schedule','interview_settings'], view_only: ['jobs','clients','onboards','reports'] },
+  recruiter:            { full: ['candidates','interviews','clients','jobs','interview_settings'], view_only: ['onboards','reports'] },
   hr:                   { full: ['users','candidates','onboards'], view_only: ['reports'] },
   accounts:             { full: ['accounts','payouts','invoices','imports','exports'], view_only: ['clients','partners','reports'] },
   partner:              { full: ['candidates'], view_only: ['jobs','interviews'] },
@@ -246,8 +247,30 @@ const [errors,       setErrors]       = useState({})
     const fetchUser = async () => {
       try {
         setLoading(true)
-        const response = await userService.getUser(id)
+        // Load reference data and user in parallel
+        const [response, deptsRes, desigsRes] = await Promise.all([
+          userService.getUser(id),
+          departmentService.getDepartments(),
+          designationService.getDesignations(),
+        ])
+        const depts = deptsRes.data || []
+        const desigs = desigsRes.data || []
+        setDepartments(depts)
+        setDesignations(desigs)
+
         const user = response.data
+        // Resolve department_id: use stored ID or look up by name
+        let deptId = user.department_id || ''
+        if (!deptId && user.department) {
+          const match = depts.find(d => d.name?.toLowerCase() === user.department?.toLowerCase())
+          if (match) deptId = match.id
+        }
+        // Resolve designation_id: use stored ID or look up by name
+        let desigId = user.designation_id || ''
+        if (!desigId && user.designation) {
+          const match = desigs.find(d => d.name?.toLowerCase() === user.designation?.toLowerCase())
+          if (match) desigId = match.id
+        }
         setFormData({
           username:      user.username       || '',
           email:         user.email          || '',
@@ -257,8 +280,8 @@ const [errors,       setErrors]       = useState({})
           employee_id:   user.employee_id    || '',
           role:          user.role           || 'candidate_coordinator',
           user_type:     user.user_type      || 'internal',
-          department_id: user.department_id  || '',
-          designation_id:user.designation_id || '',
+          department_id: deptId,
+          designation_id:desigId,
           reporting_to:  user.reporting_to   || '',
           joining_date:  user.joining_date?.split('T')[0] || '',
           status:        user.status         || 'active',
@@ -394,10 +417,16 @@ const [errors,       setErrors]       = useState({})
     }
     setErrors(newErrors)
     if (Object.keys(newErrors).length > 0) {
-      // Scroll to the permissions section if that is the only / last error
-      if (newErrors.permissions) {
-        setTimeout(() => permissionsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
-      }
+      // Scroll to the first error field
+      setTimeout(() => {
+        const firstErrKey = Object.keys(newErrors)[0]
+        if (firstErrKey === 'permissions') {
+          permissionsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        } else {
+          const el = document.querySelector(`[name="${firstErrKey}"]`)
+          el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 50)
       return
     }
 
@@ -893,7 +922,7 @@ const [errors,       setErrors]       = useState({})
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-accent-500 ${!isEdit && errors.permissions ? 'border-red-500' : 'border-surface-300'}`}
               >
                 <option value="">Select department…</option>
-                {PERM_DEPT_OPTIONS.map(o => (
+                {PERM_DEPT_OPTIONS.filter(o => o.value !== 'owner' || currentUser?.isOwner).map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>

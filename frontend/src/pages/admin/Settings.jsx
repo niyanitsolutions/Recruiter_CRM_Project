@@ -1,4 +1,6 @@
 import { useNavigate } from 'react-router-dom'
+import { useSelector } from 'react-redux'
+import { selectIsOwner } from '../../store/authSlice'
 import {
   Users, Shield, UsersRound, Building2, Layers, Award, GitBranch,
   Workflow, Briefcase, CalendarCheck, FileText, ScanLine, UserPlus2,
@@ -23,7 +25,7 @@ const SECTIONS = [
     color: 'bg-purple-50',
     iconColor: 'text-purple-600',
     items: [
-      { icon: Building2,   label: 'Company Profile',   description: 'Update company info, logo and address',    path: '/company-settings' },
+      { icon: Building2,   label: 'Company Profile',   description: 'Update company info, logo and address',    path: '/company-settings', ownerOnly: true },
       { icon: Layers,      label: 'Departments',        description: 'Manage organisation departments',         path: '/departments' },
       { icon: Award,       label: 'Designations',       description: 'Manage job titles and positions',         path: '/designations' },
       { icon: GitBranch,   label: 'Branches',           description: 'Manage office locations and branches',    path: '/settings/branches' },
@@ -46,6 +48,7 @@ const SECTIONS = [
     title: 'Finance & Billing',
     color: 'bg-yellow-50',
     iconColor: 'text-yellow-600',
+    ownerOnly: true,
     items: [
       { icon: Receipt,          label: 'Invoice Settings',        description: 'Prefix, tax, payment terms and bank details', path: '/settings/invoice-settings' },
       { icon: BadgeDollarSign,  label: 'Commission & Payout Rules', description: 'Percentage, fixed or slab-based rules',     path: '/settings/commission-rules' },
@@ -88,6 +91,7 @@ const SECTIONS = [
 
 const SettingsHub = () => {
   const navigate = useNavigate()
+  const isOwner = useSelector(selectIsOwner)
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -99,36 +103,40 @@ const SettingsHub = () => {
       </div>
 
       <div className="space-y-6">
-        {SECTIONS.map(section => (
-          <div
-            key={section.title}
-            className="bg-white rounded-xl shadow-sm border border-surface-100 overflow-hidden"
-          >
-            <div className={`px-6 py-3 border-b border-surface-100 ${section.color}`}>
-              <h2 className="font-semibold text-surface-800 text-sm uppercase tracking-wide">
-                {section.title}
-              </h2>
+        {SECTIONS.filter(section => !section.ownerOnly || isOwner).map(section => {
+          const visibleItems = section.items.filter(item => !item.ownerOnly || isOwner)
+          if (visibleItems.length === 0) return null
+          return (
+            <div
+              key={section.title}
+              className="bg-white rounded-xl shadow-sm border border-surface-100 overflow-hidden"
+            >
+              <div className={`px-6 py-3 border-b border-surface-100 ${section.color}`}>
+                <h2 className="font-semibold text-surface-800 text-sm uppercase tracking-wide">
+                  {section.title}
+                </h2>
+              </div>
+              <div className="divide-y divide-surface-50">
+                {visibleItems.map(item => (
+                  <button
+                    key={item.label}
+                    onClick={() => navigate(item.path)}
+                    className="w-full flex items-center gap-4 px-6 py-4 hover:bg-surface-50 transition-colors text-left"
+                  >
+                    <div className={`p-2 rounded-lg ${section.color}`}>
+                      <item.icon className={`w-5 h-5 ${section.iconColor}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-surface-900 text-sm">{item.label}</p>
+                      <p className="text-xs text-surface-500 mt-0.5 truncate">{item.description}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-surface-400 flex-shrink-0" />
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="divide-y divide-surface-50">
-              {section.items.map(item => (
-                <button
-                  key={item.label}
-                  onClick={() => navigate(item.path)}
-                  className="w-full flex items-center gap-4 px-6 py-4 hover:bg-surface-50 transition-colors text-left"
-                >
-                  <div className={`p-2 rounded-lg ${section.color}`}>
-                    <item.icon className={`w-5 h-5 ${section.iconColor}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-surface-900 text-sm">{item.label}</p>
-                    <p className="text-xs text-surface-500 mt-0.5 truncate">{item.description}</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-surface-400 flex-shrink-0" />
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

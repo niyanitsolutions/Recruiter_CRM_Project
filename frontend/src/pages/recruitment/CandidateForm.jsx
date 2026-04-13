@@ -7,6 +7,21 @@ import candidateService from '../../services/candidateService'
 const EMPTY_EDU = () => ({ degree: '', field_of_study: '', institution: '', from_year: '', to_year: '', percentage: '' })
 const EMPTY_EXP = () => ({ company_name: '', designation: '', start_date: '', end_date: '', is_current: false })
 
+const EXP_OPTIONS = [
+  { label: 'Less than 1 Year', value: 0.5 },
+  { label: '1 Year', value: 1 },
+  { label: '2 Years', value: 2 },
+  { label: '3 Years', value: 3 },
+  { label: '4 Years', value: 4 },
+  { label: '5 Years', value: 5 },
+  { label: '6 Years', value: 6 },
+  { label: '7 Years', value: 7 },
+  { label: '8 Years', value: 8 },
+  { label: '9 Years', value: 9 },
+  { label: '10 Years', value: 10 },
+  { label: '10+ Years', value: 11 },
+]
+
 const CandidateForm = () => {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -50,7 +65,7 @@ const CandidateForm = () => {
     current_state: '',
     preferred_locations: [],
     willing_to_relocate: false,
-    total_experience_years: 0,
+    total_experience_years: '',
     total_experience_months: 0,
     current_ctc: '',
     expected_ctc: '',
@@ -134,7 +149,15 @@ const CandidateForm = () => {
           current_state: data.current_state || '',
           preferred_locations: data.preferred_locations || [],
           willing_to_relocate: data.willing_to_relocate || false,
-          total_experience_years: data.total_experience_years || 0,
+          total_experience_years: (() => {
+            const v = data.total_experience_years
+            if (!v && v !== 0) return ''
+            // Map stored float to nearest dropdown value
+            const opt = EXP_OPTIONS.reduce((prev, curr) =>
+              Math.abs(curr.value - v) < Math.abs(prev.value - v) ? curr : prev
+            )
+            return String(opt.value)
+          })(),
           total_experience_months: data.total_experience_months || 0,
           current_ctc: data.current_ctc ?? '',
           expected_ctc: data.expected_ctc ?? '',
@@ -235,7 +258,10 @@ const CandidateForm = () => {
             mobile: p.mobile || prev.mobile,
             skills: p.skills?.length ? p.skills : prev.skills,
             current_city: p.current_city || prev.current_city,
-            total_experience_years: p.experience_years != null ? p.experience_years : prev.total_experience_years,
+            total_experience_years: p.experience_years != null ? (() => {
+              const opt = EXP_OPTIONS.reduce((a, b) => Math.abs(b.value - p.experience_years) < Math.abs(a.value - p.experience_years) ? b : a)
+              return String(opt.value)
+            })() : prev.total_experience_years,
           }))
           // Auto-fill first education entry if parsed
           if (p.education_degree || p.institution || p.graduation_year) {
@@ -293,7 +319,10 @@ const CandidateForm = () => {
           email: parsed.email || prev.email,
           mobile: parsed.mobile || prev.mobile,
           skills: parsed.skills || prev.skills,
-          total_experience_years: parsed.experience_years || prev.total_experience_years,
+          total_experience_years: parsed.experience_years != null ? (() => {
+              const opt = EXP_OPTIONS.reduce((a, b) => Math.abs(b.value - parsed.experience_years) < Math.abs(a.value - parsed.experience_years) ? b : a)
+              return String(opt.value)
+            })() : prev.total_experience_years,
           summary: parsed.summary || prev.summary
         }))
         toast.success(`Resume parsed with ${response.data.confidence || 0}% confidence`)
@@ -308,7 +337,20 @@ const CandidateForm = () => {
   const validate = () => {
     const errs = {}
     if (!formData.gender) errs.gender = 'Gender is required'
-    if (!formData.date_of_birth) errs.date_of_birth = 'Date of birth is required'
+    if (!formData.date_of_birth) {
+      errs.date_of_birth = 'Date of birth is required'
+    } else {
+      const dob = new Date(formData.date_of_birth)
+      const today = new Date()
+      if (dob >= today) {
+        errs.date_of_birth = 'Date of birth must be in the past'
+      } else {
+        const age = today.getFullYear() - dob.getFullYear() - (
+          today < new Date(today.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0
+        )
+        if (age < 16) errs.date_of_birth = 'Candidate must be at least 16 years old'
+      }
+    }
     if (formData.skills.length === 0) errs.skills = 'At least one skill is required'
     if (formData.preferred_locations.length === 0) errs.preferred_locations = 'At least one preferred location is required'
     if (!isEdit && !pendingResumeFile) errs.resume = 'Resume is required'
@@ -318,9 +360,19 @@ const CandidateForm = () => {
       if (!edu.degree) errs[`edu_${i}_degree`] = 'Degree is required'
       if (!edu.field_of_study?.trim()) errs[`edu_${i}_field_of_study`] = 'Specialization is required'
       if (!edu.institution?.trim()) errs[`edu_${i}_institution`] = 'University/College is required'
-      if (edu.percentage === '' || edu.percentage === null || edu.percentage === undefined) errs[`edu_${i}_percentage`] = 'Percentage is required'
-      if (!edu.from_year) errs[`edu_${i}_from_year`] = 'From year is required'
-      if (!edu.to_year) errs[`edu_${i}_to_year`] = 'To year is required'
+      if (edu.percentage === '' || edu.percentage === null || edu.percentage === undefined) {
+        errs[`edu_${i}_percentage`] = 'Percentage is required'
+      } else if (Number(edu.percentage) < 0 || Number(edu.percentage) > 100) {
+        errs[`edu_${i}_percentage`] = 'Percentage must be between 0 and 100'
+      }
+      if (!edu.from_year) {
+        errs[`edu_${i}_from_year`] = 'From year is required'
+      }
+      if (!edu.to_year) {
+        errs[`edu_${i}_to_year`] = 'To year is required'
+      } else if (edu.from_year && Number(edu.to_year) < Number(edu.from_year)) {
+        errs[`edu_${i}_to_year`] = 'To year must be after From year'
+      }
     })
 
     // Work experience: all fields required for every entry
@@ -328,8 +380,16 @@ const CandidateForm = () => {
       workExperience.forEach((exp, i) => {
         if (!exp.company_name?.trim()) errs[`exp_${i}_company_name`] = 'Company name is required'
         if (!exp.designation?.trim()) errs[`exp_${i}_designation`] = 'Designation is required'
-        if (!exp.start_date) errs[`exp_${i}_start_date`] = 'Start date is required'
-        if (!exp.is_current && !exp.end_date) errs[`exp_${i}_end_date`] = 'End date is required'
+        if (!exp.start_date) {
+          errs[`exp_${i}_start_date`] = 'Start date is required'
+        } else if (new Date(exp.start_date) > new Date()) {
+          errs[`exp_${i}_start_date`] = 'Start date cannot be in the future'
+        }
+        if (!exp.is_current && !exp.end_date) {
+          errs[`exp_${i}_end_date`] = 'End date is required'
+        } else if (!exp.is_current && exp.end_date && exp.start_date && new Date(exp.end_date) <= new Date(exp.start_date)) {
+          errs[`exp_${i}_end_date`] = 'End date must be after start date'
+        }
       })
       if (formData.current_ctc === '' || formData.current_ctc === null || formData.current_ctc === undefined) errs.current_ctc = 'Current CTC is required'
       if (formData.expected_ctc === '' || formData.expected_ctc === null || formData.expected_ctc === undefined) errs.expected_ctc = 'Expected CTC is required'
@@ -480,6 +540,10 @@ const CandidateForm = () => {
 
   const errCls = 'text-red-500 text-xs mt-1'
   const inputErrCls = (field) => errors[field] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'
+  const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/api\/v1\/?$/, '')
+  const fullResumeUrl = formData.resume_url
+    ? (formData.resume_url.startsWith('http') ? formData.resume_url : `${API_BASE}${formData.resume_url}`)
+    : ''
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -536,8 +600,8 @@ const CandidateForm = () => {
                     <p className="text-xs text-surface-500 truncate">{formData.resume_url.split('/').pop()}</p>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
-                    <a href={formData.resume_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:text-primary-800 font-medium">View</a>
-                    <a href={formData.resume_url} download className="text-xs text-primary-600 hover:text-primary-800 font-medium">Download</a>
+                    <a href={fullResumeUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:text-primary-800 font-medium">View</a>
+                    <a href={fullResumeUrl} download className="text-xs text-primary-600 hover:text-primary-800 font-medium">Download</a>
                   </div>
                 </div>
               ) : (
@@ -706,9 +770,14 @@ const CandidateForm = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-surface-100">
               <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">Total Experience (Years) <span className="text-red-500">*</span></label>
-                <input type="number" name="total_experience_years" value={formData.total_experience_years}
-                  onChange={handleChange} className="input w-full" min="0" max="50" />
+                <label className="block text-sm font-medium text-surface-700 mb-1">Total Experience</label>
+                <select name="total_experience_years" value={formData.total_experience_years}
+                  onChange={handleChange} className="input w-full">
+                  <option value="">Select experience</option>
+                  {EXP_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-surface-700 mb-1">Current CTC (LPA) <span className="text-red-500">*</span></label>
@@ -811,7 +880,7 @@ const CandidateForm = () => {
                     <input type="number" value={edu.percentage}
                       onChange={e => updateEducation(index, 'percentage', e.target.value)}
                       className={errors[`edu_${index}_percentage`] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'}
-                      step="0.01" min="0" max="100" placeholder="e.g., 72.5" />
+                      step="0.01" min="0" placeholder="e.g., 72.5" />
                     {errors[`edu_${index}_percentage`] && <p className={errCls}>{errors[`edu_${index}_percentage`]}</p>}
                   </div>
                   <div>

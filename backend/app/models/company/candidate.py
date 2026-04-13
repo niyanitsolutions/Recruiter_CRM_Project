@@ -76,7 +76,7 @@ class EducationItem(BaseModel):
 class WorkExperienceItem(BaseModel):
     """Work experience details"""
     company_name: str
-    designation: str
+    designation: Optional[str] = None
     location: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None  # None = current
@@ -269,7 +269,7 @@ class CandidateCreate(BaseModel):
     current_ctc: Optional[float] = None
     expected_ctc: Optional[float] = None
     notice_period: Optional[str] = None
-    
+
     # Skills & Education
     skills: List[SkillItem] = Field(default_factory=list)
     skill_tags: List[str] = Field(default_factory=list)

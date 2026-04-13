@@ -252,11 +252,11 @@ class CandidateService:
                 # Override any passed partner_id filter to prevent data leak
                 if search_params:
                     search_params.partner_id = None
-            elif not is_admin and role == "candidate_coordinator":
-                # Candidate coordinators see:
+            elif not is_admin and role in ("candidate_coordinator", "recruiter"):
+                # Candidate coordinators and recruiters see:
                 #   1. Candidates assigned to themselves or their subordinates
                 #   2. Candidates not yet assigned to anyone (unassigned / newly created)
-                # Without #2, coordinators can't see candidates they just created
+                # Without #2, they can't see candidates they just created
                 # because new candidates have no assigned_to value.
                 from app.services.user_service import UserService
                 user_svc = UserService(db)
@@ -265,6 +265,7 @@ class CandidateService:
                     {"assigned_to": {"$in": accessible_ids}},
                     {"assigned_to": None},
                     {"assigned_to": {"$exists": False}},
+                    {"created_by": user_id},
                 ]
                 # Clear any passed assigned_to filter to avoid conflict
                 if search_params:
