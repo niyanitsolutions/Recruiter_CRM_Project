@@ -221,14 +221,20 @@ class ClientService:
         _log = logging.getLogger("client_service")
         for client in clients:
             live_active_jobs = job_counts.get(client["_id"], 0)
-            _log.info("CLIENT LIST | %s | active_jobs=%d", client["name"], live_active_jobs)
+            _log.info(
+                "CLIENT LIST | %s | active_jobs=%d | city=%r | raw_keys=%s",
+                client["name"], live_active_jobs,
+                client.get("city"),
+                [k for k in client.keys() if "city" in k.lower() or "location" in k.lower() or "address" in k.lower()]
+            )
             result.append(ClientListResponse(
                 id=client["_id"],
                 name=client["name"],
                 code=client.get("code"),
                 client_type=client.get("client_type", "direct"),
                 industry=client.get("industry"),
-                city=client.get("city") or (client["address"].get("city") if isinstance(client.get("address"), dict) else None),
+                city=client.get("city") or None,
+                state=client.get("state") or None,
                 active_jobs=live_active_jobs,
                 total_placements=client.get("total_placements", 0),
                 status=client.get("status", "active"),

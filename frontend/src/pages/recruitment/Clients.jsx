@@ -273,12 +273,12 @@ const Clients = () => {
                     </span>
                   </td>
                   <td className="px-4 py-4">
-                    {client.city && (
+                    {(client.city || client.state) ? (
                       <div className="flex items-center gap-1 text-sm text-surface-600">
                         <MapPin className="w-3 h-3" />
-                        {client.city}
+                        {client.city && client.state ? `${client.city}, ${client.state}` : client.city || client.state}
                       </div>
-                    )}
+                    ) : null}
                   </td>
                   {activeTab !== 'rejected' && (
                     <td className="px-4 py-4">

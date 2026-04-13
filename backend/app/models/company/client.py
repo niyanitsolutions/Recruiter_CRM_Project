@@ -239,6 +239,7 @@ class ClientListResponse(BaseModel):
     client_type: str
     industry: Optional[str]
     city: Optional[str]
+    state: Optional[str] = None
     active_jobs: int
     total_placements: int
     status: str
