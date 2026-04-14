@@ -93,14 +93,14 @@ const PERMISSION_NAV_MAP = [
 /**
  * Build a sectioned nav from the user's actual permission array.
  * A nav item is shown when the user has ANY permission in its `permissions` list.
- * Pass isOwner=true to bypass filtering (owner sees all nav items).
+ * Pass isOwner=true or isAdmin=true to bypass filtering entirely.
  */
-const buildPermissionMenu = (permissions, isOwner = false) => {
+const buildPermissionMenu = (permissions, isOwner = false, isAdmin = false) => {
   const perms = new Set(permissions || [])
   const sectionMap = {}
 
   for (const item of PERMISSION_NAV_MAP) {
-    if (!isOwner && !item.permissions.some(p => perms.has(p))) continue
+    if (!isOwner && !isAdmin && !item.permissions.some(p => perms.has(p))) continue
     if (!sectionMap[item.section]) sectionMap[item.section] = []
     const isDuplicate = sectionMap[item.section].some(
       (i) => i.path === item.path && JSON.stringify(i.query || {}) === JSON.stringify(item.query || {})
@@ -179,8 +179,9 @@ const SideNav = ({ isCollapsed, onToggle }) => {
     }
 
     // All non-super-admin, non-partner roles: strictly permission-driven.
-    // Owners bypass the permission filter and see every nav section.
-    const sections = buildPermissionMenu(user?.permissions, !!user?.isOwner)
+    // Owners AND Admins bypass the permission filter and see every nav section.
+    const isAdminRole = userRole === 'admin'
+    const sections = buildPermissionMenu(user?.permissions, !!user?.isOwner, isAdminRole)
     return {
       flat: [],
       sections: sections.length > 0

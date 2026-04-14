@@ -179,7 +179,7 @@ class ClientService:
         if current_user:
             from app.services.user_service import UserService
             user_svc = UserService(db)
-            visible_ids = await user_svc.get_visible_user_ids(current_user)
+            visible_ids = await user_svc.get_visible_user_ids(current_user, module_name="clients")
             if visible_ids is not None:
                 query["created_by"] = {"$in": visible_ids}
         

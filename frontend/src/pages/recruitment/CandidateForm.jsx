@@ -250,39 +250,51 @@ const CandidateForm = () => {
         const res = await candidateService.parseResumeFile(file)
         if (res.data) {
           const p = res.data
+          // ── Basic fields ──────────────────────────────────────────────
           setFormData(prev => ({
             ...prev,
-            first_name: p.first_name || prev.first_name,
-            last_name: p.last_name || prev.last_name,
-            email: p.email || prev.email,
-            mobile: p.mobile || prev.mobile,
+            first_name:    p.first_name    || prev.first_name,
+            last_name:     p.last_name     || prev.last_name,
+            email:         p.email         || prev.email,
+            mobile:        p.mobile        || prev.mobile,
+            current_city:  p.current_city  || prev.current_city,
+            linkedin_url:  p.linkedin_url  || prev.linkedin_url,
             skills: p.skills?.length ? p.skills : prev.skills,
-            current_city: p.current_city || prev.current_city,
-            total_experience_years: p.experience_years != null ? (() => {
-              const opt = EXP_OPTIONS.reduce((a, b) => Math.abs(b.value - p.experience_years) < Math.abs(a.value - p.experience_years) ? b : a)
-              return String(opt.value)
-            })() : prev.total_experience_years,
+            total_experience_years: p.total_experience_years != null && p.total_experience_years > 0
+              ? (() => {
+                  const opt = EXP_OPTIONS.reduce((a, b) =>
+                    Math.abs(b.value - p.total_experience_years) < Math.abs(a.value - p.total_experience_years) ? b : a
+                  )
+                  return String(opt.value)
+                })()
+              : prev.total_experience_years,
           }))
-          // Auto-fill first education entry if parsed
-          if (p.education_degree || p.institution || p.graduation_year) {
-            setEducation(prev => prev.map((e, i) => i === 0 ? {
-              ...e,
-              degree: p.education_degree || e.degree,
-              institution: p.institution || e.institution,
-              to_year: p.graduation_year || e.to_year
-            } : e))
+
+          // ── Education array ───────────────────────────────────────────
+          if (p.education?.length) {
+            setEducation(p.education.map(e => ({
+              degree:        e.degree        || '',
+              field_of_study: e.field_of_study || '',
+              institution:   e.institution   || '',
+              from_year:     e.from_year     || '',
+              to_year:       e.to_year       || '',
+              percentage:    e.percentage    || '',
+            })))
           }
-          // Auto-fill first work experience if parsed
-          if (p.current_company || p.current_designation) {
-            setWorkExperience(prev => prev.map((e, i) => i === 0 ? {
-              ...e,
-              company_name: p.current_company || e.company_name,
-              designation: p.current_designation || e.designation,
-              is_current: true
-            } : e))
+
+          // ── Experience array ──────────────────────────────────────────
+          if (p.experience?.length) {
+            setWorkExperience(p.experience.map(e => ({
+              company_name: e.company_name || '',
+              designation:  e.designation  || '',
+              start_date:   e.start_date   || '',
+              end_date:     e.is_current ? '' : (e.end_date || ''),
+              is_current:   e.is_current   || false,
+            })))
+            setIsFresher(false)
           }
+
           if (p.first_name || p.email) toast.success('Resume parsed — form auto-filled')
-          if (p.raw_text) setResumeText(p.raw_text)
         }
       } catch {
         // non-fatal

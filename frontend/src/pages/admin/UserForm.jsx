@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useParams } from 'react-router-dom'
+import { refreshToken } from '../../store/authSlice'
 import { ArrowLeft, Save, Loader2, Shield, GitBranch, ChevronDown } from 'lucide-react'
 import toast from 'react-hot-toast'
 import userService from '../../services/userService'
@@ -555,6 +556,8 @@ const [errors,       setErrors]       = useState({})
               refresh_token: null,
             },
           })
+          // Refresh the JWT so the new permissions are encoded in the access token
+          dispatch(refreshToken())
         }
       } else {
         await userService.createUser(submitData)

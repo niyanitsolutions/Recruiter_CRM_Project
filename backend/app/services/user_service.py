@@ -945,18 +945,49 @@ class UserService:
 
         return all_ids
 
-    async def get_visible_user_ids(self, user: dict) -> Optional[List[str]]:
+    async def get_visible_user_ids(self, user: dict, module_name: str = "candidates") -> Optional[List[str]]:
         """
-        Return the list of user IDs whose records the given user is allowed to see.
+        Return the list of user IDs whose records the given user is allowed to see,
+        taking into account both the user's department role and the specific module.
         Returns None for owner/admin (no restriction — see everything).
 
-        Rules:
-          - Owner or Admin          → None (no filter)
-          - Partner                 → None (partner has own partner_id filter)
-          - level == "manager"      → self + 2 levels deep in reporting chain
-          - Has any direct reports  → self + 1 level deep (team leader)
-          - Otherwise (employee)    → only self
+        Department-module visibility rules:
+          - Owner or Admin              → None (ALL)
+          - Partner                     → None (uses partner_id filter separately)
+          - recruiter                   → HIERARCHY for all modules
+          - candidate_coordinator       → HIERARCHY for candidates/applications/interviews; ALL for jobs/clients
+          - client_coordinator          → HIERARCHY for jobs/clients/interviews; ALL for candidates/applications
+          - hr                          → ALL for all recruitment modules
+          - accounts                    → ALL (accounts have no recruitment permissions anyway)
+          - Other roles (by level):
+              manager                   → self + 2 levels deep
+              team leader               → self + 1 level deep
+              employee                  → self only
         """
+        # Department-to-module visibility map: role → module → "HIERARCHY" | "ALL"
+        DEPT_MODULE_RULES: Dict[str, Dict[str, str]] = {
+            "recruiter": {
+                "candidates": "HIERARCHY", "applications": "HIERARCHY",
+                "interviews": "HIERARCHY", "jobs": "HIERARCHY", "clients": "HIERARCHY",
+            },
+            "candidate_coordinator": {
+                "candidates": "HIERARCHY", "applications": "HIERARCHY",
+                "interviews": "HIERARCHY", "jobs": "ALL", "clients": "ALL",
+            },
+            "client_coordinator": {
+                "candidates": "ALL", "applications": "ALL",
+                "interviews": "HIERARCHY", "jobs": "HIERARCHY", "clients": "HIERARCHY",
+            },
+            "hr": {
+                "candidates": "ALL", "applications": "ALL",
+                "interviews": "ALL", "jobs": "ALL", "clients": "ALL",
+            },
+            "accounts": {
+                "candidates": "ALL", "applications": "ALL",
+                "interviews": "ALL", "jobs": "ALL", "clients": "ALL",
+            },
+        }
+
         user_id = user.get("id") or user.get("sub", "")
         role = user.get("role", "")
         is_admin = user.get("is_owner") or role == "admin"
@@ -967,7 +998,14 @@ class UserService:
         if role == "partner":
             return None  # partner uses partner_id filter separately
 
-        # Look up the user's level from DB
+        # Apply department-module rules if the role is a known department role
+        if role in DEPT_MODULE_RULES:
+            rule = DEPT_MODULE_RULES[role].get(module_name, "HIERARCHY")
+            if rule == "ALL":
+                return None
+            # Fall through to HIERARCHY logic below
+
+        # HIERARCHY logic: look up the user's level from DB
         user_doc = await self.collection.find_one(
             {"_id": user_id, "is_deleted": False},
             {"level": 1}

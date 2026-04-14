@@ -151,21 +151,43 @@ async def create_candidate(
     _: bool = Depends(require_permissions(["candidates:create"]))
 ):
     """Create a new candidate"""
+    import logging as _log
+    import traceback
+    from pydantic import ValidationError as _ValidationError
+
     # If partner, tag candidate to partner
     partner_id = None
     if current_user.get("role") == "partner":
         partner_id = current_user["id"]
-    
-    candidate = await CandidateService.create_candidate(
-        db=db,
-        candidate_data=candidate_data,
-        created_by=current_user["id"],
-        partner_id=partner_id,
-        company_id=current_user.get("company_id", ""),
-        company_name=current_user.get("company_name", ""),
-        recruiter_name=current_user.get("full_name", ""),
-    )
-    
+
+    try:
+        candidate = await CandidateService.create_candidate(
+            db=db,
+            candidate_data=candidate_data,
+            created_by=current_user["id"],
+            partner_id=partner_id,
+            company_id=current_user.get("company_id", ""),
+            company_name=current_user.get("company_name", ""),
+            recruiter_name=current_user.get("full_name", ""),
+        )
+    except HTTPException:
+        raise
+    except _ValidationError as ve:
+        raise HTTPException(
+            status_code=422,
+            detail=str(ve)
+        )
+    except Exception as exc:
+        _log.getLogger(__name__).error(
+            "Candidate creation failed: %s\n%s",
+            exc,
+            traceback.format_exc()
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create candidate: {exc}"
+        )
+
     return {"success": True, "message": "Candidate created successfully", "data": candidate}
 
 
@@ -202,10 +224,12 @@ async def extract_resume_file(
     _: bool = Depends(require_permissions(["candidates:create"]))
 ):
     """
-    Upload a resume file (PDF/DOCX/TXT), extract text, and return parsed candidate fields.
-    Used for auto-filling the candidate creation form.
+    Upload a resume file (PDF/DOCX/TXT), extract raw text, then send to Claude API
+    for structured parsing. Returns fully structured candidate fields including
+    complete education and experience arrays.
     """
-    import io, re, os
+    import io
+    import os
 
     ALLOWED = {".pdf", ".doc", ".docx", ".txt"}
     _, ext = os.path.splitext((file.filename or "").lower())
@@ -213,142 +237,189 @@ async def extract_resume_file(
         raise HTTPException(status_code=400, detail="Only PDF, DOCX, DOC, or TXT files are supported.")
 
     content = await file.read()
-    text = ""
+    raw_text = ""
 
     if ext == ".txt":
-        text = content.decode("utf-8", errors="ignore")
+        raw_text = content.decode("utf-8", errors="ignore")
 
     elif ext == ".docx":
         try:
-            import zipfile, xml.etree.ElementTree as ET
+            import zipfile
+            import xml.etree.ElementTree as ET
             with zipfile.ZipFile(io.BytesIO(content)) as z:
                 with z.open("word/document.xml") as xml_file:
                     tree = ET.parse(xml_file)
-                    texts = [node.text for node in tree.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t") if node.text]
-                    text = " ".join(texts)
+                    ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+                    texts = [node.text for node in tree.iter(f"{ns}t") if node.text]
+                    raw_text = " ".join(texts)
         except Exception:
-            text = ""
+            raw_text = ""
 
     elif ext in (".pdf", ".doc"):
         try:
             from pypdf import PdfReader
             reader = PdfReader(io.BytesIO(content))
-            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+            raw_text = "\n".join(page.extract_text() or "" for page in reader.pages)
         except Exception:
-            text = content.decode("utf-8", errors="ignore")
+            raw_text = content.decode("utf-8", errors="ignore")
 
-    # ── Parse extracted text ──────────────────────────────────────────────────
-    return _parse_resume_text(text)
+    if not raw_text.strip():
+        raise HTTPException(status_code=422, detail="Could not extract text from the uploaded file.")
+
+    return await _parse_resume_with_claude(raw_text)
 
 
-def _parse_resume_text(text: str) -> dict:
-    """Shared resume text parser used by both auth and public extract endpoints."""
+async def _parse_resume_with_claude(raw_text: str) -> dict:
+    """
+    Send extracted resume text to Claude API and return fully structured
+    candidate data: name, contact, skills, education array, experience array.
+    Falls back to empty defaults if any field is missing.
+    """
+    import json
+    import logging as _log
+    from app.core.config import settings
+
+    logger = _log.getLogger(__name__)
+
+    if not settings.ANTHROPIC_API_KEY:
+        logger.warning("ANTHROPIC_API_KEY not configured — resume parsing unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail="Resume parsing is not configured. Please set ANTHROPIC_API_KEY in environment."
+        )
+
+    prompt = f"""Parse this resume and return a JSON object with exactly this structure.
+Return ONLY the raw JSON — no explanation, no markdown, no code fences.
+
+{{
+  "full_name": "",
+  "email": "",
+  "phone": "",
+  "location": "",
+  "linkedin": "",
+  "current_role": "",
+  "total_experience_years": 0,
+  "skills": [],
+  "education": [
+    {{
+      "degree": "",
+      "field_of_study": "",
+      "institution": "",
+      "year_from": "",
+      "year_to": "",
+      "score": "",
+      "score_type": ""
+    }}
+  ],
+  "experience": [
+    {{
+      "company_name": "",
+      "job_title": "",
+      "start_date": "",
+      "end_date": "",
+      "is_current": false,
+      "description": ""
+    }}
+  ]
+}}
+
+Rules:
+- degree: full degree name (e.g. "Bachelor of Technology", "Master of Business Administration")
+- field_of_study: specialization/branch (e.g. "Computer Science", "Finance")
+- institution: college or university name
+- year_from / year_to: 4-digit year strings (e.g. "2018", "2022")
+- score: numeric value as string (e.g. "8.5" or "78")
+- score_type: "CGPA" or "Percentage" — infer from context
+- start_date / end_date: "YYYY-MM" format if known, else ""
+- is_current: true if candidate is currently working at this company
+- If a field cannot be determined, use "" for strings, 0 for numbers, [] for arrays, false for booleans
+- total_experience_years: numeric (e.g. 3.5 for 3 years 6 months)
+- skills: flat list of skill name strings
+
+Resume text:
+{raw_text[:8000]}"""
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model="claude-sonnet-4-5-20251001",
+            max_tokens=2048,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        response_text = message.content[0].text.strip()
+    except Exception as exc:
+        logger.error("Claude API call failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"Resume parsing service error: {exc}")
+
+    # Strip accidental markdown code fences
+    if response_text.startswith("```"):
+        response_text = response_text.split("```")[1]
+        if response_text.startswith("json"):
+            response_text = response_text[4:]
+    response_text = response_text.strip()
+
+    try:
+        parsed = json.loads(response_text)
+    except json.JSONDecodeError as e:
+        logger.error("Claude returned invalid JSON: %s\nRaw: %s", e, response_text[:500])
+        raise HTTPException(status_code=502, detail="Resume parser returned invalid data. Please try again.")
+
+    # Normalise: split full_name → first_name / last_name
+    full_name = (parsed.get("full_name") or "").strip()
+    name_parts = full_name.split(" ", 1) if full_name else ["", ""]
+    first_name = name_parts[0]
+    last_name = name_parts[1] if len(name_parts) > 1 else ""
+
+    # Normalise education
+    education = []
+    for edu in (parsed.get("education") or []):
+        if not isinstance(edu, dict):
+            continue
+        education.append({
+            "degree":         str(edu.get("degree") or ""),
+            "field_of_study": str(edu.get("field_of_study") or ""),
+            "institution":    str(edu.get("institution") or ""),
+            "from_year":      str(edu.get("year_from") or ""),
+            "to_year":        str(edu.get("year_to") or ""),
+            "percentage":     str(edu.get("score") or ""),
+            "score_type":     str(edu.get("score_type") or ""),
+        })
+
+    # Normalise experience
+    experience = []
+    for exp in (parsed.get("experience") or []):
+        if not isinstance(exp, dict):
+            continue
+        experience.append({
+            "company_name": str(exp.get("company_name") or ""),
+            "designation":  str(exp.get("job_title") or ""),
+            "start_date":   str(exp.get("start_date") or ""),
+            "end_date":     str(exp.get("end_date") or ""),
+            "is_current":   bool(exp.get("is_current", False)),
+            "description":  str(exp.get("description") or ""),
+        })
+
+    # Strip non-digit characters from phone, keep last 10 digits
     import re
-
-    email_m = re.search(r"[\w.\-+]+@[\w.\-]+\.\w{2,}", text)
-    email = email_m.group() if email_m else None
-
-    phone_m = re.search(r"(?:\+91[-\s]?)?[6-9]\d{9}", re.sub(r"\s", "", text))
-    mobile = phone_m.group() if phone_m else None
-
-    # Simple name extraction: first non-empty line that looks like a name
-    name = ""
-    for line in text.splitlines():
-        line = line.strip()
-        if 2 <= len(line.split()) <= 5 and line.replace(" ", "").isalpha():
-            name = line
-            break
-    first_name = name.split()[0] if name else ""
-    last_name = " ".join(name.split()[1:]) if len(name.split()) > 1 else ""
-
-    # Skills
-    COMMON_SKILLS = [
-        "python", "java", "javascript", "typescript", "react", "vue", "angular",
-        "node", "nodejs", "sql", "mysql", "postgresql", "mongodb", "redis",
-        "aws", "azure", "gcp", "docker", "kubernetes", "git", "agile", "scrum",
-        "django", "flask", "fastapi", "spring", "laravel", "php", "ruby", "go",
-        "rust", "c++", "c#", ".net", "swift", "kotlin", "flutter", "dart",
-        "machine learning", "deep learning", "tensorflow", "pytorch", "nlp",
-    ]
-    text_lower = text.lower()
-    found_skills = [s.title() for s in COMMON_SKILLS if s in text_lower]
-
-    # Education degree
-    EDU_MAP = [
-        ("ph.d", "phd"), ("phd", "phd"), ("doctorate", "phd"),
-        ("m.tech", "masters"), ("m.e.", "masters"), ("mba", "masters"),
-        ("m.sc", "masters"), ("m.s.", "masters"), ("master", "masters"),
-        ("b.tech", "bachelors"), ("b.e.", "bachelors"), ("b.sc", "bachelors"),
-        ("b.com", "bachelors"), ("b.a.", "bachelors"), ("btech", "bachelors"),
-        ("bachelor", "bachelors"), ("be ", "bachelors"), ("b.e ", "bachelors"),
-        ("diploma", "diploma"),
-        ("12th", "high_school"), ("hsc", "high_school"), ("ssc", "high_school"),
-        ("high school", "high_school"),
-    ]
-    education_degree = None
-    for kw, val in EDU_MAP:
-        if kw in text_lower:
-            education_degree = val
-            break
-
-    # Institution name
-    inst_m = re.search(
-        r"([A-Z][A-Za-z ]{3,50}(?:University|College|Institute|School|IIT|NIT|BITS|VIT)(?:[A-Za-z ,]+)?)",
-        text,
-    )
-    institution = inst_m.group(1).strip() if inst_m else None
-
-    # Graduation year — take the most recent plausible year
-    year_matches = re.findall(r"\b(19[7-9]\d|20[0-2]\d)\b", text)
-    graduation_year = int(year_matches[-1]) if year_matches else None
-
-    # Experience years
-    exp_m = re.search(
-        r"(\d+(?:\.\d+)?)\s*\+?\s*years?\s*(?:of\s*)?(?:experience|exp\.?)",
-        text_lower,
-    )
-    experience_years = float(exp_m.group(1)) if exp_m else None
-
-    # Current company — look for common patterns
-    company_m = re.search(
-        r"(?:currently\s+(?:working\s+at|employed\s+at)|working\s+at|employer)[:\s]+([A-Z][A-Za-z0-9 &.,]+)",
-        text,
-        re.IGNORECASE,
-    )
-    current_company = company_m.group(1).strip() if company_m else None
-
-    # Current designation
-    desig_m = re.search(
-        r"(?:designation|position|role|title)[:\s]+([A-Z][A-Za-z0-9 ]+)",
-        text,
-        re.IGNORECASE,
-    )
-    current_designation = desig_m.group(1).strip() if desig_m else None
-
-    # Current city — look for "Location:" or "City:" patterns
-    city_m = re.search(
-        r"(?:location|city|residing in|based in|address)[:\s]+([A-Z][a-zA-Z ]{2,30})",
-        text,
-        re.IGNORECASE,
-    )
-    current_city = city_m.group(1).strip() if city_m else None
+    phone_raw = str(parsed.get("phone") or "")
+    phone_digits = re.sub(r"\D", "", phone_raw)
+    mobile = phone_digits[-10:] if len(phone_digits) >= 10 else phone_digits
 
     return {
         "success": True,
         "data": {
-            "first_name": first_name,
-            "last_name": last_name,
-            "email": email,
-            "mobile": re.sub(r"\D", "", mobile)[-10:] if mobile else None,
-            "skills": found_skills,
-            "education_degree": education_degree,
-            "institution": institution,
-            "graduation_year": graduation_year,
-            "experience_years": experience_years,
-            "current_company": current_company,
-            "current_designation": current_designation,
-            "current_city": current_city,
-            "raw_text": text[:3000],
+            "first_name":             first_name,
+            "last_name":              last_name,
+            "email":                  str(parsed.get("email") or ""),
+            "mobile":                 mobile,
+            "current_city":           str(parsed.get("location") or ""),
+            "linkedin_url":           str(parsed.get("linkedin") or ""),
+            "current_designation":    str(parsed.get("current_role") or ""),
+            "total_experience_years": float(parsed.get("total_experience_years") or 0),
+            "skills":                 [str(s) for s in (parsed.get("skills") or []) if s],
+            "education":              education,
+            "experience":             experience,
         },
     }
 
@@ -997,8 +1068,10 @@ async def public_extract_resume_file(file: UploadFile = File(...)):
     """
     Public endpoint — no auth.
     Upload a resume file, extract text, and return parsed candidate fields for form auto-fill.
+    Uses the same Claude-based parser as the authenticated endpoint.
     """
-    import io, os
+    import io
+    import os
 
     ALLOWED = {".pdf", ".doc", ".docx", ".txt"}
     _, ext = os.path.splitext((file.filename or "").lower())
@@ -1006,29 +1079,34 @@ async def public_extract_resume_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Only PDF, DOCX, DOC, or TXT files are supported.")
 
     content = await file.read()
-    text = ""
+    raw_text = ""
 
     if ext == ".txt":
-        text = content.decode("utf-8", errors="ignore")
+        raw_text = content.decode("utf-8", errors="ignore")
     elif ext == ".docx":
         try:
-            import zipfile, xml.etree.ElementTree as ET
+            import zipfile
+            import xml.etree.ElementTree as ET
             with zipfile.ZipFile(io.BytesIO(content)) as z:
                 with z.open("word/document.xml") as xml_file:
                     tree = ET.parse(xml_file)
-                    texts = [node.text for node in tree.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t") if node.text]
-                    text = " ".join(texts)
+                    ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+                    texts = [node.text for node in tree.iter(f"{ns}t") if node.text]
+                    raw_text = " ".join(texts)
         except Exception:
-            text = ""
+            raw_text = ""
     elif ext in (".pdf", ".doc"):
         try:
             from pypdf import PdfReader
             reader = PdfReader(io.BytesIO(content))
-            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+            raw_text = "\n".join(page.extract_text() or "" for page in reader.pages)
         except Exception:
-            text = content.decode("utf-8", errors="ignore")
+            raw_text = content.decode("utf-8", errors="ignore")
 
-    return _parse_resume_text(text)
+    if not raw_text.strip():
+        raise HTTPException(status_code=422, detail="Could not extract text from the uploaded file.")
+
+    return await _parse_resume_with_claude(raw_text)
 
 
 @public_router.get("/candidate-form/{token}")

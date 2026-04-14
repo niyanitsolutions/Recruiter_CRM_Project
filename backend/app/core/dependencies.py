@@ -98,9 +98,20 @@ async def get_company_db(
 
 def require_permissions(required_permissions: List[str]) -> Callable:
     """Dependency factory to check if user has required permissions.
-    Returns current_user dict so it can be used as: current_user = Depends(require_permissions(...))"""
+
+    Permission check order:
+    1. Super-admin / Owner → always allowed.
+    2. JWT token permissions → fast path (no DB query needed).
+    3. DB fallback → if JWT is stale (e.g. permissions were updated after login),
+       check the live DB record.  This ensures that an admin un-restricting a
+       module takes effect immediately without forcing the user to re-login.
+
+    Returns current_user dict so it can be used as:
+        current_user = Depends(require_permissions(...))
+    """
     async def check_permissions(
-        current_user: dict = Depends(get_current_user)
+        current_user: dict = Depends(get_current_user),
+        db = Depends(get_company_db),
     ) -> dict:
         # Super admin has all permissions
         if current_user.get("is_super_admin"):
@@ -110,25 +121,44 @@ def require_permissions(required_permissions: List[str]) -> Callable:
         if current_user.get("is_owner"):
             return current_user
 
-        user_permissions = current_user.get("permissions") or []
-
-        # Check if user has all required permissions
+        user_permissions = set(current_user.get("permissions") or [])
         missing = [p for p in required_permissions if p not in user_permissions]
 
-        if missing:
-            logger.warning(
-                "Permission denied | user=%s | role=%s | required=%s | missing=%s",
-                current_user.get("id", "?"),
-                current_user.get("role", "?"),
-                required_permissions,
-                missing,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Missing required permissions: {', '.join(missing)}"
-            )
+        if not missing:
+            return current_user  # JWT already has all required permissions
 
-        return current_user
+        # ── DB fallback: permissions may have been updated since last login ──
+        # This handles the "unrestrict" case where the JWT is stale.
+        try:
+            user_doc = await db["users"].find_one(
+                {"_id": current_user["id"], "is_deleted": False},
+                {"permissions": 1, "is_owner": 1}
+            )
+            if user_doc:
+                if user_doc.get("is_owner"):
+                    return current_user  # owner found in DB
+
+                db_permissions = set(user_doc.get("permissions") or [])
+                still_missing = [p for p in required_permissions if p not in db_permissions]
+                if not still_missing:
+                    # DB has the permission — update the in-request user dict so
+                    # downstream code sees fresh permissions, then allow.
+                    current_user["permissions"] = list(db_permissions)
+                    return current_user
+        except Exception as _db_err:
+            logger.warning("Permission DB fallback failed for user %s: %s", current_user.get("id"), _db_err)
+
+        logger.warning(
+            "Permission denied | user=%s | role=%s | required=%s | missing=%s",
+            current_user.get("id", "?"),
+            current_user.get("role", "?"),
+            required_permissions,
+            missing,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Missing required permissions: {', '.join(missing)}"
+        )
 
     return check_permissions
 

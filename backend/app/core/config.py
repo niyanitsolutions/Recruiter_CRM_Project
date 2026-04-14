@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     # Frontend URL (used to build verification / reset links)
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Anthropic / Claude API
+    ANTHROPIC_API_KEY: str = ""
+
     # Seller default commission margin percentage
     DEFAULT_SELLER_MARGIN: float = 20.0
 

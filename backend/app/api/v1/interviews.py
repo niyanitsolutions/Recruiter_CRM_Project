@@ -37,15 +37,15 @@ async def list_interviews(
 
     # Hierarchy-based visibility: non-admin/coordinator roles see only their own interviews
     role = current_user.get("role", "")
-    is_admin = current_user.get("is_owner") or role in ("admin", "candidate_coordinator", "client_coordinator")
+    is_admin = current_user.get("is_owner") or role == "admin"
     if not is_admin:
         from app.services.user_service import UserService
         user_svc = UserService(db)
-        visible_ids = await user_svc.get_visible_user_ids(current_user)
+        visible_ids = await user_svc.get_visible_user_ids(current_user, module_name="interviews")
         if visible_ids is not None and len(visible_ids) == 1:
             # Plain employee: restrict to their own interviews as interviewer
             interviewer_id = current_user["id"]
-        # Managers/team leaders: no interviewer filter (they see their team's interviews)
+        # Managers/team leaders / coordinator roles with ALL: no interviewer filter
 
     result = await InterviewService.list_interviews(
         db=db,

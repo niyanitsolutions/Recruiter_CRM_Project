@@ -32,16 +32,22 @@ def _normalize_status(s: str) -> str:
     return "blacklisted" if s == "blacklisted" else "active"
 
 
-def _sanitize_for_mongo(d: dict) -> dict:
-    """Recursively convert datetime.date → datetime.datetime for Motor/BSON."""
-    for key, val in list(d.items()):
-        if isinstance(val, datetime):
-            pass
-        elif isinstance(val, date):
-            d[key] = datetime(val.year, val.month, val.day)
-        elif isinstance(val, dict):
-            _sanitize_for_mongo(val)
-    return d
+def _sanitize_for_mongo(obj):
+    """Recursively convert datetime.date → datetime.datetime for Motor/BSON.
+    Handles nested dicts AND lists of dicts (e.g. work_experience, education).
+    """
+    if isinstance(obj, list):
+        return [_sanitize_for_mongo(item) for item in obj]
+    elif isinstance(obj, dict):
+        for key, val in list(obj.items()):
+            if isinstance(val, datetime):
+                pass  # already a datetime, fine
+            elif isinstance(val, date):
+                obj[key] = datetime(val.year, val.month, val.day)
+            elif isinstance(val, (dict, list)):
+                obj[key] = _sanitize_for_mongo(val)
+        return obj
+    return obj
 
 
 class CandidateService:
@@ -254,7 +260,7 @@ class CandidateService:
             else:
                 from app.services.user_service import UserService
                 user_svc = UserService(db)
-                visible_ids = await user_svc.get_visible_user_ids(current_user)
+                visible_ids = await user_svc.get_visible_user_ids(current_user, module_name="candidates")
                 if visible_ids is not None:
                     query["created_by"] = {"$in": visible_ids}
         
