@@ -466,7 +466,7 @@ const Candidates = () => {
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Experience</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Skills</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Notice</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Partner</th>
+                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Added By</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Applied Jobs</th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Status</th>
                 <th className="text-right px-4 py-3 text-sm font-medium text-surface-600">Actions</th>
@@ -521,7 +521,9 @@ const Candidates = () => {
                   </td>
                   <td className="px-4 py-4">
                     <span className="text-sm text-surface-600">
-                      {candidate.partner_name || '—'}
+                      {candidate.partner_id
+                        ? `Partner (${candidate.partner_name || 'Unknown'})`
+                        : (candidate.created_by_name || '—')}
                     </span>
                   </td>
                   <td className="px-4 py-4">
@@ -560,15 +562,19 @@ const Candidates = () => {
                   <td className="px-4 py-4">
                     <div className="flex items-center justify-end gap-2">
                       {candidate.resume_url && (
-                        <a
-                          href={candidate.resume_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          onClick={() => {
+                            const base = (import.meta.env.VITE_API_URL || '').replace(/\/api\/v1\/?$/, '')
+                            const url = candidate.resume_url.startsWith('http')
+                              ? candidate.resume_url
+                              : `${base}${candidate.resume_url}`
+                            window.open(url, '_blank', 'noopener,noreferrer')
+                          }}
                           className="p-2 hover:bg-surface-100 rounded-lg transition-colors"
                           title="View Resume"
                         >
                           <FileText className="w-4 h-4 text-surface-500" />
-                        </a>
+                        </button>
                       )}
                       <button
                         onClick={() => navigate(`/candidates/${candidate.id}`)}

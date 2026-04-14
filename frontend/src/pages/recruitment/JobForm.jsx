@@ -142,6 +142,9 @@ const JobForm = () => {
 
   const validate = () => {
     const e = {}
+    // Basic
+    if (!formData.title.trim()) e.title = 'Job title is required'
+    if (!formData.client_id) e.client_id = 'Client is required'
     // Location
     if (!formData.city.trim()) e.city = 'City is required'
     if (!formData.state.trim()) e.state = 'State is required'
@@ -192,15 +195,16 @@ const JobForm = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (!formData.title.trim() || !formData.client_id) {
-      toast.error('Title and Client are required')
-      return
-    }
-
     const validationErrors = validate()
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors)
       toast.error('Please fill in all required fields')
+      const firstField = Object.keys(validationErrors)[0]
+      const el = document.getElementById(`field-${firstField}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.focus()
+      }
       return
     }
     setErrors({})
@@ -324,14 +328,15 @@ const JobForm = () => {
                 Job Title <span className="text-red-500">*</span>
               </label>
               <input
+                id="field-title"
                 type="text"
                 name="title"
                 value={formData.title}
                 onChange={handleChange}
-                className="input w-full"
+                className={`input w-full ${errors.title ? 'border-red-400' : ''}`}
                 placeholder="e.g., Senior Software Engineer"
-                required
               />
+              {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title}</p>}
             </div>
 
             <div>
@@ -339,17 +344,18 @@ const JobForm = () => {
                 Client <span className="text-red-500">*</span>
               </label>
               <select
+                id="field-client_id"
                 name="client_id"
                 value={formData.client_id}
                 onChange={handleChange}
-                className="input w-full"
-                required
+                className={`input w-full ${errors.client_id ? 'border-red-400' : ''}`}
               >
                 <option value="">Select Client</option>
                 {clients.map(c => (
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
               </select>
+              {errors.client_id && <p className="text-red-500 text-xs mt-1">{errors.client_id}</p>}
             </div>
 
             <div>
@@ -442,6 +448,7 @@ const JobForm = () => {
                 City <span className="text-red-500">*</span>
               </label>
               <input
+                id="field-city"
                 type="text"
                 name="city"
                 value={formData.city}
@@ -456,6 +463,7 @@ const JobForm = () => {
                 State <span className="text-red-500">*</span>
               </label>
               <input
+                id="field-state"
                 type="text"
                 name="state"
                 value={formData.state}
@@ -491,6 +499,7 @@ const JobForm = () => {
                 Min Salary (LPA) <span className="text-red-500">*</span>
               </label>
               <input
+                id="field-salary_min"
                 type="number"
                 name="salary_min"
                 value={formData.salary_min}
@@ -507,6 +516,7 @@ const JobForm = () => {
                 Max Salary (LPA) <span className="text-red-500">*</span>
               </label>
               <input
+                id="field-salary_max"
                 type="number"
                 name="salary_max"
                 value={formData.salary_max}
@@ -561,6 +571,7 @@ const JobForm = () => {
                 Max Experience (Years) <span className="text-red-500">*</span>
               </label>
               <input
+                id="field-experience_max"
                 type="number"
                 name="experience_max"
                 value={formData.experience_max}
@@ -576,6 +587,7 @@ const JobForm = () => {
                 Max Notice Period <span className="text-red-500">*</span>
               </label>
               <select
+                id="field-notice_period_max"
                 name="notice_period_max"
                 value={formData.notice_period_max}
                 onChange={handleChange}
@@ -596,6 +608,7 @@ const JobForm = () => {
                 Max Current CTC (LPA) <span className="text-red-500">*</span>
               </label>
               <input
+                id="field-ctc_max"
                 type="number"
                 name="ctc_max"
                 value={formData.ctc_max}
@@ -613,6 +626,7 @@ const JobForm = () => {
                 Min. Academic Percentage (%) <span className="text-red-500">*</span>
               </label>
               <input
+                id="field-min_percentage"
                 type="number"
                 name="min_percentage"
                 value={formData.min_percentage}
@@ -634,6 +648,7 @@ const JobForm = () => {
                 Interview Pipeline <span className="text-red-500">*</span>
               </label>
               <select
+                id="field-pipeline_id"
                 name="pipeline_id"
                 value={formData.pipeline_id}
                 onChange={handleChange}
@@ -667,7 +682,7 @@ const JobForm = () => {
           </div>
 
           {/* Mandatory Skills */}
-          <div className="mb-4">
+          <div id="field-mandatory_skills" className="mb-4">
             <label className="block text-sm font-medium text-surface-700 mb-2">
               Mandatory Skills <span className="text-red-500">*</span>
             </label>
@@ -760,6 +775,7 @@ const JobForm = () => {
                 Description <span className="text-red-500">*</span>
               </label>
               <textarea
+                id="field-description"
                 name="description"
                 value={formData.description}
                 onChange={handleChange}
@@ -775,6 +791,7 @@ const JobForm = () => {
                 Requirements <span className="text-red-500">*</span>
               </label>
               <textarea
+                id="field-requirements"
                 name="requirements"
                 value={formData.requirements}
                 onChange={handleChange}
@@ -790,6 +807,7 @@ const JobForm = () => {
                 Responsibilities <span className="text-red-500">*</span>
               </label>
               <textarea
+                id="field-responsibilities"
                 name="responsibilities"
                 value={formData.responsibilities}
                 onChange={handleChange}

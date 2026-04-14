@@ -269,7 +269,8 @@ async def list_clients(
         search=search,
         status_filter=status,
         client_type=client_type,
-        city=city
+        city=city,
+        current_user=current_user
     )
     
     return {"success": True, **result}

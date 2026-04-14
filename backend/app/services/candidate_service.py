@@ -240,11 +240,10 @@ class CandidateService:
         # Build query
         query = {"is_deleted": False}
 
-        # Access control: enforce role-based visibility
+        # Access control: enforce hierarchy-based visibility
         if current_user:
             role = current_user.get("role", "")
             user_id = current_user.get("id") or current_user.get("sub", "")
-            is_admin = current_user.get("is_owner") or role == "admin"
 
             if role == "partner":
                 # Partners can only see their own submitted candidates
@@ -252,24 +251,12 @@ class CandidateService:
                 # Override any passed partner_id filter to prevent data leak
                 if search_params:
                     search_params.partner_id = None
-            elif not is_admin and role in ("candidate_coordinator", "recruiter"):
-                # Candidate coordinators and recruiters see:
-                #   1. Candidates assigned to themselves or their subordinates
-                #   2. Candidates not yet assigned to anyone (unassigned / newly created)
-                # Without #2, they can't see candidates they just created
-                # because new candidates have no assigned_to value.
+            else:
                 from app.services.user_service import UserService
                 user_svc = UserService(db)
-                accessible_ids = await user_svc.get_all_subordinates(user_id)
-                query["$or"] = [
-                    {"assigned_to": {"$in": accessible_ids}},
-                    {"assigned_to": None},
-                    {"assigned_to": {"$exists": False}},
-                    {"created_by": user_id},
-                ]
-                # Clear any passed assigned_to filter to avoid conflict
-                if search_params:
-                    search_params.assigned_to = None
+                visible_ids = await user_svc.get_visible_user_ids(current_user)
+                if visible_ids is not None:
+                    query["created_by"] = {"$in": visible_ids}
         
         if search_params:
             # Keyword search (name, email, skills)
@@ -362,28 +349,20 @@ class CandidateService:
         cursor = collection.find(query).sort("created_at", -1).skip(skip).limit(page_size)
         candidates = await cursor.to_list(length=page_size)
         
-        # Get assigned user names
-        user_ids = [c.get("assigned_to") for c in candidates if c.get("assigned_to")]
-        users_map = {}
-        if user_ids:
-            users_collection = db["users"]
-            users_cursor = users_collection.find(
-                {"_id": {"$in": user_ids}},
-                {"_id": 1, "full_name": 1}
-            )
-            users = await users_cursor.to_list(length=len(user_ids))
-            users_map = {u["_id"]: u["full_name"] for u in users}
-
-        # Get partner names
+        # Collect all user IDs needed for name lookups
+        assigned_ids = [c.get("assigned_to") for c in candidates if c.get("assigned_to")]
         partner_ids = [c.get("partner_id") for c in candidates if c.get("partner_id")]
-        partner_map = {}
-        if partner_ids:
-            partners_cursor = db["users"].find(
-                {"_id": {"$in": partner_ids}},
+        created_by_ids = [c.get("created_by") for c in candidates if c.get("created_by")]
+        all_lookup_ids = list(set(assigned_ids + partner_ids + created_by_ids))
+
+        users_map = {}
+        if all_lookup_ids:
+            users_cursor = db["users"].find(
+                {"_id": {"$in": all_lookup_ids}},
                 {"_id": 1, "full_name": 1}
             )
-            partners = await partners_cursor.to_list(length=len(partner_ids))
-            partner_map = {p["_id"]: p["full_name"] for p in partners}
+            fetched = await users_cursor.to_list(length=len(all_lookup_ids))
+            users_map = {u["_id"]: u["full_name"] for u in fetched}
 
         # Format response
         result = []
@@ -406,7 +385,9 @@ class CandidateService:
                 assigned_to=candidate.get("assigned_to"),
                 assigned_to_name=users_map.get(candidate.get("assigned_to")),
                 partner_id=candidate.get("partner_id"),
-                partner_name=partner_map.get(candidate.get("partner_id")),
+                partner_name=users_map.get(candidate.get("partner_id")),
+                created_by=candidate.get("created_by"),
+                created_by_name=users_map.get(candidate.get("created_by")),
                 resume_url=candidate.get("resume_url"),
                 total_applications=candidate.get("total_applications", 0),
                 current_job_title=candidate.get("current_job_title"),

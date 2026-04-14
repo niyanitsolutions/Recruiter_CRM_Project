@@ -60,7 +60,8 @@ async def list_jobs(
         page=page,
         page_size=page_size,
         search_params=search_params,
-        visible_to_partner=visible_to_partner
+        visible_to_partner=visible_to_partner,
+        current_user=current_user
     )
     
     return {"success": True, **result}

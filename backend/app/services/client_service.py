@@ -167,13 +167,21 @@ class ClientService:
         search: Optional[str] = None,
         status_filter: Optional[str] = None,
         client_type: Optional[str] = None,
-        city: Optional[str] = None
+        city: Optional[str] = None,
+        current_user: Optional[dict] = None
     ) -> Dict[str, Any]:
         """List clients with filters and pagination"""
         collection = db[ClientService.COLLECTION]
-        
+
         # Build query
         query = {"is_deleted": False}
+
+        if current_user:
+            from app.services.user_service import UserService
+            user_svc = UserService(db)
+            visible_ids = await user_svc.get_visible_user_ids(current_user)
+            if visible_ids is not None:
+                query["created_by"] = {"$in": visible_ids}
         
         if search:
             import re as _re

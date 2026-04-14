@@ -230,16 +230,23 @@ class JobService:
         page: int = 1,
         page_size: int = 10,
         search_params: Optional[JobSearchParams] = None,
-        visible_to_partner: bool = False
+        visible_to_partner: bool = False,
+        current_user: Optional[dict] = None
     ) -> Dict[str, Any]:
         """List jobs with filters and pagination"""
         collection = db[JobService.COLLECTION]
-        
+
         query = {"is_deleted": False}
-        
+
         if visible_to_partner:
             query["visible_to_partners"] = True
             query["status"] = JobStatus.OPEN.value
+        elif current_user:
+            from app.services.user_service import UserService
+            user_svc = UserService(db)
+            visible_ids = await user_svc.get_visible_user_ids(current_user)
+            if visible_ids is not None:
+                query["created_by"] = {"$in": visible_ids}
         
         if search_params:
             if search_params.keyword:

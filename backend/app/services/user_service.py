@@ -921,6 +921,72 @@ class UserService:
                     queue.append(sub_id)
 
         return all_ids
+
+    async def _get_subordinates_depth(self, user_id: str, max_depth: int) -> List[str]:
+        """BFS up to max_depth levels deep, including self"""
+        all_ids = [user_id]
+        queue = [(user_id, 0)]
+        visited = {user_id}
+
+        while queue:
+            current_id, depth = queue.pop(0)
+            if depth >= max_depth:
+                continue
+            cursor = self.collection.find(
+                {"reporting_to": current_id, "is_deleted": False},
+                {"_id": 1}
+            )
+            async for sub in cursor:
+                sub_id = sub["_id"]
+                if sub_id not in visited:
+                    visited.add(sub_id)
+                    all_ids.append(sub_id)
+                    queue.append((sub_id, depth + 1))
+
+        return all_ids
+
+    async def get_visible_user_ids(self, user: dict) -> Optional[List[str]]:
+        """
+        Return the list of user IDs whose records the given user is allowed to see.
+        Returns None for owner/admin (no restriction — see everything).
+
+        Rules:
+          - Owner or Admin          → None (no filter)
+          - Partner                 → None (partner has own partner_id filter)
+          - level == "manager"      → self + 2 levels deep in reporting chain
+          - Has any direct reports  → self + 1 level deep (team leader)
+          - Otherwise (employee)    → only self
+        """
+        user_id = user.get("id") or user.get("sub", "")
+        role = user.get("role", "")
+        is_admin = user.get("is_owner") or role == "admin"
+
+        if is_admin:
+            return None
+
+        if role == "partner":
+            return None  # partner uses partner_id filter separately
+
+        # Look up the user's level from DB
+        user_doc = await self.collection.find_one(
+            {"_id": user_id, "is_deleted": False},
+            {"level": 1}
+        )
+        level = user_doc.get("level") if user_doc else None
+
+        if level == "manager":
+            return await self._get_subordinates_depth(user_id, max_depth=2)
+
+        # Check if user has any direct reports (team leader)
+        direct_report = await self.collection.find_one(
+            {"reporting_to": user_id, "is_deleted": False},
+            {"_id": 1}
+        )
+        if direct_report:
+            return await self._get_subordinates_depth(user_id, max_depth=1)
+
+        # Plain employee — only sees their own records
+        return [user_id]
     
     async def validate_field(
         self,

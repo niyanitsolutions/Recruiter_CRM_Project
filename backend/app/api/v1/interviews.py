@@ -34,11 +34,19 @@ async def list_interviews(
 ):
     """List interviews with filters"""
     status_list = status.split(",") if status else None
-    
-    # If interviewer, default to their interviews
-    if current_user.get("role") not in ["admin", "candidate_coordinator", "client_coordinator"]:
-        interviewer_id = current_user["id"]
-    
+
+    # Hierarchy-based visibility: non-admin/coordinator roles see only their own interviews
+    role = current_user.get("role", "")
+    is_admin = current_user.get("is_owner") or role in ("admin", "candidate_coordinator", "client_coordinator")
+    if not is_admin:
+        from app.services.user_service import UserService
+        user_svc = UserService(db)
+        visible_ids = await user_svc.get_visible_user_ids(current_user)
+        if visible_ids is not None and len(visible_ids) == 1:
+            # Plain employee: restrict to their own interviews as interviewer
+            interviewer_id = current_user["id"]
+        # Managers/team leaders: no interviewer filter (they see their team's interviews)
+
     result = await InterviewService.list_interviews(
         db=db,
         page=page,
