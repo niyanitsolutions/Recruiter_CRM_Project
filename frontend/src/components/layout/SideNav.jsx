@@ -236,21 +236,26 @@ const SideNav = ({ isCollapsed, onToggle }) => {
   return (
     <aside className={clsx(
       'fixed left-0 top-0 h-screen text-white transition-all duration-300 z-40 flex flex-col',
-      'bg-gradient-to-b from-indigo-950 via-slate-900 to-violet-950',
       isCollapsed ? 'w-20' : 'w-64'
-    )}>
+    )} style={{ background: 'linear-gradient(180deg, #0F0F1A 0%, #1A1A2E 50%, #0D0D1F 100%)' }}>
       {/* Logo */}
-      <div className={clsx('h-16 flex items-center border-b border-white/5', isCollapsed ? 'justify-center px-2' : 'px-5')}>
+      <div className={clsx('h-16 flex items-center', isCollapsed ? 'justify-center px-2' : 'px-5')} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         {!isCollapsed ? (
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center font-bold text-base shadow-glow flex-shrink-0">C</div>
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base flex-shrink-0 text-white"
+              style={{ background: 'var(--gradient-1)', boxShadow: '0 0 14px rgba(108,99,255,0.5)' }}
+            >N</div>
             <div>
-              <h1 className="font-bold text-base leading-tight tracking-wide">CRM</h1>
-              <p className="text-[10px] text-white/40 tracking-wider uppercase">Recruitment</p>
+              <h1 className="font-bold text-sm leading-tight tracking-wide text-white">Niyan HireFlow</h1>
+              <p className="text-[10px] tracking-wider uppercase" style={{ color: 'rgba(255,255,255,0.35)' }}>Recruitment Platform</p>
             </div>
           </div>
         ) : (
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center font-bold text-base shadow-glow">C</div>
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base text-white"
+            style={{ background: 'var(--gradient-1)', boxShadow: '0 0 14px rgba(108,99,255,0.5)' }}
+          >N</div>
         )}
       </div>
 
@@ -282,7 +287,7 @@ const SideNav = ({ isCollapsed, onToggle }) => {
         ))}
 
         {/* Divider */}
-        <div className="my-4 mx-3 border-t border-white/5" />
+        <div className="my-4 mx-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }} />
 
         {/* Utility links: only for company users (not super-admin or seller) */}
         {!isSuperAdmin && !isSeller && (
@@ -314,10 +319,10 @@ const SideNav = ({ isCollapsed, onToggle }) => {
       </nav>
 
       {/* User info + logout */}
-      <div className="border-t border-white/5 p-3">
+      <div className="p-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         {!isCollapsed ? (
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-500/40 to-indigo-600/40 border border-white/10 flex items-center justify-center font-semibold text-sm flex-shrink-0">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm flex-shrink-0 text-white" style={{ background: 'var(--gradient-1)', opacity: 0.85 }}>
               {user?.fullName?.charAt(0) || user?.full_name?.charAt(0) || 'U'}
             </div>
             <div className="flex-1 min-w-0">
@@ -340,7 +345,8 @@ const SideNav = ({ isCollapsed, onToggle }) => {
       {/* Collapse toggle */}
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-20 w-6 h-6 bg-indigo-900 border border-white/20 rounded-full flex items-center justify-center hover:bg-violet-800 transition-colors shadow-lg"
+        className="absolute -right-3 top-20 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg"
+        style={{ background: 'var(--gradient-1)', border: '1px solid rgba(108,99,255,0.4)' }}
       >
         {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
       </button>

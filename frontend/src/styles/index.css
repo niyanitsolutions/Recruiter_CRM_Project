@@ -1,3 +1,4 @@
+@import './theme.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,15 +8,17 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
-    @apply font-sans text-surface-700 bg-surface-50 antialiased;
+    @apply font-sans antialiased;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { @apply bg-surface-50; }
-  ::-webkit-scrollbar-thumb { @apply bg-surface-300 rounded-full; }
-  ::-webkit-scrollbar-thumb:hover { @apply bg-surface-400; }
-  ::selection { @apply bg-accent-500/30 text-accent-300; }
+  ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+  ::selection { background: var(--selection-bg); color: var(--selection-text); }
 }
 
 /* ── Components ─────────────────────────────────────────────────────────────── */
@@ -23,21 +26,40 @@
   .btn {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg
            transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2
-           focus:ring-offset-surface-50 disabled:opacity-50 disabled:cursor-not-allowed;
+           disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn text-white shadow-glow-sm active:scale-[0.98];
-    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    @apply btn text-white active:scale-[0.98];
+    background: var(--gradient-1);
+    box-shadow: 0 0 12px rgba(108,99,255,0.35);
   }
-  .btn-primary:hover { background: linear-gradient(135deg, #4f46e5, #7c3aed); }
-  .btn-secondary { @apply btn bg-surface-100 text-surface-700 hover:bg-surface-200 border border-surface-200; }
-  .btn-outline   { @apply btn bg-transparent text-accent-400 border-2 border-accent-500 hover:bg-accent-500/10; }
+  .btn-primary:hover {
+    background: linear-gradient(135deg, #5A52E8 0%, #3d9be8 100%);
+    box-shadow: 0 0 20px rgba(108,99,255,0.5);
+  }
+  .btn-secondary {
+    @apply btn border;
+    background-color: var(--bg-card-alt);
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+  }
+  .btn-secondary:hover { background-color: var(--bg-hover); }
+  .btn-outline {
+    @apply btn bg-transparent border-2;
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .btn-outline:hover { background-color: var(--accent-light); }
   .btn-danger    { @apply btn bg-red-600 text-white hover:bg-red-700; }
-  .btn-ghost     { @apply btn bg-transparent text-surface-500 hover:bg-surface-100 hover:text-surface-700; }
+  .btn-ghost {
+    @apply btn bg-transparent;
+    color: var(--text-muted);
+  }
+  .btn-ghost:hover { background-color: var(--bg-hover); color: var(--text-primary); }
   .btn-lg { @apply px-6 py-3 text-base; }
   .btn-sm { @apply px-3 py-1.5 text-xs; }
 
-  /* Base input class — width + padding only; colors handled by unlayered global rules */
+  /* Input */
   .input {
     display: block;
     width: 100%;
@@ -52,104 +74,175 @@
   .input.pl-10 { padding-left: 2.5rem; }
   .input.pr-10 { padding-right: 2.5rem; }
 
-  .input-label      { @apply block text-sm font-medium mb-1.5; color: #94a3b8; }
-  .input-help       { @apply text-xs mt-1; color: #64748b; }
-  .input-error-text { @apply text-xs mt-1; color: #f87171; }
+  .input-label      { @apply block text-sm font-medium mb-1.5; color: var(--text-label); }
+  .input-help       { @apply text-xs mt-1; color: var(--text-muted); }
+  .input-error-text { @apply text-xs mt-1; color: var(--text-danger); }
 
-  .card       { @apply rounded-xl border shadow-card; background-color: #1e293b; border-color: #334155; }
-  .card-hover { @apply card hover:shadow-soft transition-all duration-200; border-color: #475569; }
+  .card {
+    @apply rounded-xl;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-card);
+    box-shadow: var(--shadow-card);
+  }
+  .card-hover {
+    @apply card hover:translate-y-[-2px] transition-all duration-200;
+  }
+  .card-hover:hover {
+    box-shadow: var(--shadow-soft);
+    border-color: var(--border-strong);
+  }
 
-  .nav-item        { @apply flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-white/60 rounded-lg transition-all duration-200 hover:bg-white/10 hover:text-white; }
-  .nav-item-active { @apply nav-item text-white border border-violet-400/20 shadow-glow-sm; background-color: rgba(139,92,246,0.2); }
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-200;
+    color: var(--nav-text);
+  }
+  .nav-item:hover {
+    background-color: rgba(255,255,255,0.08);
+    color: var(--nav-text-active);
+  }
+  .nav-item-active {
+    @apply nav-item;
+    color: var(--nav-text-active) !important;
+    background-color: var(--nav-bg-active) !important;
+    border: 1px solid var(--nav-border-active);
+    box-shadow: 0 0 10px var(--nav-glow-active);
+  }
 
   .stat-card  { @apply card p-6; }
-  .stat-value { @apply text-3xl font-bold text-surface-900; }
-  .stat-label { @apply text-sm text-surface-500 mt-1; }
+  .stat-value { @apply text-3xl font-bold; color: var(--text-heading); }
+  .stat-label { @apply text-sm mt-1; color: var(--text-muted); }
 
-  .table-container { @apply overflow-x-auto rounded-xl; border: 1px solid #334155; }
+  .table-container { @apply overflow-x-auto rounded-xl; border: 1px solid var(--border); }
   .table           { @apply w-full text-sm; }
-  .table th        { @apply px-4 py-3 text-left text-xs font-semibold text-surface-500 uppercase tracking-wider; background-color: #1e293b; border-bottom: 1px solid #334155; }
-  .table td        { @apply px-4 py-3 text-surface-700; border-bottom: 1px solid #1e293b; }
+  .table th {
+    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider;
+    color: var(--text-muted);
+    background-color: var(--bg-card-alt);
+    border-bottom: 1px solid var(--border);
+  }
+  .table td {
+    @apply px-4 py-3;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+  }
   .table tr:last-child td { border-bottom: none; }
-  .table tr:hover td      { background-color: rgba(51,65,85,0.3); }
+  .table tr:hover td { background-color: var(--bg-hover); }
 
   .badge         { @apply inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full; }
-  .badge-success { @apply badge bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/20; }
-  .badge-warning { @apply badge bg-amber-500/15  text-amber-400  ring-1 ring-amber-500/20;  }
-  .badge-danger  { @apply badge bg-red-500/15    text-red-400    ring-1 ring-red-500/20;    }
-  .badge-info    { @apply badge bg-violet-500/15 text-violet-400 ring-1 ring-violet-500/20; }
-  .badge-neutral { @apply badge bg-surface-200/60 text-surface-500 ring-1 ring-surface-300/30; }
+  .badge-success { @apply badge; background: var(--bg-success); color: var(--text-success); box-shadow: inset 0 0 0 1px var(--text-success); }
+  .badge-warning { @apply badge; background: var(--bg-warning); color: var(--text-warning); box-shadow: inset 0 0 0 1px var(--text-warning); }
+  .badge-danger  { @apply badge; background: var(--bg-danger);  color: var(--text-danger);  box-shadow: inset 0 0 0 1px var(--text-danger); }
+  .badge-info    { @apply badge; background: var(--bg-info);    color: var(--text-info);    box-shadow: inset 0 0 0 1px var(--text-info); }
+  .badge-neutral {
+    @apply badge;
+    background-color: var(--bg-hover);
+    color: var(--text-muted);
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
 
   .step-indicator { @apply flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold transition-all duration-300; }
-  .step-active    { @apply step-indicator text-white shadow-glow; background: linear-gradient(135deg,#8b5cf6,#6366f1); }
+  .step-active    { @apply step-indicator text-white; background: var(--gradient-1); box-shadow: 0 0 16px rgba(108,99,255,0.4); }
   .step-completed { @apply step-indicator bg-emerald-600 text-white; }
-  .step-pending   { @apply step-indicator bg-surface-200 text-surface-500; }
+  .step-pending   { @apply step-indicator; background-color: var(--bg-card-alt); color: var(--text-muted); }
 
-  .skeleton { @apply bg-gradient-to-r from-surface-200 via-surface-100 to-surface-200 bg-[length:200%_100%] animate-shimmer rounded; }
+  .skeleton {
+    @apply rounded;
+    background: linear-gradient(90deg, var(--skeleton-from) 0%, var(--skeleton-via) 50%, var(--skeleton-to) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
 
-  .dropdown      { @apply absolute z-50 mt-2 backdrop-blur-xl rounded-xl shadow-elevated py-1 min-w-[200px]; background-color: #1e293b; border: 1px solid #334155; }
-  .dropdown-item { @apply w-full px-4 py-2.5 text-sm text-left text-surface-600 transition-colors; }
-  .dropdown-item:hover { background-color: rgba(51,65,85,0.5); color: #e2e8f0; }
+  .dropdown {
+    @apply absolute z-50 mt-2 backdrop-blur-xl rounded-xl py-1 min-w-[200px];
+    background-color: var(--dropdown-bg);
+    border: 1px solid var(--dropdown-border);
+    box-shadow: var(--shadow-elevated);
+  }
+  .dropdown-item {
+    @apply w-full px-4 py-2.5 text-sm text-left transition-colors;
+    color: var(--text-secondary);
+  }
+  .dropdown-item:hover {
+    background-color: var(--dropdown-hover);
+    color: var(--text-primary);
+  }
 
-  .modal-overlay { @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm; }
-  .modal-content { @apply backdrop-blur-xl rounded-2xl shadow-elevated max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto; background-color: #1e293b; border: 1px solid #334155; }
+  .modal-overlay { @apply fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm; background-color: var(--bg-overlay); }
+  .modal-content {
+    @apply backdrop-blur-xl rounded-2xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-elevated);
+  }
 
-  .tooltip { @apply absolute z-50 px-2 py-1 text-xs font-medium text-white rounded shadow-lg whitespace-nowrap; background-color: #1e293b; }
+  .tooltip {
+    @apply absolute z-50 px-2 py-1 text-xs font-medium text-white rounded shadow-lg whitespace-nowrap;
+    background-color: var(--bg-card-alt);
+  }
 }
 
 /* ── Utilities ──────────────────────────────────────────────────────────────── */
 @layer utilities {
   .text-gradient  { @apply bg-gradient-to-r from-violet-400 to-blue-400 bg-clip-text text-transparent; }
-  .glass          { background: rgba(30,41,59,0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
-  .glass-dark     { background: rgba(15,23,42,0.8);  backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }
-  .focus-ring     { @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-50; }
+  .text-gradient-brand { background: var(--gradient-1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .glass {
+    backdrop-filter: blur(12px);
+    background: rgba(26, 26, 46, 0.60);
+    border: 1px solid var(--border);
+  }
+  [data-theme="light"] .glass {
+    background: rgba(255, 255, 255, 0.70);
+  }
+  .focus-ring { @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2; --tw-ring-color: var(--accent); }
   .hide-scrollbar::-webkit-scrollbar { display: none; }
   .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   .glow-pulse { animation: glowPulse 2s ease-in-out infinite; }
   @keyframes glowPulse {
-    0%,100% { box-shadow: 0 0 10px rgba(139,92,246,0.3); }
-    50%     { box-shadow: 0 0 25px rgba(139,92,246,0.6); }
+    0%,100% { box-shadow: 0 0 10px rgba(108,99,255,0.3); }
+    50%     { box-shadow: 0 0 25px rgba(108,99,255,0.6); }
   }
   .animate-stagger > * { animation: slideUp 0.5s ease-out forwards; opacity: 0; }
-  .animate-stagger > *:nth-child(1) { animation-delay: 0.1s; }
-  .animate-stagger > *:nth-child(2) { animation-delay: 0.2s; }
-  .animate-stagger > *:nth-child(3) { animation-delay: 0.3s; }
-  .animate-stagger > *:nth-child(4) { animation-delay: 0.4s; }
-  .animate-stagger > *:nth-child(5) { animation-delay: 0.5s; }
-  .animate-stagger > *:nth-child(6) { animation-delay: 0.6s; }
+  .animate-stagger > *:nth-child(1) { animation-delay: 0.05s; }
+  .animate-stagger > *:nth-child(2) { animation-delay: 0.10s; }
+  .animate-stagger > *:nth-child(3) { animation-delay: 0.15s; }
+  .animate-stagger > *:nth-child(4) { animation-delay: 0.20s; }
+  .animate-stagger > *:nth-child(5) { animation-delay: 0.25s; }
+  .animate-stagger > *:nth-child(6) { animation-delay: 0.30s; }
+  .page-enter { animation: fadeInUp 0.4s ease-out; }
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   GLOBAL HARD OVERRIDES — written OUTSIDE all @layer blocks.
-   Unlayered author CSS has higher cascade priority than any @layer rule
-   (including Tailwind utilities). These rules cannot be beaten by any
-   Tailwind class such as bg-white, bg-gray-50, bg-surface-*, text-gray-*, etc.
+   GLOBAL THEME-AWARE OVERRIDES
+   Uses CSS variables from theme.css — works for both dark and light themes.
+   These rules are outside all @layer blocks so they have highest cascade
+   priority and override Tailwind utility classes.
    ════════════════════════════════════════════════════════════════════════════ */
 
-/* ── 1. Dark panel containers ─────────────────────────────────────────────── */
+/* ── 1. White / light panel containers ──────────────────────────────────────── */
 .bg-white {
-  background-color: #1e293b !important;
+  background-color: var(--bg-card) !important;
 }
 
-/* ── 2. ALL input / textarea / select → light gray bg + black text ─────────
-   Light inputs on dark backgrounds give maximum readability.
-   We use the highest-specificity selectors available to beat browser UA
-   stylesheet and any Tailwind generated classes.                              */
+/* ── 2. Inputs / textarea / select ──────────────────────────────────────────── */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
 textarea,
 select {
-  background-color: #e2e8f0 !important;
-  color: #0f172a !important;
-  border: 1px solid #94a3b8 !important;
+  background-color: var(--input-bg) !important;
+  color: var(--input-text) !important;
+  border: 1px solid var(--input-border) !important;
   border-radius: 8px !important;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  -webkit-text-fill-color: #0f172a;  /* overrides autofill color in Chrome */
+  -webkit-text-fill-color: var(--input-text);
 }
 
 input:not([type="checkbox"]):not([type="radio"])::placeholder,
 textarea::placeholder {
-  color: #64748b !important;
-  -webkit-text-fill-color: #64748b !important;
+  color: var(--input-placeholder) !important;
+  -webkit-text-fill-color: var(--input-placeholder) !important;
   opacity: 1;
 }
 
@@ -157,45 +250,45 @@ textarea::placeholder {
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
 textarea:focus,
 select:focus {
-  border-color: #6366f1 !important;
+  border-color: var(--input-focus-border) !important;
   outline: none !important;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3) !important;
-  background-color: #f1f5f9 !important;
+  box-shadow: 0 0 0 3px var(--input-focus-shadow) !important;
+  background-color: var(--input-bg) !important;
 }
 
 /* Disabled state */
 input:disabled,
 textarea:disabled,
 select:disabled {
-  background-color: #cbd5e1 !important;
-  color: #475569 !important;
-  -webkit-text-fill-color: #475569 !important;
+  background-color: var(--input-disabled-bg) !important;
+  color: var(--input-disabled-text) !important;
+  -webkit-text-fill-color: var(--input-disabled-text) !important;
   cursor: not-allowed !important;
   opacity: 0.7 !important;
 }
 
-/* ── 3. Chrome autofill override (Chrome forces blue tint on autofilled) ──── */
+/* ── 3. Chrome autofill override ─────────────────────────────────────────────── */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 999px #e2e8f0 inset !important;
-  -webkit-text-fill-color: #0f172a !important;
-  caret-color: #0f172a;
+  -webkit-box-shadow: 0 0 0 999px var(--input-autofill) inset !important;
+  -webkit-text-fill-color: var(--input-autofill-text) !important;
+  caret-color: var(--input-text);
 }
 
-/* ── 4. Select native dropdown options ────────────────────────────────────── */
+/* ── 4. Select native dropdown options ───────────────────────────────────────── */
 select option {
-  background-color: #1e293b;
-  color: #e2e8f0;
+  background-color: var(--select-option-bg);
+  color: var(--select-option-text);
 }
 
-/* ── 5. Labels → muted readable color ────────────────────────────────────── */
+/* ── 5. Labels ───────────────────────────────────────────────────────────────── */
 label {
-  color: #94a3b8;
+  color: var(--label-color);
 }
 
-/* ── 6. Error state on inputs ─────────────────────────────────────────────── */
+/* ── 6. Error state on inputs ────────────────────────────────────────────────── */
 input.border-red-500,
 input[class*="border-red"],
 select.border-red-500,
@@ -205,39 +298,44 @@ textarea.border-red-500,
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
 }
 
-/* ── 7. Headings — ensure readable on dark backgrounds ─────────────────────
-   text-surface-* classes are dark-mapped in tailwind.config.js.
-   These rules catch pages that still use old Tailwind gray/slate text classes. */
+/* ── 7. Headings ─────────────────────────────────────────────────────────────── */
 h1, h2, h3, h4, h5, h6 {
-  color: #e2e8f0;
+  color: var(--text-heading);
 }
 
-/* ── 8. Status/alert background overrides (light bg-* → dark transparent) ── */
-.bg-green-50  { background-color: rgba(16, 185, 129, 0.12) !important; }
-.bg-red-50    { background-color: rgba(239, 68, 68, 0.12)  !important; }
-.bg-yellow-50 { background-color: rgba(245, 158, 11, 0.12) !important; }
-.bg-blue-50   { background-color: rgba(99, 102, 241, 0.12) !important; }
-.bg-amber-100 { background-color: rgba(245, 158, 11, 0.15) !important; }
-.bg-accent-50 { background-color: rgba(139, 92, 246, 0.12) !important; }
+/* ── 8. Status / alert backgrounds ──────────────────────────────────────────── */
+.bg-green-50  { background-color: var(--bg-success) !important; }
+.bg-red-50    { background-color: var(--bg-danger)  !important; }
+.bg-yellow-50 { background-color: var(--bg-warning) !important; }
+.bg-blue-50   { background-color: var(--bg-info)    !important; }
+.bg-amber-100 { background-color: var(--bg-warning) !important; }
+.bg-accent-50 { background-color: var(--accent-light) !important; }
 
-.text-green-700  { color: #34d399 !important; }
-.text-red-700    { color: #f87171 !important; }
-.text-yellow-700, .text-amber-700 { color: #fbbf24 !important; }
-.text-blue-700   { color: #818cf8 !important; }
-.text-amber-700  { color: #fbbf24 !important; }
+.text-green-700               { color: var(--text-success) !important; }
+.text-red-700                 { color: var(--text-danger)  !important; }
+.text-yellow-700,
+.text-amber-700               { color: var(--text-warning) !important; }
+.text-blue-700                { color: var(--text-info)    !important; }
 
-/* ── 9. Legacy gray text classes → remain readable on dark backgrounds ───── */
-.text-gray-900, .text-black { color: #f1f5f9 !important; }
-.text-gray-800              { color: #e2e8f0 !important; }
-.text-gray-700              { color: #cbd5e1 !important; }
-.text-gray-600, .text-gray-500 { color: #94a3b8 !important; }
-.text-gray-400              { color: #64748b !important; }
+/* ── 9. Legacy gray text ─────────────────────────────────────────────────────── */
+.text-gray-900, .text-black   { color: var(--gray-900) !important; }
+.text-gray-800                { color: var(--gray-800) !important; }
+.text-gray-700                { color: var(--gray-700) !important; }
+.text-gray-600, .text-gray-500 { color: var(--gray-600) !important; }
+.text-gray-400                { color: var(--gray-400) !important; }
 
-/* ── 10. Legacy border classes ────────────────────────────────────────────── */
-.border-gray-200, .border-gray-300 { border-color: #334155 !important; }
+/* ── 10. Legacy border classes ───────────────────────────────────────────────── */
+.border-gray-200,
+.border-gray-300 { border-color: var(--border-gray-200) !important; }
 
-/* ── 11. bg-surface-50 or bg-gray-50 used as info boxes → dark ───────────── */
-.bg-surface-50:not(body) { background-color: #0f172a !important; }
-.bg-gray-50              { background-color: #1e293b !important; }
-.bg-gray-100             { background-color: #1e293b !important; }
-.bg-gray-200             { background-color: #334155 !important; }
+/* ── 11. Legacy surface/gray bg classes ──────────────────────────────────────── */
+.bg-surface-50:not(body) { background-color: var(--bg-app)      !important; }
+.bg-gray-50              { background-color: var(--bg-gray-50)  !important; }
+.bg-gray-100             { background-color: var(--bg-gray-100) !important; }
+.bg-gray-200             { background-color: var(--bg-gray-200) !important; }
+
+/* ── 12. App background ──────────────────────────────────────────────────────── */
+body,
+.min-h-screen.bg-surface-50 {
+  background-color: var(--bg-app) !important;
+}

@@ -8,7 +8,7 @@ const Layout = ({ title, subtitle, actions }) => {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   return (
-    <div className="min-h-screen bg-surface-50">
+    <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-app)' }}>
       {/* Side Navigation */}
       <SideNav
         isCollapsed={isCollapsed}

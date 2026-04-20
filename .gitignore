@@ -9,12 +9,13 @@
 .env.development
 .env.staging
 backend/.env
+backend/.env.production
 frontend/.env
-# Exception: example files are committed
+# Exception: example files and frontend production config are committed
 !.env.example
 !backend/.env.example
 !frontend/.env.example
-# Production env is safe (no secrets)
+# frontend/.env.production is safe (no secrets — only public VITE_ vars)
 !frontend/.env.production
 
 # ── Python ───────────────────────────────────────────────────────────────────

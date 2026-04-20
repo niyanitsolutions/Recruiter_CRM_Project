@@ -81,12 +81,12 @@ async def lifespan(app: FastAPI):
     reminder_task.cancel()
     await close_redis()
     await close_mongo_connection()
-    print(" Shutting down CRM API Server...")
+    print(" Shutting down Niyan HireFlow API Server...")
 
 
 app = FastAPI(
-    title="Multi-Tenant CRM System",
-    description="SaaS-Grade Recruitment & Partner Platform",
+    title="Niyan HireFlow",
+    description="Smart Recruitment & Talent Management Platform",
     version="5.0.0",
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
@@ -206,7 +206,7 @@ async def root():
     """Root endpoint - Health check"""
     return {
         "status": "healthy",
-        "message": "Multi-Tenant CRM API is running",
+        "message": "Niyan HireFlow API is running",
         "version": "5.0.0",
         "phases": [
             "Phase 1 - Foundation & Auth",

@@ -1263,14 +1263,21 @@ async def public_upload_candidate_resume(token: str, candidate_id: str, file: Up
     if len(content) > MAX_SIZE:
         raise HTTPException(status_code=400, detail="File too large. Maximum 5 MB.")
 
-    upload_dir = "uploads/resumes"
-    os.makedirs(upload_dir, exist_ok=True)
-    unique_name = f"{candidate_id}_{uuid.uuid4().hex}{ext}"
-    file_path = os.path.join(upload_dir, unique_name)
-    with open(file_path, "wb") as f:
-        f.write(content)
+    try:
+        from app.utils.s3 import upload_file as s3_upload
+        resume_url = await s3_upload(
+            content,
+            file.filename or f"resume{ext}",
+            folder="resumes",
+            candidate_id=candidate_id,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as exc:
+        import logging as _log
+        _log.getLogger(__name__).error("Resume upload failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="File upload failed. Please try again.")
 
-    resume_url = f"/uploads/resumes/{unique_name}"
     await company_db.candidates.update_one(
         {"_id": candidate_id},
         {"$set": {"resume_url": resume_url}},

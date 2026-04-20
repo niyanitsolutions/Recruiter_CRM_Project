@@ -7,9 +7,11 @@ from typing import Optional, Dict, Any
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException, UploadFile, status
+import logging
 import os
 import re
-import uuid
+
+logger = logging.getLogger(__name__)
 
 from app.models.company.candidate import (
     CandidateCreate,
@@ -770,7 +772,6 @@ class CandidateService:
         candidate_id: str,
         file: UploadFile,
         updated_by: str,
-        upload_dir: str = "uploads/resumes"
     ) -> CandidateResponse:
         """Upload a resume file for a candidate and store the URL."""
         ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx"}
@@ -795,15 +796,20 @@ class CandidateService:
         if len(content) > MAX_SIZE_BYTES:
             raise HTTPException(status_code=400, detail="File too large. Maximum size is 5 MB.")
 
-        # Save file — unique name to avoid collisions
-        os.makedirs(upload_dir, exist_ok=True)
-        unique_name = f"{candidate_id}_{uuid.uuid4().hex}{ext}"
-        file_path = os.path.join(upload_dir, unique_name)
-        with open(file_path, "wb") as f:
-            f.write(content)
-
-        # Build publicly accessible URL
-        resume_url = f"/uploads/resumes/{unique_name}"
+        # Upload to S3 (production) or local disk (development)
+        try:
+            from app.utils.s3 import upload_file as s3_upload
+            resume_url = await s3_upload(
+                content,
+                original_name,
+                folder="resumes",
+                candidate_id=candidate_id,
+            )
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
+        except Exception as exc:
+            logger.error("Resume upload failed for candidate %s: %s", candidate_id, exc, exc_info=True)
+            raise HTTPException(status_code=500, detail="File upload failed. Please try again.")
 
         await collection.update_one(
             {"_id": candidate_id},

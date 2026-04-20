@@ -1,0 +1,216 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Niyan HireFlow — CSS Design System
+   Dual-theme: data-theme="dark" (default) | data-theme="light"
+   Applied to <html> element by ThemeContext.jsx
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── DARK THEME (default) ──────────────────────────────────────────────────── */
+:root,
+[data-theme="dark"] {
+  /* ── Backgrounds ── */
+  --bg-app:            #0F0F1A;
+  --bg-surface:        #1A1A2E;
+  --bg-card:           #16213E;
+  --bg-card-alt:       #1A1A2E;
+  --bg-topbar:         rgba(13, 13, 31, 0.90);
+  --bg-hover:          rgba(255, 255, 255, 0.05);
+  --bg-active:         rgba(108, 99, 255, 0.22);
+  --bg-overlay:        rgba(0, 0, 0, 0.70);
+
+  /* ── Text ── */
+  --text-primary:      #F8F9FF;
+  --text-secondary:    #B8BCC8;
+  --text-muted:        #8B8FA8;
+  --text-disabled:     #505070;
+  --text-heading:      #FFFFFF;
+  --text-label:        #B8BCC8;
+  --text-link:         #6C63FF;
+
+  /* ── Borders ── */
+  --border:            rgba(255, 255, 255, 0.08);
+  --border-strong:     rgba(255, 255, 255, 0.15);
+  --border-subtle:     rgba(255, 255, 255, 0.04);
+  --border-card:       rgba(255, 255, 255, 0.07);
+
+  /* ── Inputs (light bg on dark surface — max readability) ── */
+  --input-bg:           #e2e8f0;
+  --input-text:         #0f172a;
+  --input-placeholder:  #64748b;
+  --input-border:       #94a3b8;
+  --input-focus-border: #6C63FF;
+  --input-focus-shadow: rgba(108, 99, 255, 0.30);
+  --input-autofill:     #e2e8f0;
+  --input-autofill-text: #0f172a;
+  --input-disabled-bg:  #cbd5e1;
+  --input-disabled-text: #475569;
+  --select-option-bg:  #1e293b;
+  --select-option-text: #e2e8f0;
+  --label-color:        #94a3b8;
+
+  /* ── Status Backgrounds ── */
+  --bg-success: rgba(67, 233, 123, 0.10);
+  --bg-warning: rgba(250, 130, 49,  0.10);
+  --bg-danger:  rgba(255, 71,  87,  0.10);
+  --bg-info:    rgba(79,  172, 254, 0.10);
+
+  /* ── Status Text ── */
+  --text-success: #43E97B;
+  --text-warning: #FA8231;
+  --text-danger:  #FF4757;
+  --text-info:    #4FACFE;
+
+  /* ── Navigation ── */
+  --nav-text:          rgba(255, 255, 255, 0.55);
+  --nav-text-active:   #FFFFFF;
+  --nav-bg-active:     rgba(108, 99, 255, 0.25);
+  --nav-border-active: rgba(108, 99, 255, 0.45);
+  --nav-glow-active:   rgba(108, 99, 255, 0.40);
+
+  /* ── UI elements ── */
+  --scrollbar-track: #0F0F1A;
+  --scrollbar-thumb: #334155;
+  --scrollbar-thumb-hover: #475569;
+  --selection-bg:    rgba(108, 99, 255, 0.35);
+  --selection-text:  #c4b5fd;
+  --dropdown-bg:     #1A1A2E;
+  --dropdown-border: rgba(255, 255, 255, 0.08);
+  --dropdown-hover:  rgba(255, 255, 255, 0.06);
+  --skeleton-from:   #1e293b;
+  --skeleton-via:    #334155;
+  --skeleton-to:     #1e293b;
+
+  /* ── Shadows ── */
+  --shadow-card:     0 4px 6px -1px rgba(0,0,0,0.40), 0 2px 4px -2px rgba(0,0,0,0.30);
+  --shadow-soft:     0 2px 15px -3px rgba(0,0,0,0.50);
+  --shadow-elevated: 0 20px 60px -10px rgba(0,0,0,0.70);
+
+  /* ── Legacy gray overrides (dark) ── */
+  --gray-900: #f1f5f9;
+  --gray-800: #e2e8f0;
+  --gray-700: #cbd5e1;
+  --gray-600: #94a3b8;
+  --gray-500: #94a3b8;
+  --gray-400: #64748b;
+  --border-gray-200: #334155;
+  --bg-gray-50:  #1e293b;
+  --bg-gray-100: #1e293b;
+  --bg-gray-200: #334155;
+}
+
+/* ── LIGHT THEME ────────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  /* ── Backgrounds ── */
+  --bg-app:            #EEF0FF;
+  --bg-surface:        #FFFFFF;
+  --bg-card:           #FFFFFF;
+  --bg-card-alt:       #F8F9FF;
+  --bg-topbar:         rgba(255, 255, 255, 0.94);
+  --bg-hover:          rgba(108, 99, 255, 0.06);
+  --bg-active:         rgba(108, 99, 255, 0.10);
+  --bg-overlay:        rgba(0, 0, 0, 0.50);
+
+  /* ── Text ── */
+  --text-primary:      #1A1A2E;
+  --text-secondary:    #4A4A6A;
+  --text-muted:        #7A7A9A;
+  --text-disabled:     #ACACCC;
+  --text-heading:      #0F0F1A;
+  --text-label:        #4A4A6A;
+  --text-link:         #6C63FF;
+
+  /* ── Borders ── */
+  --border:            rgba(108, 99, 255, 0.12);
+  --border-strong:     rgba(108, 99, 255, 0.25);
+  --border-subtle:     rgba(108, 99, 255, 0.06);
+  --border-card:       rgba(108, 99, 255, 0.10);
+
+  /* ── Inputs ── */
+  --input-bg:           #F8F9FF;
+  --input-text:         #1A1A2E;
+  --input-placeholder:  #7A7A9A;
+  --input-border:       #D0D5E8;
+  --input-focus-border: #6C63FF;
+  --input-focus-shadow: rgba(108, 99, 255, 0.20);
+  --input-autofill:     #F8F9FF;
+  --input-autofill-text: #1A1A2E;
+  --input-disabled-bg:  #E8EAFF;
+  --input-disabled-text: #7A7A9A;
+  --select-option-bg:   #FFFFFF;
+  --select-option-text: #1A1A2E;
+  --label-color:        #4A4A6A;
+
+  /* ── Status Backgrounds ── */
+  --bg-success: rgba(16, 185, 129, 0.10);
+  --bg-warning: rgba(245, 158, 11,  0.10);
+  --bg-danger:  rgba(239, 68,  68,  0.10);
+  --bg-info:    rgba(99,  102, 241, 0.10);
+
+  /* ── Status Text ── */
+  --text-success: #059669;
+  --text-warning: #d97706;
+  --text-danger:  #dc2626;
+  --text-info:    #4f46e5;
+
+  /* ── Navigation (sidebar stays dark in light mode) ── */
+  --nav-text:          rgba(255, 255, 255, 0.55);
+  --nav-text-active:   #FFFFFF;
+  --nav-bg-active:     rgba(108, 99, 255, 0.30);
+  --nav-border-active: rgba(108, 99, 255, 0.55);
+  --nav-glow-active:   rgba(108, 99, 255, 0.50);
+
+  /* ── UI elements ── */
+  --scrollbar-track: #EEF0FF;
+  --scrollbar-thumb: #D0D5E8;
+  --scrollbar-thumb-hover: #B8BCC8;
+  --selection-bg:    rgba(108, 99, 255, 0.20);
+  --selection-text:  #6C63FF;
+  --dropdown-bg:     #FFFFFF;
+  --dropdown-border: rgba(108, 99, 255, 0.12);
+  --dropdown-hover:  rgba(108, 99, 255, 0.06);
+  --skeleton-from:   #E8EAFF;
+  --skeleton-via:    #F0F2FF;
+  --skeleton-to:     #E8EAFF;
+
+  /* ── Shadows ── */
+  --shadow-card:     0 4px 6px -1px rgba(108,99,255,0.08), 0 2px 4px -2px rgba(108,99,255,0.05);
+  --shadow-soft:     0 2px 15px -3px rgba(108,99,255,0.12);
+  --shadow-elevated: 0 20px 60px -10px rgba(108,99,255,0.15);
+
+  /* ── Legacy gray overrides (light) ── */
+  --gray-900: #1A1A2E;
+  --gray-800: #2D2D4E;
+  --gray-700: #4A4A6A;
+  --gray-600: #7A7A9A;
+  --gray-500: #7A7A9A;
+  --gray-400: #9A9AC0;
+  --border-gray-200: #D0D5E8;
+  --bg-gray-50:  #F8F9FF;
+  --bg-gray-100: #F0F2FF;
+  --bg-gray-200: #E8EAFF;
+}
+
+/* ── Brand / Accent — same in both themes ──────────────────────────────────── */
+:root {
+  --accent:           #6C63FF;
+  --accent-hover:     #5A52E8;
+  --accent-light:     rgba(108, 99, 255, 0.15);
+  --accent-2:         #4FACFE;
+
+  /* ── Stat card icon gradients ── */
+  --stat-purple:  linear-gradient(135deg, #6C63FF 0%, #4FACFE 100%);
+  --stat-green:   linear-gradient(135deg, #43E97B 0%, #38F9D7 100%);
+  --stat-orange:  linear-gradient(135deg, #FA8231 0%, #FF6B9D 100%);
+  --stat-blue:    linear-gradient(135deg, #4FACFE 0%, #00F2FE 100%);
+  --stat-red:     linear-gradient(135deg, #FF4757 0%, #FF6348 100%);
+  --stat-pink:    linear-gradient(135deg, #FF6B9D 0%, #6C63FF 100%);
+  --stat-teal:    linear-gradient(135deg, #38F9D7 0%, #43E97B 100%);
+  --stat-yellow:  linear-gradient(135deg, #F6D365 0%, #FDA085 100%);
+
+  /* ── General gradients ── */
+  --gradient-1: linear-gradient(135deg, #6C63FF 0%, #4FACFE 100%);
+  --gradient-2: linear-gradient(135deg, #43E97B 0%, #38F9D7 100%);
+  --gradient-3: linear-gradient(135deg, #FA8231 0%, #FF6B9D 100%);
+  --gradient-4: linear-gradient(135deg, #4FACFE 0%, #00F2FE 100%);
+  --gradient-5: linear-gradient(135deg, #FF4757 0%, #FF6348 100%);
+  --gradient-6: linear-gradient(135deg, #FF6B9D 0%, #6C63FF 100%);
+}

@@ -15,7 +15,7 @@ services:
   # ── MongoDB ──────────────────────────────────────────────────────────────
   mongodb:
     image: mongo:7.0
-    container_name: crm_mongodb
+    container_name: hireflow_mongodb
     restart: unless-stopped
     ports:
       - "27017:27017"
@@ -35,7 +35,7 @@ services:
   # ── Redis ─────────────────────────────────────────────────────────────────
   redis:
     image: redis:7.2-alpine
-    container_name: crm_redis
+    container_name: hireflow_redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -59,7 +59,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: crm_backend
+    container_name: hireflow_backend
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -93,7 +93,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: crm_frontend
+    container_name: hireflow_frontend
     restart: unless-stopped
     ports:
       - "3000:80"

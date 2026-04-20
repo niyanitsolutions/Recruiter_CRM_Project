@@ -59,7 +59,7 @@ async def seed_super_admin():
     super_admin = {
         "_id": str(uuid.uuid4()),
         "username": "superadmin",
-        "email": "superadmin@crm.local",
+        "email": "superadmin@niyanhireflow.com",
         "full_name": "Super Administrator",
         "mobile": "+919999999999",
         "password_hash": hash_password("SuperAdmin@123"),
@@ -130,7 +130,7 @@ async def create_indexes():
 async def main():
     """Main seed function"""
     print("=" * 50)
-    print("🚀 CRM Database Seed Script")
+    print("🚀 Niyan HireFlow — Database Seed Script")
     print("=" * 50)
     
     try:
