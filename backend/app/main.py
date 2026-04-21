@@ -219,8 +219,8 @@ async def root():
 
 
 @app.get("/health", tags=["Health Check"])
+@app.get("/healthy", tags=["Health Check"])
 async def health_check():
-    """Detailed health check endpoint"""
     return {
         "status": "healthy",
         "database": "connected",
