@@ -32,6 +32,8 @@ import {
   SlidersHorizontal,
   Tag,
   Wallet,
+  Trash2,
+  Plug,
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType } from '../../store/authSlice'
@@ -87,6 +89,10 @@ const PERMISSION_NAV_MAP = [
     path: '/analytics',  icon: BarChart2, label: 'Analytics', section: 'System' },
   { permissions: ['audit:view'],
     path: '/audit-logs', icon: History,   label: 'Audit Logs', section: 'System' },
+  { permissions: ['admin:delete', 'admin:view'],
+    path: '/trash',        icon: Trash2, label: 'Deleted History', section: 'System' },
+  { permissions: ['crm_settings:view', 'crm_settings:edit'],
+    path: '/integrations', icon: Plug,   label: 'Integrations',    section: 'System' },
   { permissions: ['crm_settings:view', 'crm_settings:edit'],
     path: '/settings',   icon: Settings,  label: 'Settings',   section: 'System' },
 ]

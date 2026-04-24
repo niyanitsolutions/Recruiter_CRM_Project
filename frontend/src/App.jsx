@@ -48,8 +48,10 @@ import {
   Profile,
   Settings,
   CompanySettings,
-  InterviewSettings
+  InterviewSettings,
+  DeletedHistory,
 } from './pages/admin'
+import IntegrationList from './components/integrations/IntegrationList'
 
 // Phase 3 - Recruitment Pages
 import {
@@ -858,6 +860,14 @@ function App() {
           element={<PermissionRoute permission="audit:view"><AuditLogsPage /></PermissionRoute>} />
         <Route path="/audit/alerts"
           element={<PermissionRoute permission="audit:view"><AuditLogsPage /></PermissionRoute>} />
+
+        {/* ── Trash / Deleted History ── */}
+        <Route path="/trash"
+          element={<PermissionRoute permission="admin:view"><DeletedHistory /></PermissionRoute>} />
+
+        {/* ── Integrations ── */}
+        <Route path="/integrations"
+          element={<PermissionRoute permission="crm_settings:view"><IntegrationList /></PermissionRoute>} />
 
         {/* ── Always-accessible utility pages ── */}
         <Route path="/notifications" element={<Notifications />} />

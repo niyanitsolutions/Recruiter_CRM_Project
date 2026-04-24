@@ -4,7 +4,6 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   Search,
-  Bell,
   Settings,
   User,
   LogOut,
@@ -18,6 +17,7 @@ import {
   Menu,
 } from 'lucide-react'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsOwner, selectIsSeller } from '../../store/authSlice'
+import NotificationBell from '../notifications/NotificationBell'
 import { useTheme } from '../../contexts/ThemeContext'
 
 // ── Breadcrumb path → label map ───────────────────────────────────────────────
@@ -91,22 +91,16 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle }) => {
   const { isDark, toggleTheme } = useTheme()
 
   const [isProfileOpen, setIsProfileOpen] = useState(false)
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
   const profileRef = useRef(null)
-  const notificationsRef = useRef(null)
 
   useEffect(() => {
     setIsProfileOpen(false)
-    setIsNotificationsOpen(false)
   }, [location.pathname])
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (profileRef.current && !profileRef.current.contains(event.target)) {
         setIsProfileOpen(false)
-      }
-      if (notificationsRef.current && !notificationsRef.current.contains(event.target)) {
-        setIsNotificationsOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -204,38 +198,7 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle }) => {
         </button>
 
         {/* Notifications */}
-        <div className="relative" ref={notificationsRef}>
-          <button
-            onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-            className="relative p-2 rounded-lg transition-all duration-200"
-            style={{ color: 'var(--text-muted)' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
-          >
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-          </button>
-
-          {isNotificationsOpen && (
-            <div className="dropdown right-0 w-80 animate-slide-up">
-              <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
-                <h3 className="font-semibold text-sm" style={{ color: 'var(--text-heading)' }}>Notifications</h3>
-              </div>
-              <div className="px-4 py-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-                No new notifications
-              </div>
-              <div className="px-4 py-2" style={{ borderTop: '1px solid var(--border)' }}>
-                <button
-                  className="text-sm font-medium transition-colors"
-                  style={{ color: 'var(--accent)' }}
-                  onClick={() => { setIsNotificationsOpen(false); navigate('/notifications') }}
-                >
-                  View all notifications
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        <NotificationBell />
 
         {/* Profile */}
         <div className="relative" ref={profileRef}>

@@ -25,3 +25,7 @@ export { default as settingsService } from './settingsService'
 export { default as onboardService } from './onboardService'
 export { default as payoutService } from './payoutService'
 export { default as notificationService } from './notificationService'
+
+// Phase 6 Services - Integrations & Trash
+export { default as integrationService } from './integrationService'
+export { default as trashService } from './trashService'

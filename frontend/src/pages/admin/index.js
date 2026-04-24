@@ -31,3 +31,6 @@ export { default as Profile } from './Profile'
 export { default as Settings } from './Settings'
 export { default as CompanySettings } from './CompanySettings'
 export { default as InterviewSettings } from './InterviewSettings'
+
+// Trash / Soft Delete
+export { default as DeletedHistory } from './DeletedHistory'

@@ -41,6 +41,10 @@ from . import audit
 from . import scheduler
 from . import tasks
 
+# ============== Phase 6 - Integrations & Trash ==============
+from . import integrations
+from . import trash
+
 
 __all__ = [
     # Phase 1
@@ -76,4 +80,7 @@ __all__ = [
     'audit',
     'scheduler',
     'tasks',
+    # Phase 6
+    'integrations',
+    'trash',
 ]

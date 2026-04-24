@@ -43,6 +43,9 @@ from app.api.v1 import onboards, payouts, notifications
 # ============== Phase 5 - Reports, Analytics, Import/Export, Targets, Audit ==============
 from app.api.v1 import reports, analytics, imports_exports, targets, audit, scheduler, tasks
 
+# ============== Phase 6 - Integrations & Trash ==============
+from app.api.v1 import integrations, trash
+
 # ============== Export ==============
 from app.api.v1 import export
 
@@ -194,6 +197,10 @@ app.include_router(scheduler.router, prefix=API_V1_PREFIX, tags=["Scheduler"])
 app.include_router(export.router, prefix=API_V1_PREFIX, tags=["Export"])
 app.include_router(tasks.router, prefix=API_V1_PREFIX, tags=["Tasks"])
 app.include_router(email_test.router, prefix=API_V1_PREFIX, tags=["Email"])
+
+# ============== PHASE 6 ROUTERS ==============
+app.include_router(integrations.router, prefix=API_V1_PREFIX, tags=["Integrations"])
+app.include_router(trash.router, prefix=API_V1_PREFIX, tags=["Trash"])
 
 
 # Serve uploaded files (resumes, etc.)
