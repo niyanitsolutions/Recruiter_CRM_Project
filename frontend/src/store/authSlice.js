@@ -182,8 +182,9 @@ export const login = createAsyncThunk(
         }).join(', ')
         return rejectWithValue(msg || 'Login failed. Please try again.')
       }
+      console.error('[AUTH] LOGIN THUNK CATCH →', error.message, '| status:', error.response?.status, '| detail:', detail)
       return rejectWithValue(
-        (typeof detail === 'string' ? detail : null) || 'Login failed. Please try again.'
+        (typeof detail === 'string' ? detail : null) || error.message || 'Login failed. Please try again.'
       )
     }
   }

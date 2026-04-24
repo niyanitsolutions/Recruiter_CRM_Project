@@ -3,9 +3,14 @@ import api from './api'
 const authService = {
   login: async (credentials) => {
     const url = `${import.meta.env.VITE_API_URL || '/api/v1'}/auth/login`
-    console.log('[AUTH] LOGIN REQUEST →', url, '| payload keys:', Object.keys(credentials))
+    console.log('[AUTH] LOGIN REQUEST →', url, '| identifier:', credentials.identifier, '| password present:', !!credentials.password)
     const res = await api.post('/auth/login', credentials)
-    console.log('[AUTH] LOGIN RESPONSE →', res.status, res.data?.access_token ? '✓ token received' : '✗ NO TOKEN — wrong server?')
+    console.log('[AUTH] LOGIN RESPONSE →', res.status, '| success:', res.data?.success, '| has_token:', !!res.data?.access_token, '| tenant_selection:', !!res.data?.tenant_selection_required)
+    // Explicit guard: if server returned 200 but success===false, treat as failure
+    if (!res.data || res.data.success === false) {
+      console.error('[AUTH] LOGIN REJECTED — success flag is false or empty response:', res.data)
+      throw new Error(res.data?.message || 'Invalid credentials')
+    }
     return res
   },
 

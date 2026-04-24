@@ -91,7 +91,9 @@ const Login = () => {
     setEmailNotVerified(null)
     setResendSent(false)
     setInlineError('')
+    console.log('[LOGIN] Submitting — identifier:', data.identifier, '| password present:', !!data.password)
     const result = await dispatch(login({ ...data, remember_me: rememberMe }))
+    console.log('[LOGIN] Dispatch result type:', result.type, '| payload:', result.payload)
 
     if (login.fulfilled.match(result)) {
       // Tenant selection required — Redux state is set, screen switches automatically
