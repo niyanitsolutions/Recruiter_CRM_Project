@@ -15,6 +15,7 @@ import {
   Sun,
   Moon,
   ChevronRight,
+  Menu,
 } from 'lucide-react'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsOwner, selectIsSeller } from '../../store/authSlice'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -79,7 +80,7 @@ const Breadcrumbs = () => {
   )
 }
 
-const TopBar = ({ title, subtitle, actions }) => {
+const TopBar = ({ title, subtitle, actions, onMobileToggle }) => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const location = useLocation()
@@ -144,15 +145,29 @@ const TopBar = ({ title, subtitle, actions }) => {
         borderBottom: '1px solid var(--border)',
       }}
     >
-      {/* Left: Page title + breadcrumbs */}
-      <div className="min-w-0">
-        <h1 className="text-lg font-semibold leading-tight truncate" style={{ color: 'var(--text-heading)' }}>
-          {derivedTitle}
-        </h1>
-        {subtitle
-          ? <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{subtitle}</p>
-          : <Breadcrumbs />
-        }
+      {/* Left: mobile hamburger + page title */}
+      <div className="flex items-center gap-2 min-w-0">
+        {onMobileToggle && (
+          <button
+            className="md:hidden flex-shrink-0 p-2 rounded-lg transition-colors"
+            onClick={onMobileToggle}
+            style={{ color: 'var(--text-secondary)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={e => e.currentTarget.style.background = ''}
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold leading-tight truncate" style={{ color: 'var(--text-heading)' }}>
+            {derivedTitle}
+          </h1>
+          {subtitle
+            ? <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{subtitle}</p>
+            : <Breadcrumbs />
+          }
+        </div>
       </div>
 
       <div className="flex items-center gap-2 ml-4">

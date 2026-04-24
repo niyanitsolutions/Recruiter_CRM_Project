@@ -131,6 +131,13 @@ export const login = createAsyncThunk(
           remember_me: remember_me !== false,
         }
       }
+      // Guard: a real login response MUST contain access_token.
+      // Without this check, a 200 from the wrong server (S3/CDN returning index.html)
+      // would be treated as a successful login.
+      if (!response.data?.access_token) {
+        console.error('[AUTH] Login: response has no access_token', response.status, typeof response.data)
+        return rejectWithValue('Login failed: server returned an unexpected response. Verify API configuration.')
+      }
       return { ...response.data, remember_me: remember_me !== false }
     } catch (error) {
       if (error.response?.status === 409) {
@@ -165,8 +172,19 @@ export const login = createAsyncThunk(
           companyId:  detail.company_id  || null,
         })
       }
-      const detail = error.response?.data?.detail || 'Login failed. Please try again.'
-      return rejectWithValue(typeof detail === 'string' ? detail : 'Login failed. Please try again.')
+      // FastAPI validation errors (422): detail is an array of field errors.
+      // Extract human-readable message instead of swallowing it.
+      const detail = error.response?.data?.detail
+      if (Array.isArray(detail)) {
+        const msg = detail.map(e => {
+          const field = e.loc?.slice(-1)[0] || 'field'
+          return `${field}: ${e.msg}`
+        }).join(', ')
+        return rejectWithValue(msg || 'Login failed. Please try again.')
+      }
+      return rejectWithValue(
+        (typeof detail === 'string' ? detail : null) || 'Login failed. Please try again.'
+      )
     }
   }
 )
@@ -177,10 +195,19 @@ export const forceLogoutAndLogin = createAsyncThunk(
     try {
       const { remember_me, ...loginData } = credentials
       const response = await authService.forceLogoutAndLogin(loginData)
+      if (!response.data?.access_token) {
+        return rejectWithValue('Login failed: server returned an unexpected response.')
+      }
       return { ...response.data, remember_me: remember_me !== false }
     } catch (error) {
-      const detail = error.response?.data?.detail || 'Login failed. Please try again.'
-      return rejectWithValue(typeof detail === 'string' ? detail : 'Login failed. Please try again.')
+      const detail = error.response?.data?.detail
+      if (Array.isArray(detail)) {
+        const msg = detail.map(e => `${e.loc?.slice(-1)[0] || 'field'}: ${e.msg}`).join(', ')
+        return rejectWithValue(msg || 'Login failed. Please try again.')
+      }
+      return rejectWithValue(
+        (typeof detail === 'string' ? detail : null) || 'Login failed. Please try again.'
+      )
     }
   }
 )
@@ -336,6 +363,14 @@ const authSlice = createSlice({
           }
           return
         }
+        // Guard: backend must return a real JWT. If access_token is missing the
+        // response came from the wrong server (e.g. S3 returning index.html with 200).
+        if (!action.payload.access_token) {
+          state.isLoading  = false
+          state.isAuthenticated = false
+          state.error = 'Login failed: server returned an unexpected response. Check API configuration.'
+          return
+        }
         const remember = action.payload.remember_me !== false
         state.isAuthenticated = true
         state.tenantSelection = null
@@ -384,6 +419,12 @@ const authSlice = createSlice({
         state.error = null
       })
       .addCase(loginWithTenant.fulfilled, (state, action) => {
+        if (!action.payload.access_token) {
+          state.isLoading = false
+          state.isAuthenticated = false
+          state.error = 'Login failed: server returned an unexpected response. Check API configuration.'
+          return
+        }
         const remember = action.payload.remember_me !== false
         state.isLoading = false
         state.isAuthenticated = true
@@ -433,6 +474,12 @@ const authSlice = createSlice({
         state.error = null
       })
       .addCase(forceLogoutAndLogin.fulfilled, (state, action) => {
+        if (!action.payload.access_token) {
+          state.isLoading = false
+          state.isAuthenticated = false
+          state.error = 'Login failed: server returned an unexpected response. Check API configuration.'
+          return
+        }
         const remember = action.payload.remember_me !== false
         state.isLoading = false
         state.isAuthenticated = true

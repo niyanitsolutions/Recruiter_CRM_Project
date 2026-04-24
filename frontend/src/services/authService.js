@@ -1,12 +1,12 @@
 import api from './api'
 
 const authService = {
-  /**
-   * Login with identifier (username/email/mobile) and password
-   * Pass force_login: true to take over an existing active session
-   */
-  login: (credentials) => {
-    return api.post('/auth/login', credentials)
+  login: async (credentials) => {
+    const url = `${import.meta.env.VITE_API_URL || '/api/v1'}/auth/login`
+    console.log('[AUTH] LOGIN REQUEST →', url, '| payload keys:', Object.keys(credentials))
+    const res = await api.post('/auth/login', credentials)
+    console.log('[AUTH] LOGIN RESPONSE →', res.status, res.data?.access_token ? '✓ token received' : '✗ NO TOKEN — wrong server?')
+    return res
   },
 
   /**

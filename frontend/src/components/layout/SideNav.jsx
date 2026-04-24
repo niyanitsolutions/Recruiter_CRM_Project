@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
@@ -113,13 +114,19 @@ const buildPermissionMenu = (permissions, isOwner = false, isAdmin = false) => {
   return Object.entries(sectionMap).map(([section, items]) => ({ section, items }))
 }
 
-const SideNav = ({ isCollapsed, onToggle }) => {
+const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
   const dispatch     = useDispatch()
   const user         = useSelector(selectUser)
   const isSuperAdmin = useSelector(selectIsSuperAdmin)
   const isSeller     = useSelector(selectIsSeller)
   const userRole     = useSelector(selectUserRole)
   const userType     = useSelector(selectUserType)
+  const location     = useLocation()
+
+  // Close mobile nav on route change
+  useEffect(() => {
+    if (mobileOpen && onMobileClose) onMobileClose()
+  }, [location.pathname])
 
   const handleLogout = () => dispatch(logoutUser())
 
@@ -236,7 +243,8 @@ const SideNav = ({ isCollapsed, onToggle }) => {
   return (
     <aside className={clsx(
       'fixed left-0 top-0 h-screen text-white transition-all duration-300 z-40 flex flex-col',
-      isCollapsed ? 'w-20' : 'w-64'
+      isCollapsed ? 'w-20' : 'w-64',
+      mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
     )} style={{ background: 'linear-gradient(180deg, #0F0F1A 0%, #1A1A2E 50%, #0D0D1F 100%)' }}>
       {/* Logo */}
       <div className={clsx('h-16 flex items-center', isCollapsed ? 'justify-center px-2' : 'px-5')} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>

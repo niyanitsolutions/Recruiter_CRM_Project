@@ -24,6 +24,24 @@ const FALLBACK_STATUSES = [
   { value: 'on_hold', label: 'On Hold' },
 ]
 
+const STATUS_STYLES = {
+  applied:        { background: 'rgba(79,172,254,0.15)',   color: '#4FACFE' },
+  screening:      { background: 'rgba(245,158,11,0.15)',   color: '#F59E0B' },
+  shortlisted:    { background: 'rgba(108,99,255,0.15)',   color: '#6C63FF' },
+  interview:      { background: 'rgba(108,99,255,0.20)',   color: '#9C63FF' },
+  next_round:     { background: 'rgba(90,82,232,0.20)',    color: '#8B7FF8' },
+  selected:       { background: 'rgba(67,233,123,0.20)',   color: '#43E97B' },
+  offered:        { background: 'rgba(251,146,60,0.15)',   color: '#FB923C' },
+  offer_accepted: { background: 'rgba(56,249,215,0.15)',   color: '#38F9D7' },
+  offer_declined: { background: 'rgba(255,107,157,0.15)', color: '#FF6B9D' },
+  joined:         { background: 'rgba(67,233,123,0.25)',   color: '#43E97B', fontWeight: 700 },
+  rejected:       { background: 'rgba(255,71,87,0.15)',    color: '#FF4757' },
+  withdrawn:      { background: 'rgba(139,143,168,0.15)', color: '#8B8FA8' },
+  on_hold:        { background: 'rgba(245,158,11,0.10)',   color: '#F59E0B' },
+}
+
+const getStatusStyle = (status) => STATUS_STYLES[status] || STATUS_STYLES.withdrawn
+
 const Applications = () => {
   const navigate = useNavigate()
   const { has } = usePermissions()
@@ -42,13 +60,8 @@ const Applications = () => {
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
 
-  useEffect(() => {
-    loadDropdowns()
-  }, [])
-
-  useEffect(() => {
-    loadApplications()
-  }, [pagination.page, filters])
+  useEffect(() => { loadDropdowns() }, [])
+  useEffect(() => { loadApplications() }, [pagination.page, filters])
 
   const loadDropdowns = async () => {
     try {
@@ -100,7 +113,6 @@ const Applications = () => {
       toast.error('Please select applications first')
       return
     }
-
     try {
       await applicationService.bulkUpdateStatus(selectedIds, newStatus)
       toast.success(`Updated ${selectedIds.length} applications`)
@@ -112,30 +124,9 @@ const Applications = () => {
     }
   }
 
-  const getStatusBadge = (status) => {
-    const colors = {
-      applied: 'bg-blue-100 text-blue-800',
-      screening: 'bg-yellow-100 text-yellow-800',
-      shortlisted: 'bg-purple-100 text-purple-800',
-      interview: 'bg-indigo-100 text-indigo-800',
-      next_round: 'bg-indigo-200 text-indigo-900',
-      selected: 'bg-green-600 text-white',
-      offered: 'bg-orange-100 text-orange-800',
-      offer_accepted: 'bg-green-100 text-green-800',
-      offer_declined: 'bg-pink-100 text-pink-800',
-      joined: 'bg-green-200 text-green-900',
-      rejected: 'bg-red-100 text-red-800',
-      withdrawn: 'bg-gray-100 text-gray-800',
-      on_hold: 'bg-yellow-50 text-yellow-700'
-    }
-    return colors[status] || 'bg-gray-100 text-gray-800'
-  }
-
   const toggleSelect = (id) => {
-    setSelectedIds(prev => 
-      prev.includes(id) 
-        ? prev.filter(i => i !== id)
-        : [...prev, id]
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     )
   }
 
@@ -148,30 +139,24 @@ const Applications = () => {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 page-enter">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-surface-900">Applications</h1>
-          <p className="text-surface-500">Track candidate applications through the hiring pipeline</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Applications</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Track candidate applications through the hiring pipeline</p>
         </div>
         <div className="flex items-center gap-2">
           {has('exports:create') && (
-            <button
-              onClick={() => setExportOpen(true)}
-              className="btn-secondary flex items-center gap-2"
-            >
+            <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
               <Download className="w-4 h-4" />
               Export
             </button>
           )}
           {selectedIds.length > 0 && has('applications:edit') && (
             <div className="flex items-center gap-3">
-              <span className="text-sm text-surface-600">{selectedIds.length} selected</span>
-              <button
-                onClick={() => setShowStatusModal(true)}
-                className="btn-primary text-sm"
-              >
+              <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{selectedIds.length} selected</span>
+              <button onClick={() => setShowStatusModal(true)} className="btn-primary text-sm">
                 Update Status
               </button>
             </div>
@@ -180,7 +165,7 @@ const Applications = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-4 mb-6">
+      <div className="rounded-xl p-4 mb-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
         <div className="flex flex-wrap gap-3">
           <div className="flex-1 min-w-[200px]">
             <input
@@ -214,55 +199,65 @@ const Applications = () => {
         </div>
       </div>
 
-      {/* Pipeline View */}
-      <div className="bg-white rounded-xl shadow-sm border border-surface-200 overflow-hidden">
+      {/* Applications Table */}
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
         {loading ? (
           <div>
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="flex items-center gap-4 px-4 py-4 border-b border-surface-100">
-                <div className="w-5 h-5 bg-surface-200 rounded skeleton flex-shrink-0" />
-                <div className="w-8 h-8 rounded-full bg-surface-200 skeleton flex-shrink-0" />
+              <div
+                key={i}
+                className="flex items-center gap-4 px-4 py-4"
+                style={{ borderBottom: '1px solid var(--border-subtle)' }}
+              >
+                <div className="w-5 h-5 rounded skeleton flex-shrink-0" style={{ background: 'var(--skeleton-from)' }} />
+                <div className="w-8 h-8 rounded-full skeleton flex-shrink-0" style={{ background: 'var(--skeleton-from)' }} />
                 <div className="flex-1 space-y-2">
-                  <div className="h-3 bg-surface-200 rounded skeleton w-36" />
-                  <div className="h-2.5 bg-surface-200 rounded skeleton w-48" />
+                  <div className="h-3 rounded skeleton w-36" style={{ background: 'var(--skeleton-from)' }} />
+                  <div className="h-2.5 rounded skeleton w-48" style={{ background: 'var(--skeleton-from)' }} />
                 </div>
-                <div className="h-3 bg-surface-200 rounded skeleton w-24" />
-                <div className="h-5 bg-surface-200 rounded-full skeleton w-20" />
-                <div className="h-3 bg-surface-200 rounded skeleton w-16" />
+                <div className="h-3 rounded skeleton w-24" style={{ background: 'var(--skeleton-from)' }} />
+                <div className="h-5 rounded-full skeleton w-20" style={{ background: 'var(--skeleton-from)' }} />
+                <div className="h-3 rounded skeleton w-16" style={{ background: 'var(--skeleton-from)' }} />
               </div>
             ))}
           </div>
         ) : applications.length === 0 ? (
           <div className="p-8 text-center">
-            <FileText className="w-12 h-12 text-surface-300 mx-auto mb-4" />
-            <p className="text-surface-500">No applications found</p>
+            <FileText className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-disabled)' }} />
+            <p style={{ color: 'var(--text-muted)' }}>No applications found</p>
           </div>
         ) : (
           <table className="w-full">
-            <thead className="bg-surface-50 border-b border-surface-200">
+            <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
               <tr>
                 <th className="w-12 px-4 py-3">
                   <input
                     type="checkbox"
-                    checked={selectedIds.length === applications.length}
+                    checked={selectedIds.length === applications.length && applications.length > 0}
                     onChange={toggleSelectAll}
                     className="rounded"
                   />
                 </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Candidate</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Match</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Job</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Stage</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Status</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Interviews</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Applied</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Last Updated</th>
-                <th className="text-right px-4 py-3 text-sm font-medium text-surface-600">Actions</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Candidate</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Match</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Job</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Stage</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Status</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Interviews</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Applied</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Last Updated</th>
+                <th className="text-right px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-surface-100">
+            <tbody>
               {applications.map(app => (
-                <tr key={app.id} className="hover:bg-surface-50 transition-colors">
+                <tr
+                  key={app.id}
+                  className="transition-colors"
+                  style={{ borderBottom: '1px solid var(--border-subtle)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                  onMouseLeave={e => e.currentTarget.style.background = ''}
+                >
                   <td className="px-4 py-4">
                     <input
                       type="checkbox"
@@ -273,49 +268,53 @@ const Applications = () => {
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-                        <User className="w-4 h-4 text-primary-600" />
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
+                      >
+                        <User className="w-4 h-4" />
                       </div>
                       <div>
-                        <p className="font-medium text-surface-900">{app.candidate_name}</p>
-                        <p className="text-sm text-surface-500">{app.candidate_email}</p>
+                        <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{app.candidate_name}</p>
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{app.candidate_email}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-4">
                     {app.eligibility_score != null ? (
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 4,
-                        padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700,
-                        background: app.eligibility_score >= 70
-                          ? 'rgba(16,185,129,0.15)' : app.eligibility_score >= 50
-                          ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.12)',
-                        color: app.eligibility_score >= 70 ? '#34d399'
-                          : app.eligibility_score >= 50 ? '#fbbf24' : '#f87171',
-                      }}>
+                      <span
+                        className="px-2 py-0.5 rounded-full text-xs font-bold"
+                        style={
+                          app.eligibility_score >= 70
+                            ? { background: 'rgba(67,233,123,0.15)', color: '#43E97B' }
+                            : app.eligibility_score >= 50
+                            ? { background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }
+                            : { background: 'rgba(255,71,87,0.12)', color: '#FF4757' }
+                        }
+                      >
                         {Math.round(app.eligibility_score)}%
                       </span>
                     ) : (
-                      <span style={{ fontSize: 11, color: '#475569' }}>—</span>
+                      <span className="text-xs" style={{ color: 'var(--text-disabled)' }}>—</span>
                     )}
                   </td>
                   <td className="px-4 py-4">
                     <div>
-                      <p className="text-sm text-surface-900">{app.job_title}</p>
-                      <p className="text-xs text-surface-500">{app.client_name}</p>
+                      <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{app.job_title}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{app.client_name}</p>
                     </div>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="text-sm text-surface-600">
+                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                       {app.current_stage_name || '-'}
                     </span>
                   </td>
                   <td className="px-4 py-4">
-                    {/* Inline status dropdown — no edit click required */}
                     <select
                       value={app.status}
                       onChange={(e) => handleStatusUpdate(app.id, e.target.value)}
-                      className={`text-xs font-medium rounded-full px-2 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-primary-300 ${getStatusBadge(app.status)}`}
+                      className="text-xs font-medium rounded-full px-2 py-1 border-0 cursor-pointer focus:outline-none"
+                      style={getStatusStyle(app.status)}
                     >
                       {(statuses.length ? statuses : FALLBACK_STATUSES).map(s => (
                         <option key={s.value} value={s.value}>{s.label}</option>
@@ -323,17 +322,17 @@ const Applications = () => {
                     </select>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="text-sm text-surface-600">
+                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                       {app.total_interviews || 0} total
                     </span>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="text-sm text-surface-500">
+                    <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
                       {new Date(app.applied_at).toLocaleDateString()}
                     </span>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="text-sm text-surface-500">
+                    <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
                       {app.status_changed_at
                         ? new Date(app.status_changed_at).toLocaleDateString()
                         : '—'}
@@ -343,10 +342,13 @@ const Applications = () => {
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => navigate(`/applications/${app.id}`)}
-                        className="p-2 hover:bg-surface-100 rounded-lg transition-colors"
+                        className="p-2 rounded-lg transition-colors"
+                        style={{ color: 'var(--text-muted)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                        onMouseLeave={e => e.currentTarget.style.background = ''}
                         title="View"
                       >
-                        <Eye className="w-4 h-4 text-surface-500" />
+                        <Eye className="w-4 h-4" />
                       </button>
                     </div>
                   </td>
@@ -358,8 +360,8 @@ const Applications = () => {
 
         {/* Pagination */}
         {pagination.totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-surface-200 flex items-center justify-between">
-            <p className="text-sm text-surface-500">
+          <div className="px-4 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
               Showing {applications.length} of {pagination.total} applications
             </p>
             <div className="flex gap-2">
@@ -385,9 +387,9 @@ const Applications = () => {
       {/* Bulk Status Update Modal */}
       {showStatusModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Update Status</h3>
-            <p className="text-surface-600 mb-4">
+          <div className="rounded-xl shadow-xl p-6 w-full max-w-md" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+            <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Update Status</h3>
+            <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
               Select new status for {selectedIds.length} application(s)
             </p>
             <div className="grid grid-cols-2 gap-2 mb-6">
@@ -395,17 +397,17 @@ const Applications = () => {
                 <button
                   key={s.value}
                   onClick={() => handleBulkStatusUpdate(s.value)}
-                  className="px-4 py-2 text-sm border border-surface-200 rounded-lg hover:bg-surface-50 transition-colors text-left"
+                  className="px-4 py-2 text-sm rounded-lg transition-colors text-left"
+                  style={{ border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                  onMouseLeave={e => e.currentTarget.style.background = ''}
                 >
                   {s.label}
                 </button>
               ))}
             </div>
             <div className="flex justify-end">
-              <button
-                onClick={() => setShowStatusModal(false)}
-                className="btn-secondary"
-              >
+              <button onClick={() => setShowStatusModal(false)} className="btn-secondary">
                 Cancel
               </button>
             </div>
@@ -420,7 +422,7 @@ const Applications = () => {
         apiPath="/export/applications"
         extraFilters={({ status, setStatus }) => (
           <div>
-            <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Status</label>
             <select value={status} onChange={e => setStatus(e.target.value)} className="input w-full">
               <option value="">All Statuses</option>
               {statuses.map(s => (

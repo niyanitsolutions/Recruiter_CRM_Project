@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Users, Plus, Search, Filter, Eye, Edit, Trash2,
-  Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2, Send, Upload
+  Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2, Send, Upload,
+  LayoutGrid, List, Clock, Building2
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -13,15 +14,30 @@ import ExportModal from '../../components/common/ExportModal'
 import CandidateImportModal from '../../components/common/CandidateImportModal'
 import { selectUserType } from '../../store/authSlice'
 
+const AVATAR_GRADIENTS = [
+  'var(--stat-purple)',
+  'var(--stat-blue)',
+  'var(--stat-green)',
+  'var(--stat-orange)',
+  'var(--stat-teal)',
+  'var(--stat-pink)',
+]
+
+const getAvatarGradient = (name = '') => {
+  const idx = (name.charCodeAt(0) || 0) % AVATAR_GRADIENTS.length
+  return AVATAR_GRADIENTS[idx]
+}
+
 const Candidates = () => {
   const navigate = useNavigate()
   const { has } = usePermissions()
   const userType = useSelector(selectUserType)
   const [candidates, setCandidates] = useState([])
-  const [activeTab, setActiveTab] = useState('all') // 'all' | 'active' | 'blacklisted'
+  const [activeTab, setActiveTab] = useState('all')
+  const [viewMode, setViewMode] = useState('table')
   const [loading, setLoading] = useState(true)
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 })
-  const [searchMode, setSearchMode] = useState('filter') // 'filter' or 'keyword'
+  const [searchMode, setSearchMode] = useState('filter')
   const [keywordSearch, setKeywordSearch] = useState('')
   const [filters, setFilters] = useState({
     keyword: '',
@@ -49,7 +65,6 @@ const Candidates = () => {
       await navigator.clipboard.writeText(text)
       return true
     } catch {
-      // Fallback for non-HTTPS or browsers that block clipboard API
       try {
         const ta = document.createElement('textarea')
         ta.value = text
@@ -76,7 +91,6 @@ const Candidates = () => {
         await copyToClipboard(url)
         toast.success('Form link sent to candidate email!')
       } else if (formLinkEmail.trim() && !res.email_enabled) {
-        // Email was entered but service is disabled — copy instead
         await copyToClipboard(url)
         toast.success('Email service disabled. Link copied instead.')
       } else {
@@ -93,19 +107,13 @@ const Candidates = () => {
     }
   }
 
-  // Apply modal state
-  const [applyModal, setApplyModal] = useState(null)        // null | { candidate }
+  const [applyModal, setApplyModal] = useState(null)
   const [eligibleJobs, setEligibleJobs] = useState([])
   const [eligibleLoading, setEligibleLoading] = useState(false)
   const [applyingJobId, setApplyingJobId] = useState(null)
 
-  useEffect(() => {
-    loadDropdowns()
-  }, [])
-
-  useEffect(() => {
-    loadCandidates()
-  }, [pagination.page, filters, activeTab])
+  useEffect(() => { loadDropdowns() }, [])
+  useEffect(() => { loadCandidates() }, [pagination.page, filters, activeTab])
 
   const loadDropdowns = async () => {
     try {
@@ -241,44 +249,39 @@ const Candidates = () => {
     }
   }
 
-  // Global status only: Active (green) or Blacklisted (red)
-  const getStatusBadge = (status) => {
-    if (status === 'blacklisted') return 'bg-red-200 text-red-900'
-    return 'bg-green-100 text-green-800' // active + any legacy values → green
+  const getStatusStyle = (status) => status === 'blacklisted'
+    ? { background: 'rgba(255,71,87,0.15)', color: '#FF4757' }
+    : { background: 'rgba(67,233,123,0.15)', color: '#43E97B' }
+
+  const openResume = (resumeUrl) => {
+    const base = (import.meta.env.VITE_API_URL || '').replace(/\/api\/v1\/?$/, '')
+    const url = resumeUrl.startsWith('http') ? resumeUrl : `${base}${resumeUrl}`
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 page-enter">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-surface-900">Candidates</h1>
-          <p className="text-surface-500">Master talent pool — manage candidate profiles</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Candidates</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Master talent pool — manage candidate profiles</p>
         </div>
         <div className="flex items-center gap-2">
           {has('exports:create') && (
-            <button
-              onClick={() => setExportOpen(true)}
-              className="btn-secondary flex items-center gap-2"
-            >
+            <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
               <Download className="w-4 h-4" />
               Export
             </button>
           )}
           {has('candidates:create') && (
-            <button
-              onClick={() => setFormLinkModal(true)}
-              className="btn-secondary flex items-center gap-2"
-            >
+            <button onClick={() => setFormLinkModal(true)} className="btn-secondary flex items-center gap-2">
               <Link2 className="w-4 h-4" />
               Send Form Link
             </button>
           )}
           {has('candidates:create') && (
-            <button
-              onClick={() => setImportOpen(true)}
-              className="btn-secondary flex items-center gap-2"
-            >
+            <button onClick={() => setImportOpen(true)} className="btn-secondary flex items-center gap-2">
               <Upload className="w-4 h-4" />
               Import
             </button>
@@ -292,40 +295,76 @@ const Candidates = () => {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-surface-200">
-        {[['all', 'All'], ['active', 'Active'], ['blacklisted', 'Blacklisted']].map(([key, label]) => (
+      {/* Tabs + View Toggle */}
+      <div className="flex items-center justify-between mb-6" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex gap-1">
+          {[['all', 'All'], ['active', 'Active'], ['blacklisted', 'Blacklisted']].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => { setActiveTab(key); setPagination(p => ({ ...p, page: 1 })) }}
+              className="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+              style={activeTab === key
+                ? { borderColor: 'var(--accent)', color: 'var(--accent)', marginBottom: '-1px' }
+                : { borderColor: 'transparent', color: 'var(--text-muted)' }
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div
+          className="flex items-center rounded-lg p-1 mb-1"
+          style={{ border: '1px solid var(--border)', background: 'var(--bg-card-alt)' }}
+        >
           <button
-            key={key}
-            onClick={() => { setActiveTab(key); setPagination(p => ({ ...p, page: 1 })) }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === key
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-surface-500 hover:text-surface-700'
-            }`}
+            onClick={() => setViewMode('table')}
+            className="p-1.5 rounded-md transition-colors"
+            style={viewMode === 'table'
+              ? { background: 'var(--accent)', color: '#fff' }
+              : { color: 'var(--text-muted)' }
+            }
+            title="Table view"
           >
-            {label}
+            <List className="w-4 h-4" />
           </button>
-        ))}
+          <button
+            onClick={() => setViewMode('card')}
+            className="p-1.5 rounded-md transition-colors"
+            style={viewMode === 'card'
+              ? { background: 'var(--accent)', color: '#fff' }
+              : { color: 'var(--text-muted)' }
+            }
+            title="Card view"
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Search / Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-4 mb-6">
+      <div className="rounded-xl p-4 mb-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
         <div className="flex items-center gap-4 mb-4">
-          <div className="flex rounded-lg border border-surface-200 p-1">
+          <div
+            className="flex rounded-lg p-1"
+            style={{ border: '1px solid var(--border)', background: 'var(--bg-card-alt)' }}
+          >
             <button
               onClick={() => setSearchMode('filter')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                searchMode === 'filter' ? 'bg-primary-500 text-white' : 'text-surface-600 hover:bg-surface-100'
-              }`}
+              className="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              style={searchMode === 'filter'
+                ? { background: 'var(--accent)', color: '#fff' }
+                : { color: 'var(--text-secondary)' }
+              }
             >
               Filter Search
             </button>
             <button
               onClick={() => setSearchMode('keyword')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                searchMode === 'keyword' ? 'bg-primary-500 text-white' : 'text-surface-600 hover:bg-surface-100'
-              }`}
+              className="px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2"
+              style={searchMode === 'keyword'
+                ? { background: 'var(--accent)', color: '#fff' }
+                : { color: 'var(--text-secondary)' }
+              }
             >
               <Sparkles className="w-4 h-4" />
               AI Keyword Search
@@ -337,7 +376,7 @@ const Candidates = () => {
           <div className="flex gap-4">
             <div className="flex-1">
               <div className="relative">
-                <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-accent-500" />
+                <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--accent)' }} />
                 <input
                   type="text"
                   placeholder="e.g., Python 3+ years Bangalore OR React senior developer remote"
@@ -347,7 +386,7 @@ const Candidates = () => {
                   className="input pl-10 w-full"
                 />
               </div>
-              <p className="text-xs text-surface-500 mt-1">
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                 Try: "Python 3+ years", "React Node Mumbai", "Java senior developer"
               </p>
             </div>
@@ -358,7 +397,7 @@ const Candidates = () => {
             <div className="flex flex-wrap gap-4">
               <div className="flex-1 min-w-[200px]">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
                   <input
                     type="text"
                     placeholder="Search by name, email, skills..."
@@ -370,7 +409,8 @@ const Candidates = () => {
               </div>
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`btn-secondary flex items-center gap-2 ${showFilters ? 'bg-surface-100' : ''}`}
+                className="btn-secondary flex items-center gap-2"
+                style={showFilters ? { background: 'var(--bg-active)', color: 'var(--accent)' } : {}}
               >
                 <Filter className="w-4 h-4" />
                 Filters
@@ -378,7 +418,7 @@ const Candidates = () => {
             </div>
 
             {showFilters && (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-surface-200">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
                 <input
                   type="text"
                   placeholder="Skills (comma separated)"
@@ -402,16 +442,13 @@ const Candidates = () => {
                     className="input w-full"
                   />
                 </div>
-                {/* Status filter only shows Active / Blacklisted (from API) */}
                 <select
                   value={filters.status}
                   onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
                   className="input"
                 >
                   <option value="">All Statuses</option>
-                  {statuses.map(s => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
+                  {statuses.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
                 <select
                   value={filters.notice_period}
@@ -419,9 +456,7 @@ const Candidates = () => {
                   className="input"
                 >
                   <option value="">All Notice Periods</option>
-                  {noticePeriods.map(n => (
-                    <option key={n.value} value={n.value}>{n.label}</option>
-                  ))}
+                  {noticePeriods.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
                 </select>
                 <select
                   value={filters.source}
@@ -429,9 +464,7 @@ const Candidates = () => {
                   className="input"
                 >
                   <option value="">All Sources</option>
-                  {sources.map(s => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
+                  {sources.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
                 <input
                   type="text"
@@ -446,39 +479,211 @@ const Candidates = () => {
         )}
       </div>
 
-      {/* Candidates Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-surface-200 overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center">
-            <div className="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full mx-auto" />
-            <p className="mt-2 text-surface-500">Loading candidates...</p>
-          </div>
-        ) : candidates.length === 0 ? (
-          <div className="p-8 text-center">
-            <Users className="w-12 h-12 text-surface-300 mx-auto mb-4" />
-            <p className="text-surface-500">No candidates found</p>
-          </div>
-        ) : (
+      {/* Loading state */}
+      {loading && (
+        <div className="p-8 text-center">
+          <div
+            className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto"
+            style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
+          />
+          <p className="mt-2" style={{ color: 'var(--text-muted)' }}>Loading candidates...</p>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loading && candidates.length === 0 && (
+        <div className="p-8 text-center rounded-xl" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <Users className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-disabled)' }} />
+          <p style={{ color: 'var(--text-muted)' }}>No candidates found</p>
+        </div>
+      )}
+
+      {/* Card Grid View */}
+      {!loading && viewMode === 'card' && candidates.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {candidates.map(candidate => (
+            <div
+              key={candidate.id}
+              className="p-4"
+              style={{
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-card)',
+                borderRadius: '12px',
+                transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = 'var(--shadow-elevated)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = ''
+                e.currentTarget.style.boxShadow = ''
+              }}
+            >
+              {/* Avatar + Name + Status */}
+              <div className="flex items-start gap-3 mb-3">
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                  style={{ background: getAvatarGradient(candidate.full_name) }}
+                >
+                  {candidate.full_name?.charAt(0)?.toUpperCase() || '?'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+                    {candidate.full_name}
+                  </p>
+                  <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
+                    {candidate.email}
+                  </p>
+                </div>
+                <span
+                  className="px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0"
+                  style={getStatusStyle(candidate.status)}
+                >
+                  {candidate.status}
+                </span>
+              </div>
+
+              {/* Experience + Company + Location */}
+              <div className="flex flex-wrap items-center gap-3 mb-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                <div className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  <span>{candidate.total_experience_years || 0} yrs exp</span>
+                </div>
+                {candidate.current_company && (
+                  <div className="flex items-center gap-1 min-w-0">
+                    <Building2 className="w-3 h-3 flex-shrink-0" />
+                    <span className="truncate" style={{ maxWidth: '100px' }}>{candidate.current_company}</span>
+                  </div>
+                )}
+                {candidate.current_city && (
+                  <div className="flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    <span>{candidate.current_city}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Skills */}
+              {(candidate.skill_tags || []).length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {candidate.skill_tags.slice(0, 4).map((skill, i) => (
+                    <span
+                      key={i}
+                      className="px-2 py-0.5 rounded-full text-xs"
+                      style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                  {candidate.skill_tags.length > 4 && (
+                    <span
+                      className="px-2 py-0.5 rounded-full text-xs"
+                      style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)' }}
+                    >
+                      +{candidate.skill_tags.length - 4}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Footer: notice + apps + actions */}
+              <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  {candidate.notice_period?.replace('_', ' ') || '—'}
+                  {candidate.total_applications > 0 && (
+                    <Link
+                      to={`/applications?candidate_id=${candidate.id}`}
+                      className="ml-2 font-medium"
+                      style={{ color: 'var(--accent)' }}
+                    >
+                      {candidate.total_applications} app{candidate.total_applications !== 1 ? 's' : ''}
+                    </Link>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  {candidate.resume_url && (
+                    <button
+                      onClick={() => openResume(candidate.resume_url)}
+                      className="p-1.5 rounded-lg transition-colors"
+                      style={{ color: 'var(--text-muted)' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                      onMouseLeave={e => e.currentTarget.style.background = ''}
+                      title="View Resume"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => navigate(`/candidates/${candidate.id}`)}
+                    className="p-1.5 rounded-lg transition-colors"
+                    style={{ color: 'var(--text-muted)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = ''}
+                    title="View"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                  </button>
+                  {has('candidates:edit') && (
+                    <button
+                      onClick={() => navigate(`/candidates/${candidate.id}/edit`)}
+                      className="p-1.5 rounded-lg transition-colors"
+                      style={{ color: 'var(--text-muted)' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                      onMouseLeave={e => e.currentTarget.style.background = ''}
+                      title="Edit"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  {has('candidates:delete') && (
+                    <button
+                      onClick={() => handleDelete(candidate.id, candidate.full_name)}
+                      className="p-1.5 rounded-lg transition-colors"
+                      style={{ color: '#FF4757' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,71,87,0.10)'}
+                      onMouseLeave={e => e.currentTarget.style.background = ''}
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Table View */}
+      {!loading && viewMode === 'table' && candidates.length > 0 && (
+        <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
           <table className="w-full">
-            <thead className="bg-surface-50 border-b border-surface-200">
+            <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
               <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Candidate</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Experience</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Skills</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Notice</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Added By</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Applied Jobs</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Status</th>
-                <th className="text-right px-4 py-3 text-sm font-medium text-surface-600">Actions</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Candidate</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Experience</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Skills</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Notice</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Added By</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Applied Jobs</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Status</th>
+                <th className="text-right px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-surface-100">
+            <tbody>
               {candidates.map(candidate => (
-                <tr key={candidate.id} className="hover:bg-surface-50 transition-colors">
+                <tr
+                  key={candidate.id}
+                  className="transition-colors"
+                  style={{ borderBottom: '1px solid var(--border-subtle)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                  onMouseLeave={e => e.currentTarget.style.background = ''}
+                >
                   <td className="px-4 py-4">
                     <div>
-                      <p className="font-medium text-surface-900">{candidate.full_name}</p>
-                      <div className="flex items-center gap-3 text-sm text-surface-500 mt-1">
+                      <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{candidate.full_name}</p>
+                      <div className="flex items-center gap-3 text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
                         <span className="flex items-center gap-1">
                           <Mail className="w-3 h-3" />
                           {candidate.email}
@@ -494,33 +699,40 @@ const Candidates = () => {
                   </td>
                   <td className="px-4 py-4">
                     <div className="text-sm">
-                      <p className="text-surface-900">{candidate.total_experience_years || 0} years</p>
+                      <p style={{ color: 'var(--text-primary)' }}>{candidate.total_experience_years || 0} years</p>
                       {candidate.current_company && (
-                        <p className="text-surface-500">{candidate.current_company}</p>
+                        <p style={{ color: 'var(--text-muted)' }}>{candidate.current_company}</p>
                       )}
                     </div>
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex flex-wrap gap-1">
                       {(candidate.skill_tags || []).slice(0, 3).map((skill, i) => (
-                        <span key={i} className="px-2 py-0.5 bg-surface-100 text-surface-600 text-xs rounded-full">
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 text-xs rounded-full"
+                          style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
+                        >
                           {skill}
                         </span>
                       ))}
                       {(candidate.skill_tags || []).length > 3 && (
-                        <span className="px-2 py-0.5 bg-surface-100 text-surface-600 text-xs rounded-full">
+                        <span
+                          className="px-2 py-0.5 text-xs rounded-full"
+                          style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)' }}
+                        >
                           +{candidate.skill_tags.length - 3}
                         </span>
                       )}
                     </div>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="text-sm text-surface-600">
+                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                       {candidate.notice_period?.replace('_', ' ') || '-'}
                     </span>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="text-sm text-surface-600">
+                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                       {candidate.partner_id
                         ? `Partner (${candidate.partner_name || 'Unknown'})`
                         : (candidate.created_by_name || '—')}
@@ -530,13 +742,14 @@ const Candidates = () => {
                     {candidate.total_applications > 0 ? (
                       <Link
                         to={`/applications?candidate_id=${candidate.id}`}
-                        className="flex items-center gap-1 text-sm text-primary-600 hover:text-primary-800 font-medium"
+                        className="flex items-center gap-1 text-sm font-medium"
+                        style={{ color: 'var(--accent)' }}
                       >
                         <Briefcase className="w-3.5 h-3.5" />
                         {candidate.total_applications} job{candidate.total_applications !== 1 ? 's' : ''}
                       </Link>
                     ) : (
-                      <span className="text-sm text-surface-400">—</span>
+                      <span className="text-sm" style={{ color: 'var(--text-disabled)' }}>—</span>
                     )}
                   </td>
                   <td className="px-4 py-4">
@@ -544,7 +757,11 @@ const Candidates = () => {
                       value={candidate.status}
                       onChange={(e) => handleStatusChange(candidate, e.target.value)}
                       onClick={(e) => e.stopPropagation()}
-                      className={`text-xs font-medium rounded-full px-2 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-primary-300 ${getStatusBadge(candidate.status)}`}
+                      className="text-xs font-medium rounded-full px-2 py-1 border-0 cursor-pointer focus:outline-none focus:ring-2"
+                      style={{
+                        ...getStatusStyle(candidate.status),
+                        focusRingColor: 'var(--accent)',
+                      }}
                     >
                       <option value="active">Active</option>
                       <option value="blacklisted">Blacklisted</option>
@@ -552,7 +769,6 @@ const Candidates = () => {
                         <option
                           value="apply"
                           disabled={candidate.status === 'blacklisted'}
-                          className="font-semibold text-primary-700"
                         >
                           Apply →
                         </option>
@@ -563,42 +779,48 @@ const Candidates = () => {
                     <div className="flex items-center justify-end gap-2">
                       {candidate.resume_url && (
                         <button
-                          onClick={() => {
-                            const base = (import.meta.env.VITE_API_URL || '').replace(/\/api\/v1\/?$/, '')
-                            const url = candidate.resume_url.startsWith('http')
-                              ? candidate.resume_url
-                              : `${base}${candidate.resume_url}`
-                            window.open(url, '_blank', 'noopener,noreferrer')
-                          }}
-                          className="p-2 hover:bg-surface-100 rounded-lg transition-colors"
+                          onClick={() => openResume(candidate.resume_url)}
+                          className="p-2 rounded-lg transition-colors"
+                          style={{ color: 'var(--text-muted)' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}
                           title="View Resume"
                         >
-                          <FileText className="w-4 h-4 text-surface-500" />
+                          <FileText className="w-4 h-4" />
                         </button>
                       )}
                       <button
                         onClick={() => navigate(`/candidates/${candidate.id}`)}
-                        className="p-2 hover:bg-surface-100 rounded-lg transition-colors"
+                        className="p-2 rounded-lg transition-colors"
+                        style={{ color: 'var(--text-muted)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                        onMouseLeave={e => e.currentTarget.style.background = ''}
                         title="View"
                       >
-                        <Eye className="w-4 h-4 text-surface-500" />
+                        <Eye className="w-4 h-4" />
                       </button>
                       {has('candidates:edit') && (
                         <button
                           onClick={() => navigate(`/candidates/${candidate.id}/edit`)}
-                          className="p-2 hover:bg-surface-100 rounded-lg transition-colors"
+                          className="p-2 rounded-lg transition-colors"
+                          style={{ color: 'var(--text-muted)' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}
                           title="Edit"
                         >
-                          <Edit className="w-4 h-4 text-surface-500" />
+                          <Edit className="w-4 h-4" />
                         </button>
                       )}
                       {has('candidates:delete') && (
                         <button
                           onClick={() => handleDelete(candidate.id, candidate.full_name)}
-                          className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 rounded-lg transition-colors"
+                          style={{ color: '#FF4757' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,71,87,0.10)'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}
                           title="Delete"
                         >
-                          <Trash2 className="w-4 h-4 text-red-500" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                     </div>
@@ -607,33 +829,58 @@ const Candidates = () => {
               ))}
             </tbody>
           </table>
-        )}
 
-        {/* Pagination */}
-        {pagination.totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-surface-200 flex items-center justify-between">
-            <p className="text-sm text-surface-500">
-              Showing {candidates.length} of {pagination.total} candidates
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                disabled={pagination.page === 1}
-                className="btn-secondary text-sm disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                disabled={pagination.page === pagination.totalPages}
-                className="btn-secondary text-sm disabled:opacity-50"
-              >
-                Next
-              </button>
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <div className="px-4 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                Showing {candidates.length} of {pagination.total} candidates
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                  disabled={pagination.page === 1}
+                  className="btn-secondary text-sm disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                  disabled={pagination.page === pagination.totalPages}
+                  className="btn-secondary text-sm disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Card view pagination */}
+      {!loading && viewMode === 'card' && pagination.totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-between">
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            Showing {candidates.length} of {pagination.total} candidates
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+              disabled={pagination.page === 1}
+              className="btn-secondary text-sm disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+              disabled={pagination.page === pagination.totalPages}
+              className="btn-secondary text-sm disabled:opacity-50"
+            >
+              Next
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Eligible Jobs Modal (Apply action) */}
       {applyModal && (
@@ -681,11 +928,16 @@ const Candidates = () => {
                         </td>
                         <td className="py-3 px-3 text-surface-600">{job.client_name || '—'}</td>
                         <td className="py-3 px-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                            job.score >= 70 ? 'bg-green-100 text-green-800' :
-                            job.score >= 40 ? 'bg-yellow-100 text-yellow-800' :
-                                              'bg-red-100 text-red-800'
-                          }`}>
+                          <span
+                            className="px-2 py-0.5 rounded-full text-xs font-medium"
+                            style={
+                              job.score >= 70
+                                ? { background: 'rgba(67,233,123,0.15)', color: '#43E97B' }
+                                : job.score >= 40
+                                ? { background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }
+                                : { background: 'rgba(255,71,87,0.15)', color: '#FF4757' }
+                            }
+                          >
                             {job.score}%
                           </span>
                         </td>
@@ -725,7 +977,9 @@ const Candidates = () => {
             <p className="text-sm text-surface-500 mb-4">
               Enter the candidate's email to send them a self-registration link, or leave blank to copy it to clipboard.
             </p>
-            <label className="block text-sm font-medium text-surface-700 mb-1">Candidate Email <span className="text-surface-400 font-normal">(optional)</span></label>
+            <label className="block text-sm font-medium text-surface-700 mb-1">
+              Candidate Email <span className="text-surface-400 font-normal">(optional)</span>
+            </label>
             <input
               type="email"
               value={formLinkEmail}
@@ -753,10 +1007,7 @@ const Candidates = () => {
 
       {/* Import Modal */}
       {importOpen && (
-        <CandidateImportModal
-          onClose={() => setImportOpen(false)}
-          onImported={loadCandidates}
-        />
+        <CandidateImportModal onClose={() => setImportOpen(false)} onImported={loadCandidates} />
       )}
 
       {/* Export Modal */}
@@ -767,7 +1018,7 @@ const Candidates = () => {
         apiPath="/export/candidates"
         extraFilters={({ status, setStatus }) => (
           <div>
-            <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Status</label>
             <select value={status} onChange={e => setStatus(e.target.value)} className="input w-full">
               <option value="">All Statuses</option>
               <option value="active">Active</option>

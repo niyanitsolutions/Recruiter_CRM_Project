@@ -9,6 +9,18 @@ import interviewService from '../../services/interviewService'
 import usePermissions from '../../hooks/usePermissions'
 import ExportModal from '../../components/common/ExportModal'
 
+const STATUS_STYLES = {
+  scheduled:   { background: 'rgba(79,172,254,0.15)',  color: '#4FACFE' },
+  confirmed:   { background: 'rgba(108,99,255,0.15)', color: '#6C63FF' },
+  rescheduled: { background: 'rgba(245,158,11,0.15)', color: '#F59E0B' },
+  in_progress: { background: 'rgba(156,99,255,0.15)', color: '#9C63FF' },
+  completed:   { background: 'rgba(67,233,123,0.15)', color: '#43E97B' },
+  cancelled:   { background: 'rgba(255,71,87,0.15)',  color: '#FF4757' },
+  no_show:     { background: 'rgba(139,143,168,0.15)', color: '#8B8FA8' },
+}
+
+const getStatusStyle = (status) => STATUS_STYLES[status] || STATUS_STYLES.no_show
+
 const Interviews = () => {
   const navigate = useNavigate()
   const { has } = usePermissions()
@@ -16,24 +28,18 @@ const Interviews = () => {
   const [todayInterviews, setTodayInterviews] = useState([])
   const [pendingFeedback, setPendingFeedback] = useState([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('all') // 'all', 'today', 'pending'
+  const [activeTab, setActiveTab] = useState('all')
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 })
   const [filters, setFilters] = useState({
     status: '',
     date_from: '',
     date_to: ''
   })
-  const [showFilters, setShowFilters] = useState(false)
   const [statuses, setStatuses] = useState([])
   const [exportOpen, setExportOpen] = useState(false)
 
-  useEffect(() => {
-    loadDropdowns()
-  }, [])
-
-  useEffect(() => {
-    loadData()
-  }, [activeTab, pagination.page, filters])
+  useEffect(() => { loadDropdowns() }, [])
+  useEffect(() => { loadData() }, [activeTab, pagination.page, filters])
 
   const loadDropdowns = async () => {
     try {
@@ -47,7 +53,6 @@ const Interviews = () => {
   const loadData = async () => {
     try {
       setLoading(true)
-      
       if (activeTab === 'today') {
         const response = await interviewService.getTodayInterviews()
         setTodayInterviews(response.data || [])
@@ -78,7 +83,6 @@ const Interviews = () => {
   const handleCancel = async (interviewId) => {
     const reason = prompt('Please enter cancellation reason:')
     if (!reason) return
-    
     try {
       await interviewService.cancelInterview(interviewId, reason)
       toast.success('Interview cancelled')
@@ -88,39 +92,29 @@ const Interviews = () => {
     }
   }
 
-  const getStatusBadge = (status) => {
-    const colors = {
-      scheduled: 'bg-blue-100 text-blue-800',
-      confirmed: 'bg-indigo-100 text-indigo-800',
-      rescheduled: 'bg-yellow-100 text-yellow-800',
-      in_progress: 'bg-purple-100 text-purple-800',
-      completed: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800',
-      no_show: 'bg-gray-100 text-gray-800'
-    }
-    return colors[status] || 'bg-gray-100 text-gray-800'
-  }
-
-  const currentData = activeTab === 'today' 
-    ? todayInterviews 
-    : activeTab === 'pending' 
-      ? pendingFeedback 
+  const currentData = activeTab === 'today'
+    ? todayInterviews
+    : activeTab === 'pending'
+      ? pendingFeedback
       : interviews
 
+  const TABS = [
+    { key: 'all', label: 'All Interviews', icon: null },
+    { key: 'today', label: 'Today', icon: Clock },
+    { key: 'pending', label: 'Pending Feedback', icon: MessageSquare },
+  ]
+
   return (
-    <div className="p-6">
+    <div className="p-6 page-enter">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-surface-900">Interviews</h1>
-          <p className="text-surface-500">Schedule and manage candidate interviews</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Interviews</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Schedule and manage candidate interviews</p>
         </div>
         <div className="flex items-center gap-2">
           {has('exports:create') && (
-            <button
-              onClick={() => setExportOpen(true)}
-              className="btn-secondary flex items-center gap-2"
-            >
+            <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
               <Download className="w-4 h-4" />
               Export
             </button>
@@ -135,46 +129,33 @@ const Interviews = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-4 mb-6">
-        <div className="flex rounded-lg border border-surface-200 p-1 bg-white">
-          <button
-            onClick={() => setActiveTab('all')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === 'all' 
-                ? 'bg-primary-500 text-white' 
-                : 'text-surface-600 hover:bg-surface-100'
-            }`}
-          >
-            All Interviews
-          </button>
-          <button
-            onClick={() => setActiveTab('today')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-              activeTab === 'today' 
-                ? 'bg-primary-500 text-white' 
-                : 'text-surface-600 hover:bg-surface-100'
-            }`}
-          >
-            <Clock className="w-4 h-4" />
-            Today
-          </button>
-          <button
-            onClick={() => setActiveTab('pending')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-              activeTab === 'pending' 
-                ? 'bg-primary-500 text-white' 
-                : 'text-surface-600 hover:bg-surface-100'
-            }`}
-          >
-            <MessageSquare className="w-4 h-4" />
-            Pending Feedback
-          </button>
+      <div className="flex items-center gap-2 mb-6">
+        <div
+          className="flex rounded-lg p-1"
+          style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}
+        >
+          {TABS.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className="px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2"
+              style={activeTab === key
+                ? { background: 'var(--accent)', color: '#fff' }
+                : { color: 'var(--text-secondary)' }
+              }
+              onMouseEnter={e => { if (activeTab !== key) e.currentTarget.style.background = 'var(--bg-hover)' }}
+              onMouseLeave={e => { if (activeTab !== key) e.currentTarget.style.background = '' }}
+            >
+              {Icon && <Icon className="w-4 h-4" />}
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Filters (only for All tab) */}
       {activeTab === 'all' && (
-        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-4 mb-6">
+        <div className="rounded-xl p-4 mb-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
           <div className="flex flex-wrap gap-4">
             <div className="flex-1 min-w-[200px]">
               <select
@@ -188,39 +169,38 @@ const Interviews = () => {
                 ))}
               </select>
             </div>
-            
             <input
               type="date"
               value={filters.date_from}
               onChange={(e) => setFilters(prev => ({ ...prev, date_from: e.target.value }))}
               className="input"
-              placeholder="From Date"
             />
-            
             <input
               type="date"
               value={filters.date_to}
               onChange={(e) => setFilters(prev => ({ ...prev, date_to: e.target.value }))}
               className="input"
-              placeholder="To Date"
             />
           </div>
         </div>
       )}
 
-      {/* Interviews List */}
-      <div className="bg-white rounded-xl shadow-sm border border-surface-200 overflow-hidden">
+      {/* Interviews Table */}
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
         {loading ? (
           <div className="p-8 text-center">
-            <div className="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full mx-auto"></div>
-            <p className="mt-2 text-surface-500">Loading interviews...</p>
+            <div
+              className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto"
+              style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
+            />
+            <p className="mt-2" style={{ color: 'var(--text-muted)' }}>Loading interviews...</p>
           </div>
         ) : currentData.length === 0 ? (
           <div className="p-8 text-center">
-            <Calendar className="w-12 h-12 text-surface-300 mx-auto mb-4" />
-            <p className="text-surface-500">
-              {activeTab === 'today' 
-                ? 'No interviews scheduled for today' 
+            <Calendar className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-disabled)' }} />
+            <p style={{ color: 'var(--text-muted)' }}>
+              {activeTab === 'today'
+                ? 'No interviews scheduled for today'
                 : activeTab === 'pending'
                   ? 'No pending feedback'
                   : 'No interviews found'}
@@ -228,33 +208,39 @@ const Interviews = () => {
           </div>
         ) : (
           <table className="w-full">
-            <thead className="bg-surface-50 border-b border-surface-200">
+            <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
               <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Candidate</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Job / Company</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Pipeline</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Stage</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Last Round</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Overall Status</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-surface-600">Progress</th>
-                <th className="text-right px-4 py-3 text-sm font-medium text-surface-600">Actions</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Candidate</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Job / Company</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Pipeline</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Stage</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Last Round</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Overall Status</th>
+                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Progress</th>
+                <th className="text-right px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-surface-100">
+            <tbody>
               {currentData.map(interview => (
                 <tr
                   key={interview.id}
-                  className="hover:bg-surface-50 transition-colors cursor-pointer"
+                  className="transition-colors cursor-pointer"
+                  style={{ borderBottom: '1px solid var(--border-subtle)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                  onMouseLeave={e => e.currentTarget.style.background = ''}
                   onClick={() => navigate(`/interviews/${interview.id}`)}
                 >
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
-                        <User className="w-4 h-4 text-primary-600" />
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
+                      >
+                        <User className="w-4 h-4" />
                       </div>
                       <div>
-                        <p className="font-medium text-surface-900">{interview.candidate_name}</p>
-                        <p className="text-xs text-surface-400">
+                        <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{interview.candidate_name}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                           {interview.scheduled_date
                             ? new Date(interview.scheduled_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
                             : '—'}
@@ -264,70 +250,78 @@ const Interviews = () => {
                     </div>
                   </td>
                   <td className="px-4 py-4">
-                    <p className="text-sm font-medium text-surface-900">{interview.job_title}</p>
-                    <p className="text-xs text-surface-500">{interview.client_name}</p>
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{interview.job_title}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{interview.client_name}</p>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="text-sm text-surface-600">{interview.pipeline_name || '—'}</span>
+                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{interview.pipeline_name || '—'}</span>
                   </td>
                   <td className="px-4 py-4">
-                    <span className="text-sm text-surface-700">{interview.current_round_name || interview.stage_name || '—'}</span>
+                    <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{interview.current_round_name || interview.stage_name || '—'}</span>
                   </td>
                   <td className="px-4 py-4">
                     {interview.last_round_result ? (
-                      <span className="text-xs text-surface-600">{interview.last_round_result}</span>
+                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{interview.last_round_result}</span>
                     ) : (
-                      <span className="text-xs text-surface-400">—</span>
+                      <span className="text-xs" style={{ color: 'var(--text-disabled)' }}>—</span>
                     )}
                   </td>
                   <td className="px-4 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium inline-block w-fit ${getStatusBadge(interview.overall_status || interview.status)}`}>
+                    <span
+                      className="px-2 py-1 rounded-full text-xs font-medium inline-block w-fit"
+                      style={getStatusStyle(interview.overall_status || interview.status)}
+                    >
                       {(interview.overall_status || interview.status)?.replace('_', ' ')}
                     </span>
                   </td>
                   <td className="px-4 py-4">
                     {interview.total_rounds > 0 ? (
                       <div>
-                        <p className="text-xs text-surface-600">
+                        <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>
                           Round {Math.min(interview.current_round_index + 1, interview.total_rounds)} of {interview.total_rounds}
                         </p>
-                        <div className="flex gap-0.5 mt-1">
+                        <div className="flex gap-0.5">
                           {Array.from({ length: interview.total_rounds }).map((_, i) => (
                             <div
                               key={i}
-                              className={`h-1.5 flex-1 rounded-full ${
-                                i < interview.current_round_index
-                                  ? 'bg-green-400'
-                                  : i === interview.current_round_index && !['selected','failed'].includes(interview.overall_status)
-                                  ? 'bg-primary-400'
-                                  : interview.overall_status === 'selected'
-                                  ? 'bg-green-400'
-                                  : 'bg-surface-200'
-                              }`}
+                              className="h-1.5 flex-1 rounded-full"
+                              style={{
+                                background: i < interview.current_round_index || interview.overall_status === 'selected'
+                                  ? '#43E97B'
+                                  : i === interview.current_round_index && !['selected', 'failed'].includes(interview.overall_status)
+                                  ? 'var(--accent)'
+                                  : 'var(--border-strong)'
+                              }}
                             />
                           ))}
                         </div>
                       </div>
                     ) : (
-                      <span className="text-xs text-surface-400">—</span>
+                      <span className="text-xs" style={{ color: 'var(--text-disabled)' }}>—</span>
                     )}
                   </td>
                   <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => navigate(`/interviews/${interview.id}`)}
-                        className="p-2 hover:bg-surface-100 rounded-lg transition-colors"
+                        className="p-2 rounded-lg transition-colors"
+                        style={{ color: 'var(--text-muted)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                        onMouseLeave={e => e.currentTarget.style.background = ''}
                         title="View"
                       >
-                        <Eye className="w-4 h-4 text-surface-500" />
+                        <Eye className="w-4 h-4" />
                       </button>
                       {has('interviews:update_status') && ['scheduled', 'confirmed', 'rescheduled', 'in_progress'].includes(interview.status) && (
                         <button
                           onClick={() => handleCancel(interview.id)}
-                          className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 rounded-lg transition-colors"
+                          style={{ color: '#FF4757' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,71,87,0.10)'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}
                           title="Cancel"
                         >
-                          <XCircle className="w-4 h-4 text-red-500" />
+                          <XCircle className="w-4 h-4" />
                         </button>
                       )}
                     </div>
@@ -340,8 +334,8 @@ const Interviews = () => {
 
         {/* Pagination (only for All tab) */}
         {activeTab === 'all' && pagination.totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-surface-200 flex items-center justify-between">
-            <p className="text-sm text-surface-500">
+          <div className="px-4 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
               Showing {interviews.length} of {pagination.total} interviews
             </p>
             <div className="flex gap-2">
@@ -371,7 +365,7 @@ const Interviews = () => {
         apiPath="/export/interviews"
         extraFilters={({ status, setStatus }) => (
           <div>
-            <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Status</label>
             <select value={status} onChange={e => setStatus(e.target.value)} className="input w-full">
               <option value="">All Statuses</option>
               {statuses.map(s => (
