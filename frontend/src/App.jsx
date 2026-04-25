@@ -849,7 +849,7 @@ function App() {
 
         {/* ── Tasks ── */}
         <Route path="/tasks"
-          element={<CompanyRoute><Tasks /></CompanyRoute>} />
+          element={<PermissionRoute permission="tasks:view"><Tasks /></PermissionRoute>} />
 
         {/* ── Audit ── */}
         <Route path="/audit-logs"

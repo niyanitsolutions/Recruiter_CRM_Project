@@ -30,6 +30,7 @@ const MODULE_PERMS = {
   imports:                 ['imports:view','imports:create'],
   exports:                 ['exports:view','exports:create'],
   targets:                 ['targets:view','targets:create','targets:edit','targets:delete','targets:admin'],
+  tasks:                   ['tasks:view','tasks:create','tasks:edit'],
   analytics:               ['analytics:view','analytics:edit'],
   reports:                 ['reports:view','reports:export'],
   crm_settings:            ['crm_settings:view','crm_settings:edit'],
@@ -43,14 +44,14 @@ const MODULE_LABELS = {
   interviews: 'Interviews', interview_settings: 'Interview Settings',
   onboards: 'Onboards', candidates: 'Candidates', accounts: 'Accounts',
   payouts: 'Payouts', invoices: 'Invoices', imports: 'Imports',
-  exports: 'Exports', targets: 'Targets', analytics: 'Analytics',
+  exports: 'Exports', targets: 'Targets', tasks: 'Tasks', analytics: 'Analytics',
   reports: 'Reports', crm_settings: 'CRM Settings', audit: 'Audit',
   notifications: 'Notifications',
 }
 
 const DEPT_MODULES = {
   owner:                { full: Object.keys(MODULE_PERMS), view_only: [] },
-  admin:                { full: ['users','roles','partners','departments','designations','clients','jobs','interviews','interview_settings','candidates','onboards','accounts','payouts','invoices','imports','exports','targets','analytics','crm_settings','audit','notifications'], view_only: ['reports'] },
+  admin:                { full: ['users','roles','partners','departments','designations','interview_settings','targets','tasks','imports','exports','crm_settings','audit','notifications'], view_only: ['reports','analytics'] },
   client_coordinator:   { full: ['clients','jobs','interviews','interview_settings','onboards'], view_only: ['candidates','reports'] },
   candidate_coordinator:{ full: ['candidates','interviews_no_schedule','interview_settings'], view_only: ['jobs','clients','onboards','reports'] },
   recruiter:            { full: ['candidates','interviews','clients','jobs','interview_settings'], view_only: ['onboards','reports'] },

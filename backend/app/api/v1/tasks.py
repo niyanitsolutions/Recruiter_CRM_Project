@@ -3,7 +3,7 @@ Tasks API - Phase 6
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
-from app.core.dependencies import get_current_user, get_company_db
+from app.core.dependencies import get_current_user, get_company_db, require_permissions
 from app.services.task_service import TaskService
 from app.models.company.task import TaskCreate, TaskUpdate
 
@@ -16,7 +16,7 @@ async def list_tasks(
     priority: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permissions(["tasks:view"])),
     db=Depends(get_company_db),
 ):
     """
@@ -37,7 +37,7 @@ async def list_tasks(
 @router.post("/")
 async def create_task(
     data: TaskCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permissions(["tasks:create"])),
     db=Depends(get_company_db),
 ):
     """Create a new task. The authenticated user becomes the creator."""
@@ -53,7 +53,7 @@ async def create_task(
 @router.get("/{task_id}")
 async def get_task(
     task_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permissions(["tasks:view"])),
     db=Depends(get_company_db),
 ):
     """
@@ -68,7 +68,7 @@ async def get_task(
 async def update_task(
     task_id: str,
     data: TaskUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permissions(["tasks:edit"])),
     db=Depends(get_company_db),
 ):
     """
@@ -82,7 +82,7 @@ async def update_task(
 @router.delete("/{task_id}")
 async def delete_task(
     task_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permissions(["tasks:edit"])),
     db=Depends(get_company_db),
 ):
     """

@@ -100,7 +100,7 @@ const PERMISSION_NAV_MAP = [
 /**
  * Build a sectioned nav from the user's actual permission array.
  * A nav item is shown when the user has ANY permission in its `permissions` list.
- * Pass isOwner=true or isAdmin=true to bypass filtering entirely.
+ * Pass isOwner=true to bypass filtering (company-level superuser only).
  */
 const buildPermissionMenu = (permissions, isOwner = false, isAdmin = false) => {
   const perms = new Set(permissions || [])
@@ -192,9 +192,10 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
     }
 
     // All non-super-admin, non-partner roles: strictly permission-driven.
-    // Owners AND Admins bypass the permission filter and see every nav section.
-    const isAdminRole = userRole === 'admin'
-    const sections = buildPermissionMenu(user?.permissions, !!user?.isOwner, isAdminRole)
+    // Only Owners bypass the filter (company-level superuser).
+    // Admin role goes through the same permission check as all other roles —
+    // it simply has a different (smaller) default permission set.
+    const sections = buildPermissionMenu(user?.permissions, !!user?.isOwner, false)
     return {
       flat: [],
       sections: sections.length > 0
