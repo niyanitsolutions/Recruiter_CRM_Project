@@ -102,6 +102,7 @@ class CandidateService:
         candidate_dict["created_by"] = created_by
         candidate_dict["created_at"] = datetime.now(timezone.utc)
         candidate_dict["is_deleted"] = False
+        candidate_dict["company_id"] = company_id
         candidate_dict["status"] = CandidateStatus.ACTIVE.value
         
         # Generate full name

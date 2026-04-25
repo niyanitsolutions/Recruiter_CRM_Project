@@ -14,25 +14,25 @@ router = APIRouter(prefix="/trash", tags=["Trash"])
 @router.get("")
 async def list_deleted(
     module: Optional[str] = Query(None, description="Filter by module name"),
-    current_user: dict = Depends(require_permissions("admin:view")),
+    current_user: dict = Depends(require_permissions(["audit:view"])),
     db=Depends(get_company_db),
 ):
     """List all soft-deleted records, optionally filtered by module."""
     svc = TrashService(db)
-    return await svc.list_deleted(current_user["company_id"], module)
+    return await svc.list_deleted(module)
 
 
 @router.post("/{module}/{record_id}/restore")
 async def restore_record(
     module: str,
     record_id: str,
-    current_user: dict = Depends(require_permissions("admin:view")),
+    current_user: dict = Depends(require_permissions(["audit:view"])),
     db=Depends(get_company_db),
 ):
     """Restore a soft-deleted record."""
     svc = TrashService(db)
     try:
-        return await svc.restore(current_user["company_id"], module, record_id)
+        return await svc.restore(module, record_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
@@ -41,12 +41,12 @@ async def restore_record(
 async def permanent_delete(
     module: str,
     record_id: str,
-    current_user: dict = Depends(require_permissions("admin:delete")),
+    current_user: dict = Depends(require_permissions(["candidates:delete"])),
     db=Depends(get_company_db),
 ):
     """Permanently delete a record from trash (irreversible)."""
     svc = TrashService(db)
     try:
-        return await svc.permanent_delete(current_user["company_id"], module, record_id)
+        return await svc.permanent_delete(module, record_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

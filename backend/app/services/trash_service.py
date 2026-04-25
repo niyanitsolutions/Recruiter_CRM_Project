@@ -1,14 +1,18 @@
 """
 Trash Service - Phase 6
 Lists soft-deleted records, restores them, and hard-deletes them.
-Soft-deleted docs are identified by is_deleted=True.
+
+DB is already scoped per-tenant (one MongoDB database per company), so
+company_id filtering within the collection is not required for isolation —
+the DB itself provides tenant separation. company_id is stored on new records
+for forward compatibility but is NOT used as a filter here.
 """
 from datetime import datetime, timezone
 from typing import Optional
 from bson import ObjectId
 
 
-# Map frontend module names → MongoDB collection names + display label field
+# Map frontend module names → MongoDB collection names + display label fields
 MODULE_MAP = {
     "candidates": {
         "collection": "candidates",
@@ -46,13 +50,14 @@ def _pick_label(doc: dict, fields: list) -> str:
 
 
 def _serialize(doc: dict, label_fields: list) -> dict:
+    deleted_at = doc.get("deleted_at")
     return {
         "id":         str(doc["_id"]),
         "label":      _pick_label(doc, label_fields),
         "email":      doc.get("email") or doc.get("contact_email"),
         "status":     doc.get("status"),
         "title":      doc.get("title") or doc.get("job_title"),
-        "deleted_at": doc.get("deleted_at").isoformat() if isinstance(doc.get("deleted_at"), datetime) else doc.get("deleted_at"),
+        "deleted_at": deleted_at.isoformat() if isinstance(deleted_at, datetime) else deleted_at,
         "deleted_by": doc.get("deleted_by"),
     }
 
@@ -63,7 +68,7 @@ class TrashService:
 
     # ── List ───────────────────────────────────────────────────────────────────
 
-    async def list_deleted(self, company_id: str, module: Optional[str] = None) -> dict:
+    async def list_deleted(self, module: Optional[str] = None) -> dict:
         modules_to_query = (
             {module: MODULE_MAP[module]} if module and module in MODULE_MAP
             else MODULE_MAP
@@ -72,7 +77,7 @@ class TrashService:
         for mod_name, cfg in modules_to_query.items():
             col = self.db[cfg["collection"]]
             docs = await col.find(
-                {"company_id": company_id, "is_deleted": True}
+                {"is_deleted": True}
             ).sort("deleted_at", -1).limit(200).to_list(length=200)
 
             if not docs:
@@ -89,13 +94,16 @@ class TrashService:
 
     # ── Restore ────────────────────────────────────────────────────────────────
 
-    async def restore(self, company_id: str, module: str, record_id: str) -> dict:
+    async def restore(self, module: str, record_id: str) -> dict:
         if module not in MODULE_MAP:
             raise ValueError(f"Unknown module: {module}")
 
         col = self.db[MODULE_MAP[module]["collection"]]
+
+        # Support both string _id (used by candidates/jobs) and ObjectId
+        oid = _to_id(record_id)
         result = await col.update_one(
-            {"_id": ObjectId(record_id), "company_id": company_id, "is_deleted": True},
+            {"_id": oid, "is_deleted": True},
             {"$set": {
                 "is_deleted":  False,
                 "deleted_at":  None,
@@ -104,19 +112,49 @@ class TrashService:
             }}
         )
         if result.matched_count == 0:
+            # Retry with the other id type before giving up
+            alt_oid = record_id if isinstance(oid, ObjectId) else _try_object_id(record_id)
+            if alt_oid:
+                result = await col.update_one(
+                    {"_id": alt_oid, "is_deleted": True},
+                    {"$set": {
+                        "is_deleted":  False,
+                        "deleted_at":  None,
+                        "deleted_by":  None,
+                        "restored_at": datetime.now(timezone.utc),
+                    }}
+                )
+        if result.matched_count == 0:
             raise ValueError("Record not found or already restored")
         return {"success": True, "message": "Record restored"}
 
     # ── Permanent delete ───────────────────────────────────────────────────────
 
-    async def permanent_delete(self, company_id: str, module: str, record_id: str) -> dict:
+    async def permanent_delete(self, module: str, record_id: str) -> dict:
         if module not in MODULE_MAP:
             raise ValueError(f"Unknown module: {module}")
 
         col = self.db[MODULE_MAP[module]["collection"]]
-        result = await col.delete_one(
-            {"_id": ObjectId(record_id), "company_id": company_id, "is_deleted": True}
-        )
+        oid = _to_id(record_id)
+        result = await col.delete_one({"_id": oid, "is_deleted": True})
+        if result.deleted_count == 0:
+            # Retry with the other id type
+            alt_oid = record_id if isinstance(oid, ObjectId) else _try_object_id(record_id)
+            if alt_oid:
+                result = await col.delete_one({"_id": alt_oid, "is_deleted": True})
         if result.deleted_count == 0:
             raise ValueError("Record not found in trash")
         return {"success": True, "message": "Permanently deleted"}
+
+
+def _try_object_id(value: str):
+    try:
+        return ObjectId(value)
+    except Exception:
+        return None
+
+
+def _to_id(value: str):
+    """Candidate/job services store _id as plain string (str(ObjectId())).
+    Try plain string first; fall back to ObjectId for other collections."""
+    return value  # default: plain string (matches candidates/jobs)

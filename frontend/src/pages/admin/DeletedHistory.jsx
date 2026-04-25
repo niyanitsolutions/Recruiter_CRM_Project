@@ -219,7 +219,7 @@ const DeletedHistory = () => {
                               <RotateCcw className="w-3.5 h-3.5" />
                               Restore
                             </button>
-                            {has('admin:delete') && (
+                            {has('candidates:delete') && (
                               <button
                                 onClick={() => setConfirming({
                                   module: group.module,

@@ -94,6 +94,7 @@ class JobService:
         job_dict["created_by"] = created_by
         job_dict["created_at"] = datetime.now(timezone.utc)
         job_dict["is_deleted"] = False
+        job_dict["company_id"] = company_id
         job_dict["filled_positions"] = 0
         job_dict["total_applications"] = 0
         job_dict["shortlisted_count"] = 0
