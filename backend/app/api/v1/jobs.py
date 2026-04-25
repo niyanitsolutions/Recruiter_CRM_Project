@@ -11,7 +11,12 @@ from app.models.company.job import (
     JobSearchParams, JobStatus, JobType, WorkMode, Priority
 )
 from app.services.job_service import JobService
+from app.services.notification_service import NotificationService
+from app.models.company.notification import NotificationCreate, NotificationType, NotificationChannel
 from app.core.dependencies import get_current_user, get_company_db, require_permissions
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
@@ -142,6 +147,21 @@ async def create_job(
             created_by_name=current_user.get("full_name", ""),
             user_name=current_user.get("full_name", ""),
         )
+        logger.info("Notification triggered: job_created id=%s by user=%s", job.get("id"), current_user["id"])
+        try:
+            await NotificationService(db).create_notification(
+                data=NotificationCreate(
+                    user_id=current_user["id"],
+                    type=NotificationType.SYSTEM_ALERT,
+                    title="Job Posted",
+                    message=f"New job '{job_data.title}' was posted successfully.",
+                    channels=[NotificationChannel.IN_APP],
+                ),
+                company_id=current_user.get("company_id", ""),
+            )
+        except Exception as _ne:
+            logger.warning("Notification skipped (job create): %s", _ne)
+
         return {"success": True, "message": "Job created successfully", "data": job}
     except HTTPException:
         raise
@@ -517,7 +537,22 @@ async def delete_job(
         deleted_by=current_user["id"],
         user_name=current_user.get("full_name", "")
     )
-    
+
+    logger.info("Notification triggered: job_deleted id=%s by user=%s", job_id, current_user["id"])
+    try:
+        await NotificationService(db).create_notification(
+            data=NotificationCreate(
+                user_id=current_user["id"],
+                type=NotificationType.SYSTEM_ALERT,
+                title="Job Deleted",
+                message=f"Job record was moved to trash.",
+                channels=[NotificationChannel.IN_APP],
+            ),
+            company_id=current_user.get("company_id", ""),
+        )
+    except Exception as _ne:
+        logger.warning("Notification skipped (job delete): %s", _ne)
+
     return {"success": True, "message": "Job deleted successfully"}
 
 

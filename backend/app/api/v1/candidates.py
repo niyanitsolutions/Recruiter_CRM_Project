@@ -13,8 +13,13 @@ from app.models.company.candidate import (
     CandidateSearchParams, CandidateStatus, CandidateSource, NoticePeriod
 )
 from app.services.candidate_service import CandidateService
+from app.services.notification_service import NotificationService
+from app.models.company.notification import NotificationCreate, NotificationType, NotificationChannel
 from app.core.dependencies import get_current_user, get_company_db, require_permissions
 from app.core.database import get_master_db
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/candidates", tags=["Candidates"])
 public_router = APIRouter(prefix="/public", tags=["Public"])
@@ -187,6 +192,21 @@ async def create_candidate(
             status_code=500,
             detail=f"Failed to create candidate: {exc}"
         )
+
+    logger.info("Notification triggered: candidate_created id=%s by user=%s", candidate.get("id"), current_user["id"])
+    try:
+        await NotificationService(db).create_notification(
+            data=NotificationCreate(
+                user_id=current_user["id"],
+                type=NotificationType.SYSTEM_ALERT,
+                title="Candidate Added",
+                message=f"New candidate '{candidate_data.full_name}' was added successfully.",
+                channels=[NotificationChannel.IN_APP],
+            ),
+            company_id=current_user.get("company_id", ""),
+        )
+    except Exception as _ne:
+        logger.warning("Notification skipped (candidate create): %s", _ne)
 
     return {"success": True, "message": "Candidate created successfully", "data": candidate}
 
@@ -981,7 +1001,22 @@ async def delete_candidate(
         deleted_by=current_user["id"],
         user_name=current_user.get("full_name", "")
     )
-    
+
+    logger.info("Notification triggered: candidate_deleted id=%s by user=%s", candidate_id, current_user["id"])
+    try:
+        await NotificationService(db).create_notification(
+            data=NotificationCreate(
+                user_id=current_user["id"],
+                type=NotificationType.SYSTEM_ALERT,
+                title="Candidate Deleted",
+                message=f"Candidate record was moved to trash.",
+                channels=[NotificationChannel.IN_APP],
+            ),
+            company_id=current_user.get("company_id", ""),
+        )
+    except Exception as _ne:
+        logger.warning("Notification skipped (candidate delete): %s", _ne)
+
     return {"success": True, "message": "Candidate deleted successfully"}
 
 

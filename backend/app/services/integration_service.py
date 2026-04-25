@@ -121,7 +121,7 @@ def _decrypt_config(config: dict) -> dict:
 
 class IntegrationService:
     def __init__(self, db):
-        self.col = db.integrations
+        self.col = db.integrations if db is not None else None
 
     # ── Definitions ────────────────────────────────────────────────────────────
 
