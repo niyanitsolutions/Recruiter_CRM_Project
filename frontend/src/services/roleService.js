@@ -45,9 +45,15 @@ const roleService = {
 
   // Assign role to user
   assignRoleToUser: async (userId, roleName) => {
-    const response = await api.post('/roles/assign', null, { 
-      params: { user_id: userId, role_name: roleName } 
+    const response = await api.post('/roles/assign', null, {
+      params: { user_id: userId, role_name: roleName }
     })
+    return response.data
+  },
+
+  // Get default permissions for a system role (used by Reset to Default)
+  getDefaultPermissions: async (roleName) => {
+    const response = await api.get(`/roles/defaults/${roleName}`)
     return response.data
   },
 }

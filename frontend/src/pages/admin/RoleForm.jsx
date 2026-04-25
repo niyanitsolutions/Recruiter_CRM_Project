@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Save, Loader2, Shield } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Shield, RotateCcw } from 'lucide-react'
 import { useDispatch, useSelector } from 'react-redux'
 import roleService from '../../services/roleService'
 import userService from '../../services/userService'
@@ -41,6 +41,7 @@ const PERMISSION_SECTIONS = [
     { label: 'Payouts',    perms: ['payouts:view','payouts:edit'] },
   ]},
   { section: 'Others', modules: [
+    { label: 'Tasks',         perms: ['tasks:view','tasks:create','tasks:edit'] },
     { label: 'Payouts',       perms: ['payouts:view','payouts:edit'] },
     { label: 'Invoices',      perms: ['invoices:view','invoices:approve'] },
     { label: 'Imports',       perms: ['imports:view','imports:create'] },
@@ -92,9 +93,10 @@ const RoleForm = () => {
   const currentUser = useSelector(state => state.auth.user)
   const auth      = useSelector(state => state.auth)
 
-  const [loading, setLoading] = useState(false)
-  const [saving,  setSaving]  = useState(false)
-  const [error,   setError]   = useState(null)
+  const [loading,   setLoading]   = useState(false)
+  const [saving,    setSaving]    = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [error,     setError]     = useState(null)
 
   const [formData, setFormData] = useState({
     name: '', display_name: '', description: '', permissions: [],
@@ -152,6 +154,21 @@ const RoleForm = () => {
       secPerms.forEach(p => allOn ? current.delete(p) : current.add(p))
       return { ...prev, permissions: Array.from(current) }
     })
+  }
+
+  // ── Reset to default permissions for this role name ──────────────────────
+  const handleResetToDefault = async () => {
+    if (!formData.name) return
+    try {
+      setResetting(true)
+      setError(null)
+      const res = await roleService.getDefaultPermissions(formData.name)
+      setFormData(prev => ({ ...prev, permissions: res.data?.permissions || [] }))
+    } catch {
+      setError(`No default permissions found for role "${formData.name}". Only system roles have defaults.`)
+    } finally {
+      setResetting(false)
+    }
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -254,8 +271,23 @@ const RoleForm = () => {
           <div className="flex items-center gap-2 mb-1">
             <Shield className="w-5 h-5 text-accent-600" />
             <h2 className="text-lg font-semibold">Permissions</h2>
-            <span className="ml-auto text-sm text-surface-400">
-              {formData.permissions.length} selected
+            <span className="ml-auto flex items-center gap-3">
+              <span className="text-sm text-surface-400">
+                {formData.permissions.length} selected
+              </span>
+              <button
+                type="button"
+                onClick={handleResetToDefault}
+                disabled={resetting || !formData.name}
+                title="Reset to default permissions for this role"
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-surface-300 text-surface-600 hover:border-accent-400 hover:text-accent-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {resetting
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <RotateCcw className="w-3.5 h-3.5" />
+                }
+                Reset to Default
+              </button>
             </span>
           </div>
           <p className="text-sm text-surface-500 mb-5">

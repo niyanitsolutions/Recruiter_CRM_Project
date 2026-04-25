@@ -134,100 +134,77 @@ class Permission(str, Enum):
     # Notifications
     NOTIFICATIONS_CREATE = "notifications:create"
 
+    # Tasks
+    TASKS_VIEW = "tasks:view"
+    TASKS_CREATE = "tasks:create"
+    TASKS_EDIT = "tasks:edit"
+
 
 # Default permissions for each system role
 ROLE_DEFAULT_PERMISSIONS = {
+    # ── Admin: manages the platform (users, settings, structure).
+    # Does NOT include recruitment modules (candidates, jobs, clients,
+    # interviews, onboards, finance) — those belong to specialist roles.
+    # Additional permissions can be granted individually via UserForm.
     SystemRole.ADMIN: [
         # Dashboard
         Permission.DASHBOARD_VIEW,
-        # User Management - FULL
+        # User Management — FULL
         Permission.USERS_VIEW,
         Permission.USERS_CREATE,
         Permission.USERS_EDIT,
         Permission.USERS_DELETE,
         Permission.USERS_MANAGE_ROLES,
-        # Role Management - FULL
+        # Role Management — FULL (admin owns role definitions)
         Permission.ROLES_VIEW,
         Permission.ROLES_CREATE,
         Permission.ROLES_EDIT,
         Permission.ROLES_DELETE,
-        # Department Management - FULL
+        # Department & Designation — FULL
         Permission.DEPARTMENTS_VIEW,
         Permission.DEPARTMENTS_CREATE,
         Permission.DEPARTMENTS_EDIT,
         Permission.DEPARTMENTS_DELETE,
-        # Designation Management - FULL
         Permission.DESIGNATIONS_VIEW,
         Permission.DESIGNATIONS_CREATE,
         Permission.DESIGNATIONS_EDIT,
         Permission.DESIGNATIONS_DELETE,
-        # Clients - FULL
-        Permission.CLIENTS_VIEW,
-        Permission.CLIENTS_CREATE,
-        Permission.CLIENTS_EDIT,
-        Permission.CLIENTS_DELETE,
-        # Candidates - FULL (admin oversees all recruitment activity)
-        Permission.CANDIDATES_VIEW,
-        Permission.CANDIDATES_CREATE,
-        Permission.CANDIDATES_EDIT,
-        Permission.CANDIDATES_DELETE,
-        Permission.CANDIDATES_ASSIGN,
-        # Jobs - FULL
-        Permission.JOBS_VIEW,
-        Permission.JOBS_CREATE,
-        Permission.JOBS_EDIT,
-        Permission.JOBS_DELETE,
-        # Interviews - FULL
-        Permission.INTERVIEWS_VIEW,
-        Permission.INTERVIEWS_SCHEDULE,
-        Permission.INTERVIEWS_UPDATE_STATUS,
-        # Partners - FULL
+        # Partners — VIEW + CREATE + EDIT (no delete)
         Permission.PARTNERS_VIEW,
         Permission.PARTNERS_CREATE,
         Permission.PARTNERS_EDIT,
-        Permission.PARTNERS_DELETE,
-        # Onboards - FULL
-        Permission.ONBOARDS_VIEW,
-        Permission.ONBOARDS_CREATE,
-        Permission.ONBOARDS_EDIT,
-        # Accounts / Finance
-        Permission.ACCOUNTS_VIEW,
-        Permission.ACCOUNTS_INVOICES,
-        Permission.ACCOUNTS_PAYOUTS,
-        Permission.PAYOUTS_VIEW,
-        Permission.PAYOUTS_EDIT,
-        Permission.INVOICES_VIEW,
-        Permission.INVOICES_APPROVE,
-        # Imports / Exports
-        Permission.IMPORTS_VIEW,
-        Permission.IMPORTS_CREATE,
-        Permission.EXPORTS_VIEW,
-        Permission.EXPORTS_CREATE,
-        # Targets
+        # Targets — FULL (admin sets performance targets)
         Permission.TARGETS_VIEW,
         Permission.TARGETS_CREATE,
         Permission.TARGETS_EDIT,
         Permission.TARGETS_DELETE,
         Permission.TARGETS_ADMIN,
-        # Analytics
-        Permission.ANALYTICS_VIEW,
-        Permission.ANALYTICS_EDIT,
-        # Reports - FULL
+        # Tasks
+        Permission.TASKS_VIEW,
+        Permission.TASKS_CREATE,
+        Permission.TASKS_EDIT,
+        # Reports & Analytics — VIEW only
         Permission.REPORTS_VIEW,
         Permission.REPORTS_EXPORT,
-        # CRM Settings - FULL (no create/delete)
-        Permission.CRM_SETTINGS_VIEW,
-        Permission.CRM_SETTINGS_EDIT,
-        # Interview Settings - FULL CRUD
-        Permission.INTERVIEW_SETTINGS_VIEW,
-        Permission.INTERVIEW_SETTINGS_CREATE,
-        Permission.INTERVIEW_SETTINGS_EDIT,
-        Permission.INTERVIEW_SETTINGS_DELETE,
-        # Audit - FULL VIEW
+        Permission.ANALYTICS_VIEW,
+        # Audit — FULL VIEW (includes Deleted History)
         Permission.AUDIT_VIEW,
         Permission.AUDIT_SESSIONS,
         Permission.AUDIT_ALERTS,
         Permission.AUDIT_ADMIN,
+        # CRM Settings — FULL (Integrations + Settings pages)
+        Permission.CRM_SETTINGS_VIEW,
+        Permission.CRM_SETTINGS_EDIT,
+        # Interview Settings — FULL (admin configures templates)
+        Permission.INTERVIEW_SETTINGS_VIEW,
+        Permission.INTERVIEW_SETTINGS_CREATE,
+        Permission.INTERVIEW_SETTINGS_EDIT,
+        Permission.INTERVIEW_SETTINGS_DELETE,
+        # Imports / Exports
+        Permission.IMPORTS_VIEW,
+        Permission.IMPORTS_CREATE,
+        Permission.EXPORTS_VIEW,
+        Permission.EXPORTS_CREATE,
         # Notifications
         Permission.NOTIFICATIONS_CREATE,
     ],
@@ -256,6 +233,10 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.ONBOARDS_VIEW,
         # Reports - VIEW
         Permission.REPORTS_VIEW,
+        # Tasks
+        Permission.TASKS_VIEW,
+        Permission.TASKS_CREATE,
+        Permission.TASKS_EDIT,
     ],
     SystemRole.CLIENT_COORDINATOR: [
         Permission.DASHBOARD_VIEW,
@@ -281,6 +262,10 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.ONBOARDS_VIEW,
         # Reports - VIEW
         Permission.REPORTS_VIEW,
+        # Tasks
+        Permission.TASKS_VIEW,
+        Permission.TASKS_CREATE,
+        Permission.TASKS_EDIT,
     ],
     SystemRole.HR: [
         Permission.DASHBOARD_VIEW,
@@ -294,6 +279,10 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.ONBOARDS_EDIT,
         # Reports - VIEW
         Permission.REPORTS_VIEW,
+        # Tasks
+        Permission.TASKS_VIEW,
+        Permission.TASKS_CREATE,
+        Permission.TASKS_EDIT,
     ],
     SystemRole.ACCOUNTS: [
         Permission.DASHBOARD_VIEW,
@@ -312,6 +301,8 @@ ROLE_DEFAULT_PERMISSIONS = {
         # Reports - FULL
         Permission.REPORTS_VIEW,
         Permission.REPORTS_EXPORT,
+        # Tasks
+        Permission.TASKS_VIEW,
     ],
     SystemRole.PARTNER: [
         Permission.DASHBOARD_VIEW,

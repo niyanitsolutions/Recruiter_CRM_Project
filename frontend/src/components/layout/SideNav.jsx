@@ -81,7 +81,7 @@ const PERMISSION_NAV_MAP = [
   // System
   { permissions: ['targets:view', 'targets:create', 'targets:edit'],
     path: '/targets',    icon: Target,       label: 'Targets',   section: 'System' },
-  { permissions: ['dashboard:view'],
+  { permissions: ['tasks:view'],
     path: '/tasks',      icon: FileCheck,    label: 'Tasks',     section: 'System' },
   { permissions: ['reports:view'],
     path: '/reports',    icon: FileText,  label: 'Reports',   section: 'System' },
@@ -89,7 +89,7 @@ const PERMISSION_NAV_MAP = [
     path: '/analytics',  icon: BarChart2, label: 'Analytics', section: 'System' },
   { permissions: ['audit:view'],
     path: '/audit-logs', icon: History,   label: 'Audit Logs', section: 'System' },
-  { permissions: ['admin:delete', 'admin:view'],
+  { permissions: ['audit:view'],
     path: '/trash',        icon: Trash2, label: 'Deleted History', section: 'System' },
   { permissions: ['crm_settings:view', 'crm_settings:edit'],
     path: '/integrations', icon: Plug,   label: 'Integrations',    section: 'System' },

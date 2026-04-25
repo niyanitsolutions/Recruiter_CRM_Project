@@ -5,7 +5,7 @@ Handles role and permission management within a company
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import Optional
 
-from app.models.company.role import RoleCreate, RoleUpdate, Permission
+from app.models.company.role import RoleCreate, RoleUpdate, Permission, SystemRole, ROLE_DEFAULT_PERMISSIONS
 from app.services.role_service import RoleService
 from app.core.dependencies import (
     get_current_user, get_company_db, require_permissions
@@ -71,6 +71,31 @@ async def get_all_permissions(
     return {
         "success": True,
         "data": result
+    }
+
+
+@router.get("/defaults/{role_name}")
+async def get_role_defaults(
+    role_name: str,
+    current_user: dict = Depends(get_current_user),
+    _: bool = Depends(require_permissions(["roles:view"])),
+):
+    """Return the default permission set for a system role by name.
+    Used by the frontend Reset to Default button in RoleForm."""
+    try:
+        system_role = SystemRole(role_name)
+    except ValueError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No default permissions defined for role '{role_name}'"
+        )
+    defaults = ROLE_DEFAULT_PERMISSIONS.get(system_role, [])
+    return {
+        "success": True,
+        "data": {
+            "role": role_name,
+            "permissions": [p.value for p in defaults],
+        },
     }
 
 
