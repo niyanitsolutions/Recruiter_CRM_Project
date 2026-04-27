@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import {
   selectIsAuthenticated, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType, selectUser,
   selectIsInitializing, selectProfileCompleted, selectForcePasswordChange,
+  selectHrmEnabled,
   initAuth, setProfileCompleted, clearForcePasswordChange,
 } from './store/authSlice'
 import { useAutoLogout } from './hooks/useAutoLogout'
@@ -95,6 +96,22 @@ import {
   LoginActivityPage,
 } from './pages/settings'
 
+// HRM Module Pages
+import HRMDashboard from './pages/hrm/HRMDashboard'
+import Employees from './pages/hrm/Employees'
+import EmployeeForm from './pages/hrm/EmployeeForm'
+import Attendance from './pages/hrm/Attendance'
+import LeaveManagement from './pages/hrm/LeaveManagement'
+import Payroll from './pages/hrm/Payroll'
+import Performance from './pages/hrm/Performance'
+import Announcements from './pages/hrm/Announcements'
+import HiringDashboard from './pages/hrm/hiring/HiringDashboard'
+import HRJobs from './pages/hrm/hiring/HRJobs'
+import HRCandidates from './pages/hrm/hiring/HRCandidates'
+import HRInterviews from './pages/hrm/hiring/HRInterviews'
+import HROffer from './pages/hrm/hiring/HROffer'
+import HROnboarding from './pages/hrm/hiring/HROnboarding'
+
 // Phase 5 - Reports, Analytics, Imports, Exports, Targets, Audit
 import ReportsPage from './pages/reports/ReportsPage'
 import ReportGenerator from './pages/reports/ReportGenerator'
@@ -129,6 +146,9 @@ export const getDefaultRoute = (role, permissions = [], userType = 'internal') =
   if (p.has('users:view'))                                   return '/users'
   if (p.has('reports:view'))                                 return '/reports'
   if (p.has('audit:view'))                                   return '/audit-logs'
+  // HRM-only roles (manager, employee) land on the HRM dashboard
+  if (p.has('hrm:dashboard:view'))                           return '/hrm'
+  if (p.has('hrm:attendance:self'))                          return '/hrm/attendance'
   return '/recruitment'
 }
 
@@ -208,11 +228,18 @@ const PermissionRoute = ({ children, permission, showUnauthorized = false }) => 
   const user           = useSelector(selectUser)
   const userRole       = useSelector(selectUserRole)
   const userType       = useSelector(selectUserType)
+  const hrmEnabled     = useSelector(selectHrmEnabled)
 
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (isSuperAdmin) return <Navigate to="/super-admin" replace />
 
-  // Owner skips all permission checks
+  // Block HRM routes when the HRM module is not enabled — even for OWNER
+  if (permission?.startsWith('hrm:') && !hrmEnabled) {
+    if (showUnauthorized) return <Unauthorized />
+    return <Navigate to={getDefaultRoute(userRole, user?.permissions, userType)} replace />
+  }
+
+  // Owner skips all other permission checks
   if (user?.isOwner) return children
 
   // Partners have their own route block — skip checks inside partner routes
@@ -873,6 +900,24 @@ function App() {
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/my-profile"    element={<Profile />} />
         <Route path="/profile"       element={<Profile />} />
+
+        {/* ── HRM Module ── */}
+        <Route path="/hrm"                element={<PermissionRoute permission="hrm:dashboard:view"><HRMDashboard /></PermissionRoute>} />
+        <Route path="/hrm/employees"      element={<PermissionRoute permission="hrm:employees:view"><Employees /></PermissionRoute>} />
+        <Route path="/hrm/employees/new"  element={<PermissionRoute permission="hrm:employees:manage"><EmployeeForm /></PermissionRoute>} />
+        <Route path="/hrm/employees/:id"  element={<PermissionRoute permission="hrm:employees:view"><EmployeeForm /></PermissionRoute>} />
+        <Route path="/hrm/employees/:id/edit" element={<PermissionRoute permission="hrm:employees:manage"><EmployeeForm /></PermissionRoute>} />
+        <Route path="/hrm/attendance"     element={<PermissionRoute permission="hrm:attendance:self"><Attendance /></PermissionRoute>} />
+        <Route path="/hrm/leaves"         element={<PermissionRoute permission="hrm:leave:apply"><LeaveManagement /></PermissionRoute>} />
+        <Route path="/hrm/payroll"        element={<PermissionRoute permission="hrm:payroll:view_self"><Payroll /></PermissionRoute>} />
+        <Route path="/hrm/performance"    element={<PermissionRoute permission="hrm:performance:self"><Performance /></PermissionRoute>} />
+        <Route path="/hrm/announcements"  element={<PermissionRoute permission="hrm:announcements:view"><Announcements /></PermissionRoute>} />
+        <Route path="/hrm/hiring"         element={<PermissionRoute permission="hrm:hiring:view"><HiringDashboard /></PermissionRoute>} />
+        <Route path="/hrm/hiring/jobs"         element={<PermissionRoute permission="hrm:hiring:view"><HRJobs /></PermissionRoute>} />
+        <Route path="/hrm/hiring/candidates"   element={<PermissionRoute permission="hrm:hiring:view"><HRCandidates /></PermissionRoute>} />
+        <Route path="/hrm/hiring/interviews"   element={<PermissionRoute permission="hrm:hiring:view"><HRInterviews /></PermissionRoute>} />
+        <Route path="/hrm/hiring/offers"       element={<PermissionRoute permission="hrm:hiring:view"><HROffer /></PermissionRoute>} />
+        <Route path="/hrm/hiring/onboarding"   element={<PermissionRoute permission="hrm:hiring:view"><HROnboarding /></PermissionRoute>} />
       </Route>
 
       {/* DEFAULT */}

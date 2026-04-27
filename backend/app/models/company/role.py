@@ -10,12 +10,15 @@ from enum import Enum
 
 class SystemRole(str, Enum):
     """System-defined roles (cannot be deleted)"""
+    OWNER = "owner"                                   # Company owner — full access within subscription
     ADMIN = "admin"
     CANDIDATE_COORDINATOR = "candidate_coordinator"
     CLIENT_COORDINATOR = "client_coordinator"
     HR = "hr"
     ACCOUNTS = "accounts"
     PARTNER = "partner"
+    MANAGER = "manager"                               # HRM team manager
+    EMPLOYEE = "employee"                             # HRM self-service employee
 
 
 class Permission(str, Enum):
@@ -139,184 +142,197 @@ class Permission(str, Enum):
     TASKS_CREATE = "tasks:create"
     TASKS_EDIT = "tasks:edit"
 
+    # ── HRM Module ────────────────────────────────────────────────────────────
+    # Dashboard
+    HRM_DASHBOARD_VIEW       = "hrm:dashboard:view"
+    # Employees
+    HRM_EMPLOYEES_VIEW       = "hrm:employees:view"
+    HRM_EMPLOYEES_MANAGE     = "hrm:employees:manage"
+    # Attendance
+    HRM_ATTENDANCE_SELF      = "hrm:attendance:self"     # own check-in/out
+    HRM_ATTENDANCE_TEAM      = "hrm:attendance:team"     # view team attendance
+    HRM_ATTENDANCE_MANAGE    = "hrm:attendance:manage"   # full control / manual updates
+    # Leaves
+    HRM_LEAVE_APPLY          = "hrm:leave:apply"         # apply own leave
+    HRM_LEAVE_TEAM_APPROVE   = "hrm:leave:team_approve"  # approve team leaves
+    HRM_LEAVE_MANAGE         = "hrm:leave:manage"        # full leave management
+    # Payroll
+    HRM_PAYROLL_VIEW_SELF    = "hrm:payroll:view_self"   # view own payslip
+    HRM_PAYROLL_MANAGE       = "hrm:payroll:manage"      # generate & manage all payslips
+    # Performance
+    HRM_PERFORMANCE_SELF     = "hrm:performance:self"    # submit self review
+    HRM_PERFORMANCE_TEAM     = "hrm:performance:team"    # view/review team
+    HRM_PERFORMANCE_MANAGE   = "hrm:performance:manage"  # create, finalize reviews
+    # Announcements
+    HRM_ANNOUNCEMENTS_VIEW   = "hrm:announcements:view"
+    HRM_ANNOUNCEMENTS_MANAGE = "hrm:announcements:manage"
+    # Hiring Pipeline
+    HRM_HIRING_VIEW          = "hrm:hiring:view"
+    HRM_HIRING_MANAGE        = "hrm:hiring:manage"
+
+
+# ── Convenience sets ──────────────────────────────────────────────────────────
+
+# All HRM permissions (for OWNER / ADMIN / HR)
+_HRM_FULL = [
+    Permission.HRM_DASHBOARD_VIEW,
+    Permission.HRM_EMPLOYEES_VIEW,
+    Permission.HRM_EMPLOYEES_MANAGE,
+    Permission.HRM_ATTENDANCE_SELF,
+    Permission.HRM_ATTENDANCE_TEAM,
+    Permission.HRM_ATTENDANCE_MANAGE,
+    Permission.HRM_LEAVE_APPLY,
+    Permission.HRM_LEAVE_TEAM_APPROVE,
+    Permission.HRM_LEAVE_MANAGE,
+    Permission.HRM_PAYROLL_VIEW_SELF,
+    Permission.HRM_PAYROLL_MANAGE,
+    Permission.HRM_PERFORMANCE_SELF,
+    Permission.HRM_PERFORMANCE_TEAM,
+    Permission.HRM_PERFORMANCE_MANAGE,
+    Permission.HRM_ANNOUNCEMENTS_VIEW,
+    Permission.HRM_ANNOUNCEMENTS_MANAGE,
+    Permission.HRM_HIRING_VIEW,
+    Permission.HRM_HIRING_MANAGE,
+]
+
+# Team-level HRM (MANAGER)
+_HRM_TEAM = [
+    Permission.HRM_DASHBOARD_VIEW,
+    Permission.HRM_EMPLOYEES_VIEW,
+    Permission.HRM_ATTENDANCE_SELF,
+    Permission.HRM_ATTENDANCE_TEAM,
+    Permission.HRM_LEAVE_APPLY,
+    Permission.HRM_LEAVE_TEAM_APPROVE,
+    Permission.HRM_PAYROLL_VIEW_SELF,
+    Permission.HRM_PERFORMANCE_SELF,
+    Permission.HRM_PERFORMANCE_TEAM,
+    Permission.HRM_ANNOUNCEMENTS_VIEW,
+    Permission.HRM_HIRING_VIEW,
+]
+
+# Self-service HRM (EMPLOYEE)
+_HRM_SELF = [
+    Permission.HRM_DASHBOARD_VIEW,
+    Permission.HRM_ATTENDANCE_SELF,
+    Permission.HRM_LEAVE_APPLY,
+    Permission.HRM_PAYROLL_VIEW_SELF,
+    Permission.HRM_PERFORMANCE_SELF,
+    Permission.HRM_ANNOUNCEMENTS_VIEW,
+]
+
+
+# ── Shared CRM permission set (platform-management permissions for OWNER/ADMIN) ──
+_CRM_ADMIN_BASE = [
+    Permission.DASHBOARD_VIEW,
+    Permission.USERS_VIEW, Permission.USERS_CREATE, Permission.USERS_EDIT,
+    Permission.USERS_DELETE, Permission.USERS_MANAGE_ROLES,
+    Permission.ROLES_VIEW, Permission.ROLES_CREATE, Permission.ROLES_EDIT, Permission.ROLES_DELETE,
+    Permission.DEPARTMENTS_VIEW, Permission.DEPARTMENTS_CREATE,
+    Permission.DEPARTMENTS_EDIT, Permission.DEPARTMENTS_DELETE,
+    Permission.DESIGNATIONS_VIEW, Permission.DESIGNATIONS_CREATE,
+    Permission.DESIGNATIONS_EDIT, Permission.DESIGNATIONS_DELETE,
+    Permission.CLIENTS_VIEW, Permission.CLIENTS_CREATE, Permission.CLIENTS_EDIT, Permission.CLIENTS_DELETE,
+    Permission.CANDIDATES_VIEW, Permission.CANDIDATES_CREATE, Permission.CANDIDATES_EDIT,
+    Permission.CANDIDATES_DELETE, Permission.CANDIDATES_ASSIGN,
+    Permission.JOBS_VIEW, Permission.JOBS_CREATE, Permission.JOBS_EDIT, Permission.JOBS_DELETE,
+    Permission.INTERVIEWS_VIEW, Permission.INTERVIEWS_SCHEDULE, Permission.INTERVIEWS_UPDATE_STATUS,
+    Permission.INTERVIEW_SETTINGS_VIEW, Permission.INTERVIEW_SETTINGS_CREATE,
+    Permission.INTERVIEW_SETTINGS_EDIT, Permission.INTERVIEW_SETTINGS_DELETE,
+    Permission.ONBOARDS_VIEW, Permission.ONBOARDS_CREATE, Permission.ONBOARDS_EDIT,
+    Permission.PARTNERS_VIEW, Permission.PARTNERS_CREATE, Permission.PARTNERS_EDIT,
+    Permission.ACCOUNTS_VIEW, Permission.ACCOUNTS_INVOICES, Permission.ACCOUNTS_PAYOUTS,
+    Permission.PAYOUTS_VIEW, Permission.PAYOUTS_EDIT,
+    Permission.INVOICES_VIEW, Permission.INVOICES_APPROVE,
+    Permission.TARGETS_VIEW, Permission.TARGETS_CREATE, Permission.TARGETS_EDIT,
+    Permission.TARGETS_DELETE, Permission.TARGETS_ADMIN,
+    Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
+    Permission.REPORTS_VIEW, Permission.REPORTS_EXPORT,
+    Permission.ANALYTICS_VIEW,
+    Permission.AUDIT_VIEW, Permission.AUDIT_SESSIONS, Permission.AUDIT_ALERTS, Permission.AUDIT_ADMIN,
+    Permission.CRM_SETTINGS_VIEW, Permission.CRM_SETTINGS_EDIT,
+    Permission.IMPORTS_VIEW, Permission.IMPORTS_CREATE,
+    Permission.EXPORTS_VIEW, Permission.EXPORTS_CREATE,
+    Permission.NOTIFICATIONS_CREATE,
+]
+
 
 # Default permissions for each system role
 ROLE_DEFAULT_PERMISSIONS = {
-    # ── Admin: manages the platform (users, settings, structure).
-    # Does NOT include recruitment modules (candidates, jobs, clients,
-    # interviews, onboards, finance) — those belong to specialist roles.
-    # Additional permissions can be granted individually via UserForm.
-    SystemRole.ADMIN: [
-        # Dashboard
-        Permission.DASHBOARD_VIEW,
-        # User Management — FULL
-        Permission.USERS_VIEW,
-        Permission.USERS_CREATE,
-        Permission.USERS_EDIT,
-        Permission.USERS_DELETE,
-        Permission.USERS_MANAGE_ROLES,
-        # Role Management — FULL (admin owns role definitions)
-        Permission.ROLES_VIEW,
-        Permission.ROLES_CREATE,
-        Permission.ROLES_EDIT,
-        Permission.ROLES_DELETE,
-        # Department & Designation — FULL
-        Permission.DEPARTMENTS_VIEW,
-        Permission.DEPARTMENTS_CREATE,
-        Permission.DEPARTMENTS_EDIT,
-        Permission.DEPARTMENTS_DELETE,
-        Permission.DESIGNATIONS_VIEW,
-        Permission.DESIGNATIONS_CREATE,
-        Permission.DESIGNATIONS_EDIT,
-        Permission.DESIGNATIONS_DELETE,
-        # Partners — VIEW + CREATE + EDIT (no delete)
-        Permission.PARTNERS_VIEW,
-        Permission.PARTNERS_CREATE,
-        Permission.PARTNERS_EDIT,
-        # Targets — FULL (admin sets performance targets)
-        Permission.TARGETS_VIEW,
-        Permission.TARGETS_CREATE,
-        Permission.TARGETS_EDIT,
-        Permission.TARGETS_DELETE,
-        Permission.TARGETS_ADMIN,
-        # Tasks
-        Permission.TASKS_VIEW,
-        Permission.TASKS_CREATE,
-        Permission.TASKS_EDIT,
-        # Reports & Analytics — VIEW only
-        Permission.REPORTS_VIEW,
-        Permission.REPORTS_EXPORT,
-        Permission.ANALYTICS_VIEW,
-        # Audit — FULL VIEW (includes Deleted History)
-        Permission.AUDIT_VIEW,
-        Permission.AUDIT_SESSIONS,
-        Permission.AUDIT_ALERTS,
-        Permission.AUDIT_ADMIN,
-        # CRM Settings — FULL (Integrations + Settings pages)
-        Permission.CRM_SETTINGS_VIEW,
-        Permission.CRM_SETTINGS_EDIT,
-        # Interview Settings — FULL (admin configures templates)
-        Permission.INTERVIEW_SETTINGS_VIEW,
-        Permission.INTERVIEW_SETTINGS_CREATE,
-        Permission.INTERVIEW_SETTINGS_EDIT,
-        Permission.INTERVIEW_SETTINGS_DELETE,
-        # Imports / Exports
-        Permission.IMPORTS_VIEW,
-        Permission.IMPORTS_CREATE,
-        Permission.EXPORTS_VIEW,
-        Permission.EXPORTS_CREATE,
-        # Notifications
-        Permission.NOTIFICATIONS_CREATE,
-    ],
+
+    # ── OWNER: Company owner — full CRM + full HRM (within subscription limits).
+    # Module guards in middleware enforce subscription boundaries; this role
+    # simply grants all permissions so nothing is blocked inside enabled modules.
+    SystemRole.OWNER: _CRM_ADMIN_BASE + _HRM_FULL,
+
+    # ── ADMIN: Same as OWNER for day-to-day platform administration.
+    SystemRole.ADMIN: _CRM_ADMIN_BASE + _HRM_FULL,
+
+    # ── CRM specialist roles ──────────────────────────────────────────────────
+
     SystemRole.CANDIDATE_COORDINATOR: [
         Permission.DASHBOARD_VIEW,
-        # Clients - VIEW only
         Permission.CLIENTS_VIEW,
-        # Candidates - FULL
-        Permission.CANDIDATES_VIEW,
-        Permission.CANDIDATES_CREATE,
-        Permission.CANDIDATES_EDIT,
-        Permission.CANDIDATES_DELETE,
-        Permission.CANDIDATES_ASSIGN,
-        # Interviews - FULL (owns interview workflow)
-        Permission.INTERVIEWS_VIEW,
-        Permission.INTERVIEWS_SCHEDULE,
-        Permission.INTERVIEWS_UPDATE_STATUS,
-        # Interview Settings - FULL CRUD
-        Permission.INTERVIEW_SETTINGS_VIEW,
-        Permission.INTERVIEW_SETTINGS_CREATE,
-        Permission.INTERVIEW_SETTINGS_EDIT,
-        Permission.INTERVIEW_SETTINGS_DELETE,
-        # Jobs - VIEW only
+        Permission.CANDIDATES_VIEW, Permission.CANDIDATES_CREATE,
+        Permission.CANDIDATES_EDIT, Permission.CANDIDATES_DELETE, Permission.CANDIDATES_ASSIGN,
+        Permission.INTERVIEWS_VIEW, Permission.INTERVIEWS_SCHEDULE, Permission.INTERVIEWS_UPDATE_STATUS,
+        Permission.INTERVIEW_SETTINGS_VIEW, Permission.INTERVIEW_SETTINGS_CREATE,
+        Permission.INTERVIEW_SETTINGS_EDIT, Permission.INTERVIEW_SETTINGS_DELETE,
         Permission.JOBS_VIEW,
-        # Onboards - VIEW
         Permission.ONBOARDS_VIEW,
-        # Reports - VIEW
         Permission.REPORTS_VIEW,
-        # Tasks
-        Permission.TASKS_VIEW,
-        Permission.TASKS_CREATE,
-        Permission.TASKS_EDIT,
+        Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
     ],
+
     SystemRole.CLIENT_COORDINATOR: [
         Permission.DASHBOARD_VIEW,
-        # Clients - FULL
-        Permission.CLIENTS_VIEW,
-        Permission.CLIENTS_CREATE,
-        Permission.CLIENTS_EDIT,
-        Permission.CLIENTS_DELETE,
-        # Jobs - FULL
-        Permission.JOBS_VIEW,
-        Permission.JOBS_CREATE,
-        Permission.JOBS_EDIT,
-        Permission.JOBS_DELETE,
-        # Interviews - PARTIAL (client side)
-        Permission.INTERVIEWS_VIEW,
-        Permission.INTERVIEWS_SCHEDULE,
-        Permission.INTERVIEWS_UPDATE_STATUS,
-        # Interview Settings - VIEW only (can see but not change)
+        Permission.CLIENTS_VIEW, Permission.CLIENTS_CREATE,
+        Permission.CLIENTS_EDIT, Permission.CLIENTS_DELETE,
+        Permission.JOBS_VIEW, Permission.JOBS_CREATE, Permission.JOBS_EDIT, Permission.JOBS_DELETE,
+        Permission.INTERVIEWS_VIEW, Permission.INTERVIEWS_SCHEDULE, Permission.INTERVIEWS_UPDATE_STATUS,
         Permission.INTERVIEW_SETTINGS_VIEW,
-        # Candidates - VIEW only
         Permission.CANDIDATES_VIEW,
-        # Onboards - VIEW
         Permission.ONBOARDS_VIEW,
-        # Reports - VIEW
         Permission.REPORTS_VIEW,
-        # Tasks
-        Permission.TASKS_VIEW,
-        Permission.TASKS_CREATE,
-        Permission.TASKS_EDIT,
+        Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
     ],
+
+    # ── HR: CRM onboarding tasks + full HRM access ────────────────────────────
     SystemRole.HR: [
         Permission.DASHBOARD_VIEW,
-        # Users - VIEW only
         Permission.USERS_VIEW,
-        # Candidates - VIEW
         Permission.CANDIDATES_VIEW,
-        # Onboards - FULL
-        Permission.ONBOARDS_VIEW,
-        Permission.ONBOARDS_CREATE,
-        Permission.ONBOARDS_EDIT,
-        # Reports - VIEW
+        Permission.ONBOARDS_VIEW, Permission.ONBOARDS_CREATE, Permission.ONBOARDS_EDIT,
         Permission.REPORTS_VIEW,
-        # Tasks
-        Permission.TASKS_VIEW,
-        Permission.TASKS_CREATE,
-        Permission.TASKS_EDIT,
+        Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
+        *_HRM_FULL,
     ],
+
     SystemRole.ACCOUNTS: [
         Permission.DASHBOARD_VIEW,
-        # Accounts - FULL
-        Permission.ACCOUNTS_VIEW,
-        Permission.ACCOUNTS_INVOICES,
-        Permission.ACCOUNTS_PAYOUTS,
-        Permission.PAYOUTS_VIEW,
-        Permission.PAYOUTS_EDIT,
-        Permission.INVOICES_VIEW,
-        Permission.INVOICES_APPROVE,
-        # Clients - VIEW only
+        Permission.ACCOUNTS_VIEW, Permission.ACCOUNTS_INVOICES, Permission.ACCOUNTS_PAYOUTS,
+        Permission.PAYOUTS_VIEW, Permission.PAYOUTS_EDIT,
+        Permission.INVOICES_VIEW, Permission.INVOICES_APPROVE,
         Permission.CLIENTS_VIEW,
-        # Partners - VIEW only
         Permission.PARTNERS_VIEW,
-        # Reports - FULL
-        Permission.REPORTS_VIEW,
-        Permission.REPORTS_EXPORT,
-        # Tasks
+        Permission.REPORTS_VIEW, Permission.REPORTS_EXPORT,
         Permission.TASKS_VIEW,
     ],
+
     SystemRole.PARTNER: [
         Permission.DASHBOARD_VIEW,
-        # Candidates - CREATE and VIEW own
-        Permission.CANDIDATES_VIEW,
-        Permission.CANDIDATES_CREATE,
-        # Jobs - VIEW only (visible to partners)
+        Permission.CANDIDATES_VIEW, Permission.CANDIDATES_CREATE,
         Permission.JOBS_VIEW,
-        # Interviews - VIEW own candidates
         Permission.INTERVIEWS_VIEW,
-        # Accounts - VIEW own invoices
-        Permission.ACCOUNTS_VIEW,
-        Permission.ACCOUNTS_INVOICES,
+        Permission.ACCOUNTS_VIEW, Permission.ACCOUNTS_INVOICES,
     ],
+
+    # ── HRM-only roles ────────────────────────────────────────────────────────
+
+    # MANAGER: team-level HRM (no CRM access by default)
+    SystemRole.MANAGER: _HRM_TEAM,
+
+    # EMPLOYEE: self-service HRM only
+    SystemRole.EMPLOYEE: _HRM_SELF,
 }
 
 

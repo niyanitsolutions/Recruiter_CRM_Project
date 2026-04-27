@@ -70,6 +70,9 @@ async def get_current_user(
         "email": payload.get("email"),
         "department_id": payload.get("department_id"),
         "reporting_to": payload.get("reporting_to"),
+        # Module flags (default to backward-compatible values if absent from old JWTs)
+        "crm_enabled": payload.get("crm_enabled", True),
+        "hrm_enabled": payload.get("hrm_enabled", False),
     }
 
     if not user["id"]:
@@ -277,3 +280,33 @@ async def get_client_ip(request: Request) -> str:
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+async def require_hrm_module(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Dependency: block HRM endpoints when tenant's hrm_enabled flag is False.
+    Only the global super-admin bypasses this check — OWNER is subject to it."""
+    if current_user.get("is_super_admin"):
+        return current_user
+    if not current_user.get("hrm_enabled", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="HRM module is not enabled for your organisation. Please upgrade your plan.",
+        )
+    return current_user
+
+
+async def require_crm_module(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Dependency: block CRM endpoints when tenant's crm_enabled flag is False.
+    Only the global super-admin bypasses this check — OWNER is subject to it."""
+    if current_user.get("is_super_admin"):
+        return current_user
+    if not current_user.get("crm_enabled", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CRM module is not enabled for your organisation.",
+        )
+    return current_user

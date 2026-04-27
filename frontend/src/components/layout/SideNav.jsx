@@ -34,9 +34,15 @@ import {
   Wallet,
   Trash2,
   Plug,
+  UserCog,
+  Clock,
+  Megaphone,
+  TrendingUp,
+  Banknote,
+  PersonStanding,
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
-import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType } from '../../store/authSlice'
+import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType, selectHrmEnabled } from '../../store/authSlice'
 
 // ─── Permission → nav-item mapping ────────────────────────────────────────────
 // `permissions` is an array — the nav item shows if the user has ANY one of them.
@@ -95,6 +101,23 @@ const PERMISSION_NAV_MAP = [
     path: '/integrations', icon: Plug,   label: 'Integrations',    section: 'System' },
   { permissions: ['crm_settings:view', 'crm_settings:edit'],
     path: '/settings',   icon: Settings,  label: 'Settings',   section: 'System' },
+  // HRM — shown only when hrm_enabled (filtered separately in getMenuSections)
+  { permissions: ['hrm:dashboard:view'],
+    path: '/hrm',                   icon: LayoutDashboard, label: 'HRM Dashboard',    section: 'HRM', hrmOnly: true },
+  { permissions: ['hrm:employees:view', 'hrm:employees:manage'],
+    path: '/hrm/employees',         icon: UserCog,         label: 'Employees',        section: 'HRM', hrmOnly: true },
+  { permissions: ['hrm:attendance:self', 'hrm:attendance:team', 'hrm:attendance:manage'],
+    path: '/hrm/attendance',        icon: Clock,           label: 'Attendance',       section: 'HRM', hrmOnly: true },
+  { permissions: ['hrm:leave:apply', 'hrm:leave:team_approve', 'hrm:leave:manage'],
+    path: '/hrm/leaves',            icon: Calendar,        label: 'Leave Management', section: 'HRM', hrmOnly: true },
+  { permissions: ['hrm:payroll:view_self', 'hrm:payroll:manage'],
+    path: '/hrm/payroll',           icon: Banknote,        label: 'Payroll',          section: 'HRM', hrmOnly: true },
+  { permissions: ['hrm:performance:self', 'hrm:performance:team', 'hrm:performance:manage'],
+    path: '/hrm/performance',       icon: TrendingUp,      label: 'Performance',      section: 'HRM', hrmOnly: true },
+  { permissions: ['hrm:announcements:view', 'hrm:announcements:manage'],
+    path: '/hrm/announcements',     icon: Megaphone,       label: 'Announcements',    section: 'HRM', hrmOnly: true },
+  { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
+    path: '/hrm/hiring',            icon: PersonStanding,  label: 'Hiring Pipeline',  section: 'HRM', hrmOnly: true },
 ]
 
 /**
@@ -102,11 +125,12 @@ const PERMISSION_NAV_MAP = [
  * A nav item is shown when the user has ANY permission in its `permissions` list.
  * Pass isOwner=true to bypass filtering (company-level superuser only).
  */
-const buildPermissionMenu = (permissions, isOwner = false, isAdmin = false) => {
+const buildPermissionMenu = (permissions, isOwner = false, isAdmin = false, hrmEnabled = false) => {
   const perms = new Set(permissions || [])
   const sectionMap = {}
 
   for (const item of PERMISSION_NAV_MAP) {
+    if (item.hrmOnly && !hrmEnabled) continue
     if (!isOwner && !isAdmin && !item.permissions.some(p => perms.has(p))) continue
     if (!sectionMap[item.section]) sectionMap[item.section] = []
     const isDuplicate = sectionMap[item.section].some(
@@ -127,6 +151,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
   const isSeller     = useSelector(selectIsSeller)
   const userRole     = useSelector(selectUserRole)
   const userType     = useSelector(selectUserType)
+  const hrmEnabled   = useSelector(selectHrmEnabled)
   const location     = useLocation()
 
   // Close mobile nav on route change
@@ -195,7 +220,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
     // Only Owners bypass the filter (company-level superuser).
     // Admin role goes through the same permission check as all other roles —
     // it simply has a different (smaller) default permission set.
-    const sections = buildPermissionMenu(user?.permissions, !!user?.isOwner, false)
+    const sections = buildPermissionMenu(user?.permissions, !!user?.isOwner, false, hrmEnabled)
     return {
       flat: [],
       sections: sections.length > 0

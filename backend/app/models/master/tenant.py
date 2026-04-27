@@ -112,10 +112,17 @@ class TenantModel(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = Field(default="system")
     
+    # ── Module Enablement ─────────────────────────────────────────────────────
+    # Controls which product modules this tenant has access to.
+    # crm_enabled=True (default) preserves backward compatibility for all
+    # existing tenants created before the HRM module was introduced.
+    crm_enabled: bool = Field(default=True)   # Recruitment / CRM module
+    hrm_enabled: bool = Field(default=False)  # HR Management module
+
     # Soft Delete
     is_deleted: bool = Field(default=False)
     deleted_at: Optional[datetime] = None
-    
+
     model_config = ConfigDict(populate_by_name=True)
     
     def to_dict(self) -> dict:

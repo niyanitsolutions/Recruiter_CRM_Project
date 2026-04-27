@@ -49,6 +49,12 @@ from app.api.v1 import integrations, trash
 # ============== Export ==============
 from app.api.v1 import export
 
+# ============== HRM Module ==============
+from app.api.v1 import (
+    hrm_employees, hrm_attendance, hrm_leaves, hrm_payroll,
+    hrm_performance, hrm_announcements, hrm_dashboard, hrm_hiring,
+)
+
 # ============== Company Settings ==============
 from app.api.v1 import company_settings
 
@@ -201,6 +207,16 @@ app.include_router(email_test.router, prefix=API_V1_PREFIX, tags=["Email"])
 # ============== PHASE 6 ROUTERS ==============
 app.include_router(integrations.router, prefix=API_V1_PREFIX, tags=["Integrations"])
 app.include_router(trash.router, prefix=API_V1_PREFIX, tags=["Trash"])
+
+# ============== HRM MODULE ROUTERS ==============
+app.include_router(hrm_dashboard.router, prefix=API_V1_PREFIX, tags=["HRM - Dashboard"])
+app.include_router(hrm_employees.router, prefix=API_V1_PREFIX, tags=["HRM - Employees"])
+app.include_router(hrm_attendance.router, prefix=API_V1_PREFIX, tags=["HRM - Attendance"])
+app.include_router(hrm_leaves.router, prefix=API_V1_PREFIX, tags=["HRM - Leaves"])
+app.include_router(hrm_payroll.router, prefix=API_V1_PREFIX, tags=["HRM - Payroll"])
+app.include_router(hrm_performance.router, prefix=API_V1_PREFIX, tags=["HRM - Performance"])
+app.include_router(hrm_announcements.router, prefix=API_V1_PREFIX, tags=["HRM - Announcements"])
+app.include_router(hrm_hiring.router, prefix=API_V1_PREFIX, tags=["HRM - Hiring"])
 
 
 # Serve uploaded files (resumes, etc.)

@@ -467,6 +467,9 @@ class AuthService:
             "designation":  user.get("designation", ""),
             "department_id": user.get("department_id"),
             "reporting_to": user.get("reporting_to"),
+            # Module flags — drive frontend visibility and API access control
+            "crm_enabled":  bool(tenant.get("crm_enabled", True)),
+            "hrm_enabled":  bool(tenant.get("hrm_enabled", False)),
         }
         session_id = await AuthService._create_session(
             user_id, "company_user", company_id,
@@ -536,6 +539,9 @@ class AuthService:
             # Onboarding flags
             "must_change_password": bool(user.get("must_change_password", False)),
             "profile_completed":    bool(user.get("profile_completed", True)),
+            # Module flags
+            "crm_enabled": bool(tenant.get("crm_enabled", True)),
+            "hrm_enabled": bool(tenant.get("hrm_enabled", False)),
         }, ""
 
     @staticmethod

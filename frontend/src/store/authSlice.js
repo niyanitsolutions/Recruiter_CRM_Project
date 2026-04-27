@@ -36,6 +36,8 @@ const _userFromPayload = (payload) => {
     isSeller:    payload.is_seller     || false,
     sellerId:    payload.seller_id     || null,
     isOwner:     payload.is_owner      || false,
+    crmEnabled:  payload.crm_enabled   !== false,
+    hrmEnabled:  payload.hrm_enabled   || false,
   }
 }
 
@@ -395,6 +397,8 @@ const authSlice = createSlice({
           isSeller:    action.payload.is_seller    || false,
           sellerId:    action.payload.seller_id    || null,
           isOwner:     action.payload.is_owner     || false,
+          crmEnabled:  action.payload.crm_enabled  !== false,
+          hrmEnabled:  action.payload.hrm_enabled  || false,
         }
         setRememberMe(remember)
         setToken(action.payload.access_token, remember)
@@ -450,6 +454,8 @@ const authSlice = createSlice({
           isSeller:    action.payload.is_seller    || false,
           sellerId:    action.payload.seller_id    || null,
           isOwner:     action.payload.is_owner     || false,
+          crmEnabled:  action.payload.crm_enabled  !== false,
+          hrmEnabled:  action.payload.hrm_enabled  || false,
         }
         setRememberMe(remember)
         setToken(action.payload.access_token, remember)
@@ -505,6 +511,8 @@ const authSlice = createSlice({
           isSeller:    action.payload.is_seller    || false,
           sellerId:    action.payload.seller_id    || null,
           isOwner:     action.payload.is_owner     || false,
+          crmEnabled:  action.payload.crm_enabled  !== false,
+          hrmEnabled:  action.payload.hrm_enabled  || false,
         }
         setRememberMe(remember)
         setToken(action.payload.access_token, remember)
@@ -584,6 +592,8 @@ export const selectIsOwner            = (state) => state.auth.user?.isOwner     
 export const selectUserRole           = (state) => state.auth.user?.role          || null
 export const selectUserType           = (state) => state.auth.user?.userType      || 'internal'
 export const selectUserPermissions    = (state) => state.auth.user?.permissions   || []
+export const selectCrmEnabled         = (state) => state.auth.user?.crmEnabled    !== false
+export const selectHrmEnabled         = (state) => state.auth.user?.hrmEnabled    || false
 export const selectSubscriptionExpired  = (state) => state.auth.subscriptionExpired  || null
 export const selectForcePasswordChange  = (state) => state.auth.forcePasswordChange  || false
 export const selectProfileCompleted     = (state) => state.auth.profileCompleted
