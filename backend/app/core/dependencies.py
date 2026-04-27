@@ -55,7 +55,7 @@ async def get_current_user(
     """Get current authenticated user from JWT token"""
     token = credentials.credentials
     payload = decode_token(token)
-    
+
     # Extract user info from token
     user = {
         "id": payload.get("sub"),
@@ -71,13 +71,39 @@ async def get_current_user(
         "department_id": payload.get("department_id"),
         "reporting_to": payload.get("reporting_to"),
     }
-    
+
     if not user["id"]:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload"
         )
-    
+
+    # ── Single-session enforcement ────────────────────────────────────────────
+    # Verify the JWT's jti (session ID) is still marked active in master_db.sessions.
+    # When another device force-logs in, _revoke_sessions() sets is_active=False for
+    # all prior sessions, so this check will fail for the displaced device on its
+    # very next API call — regardless of how much time remains on the JWT.
+    jti = payload.get("jti")
+    if jti:
+        try:
+            master_db = _db_get_master_db()
+            session_doc = await master_db.sessions.find_one(
+                {"_id": jti}, {"is_active": 1}
+            )
+            if not session_doc or not session_doc.get("is_active"):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={
+                        "sessionExpired": True,
+                        "message": "Your session was ended because this account logged in on another device.",
+                    },
+                )
+        except HTTPException:
+            raise
+        except Exception as _sess_err:
+            # DB unreachable — log and allow through rather than locking all users out
+            logger.warning("Session validation DB error for jti=%s: %s", jti, _sess_err)
+
     return user
 
 
