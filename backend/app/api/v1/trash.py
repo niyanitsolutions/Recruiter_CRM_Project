@@ -41,7 +41,7 @@ async def restore_record(
 async def permanent_delete(
     module: str,
     record_id: str,
-    current_user: dict = Depends(require_permissions(["candidates:delete"])),
+    current_user: dict = Depends(require_permissions(["audit:admin"])),
     db=Depends(get_company_db),
 ):
     """Permanently delete a record from trash (irreversible)."""
