@@ -20,6 +20,7 @@ from app.core.tenant_resolver import tenant_resolver
 from app.models.master.tenant import TenantStatus
 from app.models.master.super_admin import SuperAdminStatus
 from app.models.company.user import UserStatus, ROLE_PERMISSIONS
+from app.models.company.role import SystemRole, ROLE_DEFAULT_PERMISSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +56,19 @@ async def _resolve_effective_permissions(user: dict, role_doc: Optional[dict], d
         stored = set(user.get("permissions") or [])
         perms  = stored if stored else set()
     elif role_doc and role_doc.get("permissions"):
-        # Role document in DB — always reflects the latest role settings
+        # Role document in DB — base permission set
         perms = set(role_doc["permissions"])
+        # For system roles: merge with the current code-defined defaults so that
+        # new permissions added to ROLE_DEFAULT_PERMISSIONS take effect immediately
+        # without requiring the DB role doc to be re-initialized.
+        # This is additive only — permissions in the role doc are always preserved.
+        role_name = user.get("role", "")
+        try:
+            system_role_enum = SystemRole(role_name)
+            code_defaults = {p.value for p in ROLE_DEFAULT_PERMISSIONS.get(system_role_enum, [])}
+            perms = perms | code_defaults
+        except ValueError:
+            pass  # custom role — use role_doc as the sole source
     else:
         # Hardcoded fallback (role not in DB yet, or role has no permissions set)
         role_name = user.get("role", "")

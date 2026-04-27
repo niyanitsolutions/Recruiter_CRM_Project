@@ -863,7 +863,7 @@ function App() {
 
         {/* ── Trash / Deleted History ── */}
         <Route path="/trash"
-          element={<PermissionRoute permission="admin:view"><DeletedHistory /></PermissionRoute>} />
+          element={<PermissionRoute permission="audit:view"><DeletedHistory /></PermissionRoute>} />
 
         {/* ── Integrations ── */}
         <Route path="/integrations"

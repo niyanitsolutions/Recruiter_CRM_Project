@@ -25,16 +25,20 @@ class RoleService:
         self.audit_service = AuditService(db)
     
     async def initialize_system_roles(self) -> None:
-        """Initialize system roles if they don't exist"""
+        """Initialize system roles and sync their permissions to current code-defined defaults.
+
+        Safe to call multiple times. For existing roles the permissions are always
+        overwritten with the latest ROLE_DEFAULT_PERMISSIONS so that code changes
+        propagate to the DB without manual edits.
+        """
         for role in SystemRole:
+            permissions = [p.value for p in ROLE_DEFAULT_PERMISSIONS.get(role, [])]
             existing = await self.collection.find_one({
                 "name": role.value,
                 "is_system_role": True
             })
-            
+
             if not existing:
-                permissions = [p.value for p in ROLE_DEFAULT_PERMISSIONS.get(role, [])]
-                
                 role_doc = {
                     "_id": str(ObjectId()),
                     "name": role.value,
@@ -47,8 +51,16 @@ class RoleService:
                     "created_at": datetime.now(timezone.utc),
                     "is_deleted": False
                 }
-                
                 await self.collection.insert_one(role_doc)
+            else:
+                # Sync existing role to current defaults
+                await self.collection.update_one(
+                    {"_id": existing["_id"]},
+                    {"$set": {
+                        "permissions": permissions,
+                        "updated_at": datetime.now(timezone.utc),
+                    }}
+                )
     
     async def create_role(
         self,
