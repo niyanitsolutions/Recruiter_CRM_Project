@@ -351,6 +351,8 @@ class TenantService:
         contact_number: str,
         password: str,
         designation: str,           # "Owner" | "Admin" — already validated by schema
+        crm_enabled: bool = True,
+        hrm_enabled: bool = True,
     ) -> Tuple[Optional[dict], str]:
         """
         Single-call trial onboarding.
@@ -442,6 +444,8 @@ class TenantService:
             "email_verified": True,
             "email_verification_token": None,
             "email_verification_expiry": None,
+            "crm_enabled": crm_enabled,
+            "hrm_enabled": hrm_enabled,
             "status": TenantStatus.ACTIVE,
             "created_at": now,
             "updated_at": now,
@@ -765,6 +769,10 @@ class TenantService:
         company_id = str(uuid.uuid4())[:8]
         owner_id = str(uuid.uuid4())
 
+        admin_module = getattr(data, "module", "crm_hrm")
+        crm_enabled = admin_module in ("crm_only", "crm_hrm")
+        hrm_enabled = admin_module in ("hrm_only", "crm_hrm")
+
         tenant_data = {
             "_id": tenant_id,
             "company_id": company_id,
@@ -802,6 +810,8 @@ class TenantService:
             "email_verified": True,       # Admin-created → no verification needed
             "email_verification_token": None,
             "email_verification_expiry": None,
+            "crm_enabled": crm_enabled,
+            "hrm_enabled": hrm_enabled,
             "payment_status": "paid" if with_payment else "manual_by_admin",
             "payment_mode": getattr(data, "payment_mode", None),
             "seller_id": getattr(data, "seller_id", None),

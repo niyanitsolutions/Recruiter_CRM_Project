@@ -197,6 +197,8 @@ class TenantAdminCreate(BaseModel):
     zip_code: str = Field(default="000000")
     seller_id: Optional[str] = None
     send_welcome_email: bool = True
+    # Module selection: "crm_only" | "hrm_only" | "crm_hrm"
+    module: str = Field(default="crm_hrm")
 
 
 class TenantAdminCreateWithPayment(BaseModel):
@@ -226,6 +228,8 @@ class TenantAdminCreateWithPayment(BaseModel):
     zip_code: str = Field(default="000000")
     seller_id: Optional[str] = None
     send_welcome_email: bool = True
+    # Module selection: "crm_only" | "hrm_only" | "crm_hrm"
+    module: str = Field(default="crm_hrm")
 
 
 class TenantResponse(BaseModel):

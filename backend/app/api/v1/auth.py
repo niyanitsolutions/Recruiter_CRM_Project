@@ -200,6 +200,10 @@ async def trial_setup(request: TrialSetupRequest):
     - company_name, email, username, contact_number must be unique
     - no_website=true → website stored as null
     """
+    module = getattr(request, "module", "crm_hrm")
+    crm_enabled = module in ("crm_only", "crm_hrm")
+    hrm_enabled = module in ("hrm_only", "crm_hrm")
+
     result, error = await tenant_service.setup_trial(
         company_name=request.company_name,
         company_contact=request.company_contact,
@@ -211,6 +215,8 @@ async def trial_setup(request: TrialSetupRequest):
         contact_number=request.contact_number,
         password=request.password,
         designation=request.designation,
+        crm_enabled=crm_enabled,
+        hrm_enabled=hrm_enabled,
     )
 
     if error:

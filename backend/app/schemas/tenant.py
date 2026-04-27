@@ -208,6 +208,9 @@ class TrialSetupRequest(BaseModel):
     confirm_password: str = Field(..., min_length=8, max_length=100)
     designation: str = Field(...)
 
+    # Module selection: "crm_only" | "hrm_only" | "crm_hrm"
+    module: str = Field(default="crm_hrm")
+
     # ── Validators ────────────────────────────────────────────────────────────
 
     @field_validator('designation')
