@@ -96,7 +96,7 @@ function TaskCard({ task, onStatusChange, onDelete, isDark }) {
   const entityLabel = task.related_entity_name || task.related_entity_type || null
 
   const cardStyle = isDark ? {
-    background: 'rgba(16, 20, 60, 0.65)',
+    background: 'rgba(255, 255, 255, 0.06)',
     border: `1px solid ${task.is_overdue ? 'rgba(239,68,68,0.35)' : 'rgba(255,255,255,0.10)'}`,
     borderRadius: 14,
     padding: '16px',
@@ -179,8 +179,8 @@ function TaskCard({ task, onStatusChange, onDelete, isDark }) {
 // ── Column ────────────────────────────────────────────────────────────────────
 function KanbanColumn({ label, count, tasks, onStatusChange, onDelete, isDark }) {
   const colStyle = isDark ? {
-    background: 'rgba(13, 18, 55, 0.55)',
-    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(255, 255, 255, 0.05)',
+    border: '1px solid rgba(255,255,255,0.09)',
     borderRadius: 16,
     padding: '20px 16px',
     flex: 1,
@@ -242,10 +242,10 @@ function CreateModal({ users, onClose, onCreate, isDark }) {
   }
 
   const modalStyle = isDark ? {
-    background: 'rgba(13,16,37,0.95)',
+    background: 'rgba(15, 21, 55, 0.90)',
     border: '1px solid rgba(255,255,255,0.12)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
     borderRadius: 20,
     padding: '32px',
     width: '100%',
@@ -469,7 +469,7 @@ export default function Tasks() {
           {/* List / Calendar toggle */}
           <div style={{
             display: 'flex',
-            background: isDark ? 'rgba(16, 20, 60, 0.60)' : 'rgba(108,99,255,0.08)',
+            background: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(108,99,255,0.08)',
             border: isDark ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(108,99,255,0.15)',
             borderRadius: 24,
             padding: 4,

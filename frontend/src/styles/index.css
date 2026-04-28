@@ -370,33 +370,33 @@ body,
 /*       The html element is the lowest layer. Everything on top is transparent  */
 /*       so the glow shows through all containers.                               */
 html[data-theme="dark"] {
-  background-color: #0a0d1a;
+  background-color: #0f1535;
   background-image:
     /* Stars — scattered white dots */
-    radial-gradient(1px 1px at  8%  12%, rgba(255,255,255,0.55) 0%, transparent 100%),
-    radial-gradient(1px 1px at 22%  35%, rgba(255,255,255,0.40) 0%, transparent 100%),
-    radial-gradient(1px 1px at 38%   8%, rgba(255,255,255,0.50) 0%, transparent 100%),
-    radial-gradient(1px 1px at 55%  22%, rgba(255,255,255,0.35) 0%, transparent 100%),
-    radial-gradient(1px 1px at 70%   5%, rgba(255,255,255,0.45) 0%, transparent 100%),
-    radial-gradient(1px 1px at 84%  18%, rgba(255,255,255,0.60) 0%, transparent 100%),
-    radial-gradient(1px 1px at 93%  38%, rgba(255,255,255,0.35) 0%, transparent 100%),
-    radial-gradient(1px 1px at 15%  55%, rgba(255,255,255,0.42) 0%, transparent 100%),
-    radial-gradient(1px 1px at 42%  70%, rgba(255,255,255,0.30) 0%, transparent 100%),
-    radial-gradient(1px 1px at 60%  85%, rgba(255,255,255,0.50) 0%, transparent 100%),
-    radial-gradient(1px 1px at 78%  62%, rgba(255,255,255,0.38) 0%, transparent 100%),
-    radial-gradient(1px 1px at 88%  78%, rgba(255,255,255,0.45) 0%, transparent 100%),
-    radial-gradient(1px 1px at 30%  90%, rgba(255,255,255,0.35) 0%, transparent 100%),
-    radial-gradient(1px 1px at  5%  80%, rgba(255,255,255,0.40) 0%, transparent 100%),
-    radial-gradient(1px 1px at 97%  60%, rgba(255,255,255,0.30) 0%, transparent 100%),
-    radial-gradient(2px 2px at 48%  45%, rgba(255,255,255,0.20) 0%, transparent 100%),
-    radial-gradient(2px 2px at 12%  25%, rgba(255,255,255,0.15) 0%, transparent 100%),
-    radial-gradient(2px 2px at 72%  30%, rgba(255,255,255,0.18) 0%, transparent 100%),
+    radial-gradient(1px 1px at  8%  12%, rgba(255,255,255,0.65) 0%, transparent 100%),
+    radial-gradient(1px 1px at 22%  35%, rgba(255,255,255,0.50) 0%, transparent 100%),
+    radial-gradient(1px 1px at 38%   8%, rgba(255,255,255,0.60) 0%, transparent 100%),
+    radial-gradient(1px 1px at 55%  22%, rgba(255,255,255,0.45) 0%, transparent 100%),
+    radial-gradient(1px 1px at 70%   5%, rgba(255,255,255,0.55) 0%, transparent 100%),
+    radial-gradient(1px 1px at 84%  18%, rgba(255,255,255,0.70) 0%, transparent 100%),
+    radial-gradient(1px 1px at 93%  38%, rgba(255,255,255,0.45) 0%, transparent 100%),
+    radial-gradient(1px 1px at 15%  55%, rgba(255,255,255,0.52) 0%, transparent 100%),
+    radial-gradient(1px 1px at 42%  70%, rgba(255,255,255,0.40) 0%, transparent 100%),
+    radial-gradient(1px 1px at 60%  85%, rgba(255,255,255,0.60) 0%, transparent 100%),
+    radial-gradient(1px 1px at 78%  62%, rgba(255,255,255,0.48) 0%, transparent 100%),
+    radial-gradient(1px 1px at 88%  78%, rgba(255,255,255,0.55) 0%, transparent 100%),
+    radial-gradient(1px 1px at 30%  90%, rgba(255,255,255,0.45) 0%, transparent 100%),
+    radial-gradient(1px 1px at  5%  80%, rgba(255,255,255,0.50) 0%, transparent 100%),
+    radial-gradient(1px 1px at 97%  60%, rgba(255,255,255,0.40) 0%, transparent 100%),
+    radial-gradient(2px 2px at 48%  45%, rgba(255,255,255,0.28) 0%, transparent 100%),
+    radial-gradient(2px 2px at 12%  25%, rgba(255,255,255,0.22) 0%, transparent 100%),
+    radial-gradient(2px 2px at 72%  30%, rgba(255,255,255,0.25) 0%, transparent 100%),
     /* Purple ambient glow — top-left */
-    radial-gradient(ellipse at 15% 35%, rgba(124,58,237,0.28) 0%, transparent 55%),
+    radial-gradient(ellipse at 15% 35%, rgba(124,58,237,0.35) 0%, transparent 55%),
     /* Blue ambient glow — top-right */
-    radial-gradient(ellipse at 85% 12%, rgba(59,130,246,0.18) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 12%, rgba(59,130,246,0.25) 0%, transparent 50%),
     /* Soft purple haze — bottom center */
-    radial-gradient(ellipse at 50% 92%, rgba(91,33,182,0.15) 0%, transparent 45%);
+    radial-gradient(ellipse at 50% 92%, rgba(91,33,182,0.22) 0%, transparent 45%);
   background-attachment: fixed;
   min-height: 100vh;
 }
@@ -415,9 +415,20 @@ html[data-theme="dark"] header {
 
 /* ── 14. Dark mode — glassmorphism cards ────────────────────────────────────── */
 html[data-theme="dark"] .card,
-html[data-theme="dark"] .modal-content {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+html[data-theme="dark"] .modal-content,
+html[data-theme="dark"] .stat-card,
+html[data-theme="dark"] .bg-white,
+html[data-theme="dark"] .bg-gray-50,
+html[data-theme="dark"] .bg-gray-100 {
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+}
+
+html[data-theme="dark"] .card-hover:hover {
+  background-color: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(124, 58, 237, 0.30) !important;
 }
 
 /* ── 15. Purple glow shadow utilities ───────────────────────────────────────── */

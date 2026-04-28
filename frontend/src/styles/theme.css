@@ -14,16 +14,16 @@
 [data-theme="dark"] {
   /* ── Page Backgrounds ── */
   --bg-app:            transparent;        /* let html starfield show through */
-  --bg-base-solid:     #0a0d1a;           /* solid base for rare opaque needs */
-  --bg-surface:        #0d1030;
-  --bg-sidebar:        #0d1030;
-  /* Cards: dark indigo-tinted glass — the look from the reference image */
-  --bg-card:           rgba(16, 20, 60, 0.55);
-  --bg-card-alt:       rgba(12, 16, 50, 0.65);
-  --bg-topbar:         rgba(8, 10, 28, 0.82);
+  --bg-base-solid:     #0f1535;           /* solid base for rare opaque needs */
+  --bg-surface:        #131c45;
+  --bg-sidebar:        #0f1535;
+  /* Cards: white-tinted glassmorphism — frosted glass over the navy starfield */
+  --bg-card:           rgba(255, 255, 255, 0.06);
+  --bg-card-alt:       rgba(255, 255, 255, 0.04);
+  --bg-topbar:         rgba(10, 14, 38, 0.80);
   --bg-hover:          rgba(124, 58, 237, 0.12);
   --bg-active:         rgba(124, 58, 237, 0.22);
-  --bg-overlay:        rgba(0, 0, 10, 0.80);
+  --bg-overlay:        rgba(0, 0, 15, 0.75);
 
   /* ── Text ── */
   --text-primary:      #e2e8f0;
@@ -41,18 +41,18 @@
   --border-subtle:     rgba(255, 255, 255, 0.04);
   --border-card:       rgba(255, 255, 255, 0.10);
 
-  /* ── Inputs — dark glass style matching card ── */
-  --input-bg:           rgba(16, 20, 60, 0.60);
+  /* ── Inputs — glass style matching card ── */
+  --input-bg:           rgba(255, 255, 255, 0.07);
   --input-text:         #e2e8f0;
-  --input-placeholder:  #4a5580;
+  --input-placeholder:  #5a6890;
   --input-border:       rgba(255, 255, 255, 0.12);
   --input-focus-border: #7c3aed;
   --input-focus-shadow: rgba(124, 58, 237, 0.30);
-  --input-autofill:     #1e1b4b;
+  --input-autofill:     #1a2055;
   --input-autofill-text: #e2e8f0;
-  --input-disabled-bg:  rgba(12, 16, 50, 0.40);
-  --input-disabled-text: #2d3555;
-  --select-option-bg:   #0d1030;
+  --input-disabled-bg:  rgba(255, 255, 255, 0.03);
+  --input-disabled-text: #3d4870;
+  --select-option-bg:   #131c45;
   --select-option-text: #e2e8f0;
   --label-color:        #8892b0;
 
@@ -75,17 +75,17 @@
   --nav-glow-active:   rgba(124, 58, 237, 0.80);
 
   /* ── UI elements ── */
-  --scrollbar-track:        #0a0d1a;
-  --scrollbar-thumb:        #1a1f50;
-  --scrollbar-thumb-hover:  #2d3580;
+  --scrollbar-track:        #0f1535;
+  --scrollbar-thumb:        #2a3570;
+  --scrollbar-thumb-hover:  #3d4e90;
   --selection-bg:           rgba(124, 58, 237, 0.40);
   --selection-text:         #c4b5fd;
-  --dropdown-bg:            rgba(12, 16, 50, 0.95);
-  --dropdown-border:        rgba(255, 255, 255, 0.10);
+  --dropdown-bg:            rgba(15, 21, 53, 0.96);
+  --dropdown-border:        rgba(255, 255, 255, 0.12);
   --dropdown-hover:         rgba(124, 58, 237, 0.14);
-  --skeleton-from:          rgba(255, 255, 255, 0.04);
-  --skeleton-via:           rgba(255, 255, 255, 0.08);
-  --skeleton-to:            rgba(255, 255, 255, 0.04);
+  --skeleton-from:          rgba(255, 255, 255, 0.05);
+  --skeleton-via:           rgba(255, 255, 255, 0.10);
+  --skeleton-to:            rgba(255, 255, 255, 0.05);
 
   /* ── Shadows ── */
   --shadow-card:     0 4px 24px rgba(0, 0, 20, 0.60), 0 1px 4px rgba(0,0,0,0.30);
@@ -100,9 +100,9 @@
   --gray-500: #8892b0;
   --gray-400: #5a6480;
   --border-gray-200: rgba(255, 255, 255, 0.10);
-  --bg-gray-50:  rgba(16, 20, 60, 0.45);
-  --bg-gray-100: rgba(16, 20, 60, 0.55);
-  --bg-gray-200: rgba(20, 26, 75, 0.65);
+  --bg-gray-50:  rgba(255, 255, 255, 0.05);
+  --bg-gray-100: rgba(255, 255, 255, 0.07);
+  --bg-gray-200: rgba(255, 255, 255, 0.09);
 }
 
 /* ── LIGHT THEME ─────────────────────────────────────────────────────────────── */
