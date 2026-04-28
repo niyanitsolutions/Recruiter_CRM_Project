@@ -11,6 +11,7 @@
     @apply font-sans antialiased;
     background-color: var(--bg-app);
     color: var(--text-primary);
+    min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -104,8 +105,8 @@
     @apply nav-item;
     color: var(--nav-text-active) !important;
     background-color: var(--nav-bg-active) !important;
-    border: 1px solid var(--nav-border-active);
-    box-shadow: 0 0 10px var(--nav-glow-active);
+    border: 1px solid var(--nav-border-active) !important;
+    box-shadow: 0 0 12px var(--nav-glow-active);
   }
 
   .stat-card  { @apply card p-6; }
@@ -348,3 +349,28 @@ body,
 .min-h-screen.bg-surface-50 {
   background-color: var(--bg-app) !important;
 }
+
+/* ── 13. Dark mode — space / starfield ambient glow ─────────────────────────── */
+html[data-theme="dark"] body {
+  background-image:
+    radial-gradient(ellipse at 15% 35%, rgba(124, 58, 237, 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse at 85% 15%, rgba(59, 130, 246, 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(91, 33, 182, 0.10) 0%, transparent 45%);
+  background-attachment: fixed;
+}
+
+/* ── 14. Dark mode — glassmorphism cards ────────────────────────────────────── */
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .modal-content {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Sidebar dark background always — in both themes */
+nav[data-sidenav] {
+  background-color: var(--bg-sidebar) !important;
+}
+
+/* ── 15. Purple glow shadow utilities ───────────────────────────────────────── */
+.shadow-purple-glow    { box-shadow: 0 0 20px rgba(124, 58, 237, 0.5) !important; }
+.shadow-purple-glow-sm { box-shadow: 0 0 12px rgba(124, 58, 237, 0.35) !important; }

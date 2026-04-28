@@ -13,6 +13,7 @@ import {
   HelpCircle,
   Sun,
   Moon,
+  Monitor,
   ChevronRight,
   Menu,
 } from 'lucide-react'
@@ -88,7 +89,17 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle }) => {
   const isSuperAdmin = useSelector(selectIsSuperAdmin)
   const isOwner = useSelector(selectIsOwner)
   const isSeller = useSelector(selectIsSeller)
-  const { isDark, toggleTheme } = useTheme()
+  const { themeMode, setThemeMode, isDark } = useTheme()
+  const [themeOpen, setThemeOpen] = useState(false)
+  const themeRef = useRef(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (themeRef.current && !themeRef.current.contains(e.target)) setThemeOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const profileRef = useRef(null)
@@ -182,20 +193,43 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle }) => {
           />
         </div>
 
-        {/* Theme toggle */}
-        <button
-          onClick={toggleTheme}
-          className="relative p-2 rounded-lg transition-all duration-200"
-          style={{ color: 'var(--text-muted)' }}
-          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
-        >
-          {isDark
-            ? <Sun className="w-5 h-5" />
-            : <Moon className="w-5 h-5" />
-          }
-        </button>
+        {/* Theme toggle — 3-way: Dark / Light / System */}
+        <div className="relative" ref={themeRef}>
+          <button
+            onClick={() => setThemeOpen(o => !o)}
+            className="relative p-2 rounded-lg transition-all duration-200"
+            style={{ color: 'var(--text-muted)' }}
+            title="Change theme"
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
+          >
+            {themeMode === 'dark' ? <Moon className="w-5 h-5" />
+              : themeMode === 'light' ? <Sun className="w-5 h-5" />
+              : <Monitor className="w-5 h-5" />
+            }
+          </button>
+
+          {themeOpen && (
+            <div className="dropdown right-0 animate-slide-up" style={{ minWidth: 140 }}>
+              {[
+                { mode: 'dark',   icon: Moon,    label: 'Dark' },
+                { mode: 'light',  icon: Sun,     label: 'Light' },
+                { mode: 'system', icon: Monitor, label: 'System' },
+              ].map(({ mode, icon: Icon, label }) => (
+                <button
+                  key={mode}
+                  onClick={() => { setThemeMode(mode); setThemeOpen(false) }}
+                  className="dropdown-item flex items-center gap-3"
+                  style={themeMode === mode ? { color: 'var(--accent)', background: 'var(--bg-active)' } : {}}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                  {themeMode === mode && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-current" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Notifications */}
         <NotificationBell />

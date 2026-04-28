@@ -4,9 +4,17 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
+        // Space dark theme tokens
+        'bg-base':    '#0a0d1a',
+        'bg-sidebar': '#0d1025',
+        'nav-active': '#5b21b6',
+        'badge-high': '#f87171',
+        'badge-medium': '#fbbf24',
+        'tag-company': '#a5b4fc',
         // Primary brand colors (as per spec: #141230)
         primary: {
           50: '#f0f0f8',
@@ -75,9 +83,11 @@ export default {
         'soft': '0 2px 15px -3px rgba(0,0,0,0.4), 0 10px 20px -2px rgba(0,0,0,0.3)',
         'card': '0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -2px rgba(0,0,0,0.2)',
         'elevated': '0 20px 60px -10px rgba(0,0,0,0.6)',
-        'glow': '0 0 20px rgba(139, 92, 246, 0.4)',
-        'glow-sm': '0 0 10px rgba(139, 92, 246, 0.3)',
-        'glow-lg': '0 0 40px rgba(139, 92, 246, 0.35)',
+        'glow': '0 0 20px rgba(124, 58, 237, 0.4)',
+        'glow-sm': '0 0 10px rgba(124, 58, 237, 0.3)',
+        'glow-lg': '0 0 40px rgba(124, 58, 237, 0.35)',
+        'purple-glow': '0 0 20px rgba(124,58,237,0.5)',
+        'purple-glow-sm': '0 0 12px rgba(124,58,237,0.35)',
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out',
