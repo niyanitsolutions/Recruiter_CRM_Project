@@ -68,11 +68,11 @@
   --text-info:    #818cf8;
 
   /* ── Navigation — solid purple pill exactly as in the reference ── */
-  --nav-text:          rgba(255, 255, 255, 0.50);
+  --nav-text:          rgba(255, 255, 255, 0.55);
   --nav-text-active:   #ffffff;
-  --nav-bg-active:     #5b21b6;
-  --nav-border-active: rgba(124, 58, 237, 0.30);
-  --nav-glow-active:   rgba(91, 33, 182, 0.70);
+  --nav-bg-active:     #6d28d9;
+  --nav-border-active: rgba(167, 139, 250, 0.35);
+  --nav-glow-active:   rgba(124, 58, 237, 0.80);
 
   /* ── UI elements ── */
   --scrollbar-track:        #0a0d1a;

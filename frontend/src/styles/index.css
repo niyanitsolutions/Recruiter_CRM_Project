@@ -107,7 +107,8 @@
     color: var(--nav-text-active) !important;
     background-color: var(--nav-bg-active) !important;
     border: 1px solid var(--nav-border-active) !important;
-    box-shadow: 0 0 12px var(--nav-glow-active);
+    box-shadow: 0 0 18px var(--nav-glow-active), 0 2px 8px rgba(0,0,0,0.3);
+    border-radius: 10px !important;
   }
 
   .stat-card  { @apply card p-6; }
@@ -422,3 +423,24 @@ html[data-theme="dark"] .modal-content {
 /* ── 15. Purple glow shadow utilities ───────────────────────────────────────── */
 .shadow-purple-glow    { box-shadow: 0 0 20px rgba(124, 58, 237, 0.5) !important; }
 .shadow-purple-glow-sm { box-shadow: 0 0 12px rgba(124, 58, 237, 0.35) !important; }
+
+/* ── 16. Sidebar inner purple ambient glow (dark mode only) ─────────────────── */
+html[data-theme="dark"] aside {
+  position: relative;
+  overflow: visible;
+}
+html[data-theme="dark"] aside::after {
+  content: '';
+  position: absolute;
+  top: 20%;
+  right: -1px;
+  width: 180px;
+  height: 60%;
+  background: radial-gradient(ellipse at right center,
+    rgba(124,58,237,0.22) 0%,
+    rgba(91,33,182,0.12) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: -1;
+}

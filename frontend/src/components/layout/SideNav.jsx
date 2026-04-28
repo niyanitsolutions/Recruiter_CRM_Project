@@ -297,9 +297,9 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       isCollapsed ? 'w-20' : 'w-64',
       mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
     )} style={{
-        background: 'linear-gradient(180deg, #0d1025 0%, #0f1535 40%, #0d1025 100%)',
-        borderRight: '1px solid rgba(255,255,255,0.07)',
-        boxShadow: '4px 0 24px rgba(0,0,0,0.4)',
+        background: 'linear-gradient(180deg, #0b0e22 0%, #0e1230 50%, #0b0e22 100%)',
+        borderRight: '1px solid rgba(124,58,237,0.30)',
+        boxShadow: '4px 0 40px rgba(124,58,237,0.45), 8px 0 80px rgba(91,33,182,0.25), 1px 0 0 rgba(124,58,237,0.15)',
       }}>
       {/* Logo */}
       <div className={clsx('h-16 flex items-center', isCollapsed ? 'justify-center px-2' : 'px-5')} style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
@@ -384,22 +384,36 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       {/* User info + logout */}
       <div className="p-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         {!isCollapsed ? (
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm flex-shrink-0 text-white" style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 10px rgba(124,58,237,0.4)' }}>
-              {user?.fullName?.charAt(0) || user?.full_name?.charAt(0) || 'U'}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm flex-shrink-0 text-white" style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 10px rgba(124,58,237,0.4)' }}>
+                {user?.fullName?.charAt(0) || user?.full_name?.charAt(0) || 'U'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate text-white/90">{user?.fullName || user?.full_name || 'User'}</p>
+                <p className="text-xs text-white/40 truncate capitalize">
+                  {isSuperAdmin ? 'Super Admin' : isSeller ? 'Seller' : user?.isOwner ? 'Owner' : (userRole || 'User').replace(/_/g, ' ')}
+                </p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate text-white/90">{user?.fullName || user?.full_name || 'User'}</p>
-              <p className="text-xs text-white/40 truncate capitalize">
-                {isSuperAdmin ? 'Super Admin' : isSeller ? 'Seller' : user?.isOwner ? 'Owner' : (userRole || 'User').replace(/_/g, ' ')}
-              </p>
-            </div>
-            <button onClick={handleLogout} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white/80" title="Logout">
-              <LogOut className="w-4 h-4" />
+            <button
+              onClick={handleLogout}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', padding: '8px 12px', borderRadius: 8,
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                color: '#f87171', fontSize: 13, fontWeight: 500,
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.10)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <LogOut size={15} />
+              Logout
             </button>
           </div>
         ) : (
-          <button onClick={handleLogout} className="w-full flex justify-center p-2 hover:bg-white/10 rounded-lg transition-colors text-white/40 hover:text-white/80" title="Logout">
+          <button onClick={handleLogout} className="w-full flex justify-center p-2 rounded-lg transition-colors" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171' }} title="Logout">
             <LogOut className="w-5 h-5" />
           </button>
         )}
