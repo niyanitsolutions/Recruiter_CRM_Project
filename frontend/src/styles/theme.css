@@ -4,99 +4,105 @@
    Applied to <html> element by ThemeContext.jsx
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── DARK THEME — deep space / glassmorphism ────────────────────────────────── */
+/* ── DARK THEME — deep space / glassmorphism ─────────────────────────────────
+   Starfield gradient lives on html[data-theme="dark"] in index.css.
+   --bg-app is transparent so all containers let the starfield show through.
+   Cards use a dark indigo-tinted semi-transparent background (not white tint)
+   to produce the exact deep-space glassmorphism look from the design reference.
+   ─────────────────────────────────────────────────────────────────────────── */
 :root,
 [data-theme="dark"] {
-  /* ── Backgrounds ── */
-  --bg-app:            transparent;           /* transparent so html starfield shows through */
-  --bg-base-solid:     #0a0d1a;              /* use when you need the solid base color */
-  --bg-surface:        #0d1025;
-  --bg-sidebar:        #0d1025;
-  --bg-card:           rgba(255, 255, 255, 0.06);
-  --bg-card-alt:       rgba(255, 255, 255, 0.04);
-  --bg-topbar:         rgba(10, 13, 26, 0.80);
-  --bg-hover:          rgba(255, 255, 255, 0.07);
+  /* ── Page Backgrounds ── */
+  --bg-app:            transparent;        /* let html starfield show through */
+  --bg-base-solid:     #0a0d1a;           /* solid base for rare opaque needs */
+  --bg-surface:        #0d1030;
+  --bg-sidebar:        #0d1030;
+  /* Cards: dark indigo-tinted glass — the look from the reference image */
+  --bg-card:           rgba(16, 20, 60, 0.55);
+  --bg-card-alt:       rgba(12, 16, 50, 0.65);
+  --bg-topbar:         rgba(8, 10, 28, 0.82);
+  --bg-hover:          rgba(124, 58, 237, 0.12);
   --bg-active:         rgba(124, 58, 237, 0.22);
-  --bg-overlay:        rgba(0, 0, 0, 0.75);
+  --bg-overlay:        rgba(0, 0, 10, 0.80);
 
   /* ── Text ── */
   --text-primary:      #e2e8f0;
-  --text-secondary:    #b8bcc8;
-  --text-muted:        #64748b;
-  --text-disabled:     #334155;
+  --text-secondary:    #a8b3c8;
+  --text-muted:        #5a6480;
+  --text-disabled:     #2d3555;
   --text-heading:      #f1f5f9;
-  --text-label:        #94a3b8;
-  --text-link:         #7c3aed;
+  --text-label:        #8892b0;
+  --text-link:         #a78bfa;
+  --text-danger:       #f87171;
 
   /* ── Borders ── */
   --border:            rgba(255, 255, 255, 0.08);
-  --border-strong:     rgba(255, 255, 255, 0.15);
+  --border-strong:     rgba(255, 255, 255, 0.16);
   --border-subtle:     rgba(255, 255, 255, 0.04);
-  --border-card:       rgba(255, 255, 255, 0.08);
+  --border-card:       rgba(255, 255, 255, 0.10);
 
-  /* ── Inputs ── */
-  --input-bg:           rgba(255, 255, 255, 0.08);
+  /* ── Inputs — dark glass style matching card ── */
+  --input-bg:           rgba(16, 20, 60, 0.60);
   --input-text:         #e2e8f0;
-  --input-placeholder:  #475569;
+  --input-placeholder:  #4a5580;
   --input-border:       rgba(255, 255, 255, 0.12);
   --input-focus-border: #7c3aed;
-  --input-focus-shadow: rgba(124, 58, 237, 0.25);
+  --input-focus-shadow: rgba(124, 58, 237, 0.30);
   --input-autofill:     #1e1b4b;
   --input-autofill-text: #e2e8f0;
-  --input-disabled-bg:  rgba(255, 255, 255, 0.03);
-  --input-disabled-text: #334155;
-  --select-option-bg:   #0d1025;
+  --input-disabled-bg:  rgba(12, 16, 50, 0.40);
+  --input-disabled-text: #2d3555;
+  --select-option-bg:   #0d1030;
   --select-option-text: #e2e8f0;
-  --label-color:        #94a3b8;
+  --label-color:        #8892b0;
 
   /* ── Status Backgrounds ── */
-  --bg-success: rgba(34,  197, 94,  0.12);
-  --bg-warning: rgba(245, 158, 11,  0.12);
-  --bg-danger:  rgba(239, 68,  68,  0.12);
-  --bg-info:    rgba(99,  102, 241, 0.12);
+  --bg-success: rgba(34,  197, 94,  0.14);
+  --bg-warning: rgba(245, 158, 11,  0.14);
+  --bg-danger:  rgba(239, 68,  68,  0.14);
+  --bg-info:    rgba(99,  102, 241, 0.14);
 
   /* ── Status Text ── */
   --text-success: #4ade80;
   --text-warning: #fbbf24;
-  --text-danger:  #f87171;
   --text-info:    #818cf8;
 
-  /* ── Navigation ── */
-  --nav-text:          rgba(255, 255, 255, 0.55);
+  /* ── Navigation — solid purple pill exactly as in the reference ── */
+  --nav-text:          rgba(255, 255, 255, 0.50);
   --nav-text-active:   #ffffff;
   --nav-bg-active:     #5b21b6;
-  --nav-border-active: transparent;
-  --nav-glow-active:   rgba(91, 33, 182, 0.55);
+  --nav-border-active: rgba(124, 58, 237, 0.30);
+  --nav-glow-active:   rgba(91, 33, 182, 0.70);
 
   /* ── UI elements ── */
-  --scrollbar-track: #0a0d1a;
-  --scrollbar-thumb: #1e293b;
-  --scrollbar-thumb-hover: #334155;
-  --selection-bg:    rgba(124, 58, 237, 0.35);
-  --selection-text:  #c4b5fd;
-  --dropdown-bg:     #0d1025;
-  --dropdown-border: rgba(255, 255, 255, 0.10);
-  --dropdown-hover:  rgba(255, 255, 255, 0.06);
-  --skeleton-from:   rgba(255, 255, 255, 0.04);
-  --skeleton-via:    rgba(255, 255, 255, 0.08);
-  --skeleton-to:     rgba(255, 255, 255, 0.04);
+  --scrollbar-track:        #0a0d1a;
+  --scrollbar-thumb:        #1a1f50;
+  --scrollbar-thumb-hover:  #2d3580;
+  --selection-bg:           rgba(124, 58, 237, 0.40);
+  --selection-text:         #c4b5fd;
+  --dropdown-bg:            rgba(12, 16, 50, 0.95);
+  --dropdown-border:        rgba(255, 255, 255, 0.10);
+  --dropdown-hover:         rgba(124, 58, 237, 0.14);
+  --skeleton-from:          rgba(255, 255, 255, 0.04);
+  --skeleton-via:           rgba(255, 255, 255, 0.08);
+  --skeleton-to:            rgba(255, 255, 255, 0.04);
 
   /* ── Shadows ── */
-  --shadow-card:     0 4px 24px rgba(0,0,0,0.50), 0 1px 4px rgba(0,0,0,0.30);
-  --shadow-soft:     0 8px 32px rgba(0,0,0,0.50);
-  --shadow-elevated: 0 20px 60px rgba(0,0,0,0.75);
+  --shadow-card:     0 4px 24px rgba(0, 0, 20, 0.60), 0 1px 4px rgba(0,0,0,0.30);
+  --shadow-soft:     0 8px 32px rgba(0, 0, 20, 0.55);
+  --shadow-elevated: 0 20px 60px rgba(0, 0, 20, 0.80);
 
-  /* ── Legacy gray overrides (dark) ── */
+  /* ── Legacy gray overrides — dark mode ── */
   --gray-900: #f1f5f9;
   --gray-800: #e2e8f0;
-  --gray-700: #cbd5e1;
-  --gray-600: #94a3b8;
-  --gray-500: #94a3b8;
-  --gray-400: #64748b;
-  --border-gray-200: rgba(255,255,255,0.10);
-  --bg-gray-50:  rgba(255,255,255,0.04);
-  --bg-gray-100: rgba(255,255,255,0.06);
-  --bg-gray-200: rgba(255,255,255,0.10);
+  --gray-700: #c8d0e0;
+  --gray-600: #8892b0;
+  --gray-500: #8892b0;
+  --gray-400: #5a6480;
+  --border-gray-200: rgba(255, 255, 255, 0.10);
+  --bg-gray-50:  rgba(16, 20, 60, 0.45);
+  --bg-gray-100: rgba(16, 20, 60, 0.55);
+  --bg-gray-200: rgba(20, 26, 75, 0.65);
 }
 
 /* ── LIGHT THEME ─────────────────────────────────────────────────────────────── */
@@ -120,6 +126,7 @@
   --text-heading:      #0f0f1a;
   --text-label:        #4a4a6a;
   --text-link:         #6c63ff;
+  --text-danger:       #dc2626;
 
   /* ── Borders ── */
   --border:            rgba(108, 99, 255, 0.12);
@@ -154,32 +161,32 @@
   --text-danger:  #dc2626;
   --text-info:    #4f46e5;
 
-  /* ── Navigation (sidebar stays dark even in light mode) ── */
-  --nav-text:          rgba(255, 255, 255, 0.55);
+  /* ── Navigation (sidebar always stays dark in light mode too) ── */
+  --nav-text:          rgba(255, 255, 255, 0.50);
   --nav-text-active:   #ffffff;
   --nav-bg-active:     #5b21b6;
-  --nav-border-active: transparent;
-  --nav-glow-active:   rgba(91, 33, 182, 0.50);
+  --nav-border-active: rgba(124, 58, 237, 0.30);
+  --nav-glow-active:   rgba(91, 33, 182, 0.60);
 
   /* ── UI elements ── */
-  --scrollbar-track: #eef0ff;
-  --scrollbar-thumb: #d0d5e8;
-  --scrollbar-thumb-hover: #b8bcc8;
-  --selection-bg:    rgba(108, 99, 255, 0.20);
-  --selection-text:  #6c63ff;
-  --dropdown-bg:     #ffffff;
-  --dropdown-border: rgba(108, 99, 255, 0.12);
-  --dropdown-hover:  rgba(108, 99, 255, 0.06);
-  --skeleton-from:   #e8eaff;
-  --skeleton-via:    #f0f2ff;
-  --skeleton-to:     #e8eaff;
+  --scrollbar-track:        #eef0ff;
+  --scrollbar-thumb:        #d0d5e8;
+  --scrollbar-thumb-hover:  #b8bcc8;
+  --selection-bg:           rgba(108, 99, 255, 0.20);
+  --selection-text:         #6c63ff;
+  --dropdown-bg:            #ffffff;
+  --dropdown-border:        rgba(108, 99, 255, 0.12);
+  --dropdown-hover:         rgba(108, 99, 255, 0.06);
+  --skeleton-from:          #e8eaff;
+  --skeleton-via:           #f0f2ff;
+  --skeleton-to:            #e8eaff;
 
   /* ── Shadows ── */
-  --shadow-card:     0 4px 6px rgba(108,99,255,0.08), 0 2px 4px rgba(108,99,255,0.05);
-  --shadow-soft:     0 2px 15px rgba(108,99,255,0.12);
-  --shadow-elevated: 0 20px 60px rgba(108,99,255,0.15);
+  --shadow-card:     0 4px 6px rgba(108, 99, 255, 0.08), 0 2px 4px rgba(108, 99, 255, 0.05);
+  --shadow-soft:     0 2px 15px rgba(108, 99, 255, 0.12);
+  --shadow-elevated: 0 20px 60px rgba(108, 99, 255, 0.15);
 
-  /* ── Legacy gray overrides (light) ── */
+  /* ── Legacy gray overrides — light mode ── */
   --gray-900: #1a1a2e;
   --gray-800: #2d2d4e;
   --gray-700: #4a4a6a;
@@ -192,14 +199,22 @@
   --bg-gray-200: #e8eaff;
 }
 
-/* ── Brand / Accent — same in both themes ──────────────────────────────────── */
+/* ── Brand / Accent — identical in both themes ───────────────────────────────── */
 :root {
   --accent:           #7c3aed;
   --accent-hover:     #6d28d9;
-  --accent-light:     rgba(124, 58, 237, 0.15);
+  --accent-light:     rgba(124, 58, 237, 0.18);
   --accent-2:         #4facfe;
 
-  /* ── Stat card icon gradients ── */
+  /* ── Gradients used across app ── */
+  --gradient-1: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  --gradient-2: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  --gradient-3: linear-gradient(135deg, #fa8231 0%, #ff6b9d 100%);
+  --gradient-4: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  --gradient-5: linear-gradient(135deg, #ff4757 0%, #ff6348 100%);
+  --gradient-6: linear-gradient(135deg, #ff6b9d 0%, #7c3aed 100%);
+
+  /* ── Stat icon gradients ── */
   --stat-purple:  linear-gradient(135deg, #7c3aed 0%, #4facfe 100%);
   --stat-green:   linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
   --stat-orange:  linear-gradient(135deg, #fa8231 0%, #ff6b9d 100%);
@@ -208,12 +223,4 @@
   --stat-pink:    linear-gradient(135deg, #ff6b9d 0%, #7c3aed 100%);
   --stat-teal:    linear-gradient(135deg, #38f9d7 0%, #43e97b 100%);
   --stat-yellow:  linear-gradient(135deg, #f6d365 0%, #fda085 100%);
-
-  /* ── General gradients ── */
-  --gradient-1: linear-gradient(135deg, #7c3aed 0%, #4facfe 100%);
-  --gradient-2: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-  --gradient-3: linear-gradient(135deg, #fa8231 0%, #ff6b9d 100%);
-  --gradient-4: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-  --gradient-5: linear-gradient(135deg, #ff4757 0%, #ff6348 100%);
-  --gradient-6: linear-gradient(135deg, #ff6b9d 0%, #7c3aed 100%);
 }

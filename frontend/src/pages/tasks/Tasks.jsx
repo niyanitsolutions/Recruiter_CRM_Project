@@ -96,7 +96,7 @@ function TaskCard({ task, onStatusChange, onDelete, isDark }) {
   const entityLabel = task.related_entity_name || task.related_entity_type || null
 
   const cardStyle = isDark ? {
-    background: 'rgba(255,255,255,0.06)',
+    background: 'rgba(16, 20, 60, 0.65)',
     border: `1px solid ${task.is_overdue ? 'rgba(239,68,68,0.35)' : 'rgba(255,255,255,0.10)'}`,
     borderRadius: 14,
     padding: '16px',
@@ -179,12 +179,14 @@ function TaskCard({ task, onStatusChange, onDelete, isDark }) {
 // ── Column ────────────────────────────────────────────────────────────────────
 function KanbanColumn({ label, count, tasks, onStatusChange, onDelete, isDark }) {
   const colStyle = isDark ? {
-    background: 'rgba(255,255,255,0.04)',
+    background: 'rgba(13, 18, 55, 0.55)',
     border: '1px solid rgba(255,255,255,0.08)',
     borderRadius: 16,
     padding: '20px 16px',
     flex: 1,
     minWidth: 0,
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
   } : {
     background: '#f8f9ff',
     border: '1px solid rgba(108,99,255,0.10)',
@@ -467,7 +469,7 @@ export default function Tasks() {
           {/* List / Calendar toggle */}
           <div style={{
             display: 'flex',
-            background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(108,99,255,0.08)',
+            background: isDark ? 'rgba(16, 20, 60, 0.60)' : 'rgba(108,99,255,0.08)',
             border: isDark ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(108,99,255,0.15)',
             borderRadius: 24,
             padding: 4,
