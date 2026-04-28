@@ -48,11 +48,14 @@ class PerformanceReview(BaseModel):
     company_id: str
     employee_id: str
     employee_name: Optional[str] = None
+    employee_email: Optional[str] = None
+    description: Optional[str] = None
 
     review_cycle: ReviewCycle
     year: int
 
     goals: List[Goal] = Field(default_factory=list)
+    review_points: List["ReviewPoint"] = Field(default_factory=list)
 
     # Self assessment
     self_rating: Optional[Rating] = None
@@ -78,11 +81,21 @@ class PerformanceReview(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class ReviewPoint(BaseModel):
+    title: str
+    description: Optional[str] = None
+    rating: Optional[Rating] = None
+
+
 class CreateReview(BaseModel):
     employee_id: str
+    employee_name: Optional[str] = None
+    employee_email: Optional[str] = None
+    description: Optional[str] = None
     review_cycle: ReviewCycle
     year: int
     goals: Optional[List[Goal]] = None
+    review_points: Optional[List[ReviewPoint]] = None
 
 
 class SubmitSelfReview(BaseModel):

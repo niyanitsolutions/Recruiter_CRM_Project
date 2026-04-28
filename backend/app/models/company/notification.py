@@ -36,6 +36,13 @@ class NotificationType(str, Enum):
     SYSTEM_ALERT = "system_alert"
     TASK_ASSIGNED = "task_assigned"
     MENTION = "mention"
+    # ── HRM sync events ───────────────────────────────────────────────────────
+    HRM_USER_CREATED  = "hrm_user_created"    # CRM user created → notify HR
+    HRM_EMP_CREATED   = "hrm_emp_created"     # HRM employee created → notify Admin
+    HRM_LEAVE_APPLIED = "hrm_leave_applied"   # leave applied → notify manager
+    HRM_LEAVE_ACTION  = "hrm_leave_action"    # leave approved/rejected → notify employee
+    HRM_OFFER_SENT    = "hrm_offer_sent"      # offer released → notify candidate
+    HRM_ONBOARD_UPDATE = "hrm_onboard_update" # onboarding status updated
 
 
 class NotificationChannel(str, Enum):

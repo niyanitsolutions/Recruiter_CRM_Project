@@ -83,6 +83,23 @@ const getOnboarding = (id) => api.get(`${BASE}/hiring/onboarding/${id}`)
 const updateOnboarding = (id, data) => api.put(`${BASE}/hiring/onboarding/${id}`, data)
 const completeOnboarding = (id) => api.post(`${BASE}/hiring/onboarding/${id}/complete`)
 
+// ── Documents ──────────────────────────────────────────────────────────────
+const uploadDocument = (employeeId, formData) =>
+  api.post(`${BASE}/documents/upload/${employeeId}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+const getDocuments = (employeeId) => api.get(`${BASE}/documents/${employeeId}`)
+const deleteDocument = (employeeId, docIndex) =>
+  api.delete(`${BASE}/documents/${employeeId}/${docIndex}`)
+
+// ── Offer Templates ────────────────────────────────────────────────────────
+const createTemplate = (data) => api.post(`${BASE}/offer-templates`, data)
+const listTemplates = (params) => api.get(`${BASE}/offer-templates`, { params })
+const getTemplate = (id) => api.get(`${BASE}/offer-templates/${id}`)
+const updateTemplate = (id, data) => api.put(`${BASE}/offer-templates/${id}`, data)
+const deleteTemplate = (id) => api.delete(`${BASE}/offer-templates/${id}`)
+const generateFromTemplate = (id, data) => api.post(`${BASE}/offer-templates/${id}/generate`, data)
+
 const hrmService = {
   getDashboardStats, getAttendanceTrend,
   listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee,
@@ -96,6 +113,8 @@ const hrmService = {
   createInterview, listInterviews, submitInterviewFeedback,
   createOffer, listOffers, getOffer, respondOffer,
   createOnboarding, listOnboardings, getOnboarding, updateOnboarding, completeOnboarding,
+  uploadDocument, getDocuments, deleteDocument,
+  createTemplate, listTemplates, getTemplate, updateTemplate, deleteTemplate, generateFromTemplate,
 }
 
 export default hrmService

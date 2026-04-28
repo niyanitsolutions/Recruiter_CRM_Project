@@ -169,6 +169,13 @@ class Permission(str, Enum):
     # Hiring Pipeline
     HRM_HIRING_VIEW          = "hrm:hiring:view"
     HRM_HIRING_MANAGE        = "hrm:hiring:manage"
+    # Offer Templates
+    HRM_OFFER_TEMPLATES_VIEW   = "hrm:offer_templates:view"
+    HRM_OFFER_TEMPLATES_MANAGE = "hrm:offer_templates:manage"
+    # Documents
+    HRM_DOCUMENTS_MANAGE     = "hrm:documents:manage"
+    # Notifications (in-app read access)
+    NOTIFICATIONS_VIEW       = "notifications:view"
 
 
 # ── Convenience sets ──────────────────────────────────────────────────────────
@@ -193,6 +200,10 @@ _HRM_FULL = [
     Permission.HRM_ANNOUNCEMENTS_MANAGE,
     Permission.HRM_HIRING_VIEW,
     Permission.HRM_HIRING_MANAGE,
+    Permission.HRM_OFFER_TEMPLATES_VIEW,
+    Permission.HRM_OFFER_TEMPLATES_MANAGE,
+    Permission.HRM_DOCUMENTS_MANAGE,
+    Permission.NOTIFICATIONS_VIEW,
 ]
 
 # Team-level HRM (MANAGER)
@@ -208,6 +219,7 @@ _HRM_TEAM = [
     Permission.HRM_PERFORMANCE_TEAM,
     Permission.HRM_ANNOUNCEMENTS_VIEW,
     Permission.HRM_HIRING_VIEW,
+    Permission.NOTIFICATIONS_VIEW,
 ]
 
 # Self-service HRM (EMPLOYEE)
@@ -218,6 +230,7 @@ _HRM_SELF = [
     Permission.HRM_PAYROLL_VIEW_SELF,
     Permission.HRM_PERFORMANCE_SELF,
     Permission.HRM_ANNOUNCEMENTS_VIEW,
+    Permission.NOTIFICATIONS_VIEW,
 ]
 
 
@@ -253,6 +266,7 @@ _CRM_ADMIN_BASE = [
     Permission.IMPORTS_VIEW, Permission.IMPORTS_CREATE,
     Permission.EXPORTS_VIEW, Permission.EXPORTS_CREATE,
     Permission.NOTIFICATIONS_CREATE,
+    Permission.NOTIFICATIONS_VIEW,
 ]
 
 

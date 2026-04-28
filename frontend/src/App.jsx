@@ -111,6 +111,7 @@ import HRCandidates from './pages/hrm/hiring/HRCandidates'
 import HRInterviews from './pages/hrm/hiring/HRInterviews'
 import HROffer from './pages/hrm/hiring/HROffer'
 import HROnboarding from './pages/hrm/hiring/HROnboarding'
+import OfferTemplates from './pages/hrm/OfferTemplates'
 
 // Phase 5 - Reports, Analytics, Imports, Exports, Targets, Audit
 import ReportsPage from './pages/reports/ReportsPage'
@@ -918,6 +919,7 @@ function App() {
         <Route path="/hrm/hiring/interviews"   element={<PermissionRoute permission="hrm:hiring:view"><HRInterviews /></PermissionRoute>} />
         <Route path="/hrm/hiring/offers"       element={<PermissionRoute permission="hrm:hiring:view"><HROffer /></PermissionRoute>} />
         <Route path="/hrm/hiring/onboarding"   element={<PermissionRoute permission="hrm:hiring:view"><HROnboarding /></PermissionRoute>} />
+        <Route path="/hrm/offer-templates"     element={<PermissionRoute permission="hrm:offer_templates:view"><OfferTemplates /></PermissionRoute>} />
       </Route>
 
       {/* DEFAULT */}

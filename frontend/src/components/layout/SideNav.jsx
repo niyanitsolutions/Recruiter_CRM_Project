@@ -40,6 +40,12 @@ import {
   TrendingUp,
   Banknote,
   PersonStanding,
+  Briefcase as BriefcaseIcon,
+  UserSearch,
+  CalendarCheck,
+  FileBox,
+  UserCheck2,
+  LayoutTemplate,
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType, selectHrmEnabled } from '../../store/authSlice'
@@ -115,9 +121,22 @@ const PERMISSION_NAV_MAP = [
   { permissions: ['hrm:performance:self', 'hrm:performance:team', 'hrm:performance:manage'],
     path: '/hrm/performance',       icon: TrendingUp,      label: 'Performance',      section: 'HRM', hrmOnly: true },
   { permissions: ['hrm:announcements:view', 'hrm:announcements:manage'],
-    path: '/hrm/announcements',     icon: Megaphone,       label: 'Announcements',    section: 'HRM', hrmOnly: true },
+    path: '/hrm/announcements',        icon: Megaphone,       label: 'Announcements',   section: 'HRM', hrmOnly: true },
+  // Hiring — each section is a direct nav item (no pipeline wrapper)
   { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring',            icon: PersonStanding,  label: 'Hiring Pipeline',  section: 'HRM', hrmOnly: true },
+    path: '/hrm/hiring',               icon: PersonStanding,  label: 'Hiring',          section: 'Hiring', hrmOnly: true },
+  { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
+    path: '/hrm/hiring/jobs',          icon: BriefcaseIcon,   label: 'Jobs',            section: 'Hiring', hrmOnly: true },
+  { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
+    path: '/hrm/hiring/candidates',    icon: UserSearch,      label: 'Candidates',      section: 'Hiring', hrmOnly: true },
+  { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
+    path: '/hrm/hiring/interviews',    icon: CalendarCheck,   label: 'Interviews',      section: 'Hiring', hrmOnly: true },
+  { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
+    path: '/hrm/hiring/offers',        icon: FileBox,         label: 'Offers',          section: 'Hiring', hrmOnly: true },
+  { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
+    path: '/hrm/hiring/onboarding',    icon: UserCheck2,      label: 'Onboarding',      section: 'Hiring', hrmOnly: true },
+  { permissions: ['hrm:offer_templates:view', 'hrm:offer_templates:manage'],
+    path: '/hrm/offer-templates',      icon: LayoutTemplate,  label: 'Offer Templates', section: 'Hiring', hrmOnly: true },
 ]
 
 /**

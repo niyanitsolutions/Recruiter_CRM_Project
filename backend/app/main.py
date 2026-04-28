@@ -53,6 +53,7 @@ from app.api.v1 import export
 from app.api.v1 import (
     hrm_employees, hrm_attendance, hrm_leaves, hrm_payroll,
     hrm_performance, hrm_announcements, hrm_dashboard, hrm_hiring,
+    hrm_offer_templates, hrm_documents,
 )
 
 # ============== Company Settings ==============
@@ -215,8 +216,10 @@ app.include_router(hrm_attendance.router, prefix=API_V1_PREFIX, tags=["HRM - Att
 app.include_router(hrm_leaves.router, prefix=API_V1_PREFIX, tags=["HRM - Leaves"])
 app.include_router(hrm_payroll.router, prefix=API_V1_PREFIX, tags=["HRM - Payroll"])
 app.include_router(hrm_performance.router, prefix=API_V1_PREFIX, tags=["HRM - Performance"])
-app.include_router(hrm_announcements.router, prefix=API_V1_PREFIX, tags=["HRM - Announcements"])
-app.include_router(hrm_hiring.router, prefix=API_V1_PREFIX, tags=["HRM - Hiring"])
+app.include_router(hrm_announcements.router,   prefix=API_V1_PREFIX, tags=["HRM - Announcements"])
+app.include_router(hrm_hiring.router,           prefix=API_V1_PREFIX, tags=["HRM - Hiring"])
+app.include_router(hrm_offer_templates.router,  prefix=API_V1_PREFIX, tags=["HRM - Offer Templates"])
+app.include_router(hrm_documents.router,        prefix=API_V1_PREFIX, tags=["HRM - Documents"])
 
 
 # Serve uploaded files (resumes, etc.)

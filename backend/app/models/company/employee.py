@@ -1,6 +1,6 @@
 """HRM — Employee Model"""
 from datetime import datetime, date, timezone
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from enum import Enum
 import uuid
@@ -44,6 +44,37 @@ class EmergencyContact(BaseModel):
     name: str
     relationship: str
     phone: str
+    email: Optional[str] = None
+
+
+class AddressInfo(BaseModel):
+    street: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    country: str = "India"
+
+
+class Qualification(BaseModel):
+    type: str                         # "academic" | "professional"
+    title: str                        # e.g. "B.Tech", "AWS Certified"
+    institution: Optional[str] = None
+    year: Optional[int] = None
+    grade: Optional[str] = None
+
+
+class DisciplinaryRecord(BaseModel):
+    date: date
+    incident: str
+    action_taken: str
+    recorded_by: Optional[str] = None
+
+
+class BackgroundCheck(BaseModel):
+    status: str = "pending"           # "pending" | "verified" | "rejected"
+    checked_by: Optional[str] = None
+    checked_on: Optional[date] = None
+    notes: Optional[str] = None
 
 
 class BankDetails(BaseModel):
@@ -85,9 +116,13 @@ class EmployeeModel(BaseModel):
     gender: Optional[Gender] = None
     date_of_birth: Optional[date] = None
     blood_group: Optional[BloodGroup] = None
-    address: Optional[str] = None
-    emergency_contact: Optional[EmergencyContact] = None
+    address: Optional[str] = None             # legacy plain-text address
+    address_info: Optional[AddressInfo] = None  # structured address
+    emergency_contact: Optional[EmergencyContact] = None   # legacy single contact
+    emergency_contacts: List[EmergencyContact] = Field(default_factory=list)
     photo_url: Optional[str] = None
+    pan_number: Optional[str] = None
+    aadhaar_number: Optional[str] = None
 
     # Employment Info
     department_id: Optional[str] = None
@@ -109,10 +144,18 @@ class EmployeeModel(BaseModel):
 
     # Bank & Compliance
     bank_details: Optional[BankDetails] = None
-    pan_number: Optional[str] = None
-    aadhaar_number: Optional[str] = None
     pf_number: Optional[str] = None
     uan_number: Optional[str] = None
+
+    # Employment Notes & Discipline
+    work_description: Optional[str] = None
+    disciplinary_records: List[DisciplinaryRecord] = Field(default_factory=list)
+
+    # Qualifications
+    qualifications: List[Qualification] = Field(default_factory=list)
+
+    # Background Verification
+    background_check: Optional[BackgroundCheck] = None
 
     # Documents
     documents: List[EmployeeDocument] = Field(default_factory=list)
@@ -141,6 +184,7 @@ class EmployeeCreate(BaseModel):
     date_of_birth: Optional[date] = None
     blood_group: Optional[BloodGroup] = None
     address: Optional[str] = None
+    address_info: Optional[AddressInfo] = None
     department_id: Optional[str] = None
     department_name: Optional[str] = None
     designation_id: Optional[str] = None
@@ -155,7 +199,13 @@ class EmployeeCreate(BaseModel):
     bank_details: Optional[BankDetails] = None
     pan_number: Optional[str] = None
     aadhaar_number: Optional[str] = None
+    pf_number: Optional[str] = None
+    uan_number: Optional[str] = None
     emergency_contact: Optional[EmergencyContact] = None
+    emergency_contacts: Optional[List[EmergencyContact]] = None
+    work_description: Optional[str] = None
+    qualifications: Optional[List[Qualification]] = None
+    background_check: Optional[BackgroundCheck] = None
 
 
 class EmployeeUpdate(BaseModel):
@@ -165,6 +215,7 @@ class EmployeeUpdate(BaseModel):
     date_of_birth: Optional[date] = None
     blood_group: Optional[BloodGroup] = None
     address: Optional[str] = None
+    address_info: Optional[AddressInfo] = None
     department_id: Optional[str] = None
     department_name: Optional[str] = None
     designation_id: Optional[str] = None
@@ -181,5 +232,12 @@ class EmployeeUpdate(BaseModel):
     bank_details: Optional[BankDetails] = None
     pan_number: Optional[str] = None
     aadhaar_number: Optional[str] = None
+    pf_number: Optional[str] = None
+    uan_number: Optional[str] = None
     emergency_contact: Optional[EmergencyContact] = None
+    emergency_contacts: Optional[List[EmergencyContact]] = None
     photo_url: Optional[str] = None
+    work_description: Optional[str] = None
+    disciplinary_records: Optional[List[DisciplinaryRecord]] = None
+    qualifications: Optional[List[Qualification]] = None
+    background_check: Optional[BackgroundCheck] = None

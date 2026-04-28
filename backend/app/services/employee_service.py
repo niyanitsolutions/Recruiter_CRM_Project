@@ -28,7 +28,14 @@ class EmployeeService:
 
     # ── CRUD ──────────────────────────────────────────────────────────────────
 
-    async def create(self, data: EmployeeCreate, company_id: str, created_by: str) -> dict:
+    async def create(
+        self,
+        data: EmployeeCreate,
+        company_id: str,
+        created_by: str,
+        crm_enabled: bool = False,
+        hrm_enabled: bool = True,
+    ) -> dict:
         emp_id = await self._next_employee_id(company_id)
         now = datetime.now(timezone.utc)
         doc = {
@@ -42,14 +49,40 @@ class EmployeeService:
             "updated_at": now,
             "is_deleted": False,
         }
-        if data.salary:
-            doc["salary"] = data.salary.model_dump()
-        if data.bank_details:
-            doc["bank_details"] = data.bank_details.model_dump()
-        if data.emergency_contact:
-            doc["emergency_contact"] = data.emergency_contact.model_dump()
+        for field in ("salary", "bank_details", "emergency_contact", "address_info", "background_check"):
+            if field in doc and hasattr(doc[field], "model_dump"):
+                doc[field] = doc[field].model_dump()
+        if data.emergency_contacts:
+            doc["emergency_contacts"] = [ec.model_dump() for ec in data.emergency_contacts]
+        if data.qualifications:
+            doc["qualifications"] = [q.model_dump() for q in data.qualifications]
         await self.col.insert_one(doc)
+
+        # CRM ↔ HRM sync: only when BOTH modules are enabled
+        if crm_enabled and hrm_enabled:
+            try:
+                from app.services.notification_service import NotificationService
+                notif_svc = NotificationService(self.db)
+                admin_ids = await self._get_admin_ids(company_id)
+                await notif_svc.notify_crm_employee_created(
+                    company_id=company_id,
+                    admin_user_ids=admin_ids,
+                    employee_name=data.full_name,
+                    employee_email=str(data.email),
+                )
+            except Exception:
+                pass  # sync notification must never block employee creation
+
         return self._serialize(doc)
+
+    async def _get_admin_ids(self, company_id: str) -> list:
+        """Return user _ids for all active admin/owner users in this company."""
+        cursor = self.db.users.find(
+            {"company_id": company_id, "is_deleted": False,
+             "$or": [{"is_owner": True}, {"role": "admin"}]},
+            {"_id": 1},
+        )
+        return [doc["_id"] async for doc in cursor]
 
     async def list(
         self,

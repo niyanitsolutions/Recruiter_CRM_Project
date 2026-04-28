@@ -236,6 +236,32 @@ class UserService:
                     company_id=company_id or "",
                 ))
 
+            # CRM ↔ HRM sync: notify HR when a new CRM user is added
+            # Only fires when BOTH modules are enabled on the tenant
+            if company_id:
+                try:
+                    master_db = get_master_db()
+                    tenant = await master_db.tenants.find_one({"company_id": company_id})
+                    if tenant and tenant.get("crm_enabled") and tenant.get("hrm_enabled"):
+                        from app.services.notification_service import NotificationService
+                        notif_svc = NotificationService(self.db)
+                        hr_ids = [
+                            doc["_id"] async for doc in self.db.users.find(
+                                {"company_id": company_id, "role": "hr",
+                                 "is_deleted": False, "status": "active"},
+                                {"_id": 1},
+                            )
+                        ]
+                        if hr_ids:
+                            await notif_svc.notify_hrm_user_created(
+                                company_id=company_id,
+                                hr_user_ids=hr_ids,
+                                new_user_name=user_data.full_name,
+                                new_user_email=user_data.email,
+                            )
+                except Exception:
+                    pass  # sync notification must never block user creation
+
             # Return user without password
             user_doc.pop("password_hash", None)
             user_doc["id"] = user_doc.pop("_id")

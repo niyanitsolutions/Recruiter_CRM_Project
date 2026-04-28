@@ -646,3 +646,73 @@ class NotificationService:
             return current_date.replace(year=year, month=month)
         else:
             return current_date + timedelta(days=1)
+
+    # ── HRM Sync Helpers ──────────────────────────────────────────────────────
+    # These are lightweight fire-and-forget helpers called by employee_service
+    # and user_service. They only run when BOTH crm_enabled AND hrm_enabled.
+
+    async def notify_hrm_user_created(
+        self,
+        company_id: str,
+        hr_user_ids: list,
+        new_user_name: str,
+        new_user_email: str,
+    ) -> None:
+        """CRM → HRM: a new CRM user was created; prompt HR to create employee profile."""
+        from bson import ObjectId
+        now = datetime.now(timezone.utc)
+        docs = [
+            {
+                "_id": str(ObjectId()),
+                "id": str(ObjectId()),
+                "company_id": company_id,
+                "user_id": hr_id,
+                "type": "hrm_user_created",
+                "title": "New user added — create employee profile",
+                "message": f"{new_user_name} ({new_user_email}) was added as a CRM user. "
+                           "Please create their employee profile in HRM.",
+                "channels": ["in_app"],
+                "channel_status": {"in_app": "delivered"},
+                "is_read": False,
+                "priority": "medium",
+                "created_at": now,
+                "updated_at": now,
+                "is_deleted": False,
+            }
+            for hr_id in hr_user_ids
+        ]
+        if docs:
+            await self.notifications_collection.insert_many(docs)
+
+    async def notify_crm_employee_created(
+        self,
+        company_id: str,
+        admin_user_ids: list,
+        employee_name: str,
+        employee_email: str,
+    ) -> None:
+        """HRM → CRM: a new HRM employee was created; prompt Admin to create CRM user."""
+        from bson import ObjectId
+        now = datetime.now(timezone.utc)
+        docs = [
+            {
+                "_id": str(ObjectId()),
+                "id": str(ObjectId()),
+                "company_id": company_id,
+                "user_id": admin_id,
+                "type": "hrm_emp_created",
+                "title": "New employee added — create user account",
+                "message": f"{employee_name} ({employee_email}) was added as an HRM employee. "
+                           "Consider creating their CRM user account.",
+                "channels": ["in_app"],
+                "channel_status": {"in_app": "delivered"},
+                "is_read": False,
+                "priority": "medium",
+                "created_at": now,
+                "updated_at": now,
+                "is_deleted": False,
+            }
+            for admin_id in admin_user_ids
+        ]
+        if docs:
+            await self.notifications_collection.insert_many(docs)

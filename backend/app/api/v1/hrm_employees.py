@@ -16,7 +16,11 @@ async def create_employee(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:employees:manage"])),
 ):
-    return await EmployeeService(db).create(data, cu["company_id"], cu["id"])
+    return await EmployeeService(db).create(
+        data, cu["company_id"], cu["id"],
+        crm_enabled=cu.get("crm_enabled", False),
+        hrm_enabled=cu.get("hrm_enabled", True),
+    )
 
 
 @router.get("")
