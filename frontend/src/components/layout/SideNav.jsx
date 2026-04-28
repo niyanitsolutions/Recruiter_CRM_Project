@@ -296,24 +296,28 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       'fixed left-0 top-0 h-screen text-white transition-all duration-300 z-40 flex flex-col',
       isCollapsed ? 'w-20' : 'w-64',
       mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-    )} style={{ background: 'linear-gradient(180deg, #0F0F1A 0%, #1A1A2E 50%, #0D0D1F 100%)' }}>
+    )} style={{
+        background: 'linear-gradient(180deg, #0d1025 0%, #0f1535 40%, #0d1025 100%)',
+        borderRight: '1px solid rgba(255,255,255,0.07)',
+        boxShadow: '4px 0 24px rgba(0,0,0,0.4)',
+      }}>
       {/* Logo */}
-      <div className={clsx('h-16 flex items-center', isCollapsed ? 'justify-center px-2' : 'px-5')} style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className={clsx('h-16 flex items-center', isCollapsed ? 'justify-center px-2' : 'px-5')} style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
         {!isCollapsed ? (
           <div className="flex items-center gap-3">
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base flex-shrink-0 text-white"
-              style={{ background: 'var(--gradient-1)', boxShadow: '0 0 14px rgba(108,99,255,0.5)' }}
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 18px rgba(124,58,237,0.6)' }}
             >N</div>
             <div>
-              <h1 className="font-bold text-sm leading-tight tracking-wide text-white">Niyan HireFlow</h1>
+              <h1 className="font-bold text-sm leading-tight tracking-wide" style={{ color: '#a78bfa' }}>Niyan HireFlow</h1>
               <p className="text-[10px] tracking-wider uppercase" style={{ color: 'rgba(255,255,255,0.35)' }}>Recruitment Platform</p>
             </div>
           </div>
         ) : (
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base text-white"
-            style={{ background: 'var(--gradient-1)', boxShadow: '0 0 14px rgba(108,99,255,0.5)' }}
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 18px rgba(124,58,237,0.6)' }}
           >N</div>
         )}
       </div>
@@ -381,7 +385,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       <div className="p-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         {!isCollapsed ? (
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm flex-shrink-0 text-white" style={{ background: 'var(--gradient-1)', opacity: 0.85 }}>
+            <div className="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm flex-shrink-0 text-white" style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 10px rgba(124,58,237,0.4)' }}>
               {user?.fullName?.charAt(0) || user?.full_name?.charAt(0) || 'U'}
             </div>
             <div className="flex-1 min-w-0">
@@ -405,7 +409,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       <button
         onClick={onToggle}
         className="absolute -right-3 top-20 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg"
-        style={{ background: 'var(--gradient-1)', border: '1px solid rgba(108,99,255,0.4)' }}
+        style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', border: '1px solid rgba(124,58,237,0.4)', boxShadow: '0 0 10px rgba(124,58,237,0.4)' }}
       >
         {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
       </button>

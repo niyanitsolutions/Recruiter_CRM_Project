@@ -9,7 +9,7 @@ const Layout = ({ title, subtitle, actions }) => {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-app)' }}>
+    <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-app)', minHeight: '100vh' }}>
       {/* Mobile overlay backdrop */}
       {mobileOpen && (
         <div
