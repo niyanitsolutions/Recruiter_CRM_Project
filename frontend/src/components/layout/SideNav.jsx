@@ -80,17 +80,17 @@ const PERMISSION_NAV_MAP = [
     path: '/users',          icon: Users,      label: 'Users',           section: 'User Management' },
   { permissions: ['users:view'],
     path: '/users/inactive', icon: UserMinus,  label: 'Inactive Users',  section: 'User Management' },
-  { permissions: ['partners:view'],
-    path: '/partners',     icon: Link2,         label: 'Partners',        section: 'User Management' },
   { permissions: ['departments:view'],
     path: '/departments',  icon: Building,      label: 'Departments',     section: 'User Management' },
   { permissions: ['designations:view'],
     path: '/designations', icon: Award,         label: 'Designations',    section: 'User Management' },
-  // Finance
+  // Partner Management
+  { permissions: ['partners:view'],
+    path: '/partners',         icon: Link2,      label: 'Partners',        section: 'Partner Management' },
   { permissions: ['accounts:payouts'],
-    path: '/payouts',          icon: DollarSign, label: 'Partner Payouts', section: 'Finance' },
+    path: '/payouts',          icon: DollarSign, label: 'Partner Payouts', section: 'Partner Management' },
   { permissions: ['accounts:invoices'],
-    path: '/payouts/invoices', icon: Receipt,    label: 'Invoices',        section: 'Finance' },
+    path: '/payouts/invoices', icon: Receipt,    label: 'Partner Invoices', section: 'Partner Management' },
   // System
   { permissions: ['targets:view', 'targets:create', 'targets:edit'],
     path: '/targets',    icon: Target,       label: 'Targets',   section: 'System' },
@@ -123,21 +123,21 @@ const PERMISSION_NAV_MAP = [
     path: '/hrm/performance',       icon: TrendingUp,      label: 'Performance',      section: 'HRM', hrmOnly: true },
   { permissions: ['hrm:announcements:view', 'hrm:announcements:manage'],
     path: '/hrm/announcements',        icon: Megaphone,       label: 'Announcements',   section: 'HRM', hrmOnly: true },
-  // Hiring — each section is a direct nav item (no pipeline wrapper)
+  // Internal Hiring — each section is a direct nav item (no pipeline wrapper)
   { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring',               icon: PersonStanding,  label: 'Hiring',          section: 'Hiring', hrmOnly: true },
+    path: '/hrm/hiring',               icon: PersonStanding,  label: 'Hiring',          section: 'Internal Hiring', hrmOnly: true },
   { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring/jobs',          icon: BriefcaseIcon,   label: 'Jobs',            section: 'Hiring', hrmOnly: true },
+    path: '/hrm/hiring/jobs',          icon: BriefcaseIcon,   label: 'Jobs',            section: 'Internal Hiring', hrmOnly: true },
   { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring/candidates',    icon: UserSearch,      label: 'Candidates',      section: 'Hiring', hrmOnly: true },
+    path: '/hrm/hiring/candidates',    icon: UserSearch,      label: 'Candidates',      section: 'Internal Hiring', hrmOnly: true },
   { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring/interviews',    icon: CalendarCheck,   label: 'Interviews',      section: 'Hiring', hrmOnly: true },
+    path: '/hrm/hiring/interviews',    icon: CalendarCheck,   label: 'Interviews',      section: 'Internal Hiring', hrmOnly: true },
   { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring/offers',        icon: FileBox,         label: 'Offers',          section: 'Hiring', hrmOnly: true },
+    path: '/hrm/hiring/offers',        icon: FileBox,         label: 'Offers',          section: 'Internal Hiring', hrmOnly: true },
   { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring/onboarding',    icon: UserCheck2,      label: 'Onboarding',      section: 'Hiring', hrmOnly: true },
+    path: '/hrm/hiring/onboarding',    icon: UserCheck2,      label: 'Onboarding',      section: 'Internal Hiring', hrmOnly: true },
   { permissions: ['hrm:offer_templates:view', 'hrm:offer_templates:manage'],
-    path: '/hrm/offer-templates',      icon: LayoutTemplate,  label: 'Offer Templates', section: 'Hiring', hrmOnly: true },
+    path: '/hrm/offer-templates',      icon: LayoutTemplate,  label: 'Offer Templates', section: 'Internal Hiring', hrmOnly: true },
 ]
 
 /**
