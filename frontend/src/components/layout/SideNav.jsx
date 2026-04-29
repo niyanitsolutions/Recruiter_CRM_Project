@@ -49,6 +49,7 @@ import {
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType, selectHrmEnabled } from '../../store/authSlice'
+import { useTheme } from '../../contexts/ThemeContext'
 
 // ─── Permission → nav-item mapping ────────────────────────────────────────────
 // `permissions` is an array — the nav item shows if the user has ANY one of them.
@@ -171,6 +172,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
   const userRole     = useSelector(selectUserRole)
   const userType     = useSelector(selectUserType)
   const hrmEnabled   = useSelector(selectHrmEnabled)
+  const { isDark }   = useTheme()
   const location     = useLocation()
 
   // Close mobile nav on route change
@@ -293,16 +295,18 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
 
   return (
     <aside className={clsx(
-      'fixed left-0 top-0 h-screen text-white transition-all duration-300 z-40 flex flex-col',
+      'fixed left-0 top-0 h-screen transition-all duration-300 z-40 flex flex-col',
       isCollapsed ? 'w-20' : 'w-64',
       mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
     )} style={{
-        background: 'linear-gradient(180deg, #0b0e22 0%, #0e1230 50%, #0b0e22 100%)',
-        borderRight: '1px solid rgba(124,58,237,0.28)',
-        boxShadow: 'inset -12px 0 45px rgba(100,160,255,0.22), inset -3px 0 14px rgba(200,230,255,0.14), inset -1px 0 4px rgba(255,255,255,0.10), 4px 0 40px rgba(124,58,237,0.45), 8px 0 70px rgba(91,33,182,0.22)',
+        backgroundColor: 'var(--bg-sidebar)',
+        borderRight: '1px solid var(--border)',
+        boxShadow: isDark
+          ? 'inset -8px 0 32px rgba(124,58,237,0.18), 4px 0 24px rgba(0,0,0,0.40)'
+          : '2px 0 12px rgba(124,58,237,0.06)',
       }}>
       {/* Logo */}
-      <div className={clsx('h-16 flex items-center', isCollapsed ? 'justify-center px-2' : 'px-5')} style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+      <div className={clsx('h-16 flex items-center', isCollapsed ? 'justify-center px-2' : 'px-5')} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         {!isCollapsed ? (
           <div className="flex items-center gap-3">
             <div
@@ -310,8 +314,8 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
               style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 18px rgba(124,58,237,0.6)' }}
             >N</div>
             <div>
-              <h1 className="font-bold text-sm leading-tight tracking-wide" style={{ color: '#a78bfa' }}>Niyan HireFlow</h1>
-              <p className="text-[10px] tracking-wider uppercase" style={{ color: 'rgba(255,255,255,0.35)' }}>Recruitment Platform</p>
+              <h1 className="font-bold text-sm leading-tight tracking-wide" style={{ color: 'var(--nav-text-active)' }}>Niyan HireFlow</h1>
+              <p className="text-[10px] tracking-wider uppercase" style={{ color: 'var(--nav-text)', opacity: 0.7 }}>Recruitment Platform</p>
             </div>
           </div>
         ) : (
@@ -335,7 +339,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
         {sections.map((sec, idx) => (
           <div key={sec.section} className={idx > 0 ? 'mt-6' : ''}>
             {!isCollapsed && (
-              <p className="px-5 mb-1 text-[10px] font-semibold text-white/30 uppercase tracking-widest">
+              <p className="px-5 mb-1 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--nav-text)', opacity: 0.6 }}>
                 {sec.section}
               </p>
             )}
@@ -350,7 +354,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
         ))}
 
         {/* Divider */}
-        <div className="my-4 mx-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }} />
+        <div className="my-4 mx-3" style={{ borderTop: '1px solid var(--border-subtle)' }} />
 
         {/* Utility links: only for company users (not super-admin or seller) */}
         {!isSuperAdmin && !isSeller && (
@@ -382,7 +386,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       </nav>
 
       {/* User info + logout */}
-      <div className="p-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="p-3" style={{ borderTop: '1px solid var(--border)' }}>
         {!isCollapsed ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div className="flex items-center gap-3">
@@ -390,8 +394,8 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
                 {user?.fullName?.charAt(0) || user?.full_name?.charAt(0) || 'U'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate text-white/90">{user?.fullName || user?.full_name || 'User'}</p>
-                <p className="text-xs text-white/40 truncate capitalize">
+                <p className="text-sm font-medium truncate" style={{ color: 'var(--text-heading)' }}>{user?.fullName || user?.full_name || 'User'}</p>
+                <p className="text-xs truncate capitalize" style={{ color: 'var(--text-muted)' }}>
                   {isSuperAdmin ? 'Super Admin' : isSeller ? 'Seller' : user?.isOwner ? 'Owner' : (userRole || 'User').replace(/_/g, ' ')}
                 </p>
               </div>

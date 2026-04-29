@@ -31,6 +31,7 @@ import applicationService from '../../services/applicationService'
 import subscriptionService from '../../services/subscriptionService'
 import SubscriptionBanner from '../../components/subscription/SubscriptionBanner'
 import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
+import RecentActivity from '../../components/dashboard/RecentActivity'
 
 // ── Animated counter ─────────────────────────────────────────────────────────
 const useCounter = (target, duration = 800) => {
@@ -52,21 +53,22 @@ const useCounter = (target, duration = 800) => {
 
 // ── Gradient palette for stat cards ─────────────────────────────────────────
 const CARD_GRADIENTS = {
-  purple: { icon: 'var(--stat-purple)', glow: 'rgba(108,99,255,0.20)' },
-  blue:   { icon: 'var(--stat-blue)',   glow: 'rgba(79,172,254,0.20)'  },
-  green:  { icon: 'var(--stat-green)',  glow: 'rgba(67,233,123,0.20)'  },
-  orange: { icon: 'var(--stat-orange)', glow: 'rgba(250,130,49,0.20)'  },
-  red:    { icon: 'var(--stat-red)',     glow: 'rgba(255,71,87,0.20)'   },
-  pink:   { icon: 'var(--stat-pink)',    glow: 'rgba(255,107,157,0.20)' },
-  teal:   { icon: 'var(--stat-teal)',    glow: 'rgba(56,249,215,0.20)'  },
-  yellow: { icon: 'var(--stat-yellow)', glow: 'rgba(246,211,101,0.20)' },
+  purple: { icon: 'var(--stat-purple)', glow: 'rgba(108,99,255,0.20)', border: 'var(--stat-border-purple)' },
+  blue:   { icon: 'var(--stat-blue)',   glow: 'rgba(79,172,254,0.20)',  border: 'var(--stat-border-blue)'   },
+  green:  { icon: 'var(--stat-green)',  glow: 'rgba(67,233,123,0.20)',  border: 'var(--stat-border-green)'  },
+  orange: { icon: 'var(--stat-orange)', glow: 'rgba(250,130,49,0.20)',  border: 'var(--stat-border-orange)' },
+  red:    { icon: 'var(--stat-red)',     glow: 'rgba(255,71,87,0.20)',   border: 'var(--stat-border-red)'    },
+  pink:   { icon: 'var(--stat-pink)',    glow: 'rgba(255,107,157,0.20)', border: 'var(--stat-border-pink)'   },
+  teal:   { icon: 'var(--stat-teal)',    glow: 'rgba(56,249,215,0.20)',  border: 'var(--stat-border-teal)'   },
+  yellow: { icon: 'var(--stat-yellow)', glow: 'rgba(246,211,101,0.20)', border: 'var(--stat-border-yellow)' },
 }
 
 // ── Stat Card ─────────────────────────────────────────────────────────────────
-const StatCard = ({ title, value, icon: Icon, color = 'purple', linkTo }) => {
+const StatCard = ({ title, value, icon: Icon, color = 'purple', linkTo, trend }) => {
   const count = useCounter(typeof value === 'number' ? value : null)
   const grad = CARD_GRADIENTS[color] || CARD_GRADIENTS.purple
   const [hovered, setHovered] = useState(false)
+  const trendUp = trend && !trend.startsWith('-')
 
   return (
     <div
@@ -74,6 +76,7 @@ const StatCard = ({ title, value, icon: Icon, color = 'purple', linkTo }) => {
       style={{
         backgroundColor: 'var(--bg-card)',
         border: '1px solid var(--border-card)',
+        borderLeft: `4px solid ${grad.border}`,
         boxShadow: hovered
           ? `0 8px 24px ${grad.glow}, var(--shadow-card)`
           : 'var(--shadow-card)',
@@ -104,7 +107,20 @@ const StatCard = ({ title, value, icon: Icon, color = 'purple', linkTo }) => {
       <p className="text-2xl font-bold leading-none mb-1" style={{ color: 'var(--text-heading)' }}>
         {value == null ? <span style={{ color: 'var(--text-disabled)' }}>—</span> : count}
       </p>
-      <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{title}</p>
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{title}</p>
+        {trend && (
+          <span
+            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+            style={{
+              background: trendUp ? 'var(--bg-success)' : 'var(--bg-danger)',
+              color: trendUp ? 'var(--text-success)' : 'var(--text-danger)',
+            }}
+          >
+            {trendUp ? '▲' : '▼'} {trend}
+          </span>
+        )}
+      </div>
     </div>
   )
 }
@@ -287,16 +303,42 @@ const AdminDashboard = () => {
               Here's what's happening in your organization today.
             </p>
           </div>
-          <button
-            onClick={fetchDashboardData}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex-shrink-0"
-            style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: '1px solid rgba(255,255,255,0.25)' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.25)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+            {has('candidates:create') && (
+              <Link
+                to="/candidates/new"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+                style={{ background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.40)' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.28)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.18)'}
+              >
+                <UserPlus className="w-4 h-4" />
+                Add Candidate
+              </Link>
+            )}
+            {has('jobs:create') && (
+              <Link
+                to="/jobs/new"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+                style={{ background: 'white', color: '#7c3aed' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.90)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'white'}
+              >
+                <Briefcase className="w-4 h-4" />
+                Post Job
+              </Link>
+            )}
+            <button
+              onClick={fetchDashboardData}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200"
+              style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: '1px solid rgba(255,255,255,0.25)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.25)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
 
@@ -361,6 +403,19 @@ const AdminDashboard = () => {
         <div className="rounded-2xl p-12 text-center" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
           <p style={{ color: 'var(--text-muted)' }}>No dashboard widgets available for your current permissions.</p>
         </div>
+      )}
+
+      {/* ── Recent Activity feed (below stat cards) ─────────────────────────── */}
+      {has('audit:view') && recent_activity?.length > 0 && (
+        <RecentActivity
+          activities={recent_activity.slice(0, 8).map((a, i) => ({
+            id: a.id || i,
+            type: a.action,
+            description: a.description,
+            actor: a.user_name,
+            time: new Date(a.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
+          }))}
+        />
       )}
 
       {/* ── Charts row ─────────────────────────────────────────────────────── */}

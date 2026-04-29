@@ -12,111 +12,121 @@
    ─────────────────────────────────────────────────────────────────────────── */
 :root,
 [data-theme="dark"] {
-  /* ── Page Backgrounds ── */
-  --bg-app:            transparent;        /* let html starfield show through */
-  --bg-base-solid:     #0a0d1a;           /* solid base for rare opaque needs */
-  --bg-surface:        #0e1235;
-  --bg-sidebar:        #0e1235;
-  /* Cards: highly transparent dark glass — stars show clearly through (ref match) */
-  --bg-card:           rgba(14, 20, 55, 0.35);
-  --bg-card-alt:       rgba(10, 15, 45, 0.42);
-  --bg-topbar:         rgba(6, 9, 24, 0.88);
-  --bg-hover:          rgba(124, 58, 237, 0.14);
-  --bg-active:         rgba(124, 58, 237, 0.24);
+  /* ── Page Backgrounds — layered dark depth ── */
+  --bg-app:            #0d0b1a;           /* deep dark navy-purple page body */
+  --bg-base-solid:     #0d0b1a;
+  --bg-surface:        #110f1f;           /* sidebar / topbar layer */
+  --bg-sidebar:        #110f1f;
+  --bg-card:           #161426;           /* stat cards / panels */
+  --bg-card-alt:       #1a1730;           /* alternate card / inner panels */
+  --bg-topbar:         #110f1f;
+  --bg-hover:          rgba(124, 58, 237, 0.08);
+  --bg-active:         rgba(124, 58, 237, 0.15);
   --bg-overlay:        rgba(0, 0, 10, 0.80);
 
   /* ── Text ── */
-  --text-primary:      #e2e8f0;
+  --text-primary:      #c4c0e8;
   --text-secondary:    #a8b3c8;
-  --text-muted:        #5a6480;
-  --text-disabled:     #2d3555;
-  --text-heading:      #f1f5f9;
-  --text-label:        #8892b0;
+  --text-muted:        #7c75b8;
+  --text-disabled:     #3d3860;
+  --text-heading:      #f1f0ff;
+  --text-label:        #7c75b8;
   --text-link:         #a78bfa;
   --text-danger:       #f87171;
 
   /* ── Borders ── */
-  --border:            rgba(255, 255, 255, 0.08);
-  --border-strong:     rgba(255, 255, 255, 0.16);
-  --border-subtle:     rgba(255, 255, 255, 0.04);
-  --border-card:       rgba(255, 255, 255, 0.10);
+  --border:            #1e1b4b;
+  --border-strong:     #2d2b55;
+  --border-subtle:     #18163a;
+  --border-card:       #1e1b4b;
 
-  /* ── Inputs — dark indigo glass matching card ── */
-  --input-bg:           rgba(14, 20, 55, 0.50);
-  --input-text:         #e2e8f0;
-  --input-placeholder:  #4a5580;
-  --input-border:       rgba(255, 255, 255, 0.12);
+  /* ── Inputs ── */
+  --input-bg:           #1a1730;
+  --input-text:         #c4c0e8;
+  --input-placeholder:  #5a5585;
+  --input-border:       #2d2b55;
   --input-focus-border: #7c3aed;
-  --input-focus-shadow: rgba(124, 58, 237, 0.30);
+  --input-focus-shadow: rgba(124, 58, 237, 0.25);
   --input-autofill:     #1e1b4b;
-  --input-autofill-text: #e2e8f0;
-  --input-disabled-bg:  rgba(12, 17, 48, 0.50);
-  --input-disabled-text: #2d3555;
-  --select-option-bg:   #0e1235;
-  --select-option-text: #e2e8f0;
-  --label-color:        #8892b0;
+  --input-autofill-text: #c4c0e8;
+  --input-disabled-bg:  #13112a;
+  --input-disabled-text: #3d3860;
+  --select-option-bg:   #161426;
+  --select-option-text: #c4c0e8;
+  --label-color:        #7c75b8;
 
   /* ── Status Backgrounds ── */
-  --bg-success: rgba(34,  197, 94,  0.14);
-  --bg-warning: rgba(245, 158, 11,  0.14);
-  --bg-danger:  rgba(239, 68,  68,  0.14);
-  --bg-info:    rgba(99,  102, 241, 0.14);
+  --bg-success: rgba(6,  95,  70,  0.30);
+  --bg-warning: rgba(120, 53,  15,  0.30);
+  --bg-danger:  rgba(127, 29,  29,  0.30);
+  --bg-info:    rgba(30,  27,  75,  0.60);
 
   /* ── Status Text ── */
   --text-success: #4ade80;
   --text-warning: #fbbf24;
   --text-info:    #818cf8;
 
-  /* ── Navigation — solid purple pill exactly as in the reference ── */
-  --nav-text:          rgba(255, 255, 255, 0.55);
-  --nav-text-active:   #ffffff;
-  --nav-bg-active:     #6d28d9;
-  --nav-border-active: rgba(167, 139, 250, 0.35);
-  --nav-glow-active:   rgba(124, 58, 237, 0.80);
+  /* ── Navigation — left-border accent style ── */
+  --nav-text:          #7c75b8;
+  --nav-text-active:   #a78bfa;
+  --nav-bg-active:     rgba(124, 58, 237, 0.15);
+  --nav-border-active: #7c3aed;
+  --nav-hover-bg:      rgba(124, 58, 237, 0.08);
+  --nav-glow-active:   rgba(124, 58, 237, 0.40);
 
   /* ── UI elements ── */
-  --scrollbar-track:        #0a0d1a;
-  --scrollbar-thumb:        #1e2460;
-  --scrollbar-thumb-hover:  #2d3580;
-  --selection-bg:           rgba(124, 58, 237, 0.40);
+  --scrollbar-track:        #0d0b1a;
+  --scrollbar-thumb:        #2d2b55;
+  --scrollbar-thumb-hover:  #3d3b70;
+  --selection-bg:           rgba(124, 58, 237, 0.35);
   --selection-text:         #c4b5fd;
-  --dropdown-bg:            rgba(10, 14, 40, 0.97);
-  --dropdown-border:        rgba(255, 255, 255, 0.10);
-  --dropdown-hover:         rgba(124, 58, 237, 0.14);
-  --skeleton-from:          rgba(255, 255, 255, 0.04);
-  --skeleton-via:           rgba(255, 255, 255, 0.08);
-  --skeleton-to:            rgba(255, 255, 255, 0.04);
+  --dropdown-bg:            #161426;
+  --dropdown-border:        #2d2b55;
+  --dropdown-hover:         rgba(124, 58, 237, 0.10);
+  --skeleton-from:          #1a1730;
+  --skeleton-via:           #201d3a;
+  --skeleton-to:            #1a1730;
 
   /* ── Shadows ── */
-  --shadow-card:     0 4px 20px rgba(0, 0, 20, 0.35), 0 1px 0 rgba(255,255,255,0.06);
-  --shadow-soft:     0 8px 32px rgba(0, 0, 20, 0.55);
-  --shadow-elevated: 0 20px 60px rgba(0, 0, 20, 0.80);
+  --shadow-card:     0 2px 8px rgba(0, 0, 0, 0.40), 0 1px 0 rgba(255,255,255,0.03);
+  --shadow-soft:     0 8px 24px rgba(0, 0, 0, 0.50);
+  --shadow-elevated: 0 20px 60px rgba(0, 0, 0, 0.70);
+
+  /* ── Stat card left-border accent colors ── */
+  --stat-border-green:  #065f46;
+  --stat-border-red:    #7f1d1d;
+  --stat-border-teal:   #164e63;
+  --stat-border-orange: #7c2d12;
+  --stat-border-purple: #3b0764;
+  --stat-border-blue:   #1e3a5f;
+  --stat-border-pink:   #4a044e;
+  --stat-border-yellow: #713f12;
 
   /* ── Legacy gray overrides — dark mode ── */
-  --gray-900: #f1f5f9;
-  --gray-800: #e2e8f0;
-  --gray-700: #c8d0e0;
-  --gray-600: #8892b0;
-  --gray-500: #8892b0;
-  --gray-400: #5a6480;
-  --border-gray-200: rgba(255, 255, 255, 0.10);
-  --bg-gray-50:  rgba(14, 20, 55, 0.30);
-  --bg-gray-100: rgba(14, 20, 55, 0.38);
-  --bg-gray-200: rgba(14, 20, 55, 0.45);
+  --gray-900: #f1f0ff;
+  --gray-800: #c4c0e8;
+  --gray-700: #a8a4d4;
+  --gray-600: #7c75b8;
+  --gray-500: #7c75b8;
+  --gray-400: #5a5585;
+  --border-gray-200: #1e1b4b;
+  --bg-gray-50:  #161426;
+  --bg-gray-100: #1a1730;
+  --bg-gray-200: #1e1b3a;
 }
 
 /* ── LIGHT THEME ─────────────────────────────────────────────────────────────── */
 [data-theme="light"] {
   /* ── Backgrounds ── */
-  --bg-app:            #f0f2ff;
+  --bg-app:            #f8f7ff;           /* subtle lavender page tint */
   --bg-surface:        #ffffff;
-  --bg-sidebar:        #1a1a2e;
+  --bg-sidebar:        #f1f0ff;           /* lavender sidebar — CRITICAL FIX */
   --bg-card:           #ffffff;
-  --bg-card-alt:       #f8f9ff;
-  --bg-topbar:         rgba(255, 255, 255, 0.94);
-  --bg-hover:          rgba(108, 99, 255, 0.06);
-  --bg-active:         rgba(108, 99, 255, 0.10);
-  --bg-overlay:        rgba(0, 0, 0, 0.50);
+  --bg-card-alt:       #f8f7ff;
+  --bg-topbar:         #ffffff;
+  --bg-hover:          #e4e2ff;
+  --bg-active:         #ede9ff;
+  --bg-overlay:        rgba(0, 0, 0, 0.45);
 
   /* ── Text ── */
   --text-primary:      #1a1a2e;
@@ -125,35 +135,35 @@
   --text-disabled:     #acaccc;
   --text-heading:      #0f0f1a;
   --text-label:        #4a4a6a;
-  --text-link:         #6c63ff;
+  --text-link:         #7c3aed;
   --text-danger:       #dc2626;
 
   /* ── Borders ── */
-  --border:            rgba(108, 99, 255, 0.12);
-  --border-strong:     rgba(108, 99, 255, 0.25);
-  --border-subtle:     rgba(108, 99, 255, 0.06);
-  --border-card:       rgba(108, 99, 255, 0.10);
+  --border:            #e0dffe;
+  --border-strong:     #c8c4f0;
+  --border-subtle:     #eeecff;
+  --border-card:       #e9e7ff;
 
   /* ── Inputs ── */
-  --input-bg:           #f8f9ff;
+  --input-bg:           #f8f7ff;
   --input-text:         #1a1a2e;
   --input-placeholder:  #7a7a9a;
-  --input-border:       #d0d5e8;
-  --input-focus-border: #6c63ff;
-  --input-focus-shadow: rgba(108, 99, 255, 0.20);
-  --input-autofill:     #f8f9ff;
+  --input-border:       #d0cdf5;
+  --input-focus-border: #7c3aed;
+  --input-focus-shadow: rgba(124, 58, 237, 0.15);
+  --input-autofill:     #f3f1ff;
   --input-autofill-text: #1a1a2e;
-  --input-disabled-bg:  #e8eaff;
+  --input-disabled-bg:  #eeecff;
   --input-disabled-text: #7a7a9a;
   --select-option-bg:   #ffffff;
   --select-option-text: #1a1a2e;
   --label-color:        #4a4a6a;
 
   /* ── Status Backgrounds ── */
-  --bg-success: rgba(16,  185, 129, 0.10);
-  --bg-warning: rgba(245, 158, 11,  0.10);
-  --bg-danger:  rgba(239, 68,  68,  0.10);
-  --bg-info:    rgba(99,  102, 241, 0.10);
+  --bg-success: rgba(5,  150, 105, 0.10);
+  --bg-warning: rgba(217, 119, 6,   0.10);
+  --bg-danger:  rgba(220, 38,  38,  0.10);
+  --bg-info:    rgba(79,  70,  229, 0.10);
 
   /* ── Status Text ── */
   --text-success: #059669;
@@ -161,30 +171,41 @@
   --text-danger:  #dc2626;
   --text-info:    #4f46e5;
 
-  /* ── Navigation (sidebar always stays dark in light mode too) ── */
-  --nav-text:          rgba(255, 255, 255, 0.50);
-  --nav-text-active:   #ffffff;
-  --nav-bg-active:     #5b21b6;
-  --nav-border-active: rgba(124, 58, 237, 0.30);
-  --nav-glow-active:   rgba(91, 33, 182, 0.60);
+  /* ── Navigation — lavender sidebar, left-border active style ── */
+  --nav-text:          #6d4ac7;           /* medium purple inactive items */
+  --nav-text-active:   #7c3aed;           /* vivid purple active */
+  --nav-bg-active:     #ede9ff;           /* light lavender active bg */
+  --nav-border-active: #7c3aed;           /* left-border accent color */
+  --nav-hover-bg:      #e4e2ff;
+  --nav-glow-active:   rgba(124, 58, 237, 0.12);
 
   /* ── UI elements ── */
-  --scrollbar-track:        #eef0ff;
-  --scrollbar-thumb:        #d0d5e8;
-  --scrollbar-thumb-hover:  #b8bcc8;
-  --selection-bg:           rgba(108, 99, 255, 0.20);
-  --selection-text:         #6c63ff;
+  --scrollbar-track:        #f0eeff;
+  --scrollbar-thumb:        #d0cbf0;
+  --scrollbar-thumb-hover:  #b8b2e0;
+  --selection-bg:           rgba(124, 58, 237, 0.15);
+  --selection-text:         #5b21b6;
   --dropdown-bg:            #ffffff;
-  --dropdown-border:        rgba(108, 99, 255, 0.12);
-  --dropdown-hover:         rgba(108, 99, 255, 0.06);
-  --skeleton-from:          #e8eaff;
-  --skeleton-via:           #f0f2ff;
-  --skeleton-to:            #e8eaff;
+  --dropdown-border:        #e0dffe;
+  --dropdown-hover:         #f0eeff;
+  --skeleton-from:          #eeecff;
+  --skeleton-via:           #f5f3ff;
+  --skeleton-to:            #eeecff;
 
   /* ── Shadows ── */
-  --shadow-card:     0 4px 6px rgba(108, 99, 255, 0.08), 0 2px 4px rgba(108, 99, 255, 0.05);
-  --shadow-soft:     0 2px 15px rgba(108, 99, 255, 0.12);
-  --shadow-elevated: 0 20px 60px rgba(108, 99, 255, 0.15);
+  --shadow-card:     0 2px 8px rgba(124, 58, 237, 0.06), 0 1px 3px rgba(124, 58, 237, 0.04);
+  --shadow-soft:     0 4px 16px rgba(124, 58, 237, 0.10);
+  --shadow-elevated: 0 20px 60px rgba(124, 58, 237, 0.12);
+
+  /* ── Stat card left-border accent colors ── */
+  --stat-border-green:  #059669;
+  --stat-border-red:    #dc2626;
+  --stat-border-teal:   #0891b2;
+  --stat-border-orange: #ea580c;
+  --stat-border-purple: #7c3aed;
+  --stat-border-blue:   #2563eb;
+  --stat-border-pink:   #db2777;
+  --stat-border-yellow: #ca8a04;
 
   /* ── Legacy gray overrides — light mode ── */
   --gray-900: #1a1a2e;
@@ -193,10 +214,10 @@
   --gray-600: #7a7a9a;
   --gray-500: #7a7a9a;
   --gray-400: #9a9ac0;
-  --border-gray-200: #d0d5e8;
-  --bg-gray-50:  #f8f9ff;
-  --bg-gray-100: #f0f2ff;
-  --bg-gray-200: #e8eaff;
+  --border-gray-200: #e0dffe;
+  --bg-gray-50:  #f8f7ff;
+  --bg-gray-100: #f0eeff;
+  --bg-gray-200: #e8e5ff;
 }
 
 /* ── Brand / Accent — identical in both themes ───────────────────────────────── */
