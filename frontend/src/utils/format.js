@@ -1,4 +1,9 @@
-import { format, formatDistance, formatRelative, isValid, parseISO } from 'date-fns'
+import { format, formatDistance, isValid, parseISO } from 'date-fns'
+
+// All timestamps from the backend are UTC ISO strings.
+// Explicit IST (Asia/Kolkata, +05:30) ensures consistent display
+// regardless of the user's browser or OS timezone setting.
+const IST = 'Asia/Kolkata'
 
 /**
  * Format currency (Indian Rupees)
@@ -23,35 +28,62 @@ export const formatNumber = (num) => {
 }
 
 /**
- * Format date
+ * Format date (date-only, no time component).
+ * For plain date strings ("2024-01-15") timezone is irrelevant.
+ * For full UTC datetimes the date is resolved in IST (+05:30).
  */
 export const formatDate = (date, formatStr = 'dd MMM yyyy') => {
   if (!date) return '-'
-  
-  const dateObj = typeof date === 'string' ? parseISO(date) : date
-  
-  if (!isValid(dateObj)) return '-'
-  
-  return format(dateObj, formatStr)
+
+  const str = typeof date === 'string' ? date : date.toISOString()
+
+  // Full UTC datetime — convert to IST before extracting the date
+  if (str.includes('T') || str.endsWith('Z')) {
+    const d = new Date(str)
+    if (isNaN(d.getTime())) return '-'
+    // Use Intl to get day/month/year in IST, then reformat with date-fns
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: IST,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(d)
+    const p = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
+    const istDate = parseISO(`${p.year}-${p.month}-${p.day}`)
+    return isValid(istDate) ? format(istDate, formatStr) : '-'
+  }
+
+  // Date-only string — parse and format directly (no timezone shift needed)
+  const dateObj = parseISO(str)
+  return isValid(dateObj) ? format(dateObj, formatStr) : '-'
 }
 
 /**
- * Format date with time
+ * Format date with time, always in IST (Asia/Kolkata, +05:30).
+ * Handles UTC ISO strings from the backend correctly regardless of the
+ * browser's local timezone.
  */
 export const formatDateTime = (date) => {
-  return formatDate(date, 'dd MMM yyyy, hh:mm a')
+  if (!date) return '-'
+  const d = typeof date === 'string' ? new Date(date) : date
+  if (isNaN(d.getTime())) return '-'
+  return d.toLocaleString('en-IN', {
+    timeZone: IST,
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  })
 }
 
 /**
- * Format relative time (e.g., "2 hours ago")
+ * Format relative time (e.g., "2 hours ago").
+ * Relative durations are timezone-independent.
  */
 export const formatRelativeTime = (date) => {
   if (!date) return '-'
-  
-  const dateObj = typeof date === 'string' ? parseISO(date) : date
-  
-  if (!isValid(dateObj)) return '-'
-  
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+  if (isNaN(dateObj.getTime())) return '-'
   return formatDistance(dateObj, new Date(), { addSuffix: true })
 }
 

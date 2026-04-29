@@ -83,6 +83,10 @@ async def lifespan(app: FastAPI):
     from app.services.email_service import validate_smtp_on_startup
     validate_smtp_on_startup()
     print(" SMTP configuration validated")
+    # Run schema migrations across all tenant databases (idempotent, safe)
+    from app.migrations.runner import run_migrations
+    await run_migrations()
+    print(" Schema migrations applied")
     # Start subscription reminder background task (runs every 24 hours)
     reminder_task = asyncio.create_task(reminder_background_loop())
     print(" Subscription reminder scheduler started")

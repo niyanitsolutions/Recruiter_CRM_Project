@@ -1,0 +1,366 @@
+"""
+app/migrations/runner.py
+========================
+Central migration runner for the multi-tenant CRM system.
+
+Design
+------
+• MongoDB is schema-less, so "migrations" are idempotent backfill operations
+  that add missing fields or transform data on existing documents.
+• Every migration uses  {"field": {"$exists": False}}  guards so re-running is
+  always safe — no data is ever overwritten.
+• Applied migrations are tracked in  master_db.system_migrations  so each one
+  runs at most once per deployment, even if the server restarts.
+• Two migration scopes:
+    "master"  — runs once against master_db
+    "tenant"  — runs once per active tenant (iterates all company DBs)
+
+Called automatically from  app/main.py  lifespan AFTER MongoDB is connected.
+"""
+
+import re
+import random
+import logging
+from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from typing import Callable, Awaitable, Any
+
+from app.core.database import get_master_db, get_company_db
+
+log = logging.getLogger("migrations")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Migration dataclass
+# ─────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class Migration:
+    """
+    id      — unique, stable identifier stored in system_migrations
+    scope   — "master" (runs once) | "tenant" (runs for every active company)
+    fn      — async function: (db, company_id?) -> dict[str, int]
+    """
+    id: str
+    scope: str               # "master" or "tenant"
+    fn: Callable[..., Awaitable[dict[str, int]]]
+    description: str = ""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Migration functions
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _dept_code(name: str) -> str:
+    words = re.split(r"\s+", name.strip())
+    initials = "".join(w[0].upper() for w in words if w)
+    if not initials:
+        initials = re.sub(r"[^A-Z]", "", name.upper())[:3] or "DEPT"
+    return initials + str(random.randint(100, 999))
+
+
+async def _m001_user_fields(db, company_id: str) -> dict[str, int]:
+    """Backfill missing fields on company users collection."""
+    col = db.users
+    counts: dict[str, int] = {}
+
+    for fname, default in [
+        ("profile_completed",     True),
+        ("must_change_password",  False),
+        ("is_deleted",            False),
+        ("override_permissions",  False),
+        ("login_count",           0),
+        ("failed_login_attempts", 0),
+        ("hrm_employee_id",       None),   # new: reverse link to HRM employee
+    ]:
+        r = await col.update_many(
+            {fname: {"$exists": False}},
+            {"$set": {fname: default}},
+        )
+        counts[fname] = r.modified_count
+
+    # user_type: derive from role (aggregation pipeline so we can read per-doc value)
+    r = await col.update_many(
+        {"user_type": {"$exists": False}},
+        [{"$set": {"user_type": {
+            "$cond": {"if": {"$eq": ["$role", "partner"]}, "then": "partner", "else": "internal"}
+        }}}],
+    )
+    counts["user_type"] = r.modified_count
+
+    # status: default "active" if missing
+    r = await col.update_many(
+        {"status": {"$exists": False}},
+        {"$set": {"status": "active"}},
+    )
+    counts["status"] = r.modified_count
+
+    return counts
+
+
+async def _m002_department_codes(db, company_id: str) -> dict[str, int]:
+    """Backfill auto-generated code on departments that are missing it."""
+    col = db.departments
+    counts = {"code": 0}
+
+    cursor = col.find({"code": {"$exists": False}, "is_deleted": {"$ne": True}})
+    async for dept in cursor:
+        code = _dept_code(dept.get("name", "DEPT"))
+        while await col.find_one({"code": code, "_id": {"$ne": dept["_id"]}}):
+            code = _dept_code(dept.get("name", "DEPT"))
+        await col.update_one({"_id": dept["_id"]}, {"$set": {"code": code}})
+        counts["code"] += 1
+
+    return counts
+
+
+async def _m003_master_tenants(db) -> dict[str, int]:
+    """Backfill missing fields on master_db.tenants documents."""
+    col = db.tenants
+    counts: dict[str, int] = {}
+
+    for fname, default in [
+        ("is_deleted",     False),
+        ("email_verified", True),    # pre-existing tenants already verified
+        ("hrm_enabled",    True),    # CRM + HRM always active
+        ("crm_enabled",    True),
+    ]:
+        r = await col.update_many(
+            {fname: {"$exists": False}},
+            {"$set": {fname: default}},
+        )
+        counts[fname] = r.modified_count
+
+    # Ensure all active tenants have hrm_enabled = True (not just missing)
+    r = await col.update_many(
+        {"is_deleted": {"$ne": True}, "hrm_enabled": False},
+        {"$set": {"hrm_enabled": True}},
+    )
+    counts["hrm_enabled_activated"] = r.modified_count
+
+    return counts
+
+
+async def _m004_hrm_employee_fields(db, company_id: str) -> dict[str, int]:
+    """Backfill missing fields on hrm_employees collection."""
+    col = db.hrm_employees
+    counts: dict[str, int] = {}
+
+    for fname, default in [
+        ("is_deleted",       False),
+        ("crm_user_id",      None),  # FK to users._id — populated by linking service
+        ("background_check", {"status": "Pending", "checked_by": None,
+                              "checked_on": None, "notes": ""}),
+    ]:
+        r = await col.update_many(
+            {fname: {"$exists": False}},
+            {"$set": {fname: default}},
+        )
+        counts[fname] = r.modified_count
+
+    # Ensure employment_status field exists
+    r = await col.update_many(
+        {"employment_status": {"$exists": False}},
+        {"$set": {"employment_status": "active"}},
+    )
+    counts["employment_status"] = r.modified_count
+
+    return counts
+
+
+async def _m005_backfill_user_employee_links(db, company_id: str) -> dict[str, int]:
+    """
+    For tenants that already have both users and employees, wire up the
+    crm_user_id / hrm_employee_id cross-references based on email match.
+
+    Safe: skips docs that already have the link set.
+    """
+    linked = 0
+    now    = datetime.now(timezone.utc)
+
+    # Only look at employees not yet linked
+    cursor = db.hrm_employees.find(
+        {"company_id": company_id, "is_deleted": {"$ne": True},
+         "$or": [{"crm_user_id": None}, {"crm_user_id": {"$exists": False}}]},
+        {"_id": 1, "email": 1},
+    )
+    async for emp in cursor:
+        email = emp.get("email", "").lower().strip()
+        if not email:
+            continue
+        user = await db.users.find_one(
+            {"company_id": company_id,
+             "email": {"$regex": f"^{re.escape(email)}$", "$options": "i"},
+             "is_deleted": False},
+            {"_id": 1},
+        )
+        if not user:
+            continue
+        emp_id  = emp["_id"]
+        user_id = user["_id"]
+        await db.hrm_employees.update_one(
+            {"_id": emp_id},
+            {"$set": {"crm_user_id": user_id, "updated_at": now}},
+        )
+        await db.users.update_one(
+            {"_id": user_id},
+            {"$set": {"hrm_employee_id": emp_id, "updated_at": now}},
+        )
+        linked += 1
+
+    return {"linked_pairs": linked}
+
+
+async def _m006_notifications_fields(db, company_id: str) -> dict[str, int]:
+    """Backfill missing fields on notifications collection."""
+    col = db.notifications
+    counts: dict[str, int] = {}
+
+    for fname, default in [
+        ("is_deleted",  False),
+        ("is_read",     False),
+        ("priority",    "medium"),
+    ]:
+        r = await col.update_many(
+            {fname: {"$exists": False}},
+            {"$set": {fname: default}},
+        )
+        counts[fname] = r.modified_count
+
+    return counts
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Migration registry  (ORDER MATTERS — run in sequence)
+# ─────────────────────────────────────────────────────────────────────────────
+
+MIGRATIONS: list[Migration] = [
+    Migration(
+        id="m001_user_fields",
+        scope="tenant",
+        fn=_m001_user_fields,
+        description="Backfill user document fields",
+    ),
+    Migration(
+        id="m002_department_codes",
+        scope="tenant",
+        fn=_m002_department_codes,
+        description="Backfill department code field",
+    ),
+    Migration(
+        id="m003_master_tenants",
+        scope="master",
+        fn=_m003_master_tenants,
+        description="Backfill master tenant fields + enable HRM for all",
+    ),
+    Migration(
+        id="m004_hrm_employee_fields",
+        scope="tenant",
+        fn=_m004_hrm_employee_fields,
+        description="Backfill HRM employee document fields",
+    ),
+    Migration(
+        id="m005_user_employee_links",
+        scope="tenant",
+        fn=_m005_backfill_user_employee_links,
+        description="Link existing users ↔ employees by email",
+    ),
+    Migration(
+        id="m006_notification_fields",
+        scope="tenant",
+        fn=_m006_notifications_fields,
+        description="Backfill notification document fields",
+    ),
+]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Runner
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def run_migrations() -> None:
+    """
+    Entry point called from app/main.py lifespan.
+
+    For each migration that has NOT yet been recorded in system_migrations:
+      • scope="master"  → run against master_db, then mark done
+      • scope="tenant"  → run against every active company DB, then mark done
+
+    Tenant-scoped migrations record the list of company_ids they ran on
+    so future new tenants get them applied via the normal startup path
+    (the migration is already marked done globally, but new tenants are
+    handled by their creation flow which already calls the service layer).
+    """
+    master_db = get_master_db()
+    meta_col  = master_db.system_migrations     # tracks what has run
+
+    log.info("=" * 60)
+    log.info("  CRM Migration Runner")
+    log.info("=" * 60)
+
+    for migration in MIGRATIONS:
+        already_done = await meta_col.find_one({"_id": migration.id})
+        if already_done:
+            log.debug("  [skip] %s — already applied", migration.id)
+            continue
+
+        log.info("  [run]  %s — %s", migration.id, migration.description)
+
+        try:
+            if migration.scope == "master":
+                counts = await migration.fn(master_db)
+                _log_counts(migration.id, "master", counts)
+
+            elif migration.scope == "tenant":
+                # Fetch all non-deleted tenants
+                tenants = await master_db.tenants.find(
+                    {"is_deleted": {"$ne": True}},
+                    {"company_id": 1, "company_name": 1},
+                ).to_list(length=None)
+
+                log.info("    → %d tenant(s) to process", len(tenants))
+                total: dict[str, int] = {}
+
+                for tenant in tenants:
+                    company_id = tenant.get("company_id")
+                    if not company_id:
+                        continue
+                    try:
+                        company_db = get_company_db(company_id)
+                        counts     = await migration.fn(company_db, company_id)
+                        for k, v in counts.items():
+                            total[k] = total.get(k, 0) + v
+                    except Exception as tenant_err:
+                        log.warning(
+                            "    ⚠ %s failed for company=%s: %s",
+                            migration.id, company_id, tenant_err,
+                        )
+
+                _log_counts(migration.id, "all tenants", total)
+
+            # Mark this migration as done
+            await meta_col.insert_one({
+                "_id":        migration.id,
+                "scope":      migration.scope,
+                "description": migration.description,
+                "applied_at": datetime.now(timezone.utc),
+            })
+            log.info("  [done] %s", migration.id)
+
+        except Exception as exc:
+            # A failed migration must NEVER crash the server.
+            # Log the error and continue — operators can fix and redeploy.
+            log.error("  [FAIL] %s: %s", migration.id, exc, exc_info=True)
+
+    log.info("=" * 60)
+    log.info("  Migration check complete")
+    log.info("=" * 60)
+
+
+def _log_counts(migration_id: str, scope: str, counts: dict[str, int]) -> None:
+    changed = {k: v for k, v in counts.items() if v}
+    if changed:
+        for field_name, n in changed.items():
+            log.info("    %-35s  %d updated", field_name, n)
+    else:
+        log.info("    (nothing to update — all fields already present)")

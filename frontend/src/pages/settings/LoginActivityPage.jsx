@@ -7,7 +7,12 @@ import api from '../../services/api'
 const formatDate = (iso) => {
   if (!iso) return '—'
   const d = new Date(iso)
-  return d.toLocaleString()
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+  })
 }
 
 const LoginActivityPage = () => {
