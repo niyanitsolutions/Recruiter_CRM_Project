@@ -96,14 +96,14 @@ function TaskCard({ task, onStatusChange, onDelete, isDark }) {
   const entityLabel = task.related_entity_name || task.related_entity_type || null
 
   const cardStyle = isDark ? {
-    background: 'rgba(16, 22, 58, 0.72)',
-    border: `1px solid ${task.is_overdue ? 'rgba(239,68,68,0.35)' : 'rgba(255,255,255,0.10)'}`,
+    background: 'rgba(14, 20, 55, 0.38)',
+    border: `1px solid ${task.is_overdue ? 'rgba(239,68,68,0.35)' : 'rgba(255,255,255,0.12)'}`,
     borderRadius: 14,
     padding: '16px',
     marginBottom: 12,
     backdropFilter: 'blur(20px)',
     WebkitBackdropFilter: 'blur(20px)',
-    boxShadow: '0 4px 16px rgba(0,0,20,0.40)',
+    boxShadow: '0 4px 16px rgba(0,0,20,0.30), inset 0 1px 0 rgba(255,255,255,0.07)',
   } : {
     background: '#ffffff',
     border: `1px solid ${task.is_overdue ? 'rgba(239,68,68,0.3)' : 'rgba(108,99,255,0.12)'}`,
@@ -180,15 +180,15 @@ function TaskCard({ task, onStatusChange, onDelete, isDark }) {
 // ── Column ────────────────────────────────────────────────────────────────────
 function KanbanColumn({ label, count, tasks, onStatusChange, onDelete, isDark }) {
   const colStyle = isDark ? {
-    background: 'rgba(12, 17, 48, 0.75)',
-    border: '1px solid rgba(255,255,255,0.09)',
+    background: 'rgba(14, 20, 55, 0.32)',
+    border: '1px solid rgba(255,255,255,0.11)',
     borderRadius: 16,
     padding: '20px 16px',
     flex: 1,
     minWidth: 0,
     backdropFilter: 'blur(20px)',
     WebkitBackdropFilter: 'blur(20px)',
-    boxShadow: '0 8px 32px rgba(0,0,20,0.45)',
+    boxShadow: '0 8px 32px rgba(0,0,20,0.30), inset 0 1px 0 rgba(255,255,255,0.07)',
   } : {
     background: '#f8f9ff',
     border: '1px solid rgba(108,99,255,0.10)',
@@ -244,7 +244,7 @@ function CreateModal({ users, onClose, onCreate, isDark }) {
   }
 
   const modalStyle = isDark ? {
-    background: 'rgba(12, 17, 48, 0.92)',
+    background: 'rgba(10, 14, 42, 0.88)',
     border: '1px solid rgba(255,255,255,0.12)',
     backdropFilter: 'blur(24px)',
     WebkitBackdropFilter: 'blur(24px)',
@@ -471,7 +471,7 @@ export default function Tasks() {
           {/* List / Calendar toggle */}
           <div style={{
             display: 'flex',
-            background: isDark ? 'rgba(16, 22, 58, 0.70)' : 'rgba(108,99,255,0.08)',
+            background: isDark ? 'rgba(14, 20, 55, 0.38)' : 'rgba(108,99,255,0.08)',
             border: isDark ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(108,99,255,0.15)',
             borderRadius: 24,
             padding: 4,

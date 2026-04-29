@@ -299,7 +299,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
     )} style={{
         background: 'linear-gradient(180deg, #0b0e22 0%, #0e1230 50%, #0b0e22 100%)',
         borderRight: '1px solid rgba(124,58,237,0.28)',
-        boxShadow: 'inset -8px 0 40px rgba(124,58,237,0.28), inset -2px 0 12px rgba(124,58,237,0.18), 4px 0 40px rgba(124,58,237,0.45), 8px 0 70px rgba(91,33,182,0.22)',
+        boxShadow: 'inset -12px 0 45px rgba(100,160,255,0.22), inset -3px 0 14px rgba(200,230,255,0.14), inset -1px 0 4px rgba(255,255,255,0.10), 4px 0 40px rgba(124,58,237,0.45), 8px 0 70px rgba(91,33,182,0.22)',
       }}>
       {/* Logo */}
       <div className={clsx('h-16 flex items-center', isCollapsed ? 'justify-center px-2' : 'px-5')} style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
