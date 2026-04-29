@@ -48,7 +48,7 @@ import {
   LayoutTemplate,
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
-import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType, selectHrmEnabled } from '../../store/authSlice'
+import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType } from '../../store/authSlice'
 import { useTheme } from '../../contexts/ThemeContext'
 
 // ─── Permission → nav-item mapping ────────────────────────────────────────────
@@ -145,12 +145,12 @@ const PERMISSION_NAV_MAP = [
  * A nav item is shown when the user has ANY permission in its `permissions` list.
  * Pass isOwner=true to bypass filtering (company-level superuser only).
  */
-const buildPermissionMenu = (permissions, isOwner = false, isAdmin = false, hrmEnabled = false) => {
+const buildPermissionMenu = (permissions, isOwner = false, isAdmin = false) => {
   const perms = new Set(permissions || [])
   const sectionMap = {}
 
   for (const item of PERMISSION_NAV_MAP) {
-    if (item.hrmOnly && !hrmEnabled) continue
+    // HRM items are always shown — gating is purely permission-driven
     if (!isOwner && !isAdmin && !item.permissions.some(p => perms.has(p))) continue
     if (!sectionMap[item.section]) sectionMap[item.section] = []
     const isDuplicate = sectionMap[item.section].some(
@@ -171,7 +171,6 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
   const isSeller     = useSelector(selectIsSeller)
   const userRole     = useSelector(selectUserRole)
   const userType     = useSelector(selectUserType)
-  const hrmEnabled   = useSelector(selectHrmEnabled)
   const { isDark }   = useTheme()
   const location     = useLocation()
 
@@ -241,7 +240,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
     // Only Owners bypass the filter (company-level superuser).
     // Admin role goes through the same permission check as all other roles —
     // it simply has a different (smaller) default permission set.
-    const sections = buildPermissionMenu(user?.permissions, !!user?.isOwner, false, hrmEnabled)
+    const sections = buildPermissionMenu(user?.permissions, !!user?.isOwner, false)
     return {
       flat: [],
       sections: sections.length > 0

@@ -117,7 +117,7 @@ class TenantModel(BaseModel):
     # crm_enabled=True (default) preserves backward compatibility for all
     # existing tenants created before the HRM module was introduced.
     crm_enabled: bool = Field(default=True)   # Recruitment / CRM module
-    hrm_enabled: bool = Field(default=False)  # HR Management module
+    hrm_enabled: bool = Field(default=True)   # HR Management module — always enabled
 
     # Soft Delete
     is_deleted: bool = Field(default=False)

@@ -236,17 +236,39 @@ class UserService:
                     company_id=company_id or "",
                 ))
 
-            # CRM ↔ HRM sync: notify HR when a new CRM user is added
-            # Only fires when BOTH modules are enabled on the tenant
+            # ── User ↔ Employee auto-link by email ──────────────────────────
+            # Always runs — CRM + HRM are always active for all tenants.
             if company_id:
                 try:
-                    master_db = get_master_db()
-                    tenant = await master_db.tenants.find_one({"company_id": company_id})
-                    if tenant and tenant.get("crm_enabled") and tenant.get("hrm_enabled"):
-                        from app.services.notification_service import NotificationService
-                        notif_svc = NotificationService(self.db)
+                    from app.services.notification_service import NotificationService
+                    notif_svc = NotificationService(self.db)
+                    user_email = str(user_data.email).lower().strip()
+                    user_id    = user_doc["_id"]
+
+                    # Find HRM employee with same email (case-insensitive)
+                    matched_emp = await self.db.hrm_employees.find_one(
+                        {"company_id": company_id,
+                         "email": {"$regex": f"^{user_email}$", "$options": "i"},
+                         "is_deleted": False},
+                        {"_id": 1},
+                    )
+
+                    if matched_emp:
+                        # Link employee → user (both directions)
+                        emp_id = matched_emp["_id"]
+                        now_link = datetime.now(timezone.utc)
+                        await self.db.hrm_employees.update_one(
+                            {"_id": emp_id},
+                            {"$set": {"crm_user_id": user_id, "updated_at": now_link}},
+                        )
+                        await self.db.users.update_one(
+                            {"_id": user_id},
+                            {"$set": {"hrm_employee_id": emp_id, "updated_at": now_link}},
+                        )
+                    else:
+                        # No employee exists — notify HR team to create one
                         hr_ids = [
-                            doc["_id"] async for doc in self.db.users.find(
+                            d["_id"] async for d in self.db.users.find(
                                 {"company_id": company_id, "role": "hr",
                                  "is_deleted": False, "status": "active"},
                                 {"_id": 1},
@@ -260,7 +282,7 @@ class UserService:
                                 new_user_email=user_data.email,
                             )
                 except Exception:
-                    pass  # sync notification must never block user creation
+                    pass  # linking must never block user creation
 
             # Return user without password
             user_doc.pop("password_hash", None)

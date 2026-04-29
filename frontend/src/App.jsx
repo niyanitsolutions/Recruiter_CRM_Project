@@ -6,7 +6,6 @@ import toast from 'react-hot-toast'
 import {
   selectIsAuthenticated, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType, selectUser,
   selectIsInitializing, selectProfileCompleted, selectForcePasswordChange,
-  selectHrmEnabled,
   initAuth, setProfileCompleted, clearForcePasswordChange,
 } from './store/authSlice'
 import { useAutoLogout } from './hooks/useAutoLogout'
@@ -229,16 +228,8 @@ const PermissionRoute = ({ children, permission, showUnauthorized = false }) => 
   const user           = useSelector(selectUser)
   const userRole       = useSelector(selectUserRole)
   const userType       = useSelector(selectUserType)
-  const hrmEnabled     = useSelector(selectHrmEnabled)
-
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (isSuperAdmin) return <Navigate to="/super-admin" replace />
-
-  // Block HRM routes when the HRM module is not enabled — even for OWNER
-  if (permission?.startsWith('hrm:') && !hrmEnabled) {
-    if (showUnauthorized) return <Unauthorized />
-    return <Navigate to={getDefaultRoute(userRole, user?.permissions, userType)} replace />
-  }
 
   // Owner skips all other permission checks
   if (user?.isOwner) return children

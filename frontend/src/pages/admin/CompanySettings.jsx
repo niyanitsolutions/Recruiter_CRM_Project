@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import {
   Building2, User, CreditCard, Shield, Bell, Mail,
   Save, Loader2, Plus, Trash2, MapPin, AlertCircle,
@@ -6,6 +8,8 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
+import { selectUser } from '../../store/authSlice'
+import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 
 // ── Timezone list (abbreviated) ────────────────────────────────────────────
 const TIMEZONES = [
@@ -125,9 +129,13 @@ const DEFAULT_NOTIF = {
 // ── MAIN COMPONENT ─────────────────────────────────────────────────────────
 
 const CompanySettings = () => {
+  const navigate = useNavigate()
+  const user     = useSelector(selectUser)
+
   const [activeTab, setActiveTab] = useState('profile')
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
   const [profile,  setProfile]  = useState(DEFAULT_PROFILE)
   const [contact,  setContact]  = useState(DEFAULT_CONTACT)
@@ -594,7 +602,7 @@ const CompanySettings = () => {
               {/* Stats grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {[
-                  { label: 'Price Per User',    value: subscription.price_per_user ? `₹${subscription.price_per_user}` : '—' },
+                  { label: 'Price Per User',    value: subscription.price_per_user != null ? `₹${subscription.price_per_user}` : '—' },
                   { label: 'Allowed Users',     value: subscription.max_users ?? '—' },
                   { label: 'Current Users',     value: subscription.current_users ?? 0 },
                   { label: 'Remaining Users',   value: subscription.remaining_users ?? '—' },
@@ -626,13 +634,24 @@ const CompanySettings = () => {
 
               {/* Action buttons */}
               <div className="flex flex-wrap gap-3 pt-2">
-                <button className="px-4 py-2 bg-accent-600 text-white text-sm font-medium rounded-lg hover:bg-accent-700 transition-colors">
+                <button
+                  onClick={() => navigate('/upgrade-plan', {
+                    state: { tenantId: user?.companyId, currentPlan: subscription?.plan_name }
+                  })}
+                  className="px-4 py-2 bg-accent-600 text-white text-sm font-medium rounded-lg hover:bg-accent-700 transition-colors"
+                >
                   Upgrade Plan
                 </button>
-                <button className="px-4 py-2 bg-white border border-surface-200 text-surface-700 text-sm font-medium rounded-lg hover:bg-surface-50 transition-colors">
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="px-4 py-2 bg-white border border-surface-200 text-surface-700 text-sm font-medium rounded-lg hover:bg-surface-50 transition-colors"
+                >
                   Add More Users
                 </button>
-                <button className="px-4 py-2 bg-white border border-surface-200 text-surface-700 text-sm font-medium rounded-lg hover:bg-surface-50 transition-colors">
+                <button
+                  onClick={() => navigate('/payouts/invoices')}
+                  className="px-4 py-2 bg-white border border-surface-200 text-surface-700 text-sm font-medium rounded-lg hover:bg-surface-50 transition-colors"
+                >
                   View Billing
                 </button>
                 <button
@@ -935,6 +954,20 @@ const CompanySettings = () => {
           </div>
         </SectionCard>
       )}
+
+      <UpgradeSeatsModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        seatStatus={subscription ? {
+          total_user_seats:     subscription.max_users,
+          current_active_users: subscription.current_users,
+          remaining_seats:      subscription.remaining_users,
+          plan_name:            subscription.plan_name,
+          plan_display_name:    subscription.plan_name,
+          plan_expiry:          subscription.plan_expiry_date,
+          is_trial:             subscription.is_trial,
+        } : {}}
+      />
     </div>
   )
 }

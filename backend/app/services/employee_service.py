@@ -33,7 +33,7 @@ class EmployeeService:
         data: EmployeeCreate,
         company_id: str,
         created_by: str,
-        crm_enabled: bool = False,
+        crm_enabled: bool = True,
         hrm_enabled: bool = True,
     ) -> dict:
         emp_id = await self._next_employee_id(company_id)
@@ -58,20 +58,45 @@ class EmployeeService:
             doc["qualifications"] = [q.model_dump() for q in data.qualifications]
         await self.col.insert_one(doc)
 
-        # CRM ↔ HRM sync: only when BOTH modules are enabled
-        if crm_enabled and hrm_enabled:
-            try:
-                from app.services.notification_service import NotificationService
-                notif_svc = NotificationService(self.db)
-                admin_ids = await self._get_admin_ids(company_id)
-                await notif_svc.notify_crm_employee_created(
-                    company_id=company_id,
-                    admin_user_ids=admin_ids,
-                    employee_name=data.full_name,
-                    employee_email=str(data.email),
+        # ── User ↔ Employee auto-link by email ───────────────────────────────
+        # Always runs — CRM + HRM are always active for all tenants.
+        try:
+            from app.services.notification_service import NotificationService
+            notif_svc = NotificationService(self.db)
+            employee_email = str(data.email).lower().strip()
+
+            # Find CRM user with same email (case-insensitive)
+            matched_user = await self.db.users.find_one(
+                {"company_id": company_id, "email": {"$regex": f"^{employee_email}$", "$options": "i"},
+                 "is_deleted": False},
+                {"_id": 1},
+            )
+
+            if matched_user:
+                # Link employee → user
+                user_id = matched_user["_id"]
+                await self.col.update_one(
+                    {"_id": doc["_id"]},
+                    {"$set": {"crm_user_id": user_id, "updated_at": now}},
                 )
-            except Exception:
-                pass  # sync notification must never block employee creation
+                doc["crm_user_id"] = user_id
+                # Also stamp employee_id back on the user for reverse lookup
+                await self.db.users.update_one(
+                    {"_id": user_id},
+                    {"$set": {"hrm_employee_id": doc["_id"], "updated_at": now}},
+                )
+            else:
+                # No CRM user exists — notify admins to create one
+                admin_ids = await self._get_admin_ids(company_id)
+                if admin_ids:
+                    await notif_svc.notify_crm_employee_created(
+                        company_id=company_id,
+                        admin_user_ids=admin_ids,
+                        employee_name=data.full_name,
+                        employee_email=employee_email,
+                    )
+        except Exception:
+            pass  # linking must never block employee creation
 
         return self._serialize(doc)
 
