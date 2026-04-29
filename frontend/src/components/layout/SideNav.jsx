@@ -171,7 +171,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
   const isSeller     = useSelector(selectIsSeller)
   const userRole     = useSelector(selectUserRole)
   const userType     = useSelector(selectUserType)
-  const { isDark }   = useTheme()
+  const { isDark, themeMode } = useTheme()
   const location     = useLocation()
 
   // Close mobile nav on route change
@@ -300,7 +300,11 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
     )} style={{
         backgroundColor: 'var(--bg-sidebar)',
         borderRight: '1px solid var(--border)',
-        boxShadow: isDark
+        boxShadow: themeMode === 'system'
+          ? isDark
+            ? 'inset -8px 0 32px rgba(14,165,233,0.15), 4px 0 24px rgba(0,0,0,0.40)'
+            : '2px 0 12px rgba(14,165,233,0.08)'
+          : isDark
           ? 'inset -8px 0 32px rgba(124,58,237,0.18), 4px 0 24px rgba(0,0,0,0.40)'
           : '2px 0 12px rgba(124,58,237,0.06)',
       }}>
@@ -310,7 +314,14 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
           <div className="flex items-center gap-3">
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base flex-shrink-0 text-white"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 18px rgba(124,58,237,0.6)' }}
+              style={{
+                background: themeMode === 'system'
+                  ? 'linear-gradient(135deg, #0ea5e9, #6366f1)'
+                  : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+                boxShadow: themeMode === 'system'
+                  ? '0 0 18px rgba(14,165,233,0.6)'
+                  : '0 0 18px rgba(124,58,237,0.6)',
+              }}
             >N</div>
             <div>
               <h1 className="font-bold text-sm leading-tight tracking-wide" style={{ color: 'var(--nav-text-active)' }}>Niyan HireFlow</h1>
@@ -320,7 +331,14 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
         ) : (
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base text-white"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 18px rgba(124,58,237,0.6)' }}
+            style={{
+              background: themeMode === 'system'
+                ? 'linear-gradient(135deg, #0ea5e9, #6366f1)'
+                : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+              boxShadow: themeMode === 'system'
+                ? '0 0 18px rgba(14,165,233,0.6)'
+                : '0 0 18px rgba(124,58,237,0.6)',
+            }}
           >N</div>
         )}
       </div>

@@ -42,7 +42,11 @@ export const ThemeProvider = ({ children }) => {
   const resolvedTheme = themeMode === 'system' ? systemTheme : themeMode
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', resolvedTheme)
+    // "system" gets its own data-theme value so CSS @media (prefers-color-scheme)
+    // can handle the adaptation with the System palette (cyan/aurora aesthetic).
+    // "dark" and "light" use their own explicit palette.
+    const attr = themeMode === 'system' ? 'system' : resolvedTheme
+    document.documentElement.setAttribute('data-theme', attr)
     try { localStorage.setItem(STORAGE_KEY, themeMode) } catch {}
   }, [themeMode, resolvedTheme])
 
