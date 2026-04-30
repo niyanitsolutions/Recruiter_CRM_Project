@@ -4,6 +4,7 @@ Multi-tenant CRM System for Recruitment Agencies
 """
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -144,6 +145,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         content={"success": False, "message": "An unexpected error occurred. Please try again later."},
     )
 
+
+# GZip — compress any response ≥ 1 kB (JSON payloads, HTML, JS chunks)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # CORS Configuration
 app.add_middleware(

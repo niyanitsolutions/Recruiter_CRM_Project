@@ -11,6 +11,9 @@ from app.services.audit_service import AuditService
 from app.core.dependencies import (
     get_company_db, require_permissions
 )
+from app.core.redis import get_cache, set_cache
+
+DASHBOARD_CACHE_TTL = 60  # seconds
 
 router = APIRouter(prefix="/admin/dashboard", tags=["Admin Dashboard"])
 
@@ -29,6 +32,12 @@ async def get_dashboard_data(
     db = Depends(get_company_db),
 ):
     """Get complete admin dashboard data"""
+    # Serve from Redis cache for the first 60 s to avoid 15 parallel DB queries
+    cache_key = f"dashboard:{current_user.get('company_id', '')}"
+    cached = await get_cache(cache_key)
+    if cached:
+        return cached
+
     user_service = UserService(db)
     audit_service = AuditService(db)
 
@@ -68,7 +77,7 @@ async def get_dashboard_data(
         _safe_count(db.payouts,       {"is_deleted": False}),
     )
 
-    return {
+    result = {
         "success": True,
         "data": {
             "user_stats": user_stats,
@@ -90,6 +99,8 @@ async def get_dashboard_data(
             }
         }
     }
+    await set_cache(cache_key, result, ttl_seconds=DASHBOARD_CACHE_TTL)
+    return result
 
 
 @router.get("/users-summary")

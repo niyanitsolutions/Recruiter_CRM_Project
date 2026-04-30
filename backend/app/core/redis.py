@@ -187,6 +187,49 @@ async def invalidate_user_cache(user_id: str) -> None:
         logger.warning(f"Redis invalidate_user_cache failed: {e}")
 
 
+# ─── Generic key/value cache ──────────────────────────────────────────────────
+
+async def get_cache(key: str):
+    """Return deserialized value for key, or None on miss / Redis unavailable."""
+    client = get_redis()
+    if not client:
+        return None
+    try:
+        import json
+        raw = await client.get(key)
+        return json.loads(raw) if raw else None
+    except Exception as e:
+        logger.warning(f"Redis get_cache failed: {e}")
+        return None
+
+
+async def set_cache(key: str, value, ttl_seconds: int = 60) -> bool:
+    """Serialize value and store with TTL. Non-serialisable types become strings."""
+    client = get_redis()
+    if not client:
+        return False
+    try:
+        import json
+        await client.setex(key, ttl_seconds, json.dumps(value, default=str))
+        return True
+    except Exception as e:
+        logger.warning(f"Redis set_cache failed: {e}")
+        return False
+
+
+async def delete_cache(key: str) -> bool:
+    """Delete a cache entry (call after mutating operations)."""
+    client = get_redis()
+    if not client:
+        return False
+    try:
+        await client.delete(key)
+        return True
+    except Exception as e:
+        logger.warning(f"Redis delete_cache failed: {e}")
+        return False
+
+
 # ─── Rate Limiting ─────────────────────────────────────────────────────────────
 
 async def check_rate_limit(key: str, max_requests: int, window_seconds: int) -> tuple[bool, int]:

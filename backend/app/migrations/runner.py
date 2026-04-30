@@ -211,6 +211,67 @@ async def _m005_backfill_user_employee_links(db, company_id: str) -> dict[str, i
     return {"linked_pairs": linked}
 
 
+async def _m007_ensure_indexes(db, company_id: str) -> dict[str, int]:
+    """
+    Create compound indexes on the collections used by the most common queries
+    (dashboard counts, list pages, inbox). Each call is idempotent — MongoDB
+    silently no-ops if an identical index already exists.
+    """
+    created = 0
+
+    async def _idx(col, keys, **kw):
+        nonlocal created
+        try:
+            await col.create_index(keys, **kw)
+            created += 1
+        except Exception:
+            pass  # index already exists or collection doesn't exist yet
+
+    # users
+    await _idx(db.users, [("company_id", 1), ("is_deleted", 1)])
+    await _idx(db.users, [("email", 1), ("company_id", 1)])
+    await _idx(db.users, [("company_id", 1), ("role", 1), ("is_deleted", 1)])
+    await _idx(db.users, [("company_id", 1), ("status", 1), ("is_deleted", 1)])
+
+    # candidates
+    await _idx(db.candidates, [("company_id", 1), ("is_deleted", 1), ("status", 1)])
+    await _idx(db.candidates, [("company_id", 1), ("email", 1)])
+
+    # jobs
+    await _idx(db.jobs, [("company_id", 1), ("is_deleted", 1), ("status", 1)])
+
+    # clients
+    await _idx(db.clients, [("company_id", 1), ("is_deleted", 1), ("status", 1)])
+
+    # applications — covers rejection count + per-job/candidate lookups
+    await _idx(db.applications, [("company_id", 1), ("is_deleted", 1), ("status", 1)])
+    await _idx(db.applications, [("job_id", 1), ("is_deleted", 1)])
+    await _idx(db.applications, [("candidate_id", 1), ("is_deleted", 1)])
+
+    # interviews
+    await _idx(db.interviews, [("company_id", 1), ("is_deleted", 1), ("created_at", -1)])
+    await _idx(db.interviews, [("job_id", 1), ("is_deleted", 1)])
+
+    # hrm_employees
+    await _idx(db.hrm_employees, [("company_id", 1), ("is_deleted", 1)])
+    await _idx(db.hrm_employees, [("company_id", 1), ("email", 1)])
+    await _idx(db.hrm_employees, [("crm_user_id", 1)])
+
+    # notifications — inbox query: unread per user, sorted by time
+    await _idx(db.notifications, [("user_id", 1), ("is_read", 1), ("is_deleted", 1), ("created_at", -1)])
+    await _idx(db.notifications, [("company_id", 1), ("is_deleted", 1), ("created_at", -1)])
+
+    # audit_logs — recent activity + action filter
+    await _idx(db.audit_logs, [("company_id", 1), ("created_at", -1)])
+    await _idx(db.audit_logs, [("company_id", 1), ("action", 1), ("created_at", -1)])
+
+    # onboards, payouts, targets, departments, designations, roles — basic list queries
+    for col in (db.onboards, db.payouts, db.targets, db.departments, db.designations, db.roles):
+        await _idx(col, [("company_id", 1), ("is_deleted", 1)])
+
+    return {"indexes_created": created}
+
+
 async def _m006_notifications_fields(db, company_id: str) -> dict[str, int]:
     """Backfill missing fields on notifications collection."""
     col = db.notifications
@@ -270,6 +331,12 @@ MIGRATIONS: list[Migration] = [
         scope="tenant",
         fn=_m006_notifications_fields,
         description="Backfill notification document fields",
+    ),
+    Migration(
+        id="m007_ensure_indexes",
+        scope="tenant",
+        fn=_m007_ensure_indexes,
+        description="Create compound indexes for common query patterns",
     ),
 ]
 

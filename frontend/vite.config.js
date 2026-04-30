@@ -44,14 +44,19 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            vendor: ['react', 'react-dom', 'react-router-dom'],
-            redux: ['@reduxjs/toolkit', 'react-redux'],
-            charts: ['recharts'],
+            vendor:  ['react', 'react-dom', 'react-router-dom'],
+            redux:   ['@reduxjs/toolkit', 'react-redux'],
+            charts:  ['recharts'],
+            icons:   ['lucide-react'],
+            forms:   ['react-hook-form'],
+            dates:   ['date-fns'],
           },
         },
       },
-      // Warn if any chunk exceeds 600 kB
-      chunkSizeWarningLimit: 600,
+      // Inline assets ≤ 4 kB directly into JS (saves a round trip per small image/svg)
+      assetsInlineLimit: 4096,
+      // Warn if any chunk exceeds 500 kB
+      chunkSizeWarningLimit: 500,
     },
   }
 })

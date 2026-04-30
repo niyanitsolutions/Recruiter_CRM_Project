@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { useForm } from 'react-hook-form'
@@ -11,119 +11,143 @@ import {
 import { useAutoLogout } from './hooks/useAutoLogout'
 import api from './services/api'
 
-// Layouts
+// Layouts — kept eager so the app shell (sidebar + topbar) renders immediately
 import { Layout, AuthLayout } from './components/layout'
 
-// Auth Pages
-import { Login, Register, ForgotPassword, UpgradePlan, VerifyEmail, ChangePassword } from './pages/auth'
+// ─── Lazy page bundles ────────────────────────────────────────────────────────
+// Each group becomes a separate JS chunk; the chunk loads on first visit to
+// any route in that group and is then cached indefinitely by the browser.
 
-// SuperAdmin Pages
-import {
-  Dashboard as SuperAdminDashboard, Tenants, Payments, SuperAdminProfile, SuperAdminSettings,
-  Sellers, Plans, Subscriptions, SuperAdminReports, Discounts,
-} from './pages/super-admin'
+// Auth
+const Login           = lazy(() => import('./pages/auth').then(m => ({ default: m.Login })))
+const Register        = lazy(() => import('./pages/auth').then(m => ({ default: m.Register })))
+const ForgotPassword  = lazy(() => import('./pages/auth').then(m => ({ default: m.ForgotPassword })))
+const UpgradePlan     = lazy(() => import('./pages/auth').then(m => ({ default: m.UpgradePlan })))
+const VerifyEmail     = lazy(() => import('./pages/auth').then(m => ({ default: m.VerifyEmail })))
+const ChangePassword  = lazy(() => import('./pages/auth').then(m => ({ default: m.ChangePassword })))
 
-// Seller Portal Pages
-import {
-  SellerDashboard, SellerTenants, SellerSubscriptions, SellerRevenue,
-  SellerPayments, SellerCommissions, SellerNotifications, SellerProfile,
-} from './pages/seller'
+// Super Admin
+const SuperAdminDashboard  = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Dashboard })))
+const Tenants              = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Tenants })))
+const Payments             = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Payments })))
+const SuperAdminProfile    = lazy(() => import('./pages/super-admin').then(m => ({ default: m.SuperAdminProfile })))
+const SuperAdminSettings   = lazy(() => import('./pages/super-admin').then(m => ({ default: m.SuperAdminSettings })))
+const Sellers              = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Sellers })))
+const Plans                = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Plans })))
+const Subscriptions        = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Subscriptions })))
+const SuperAdminReports    = lazy(() => import('./pages/super-admin').then(m => ({ default: m.SuperAdminReports })))
+const Discounts            = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Discounts })))
 
-// Phase 2 - Company Admin Pages
-import {
-  AdminDashboard,
-  Users,
-  InactiveUsers,
-  UserForm,
-  UserDetails,
-  Partners,
-  PartnerForm,
-  Roles,
-  RoleForm,
-  Departments,
-  DepartmentForm,
-  Designations,
-  DesignationForm,
-  AuditLogs,
-  Profile,
-  Settings,
-  CompanySettings,
-  InterviewSettings,
-  DeletedHistory,
-} from './pages/admin'
-import IntegrationList from './components/integrations/IntegrationList'
+// Seller Portal
+const SellerDashboard      = lazy(() => import('./pages/seller').then(m => ({ default: m.SellerDashboard })))
+const SellerTenants        = lazy(() => import('./pages/seller').then(m => ({ default: m.SellerTenants })))
+const SellerSubscriptions  = lazy(() => import('./pages/seller').then(m => ({ default: m.SellerSubscriptions })))
+const SellerRevenue        = lazy(() => import('./pages/seller').then(m => ({ default: m.SellerRevenue })))
+const SellerPayments       = lazy(() => import('./pages/seller').then(m => ({ default: m.SellerPayments })))
+const SellerCommissions    = lazy(() => import('./pages/seller').then(m => ({ default: m.SellerCommissions })))
+const SellerNotifications  = lazy(() => import('./pages/seller').then(m => ({ default: m.SellerNotifications })))
+const SellerProfile        = lazy(() => import('./pages/seller').then(m => ({ default: m.SellerProfile })))
 
-// Phase 3 - Recruitment Pages
-import {
-  RecruitmentDashboard,
-  Clients,
-  ClientForm,
-  Candidates,
-  CandidateForm,
-  CandidateDetails,
-  CandidatePublicForm,
-  Jobs,
-  JobForm,
-  JobDetails,
-  JobMatchingCandidates,
-  Applications,
-  ApplicationDetail,
-  Interviews,
-  InterviewForm,
-  InterviewDetail,
-  FeedbackForm
-} from './pages/recruitment'
+// Company Admin
+const AdminDashboard    = lazy(() => import('./pages/admin').then(m => ({ default: m.AdminDashboard })))
+const Users             = lazy(() => import('./pages/admin').then(m => ({ default: m.Users })))
+const InactiveUsers     = lazy(() => import('./pages/admin').then(m => ({ default: m.InactiveUsers })))
+const UserForm          = lazy(() => import('./pages/admin').then(m => ({ default: m.UserForm })))
+const UserDetails       = lazy(() => import('./pages/admin').then(m => ({ default: m.UserDetails })))
+const Partners          = lazy(() => import('./pages/admin').then(m => ({ default: m.Partners })))
+const PartnerForm       = lazy(() => import('./pages/admin').then(m => ({ default: m.PartnerForm })))
+const Roles             = lazy(() => import('./pages/admin').then(m => ({ default: m.Roles })))
+const RoleForm          = lazy(() => import('./pages/admin').then(m => ({ default: m.RoleForm })))
+const Departments       = lazy(() => import('./pages/admin').then(m => ({ default: m.Departments })))
+const DepartmentForm    = lazy(() => import('./pages/admin').then(m => ({ default: m.DepartmentForm })))
+const Designations      = lazy(() => import('./pages/admin').then(m => ({ default: m.Designations })))
+const DesignationForm   = lazy(() => import('./pages/admin').then(m => ({ default: m.DesignationForm })))
+const AuditLogs         = lazy(() => import('./pages/admin').then(m => ({ default: m.AuditLogs })))
+const Profile           = lazy(() => import('./pages/admin').then(m => ({ default: m.Profile })))
+const Settings          = lazy(() => import('./pages/admin').then(m => ({ default: m.Settings })))
+const CompanySettings   = lazy(() => import('./pages/admin').then(m => ({ default: m.CompanySettings })))
+const InterviewSettings = lazy(() => import('./pages/admin').then(m => ({ default: m.InterviewSettings })))
+const DeletedHistory    = lazy(() => import('./pages/admin').then(m => ({ default: m.DeletedHistory })))
+const IntegrationList   = lazy(() => import('./components/integrations/IntegrationList'))
 
-// Phase 4 - Onboarding & Payout Pages
-import {
-  Onboards,
-  OnboardForm,
-  OnboardDetails,
-  PartnerPayouts,
-  RaiseInvoice,
-  Invoices,
-  Notifications
-} from './pages/phase4'
+// Recruitment
+const RecruitmentDashboard  = lazy(() => import('./pages/recruitment').then(m => ({ default: m.RecruitmentDashboard })))
+const Clients               = lazy(() => import('./pages/recruitment').then(m => ({ default: m.Clients })))
+const ClientForm            = lazy(() => import('./pages/recruitment').then(m => ({ default: m.ClientForm })))
+const Candidates            = lazy(() => import('./pages/recruitment').then(m => ({ default: m.Candidates })))
+const CandidateForm         = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidateForm })))
+const CandidateDetails      = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidateDetails })))
+const CandidatePublicForm   = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidatePublicForm })))
+const Jobs                  = lazy(() => import('./pages/recruitment').then(m => ({ default: m.Jobs })))
+const JobForm               = lazy(() => import('./pages/recruitment').then(m => ({ default: m.JobForm })))
+const JobDetails            = lazy(() => import('./pages/recruitment').then(m => ({ default: m.JobDetails })))
+const JobMatchingCandidates = lazy(() => import('./pages/recruitment').then(m => ({ default: m.JobMatchingCandidates })))
+const Applications          = lazy(() => import('./pages/recruitment').then(m => ({ default: m.Applications })))
+const ApplicationDetail     = lazy(() => import('./pages/recruitment').then(m => ({ default: m.ApplicationDetail })))
+const Interviews            = lazy(() => import('./pages/recruitment').then(m => ({ default: m.Interviews })))
+const InterviewForm         = lazy(() => import('./pages/recruitment').then(m => ({ default: m.InterviewForm })))
+const InterviewDetail       = lazy(() => import('./pages/recruitment').then(m => ({ default: m.InterviewDetail })))
+const FeedbackForm          = lazy(() => import('./pages/recruitment').then(m => ({ default: m.FeedbackForm })))
 
-// Settings sub-pages (Phase 6)
-import {
-  TeamsPage, BranchesPage, PipelineStagePage, JobCategoriesPage,
-  InterviewSettingsPage, DocumentTemplatesPage, ResumeParsingPage, CandidateSourcesPage,
-  InvoiceSettingsPage, CommissionRulesPage, LocalizationPage,
-  EmailConfigPage, NotificationSettingsPage, SecuritySettingsPage,
-  DataManagementPage, CustomFieldsPage, BrandingPage, SLAConfigPage,
-  LoginActivityPage,
-} from './pages/settings'
+// Phase 4 — Onboarding & Payouts
+const Onboards       = lazy(() => import('./pages/phase4').then(m => ({ default: m.Onboards })))
+const OnboardForm    = lazy(() => import('./pages/phase4').then(m => ({ default: m.OnboardForm })))
+const OnboardDetails = lazy(() => import('./pages/phase4').then(m => ({ default: m.OnboardDetails })))
+const PartnerPayouts = lazy(() => import('./pages/phase4').then(m => ({ default: m.PartnerPayouts })))
+const RaiseInvoice   = lazy(() => import('./pages/phase4').then(m => ({ default: m.RaiseInvoice })))
+const Invoices       = lazy(() => import('./pages/phase4').then(m => ({ default: m.Invoices })))
+const Notifications  = lazy(() => import('./pages/phase4').then(m => ({ default: m.Notifications })))
 
-// HRM Module Pages
-import HRMDashboard from './pages/hrm/HRMDashboard'
-import Employees from './pages/hrm/Employees'
-import EmployeeForm from './pages/hrm/EmployeeForm'
-import Attendance from './pages/hrm/Attendance'
-import LeaveManagement from './pages/hrm/LeaveManagement'
-import Payroll from './pages/hrm/Payroll'
-import Performance from './pages/hrm/Performance'
-import Announcements from './pages/hrm/Announcements'
-import HiringDashboard from './pages/hrm/hiring/HiringDashboard'
-import HRJobs from './pages/hrm/hiring/HRJobs'
-import HRCandidates from './pages/hrm/hiring/HRCandidates'
-import HRInterviews from './pages/hrm/hiring/HRInterviews'
-import HROffer from './pages/hrm/hiring/HROffer'
-import HROnboarding from './pages/hrm/hiring/HROnboarding'
-import OfferTemplates from './pages/hrm/OfferTemplates'
+// Settings sub-pages
+const TeamsPage               = lazy(() => import('./pages/settings').then(m => ({ default: m.TeamsPage })))
+const BranchesPage            = lazy(() => import('./pages/settings').then(m => ({ default: m.BranchesPage })))
+const PipelineStagePage       = lazy(() => import('./pages/settings').then(m => ({ default: m.PipelineStagePage })))
+const JobCategoriesPage       = lazy(() => import('./pages/settings').then(m => ({ default: m.JobCategoriesPage })))
+const InterviewSettingsPage   = lazy(() => import('./pages/settings').then(m => ({ default: m.InterviewSettingsPage })))
+const DocumentTemplatesPage   = lazy(() => import('./pages/settings').then(m => ({ default: m.DocumentTemplatesPage })))
+const ResumeParsingPage       = lazy(() => import('./pages/settings').then(m => ({ default: m.ResumeParsingPage })))
+const CandidateSourcesPage    = lazy(() => import('./pages/settings').then(m => ({ default: m.CandidateSourcesPage })))
+const InvoiceSettingsPage     = lazy(() => import('./pages/settings').then(m => ({ default: m.InvoiceSettingsPage })))
+const CommissionRulesPage     = lazy(() => import('./pages/settings').then(m => ({ default: m.CommissionRulesPage })))
+const LocalizationPage        = lazy(() => import('./pages/settings').then(m => ({ default: m.LocalizationPage })))
+const EmailConfigPage         = lazy(() => import('./pages/settings').then(m => ({ default: m.EmailConfigPage })))
+const NotificationSettingsPage = lazy(() => import('./pages/settings').then(m => ({ default: m.NotificationSettingsPage })))
+const SecuritySettingsPage    = lazy(() => import('./pages/settings').then(m => ({ default: m.SecuritySettingsPage })))
+const DataManagementPage      = lazy(() => import('./pages/settings').then(m => ({ default: m.DataManagementPage })))
+const CustomFieldsPage        = lazy(() => import('./pages/settings').then(m => ({ default: m.CustomFieldsPage })))
+const BrandingPage            = lazy(() => import('./pages/settings').then(m => ({ default: m.BrandingPage })))
+const SLAConfigPage           = lazy(() => import('./pages/settings').then(m => ({ default: m.SLAConfigPage })))
+const LoginActivityPage       = lazy(() => import('./pages/settings').then(m => ({ default: m.LoginActivityPage })))
 
-// Phase 5 - Reports, Analytics, Imports, Exports, Targets, Audit
-import ReportsPage from './pages/reports/ReportsPage'
-import ReportGenerator from './pages/reports/ReportGenerator'
-import ReportViewer from './pages/reports/ReportViewer'
-import SavedReports from './pages/reports/SavedReports'
-import AnalyticsDashboard from './pages/analytics/AnalyticsDashboard'
-import ImportsPage from './pages/imports/ImportsPage'
-import ExportsPage from './pages/exports/ExportsPage'
-import TargetsPage from './pages/targets/TargetsPage'
-import Leaderboard from './pages/targets/Leaderboard'
-import AuditLogsPage from './pages/audit/AuditLogsPage'
-import { Tasks } from './pages/tasks'
+// HRM
+const HRMDashboard    = lazy(() => import('./pages/hrm/HRMDashboard'))
+const Employees       = lazy(() => import('./pages/hrm/Employees'))
+const EmployeeForm    = lazy(() => import('./pages/hrm/EmployeeForm'))
+const Attendance      = lazy(() => import('./pages/hrm/Attendance'))
+const LeaveManagement = lazy(() => import('./pages/hrm/LeaveManagement'))
+const Payroll         = lazy(() => import('./pages/hrm/Payroll'))
+const Performance     = lazy(() => import('./pages/hrm/Performance'))
+const Announcements   = lazy(() => import('./pages/hrm/Announcements'))
+const HiringDashboard = lazy(() => import('./pages/hrm/hiring/HiringDashboard'))
+const HRJobs          = lazy(() => import('./pages/hrm/hiring/HRJobs'))
+const HRCandidates    = lazy(() => import('./pages/hrm/hiring/HRCandidates'))
+const HRInterviews    = lazy(() => import('./pages/hrm/hiring/HRInterviews'))
+const HROffer         = lazy(() => import('./pages/hrm/hiring/HROffer'))
+const HROnboarding    = lazy(() => import('./pages/hrm/hiring/HROnboarding'))
+const OfferTemplates  = lazy(() => import('./pages/hrm/OfferTemplates'))
+
+// Reports, Analytics, Imports, Exports, Targets, Audit
+const ReportsPage        = lazy(() => import('./pages/reports/ReportsPage'))
+const ReportGenerator    = lazy(() => import('./pages/reports/ReportGenerator'))
+const ReportViewer       = lazy(() => import('./pages/reports/ReportViewer'))
+const SavedReports       = lazy(() => import('./pages/reports/SavedReports'))
+const AnalyticsDashboard = lazy(() => import('./pages/analytics/AnalyticsDashboard'))
+const ImportsPage        = lazy(() => import('./pages/imports/ImportsPage'))
+const ExportsPage        = lazy(() => import('./pages/exports/ExportsPage'))
+const TargetsPage        = lazy(() => import('./pages/targets/TargetsPage'))
+const Leaderboard        = lazy(() => import('./pages/targets/Leaderboard'))
+const AuditLogsPage      = lazy(() => import('./pages/audit/AuditLogsPage'))
+const Tasks              = lazy(() => import('./pages/tasks').then(m => ({ default: m.Tasks })))
 
 // ─── Permission-aware default landing page ────────────────────────────────────
 // Used for post-login redirect and for bounce-back when a user hits a
@@ -611,6 +635,13 @@ const AuthInitializer = ({ children }) => {
   return children
 }
 
+// ─── Route-level Suspense fallback ───────────────────────────────────────────
+const RouteLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-surface-50">
+    <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+  </div>
+)
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 function App() {
   useAutoLogout()   // idle timer + screen-lock detection + multi-tab sync
@@ -620,6 +651,7 @@ function App() {
     <AuthInitializer>
     <ForcePasswordModal />
     <ProfileCompleteModal />
+    <Suspense fallback={<RouteLoader />}>
     <Routes>
       {/* AUTH — Login & ForgotPassword use the split-panel AuthLayout */}
       <Route element={<GuestRoute><AuthLayout /></GuestRoute>}>
@@ -925,6 +957,7 @@ function App() {
         </div>
       } />
     </Routes>
+    </Suspense>
     </AuthInitializer>
     </ErrorBoundary>
   )
