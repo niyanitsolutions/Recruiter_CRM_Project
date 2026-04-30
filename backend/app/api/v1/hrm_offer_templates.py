@@ -88,6 +88,9 @@ async def generate_document(
         "department":      data.department or "",
         "ctc":             data.ctc or "",
         "joining_date":    data.joining_date or "",
+        "company_name":    data.company_name or "",
+        "manager_name":    data.manager_name or "",
+        "location":        data.location or "",
         **(data.extra_fields or {}),
     }
     result = await OfferTemplateService(db).generate(template_id, cu["company_id"], fields)

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Plus, Pencil, Trash2, FileText, ChevronDown, ChevronUp, Wand2, X } from 'lucide-react'
+import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
 
 const TEMPLATE_TYPES = [
@@ -37,8 +38,12 @@ const EMPTY_TEMPLATE = {
 const EMPTY_GENERATE = {
   candidate_name: '',
   position: '',
+  department: '',
   ctc: '',
   joining_date: '',
+  company_name: '',
+  manager_name: '',
+  location: '',
 }
 
 function SectionToggle({ label, count, open, onToggle, children }) {
@@ -63,9 +68,23 @@ function TemplateForm({ initial, onSave, onCancel, saving }) {
   const [salaryOpen, setSalaryOpen] = useState(false)
   const [policiesOpen, setPoliciesOpen] = useState(false)
   const [rulesOpen, setRulesOpen] = useState(false)
+  const textareaRef = useRef(null)
 
   const insertPlaceholder = (ph) => {
-    setForm(f => ({ ...f, body: f.body + ph }))
+    const textarea = textareaRef.current
+    if (!textarea) {
+      setForm(f => ({ ...f, body: f.body + ph }))
+      return
+    }
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const body = textarea.value
+    const newBody = body.substring(0, start) + ph + body.substring(end)
+    setForm(f => ({ ...f, body: newBody }))
+    setTimeout(() => {
+      textarea.focus()
+      textarea.selectionStart = textarea.selectionEnd = start + ph.length
+    }, 0)
   }
 
   const addSalary = () =>
@@ -148,6 +167,7 @@ function TemplateForm({ initial, onSave, onCancel, saving }) {
           </div>
         </div>
         <textarea
+          ref={textareaRef}
           className="input w-full resize-none font-mono text-sm"
           rows={10}
           placeholder="Write your template body here. Use placeholders like {{candidate_name}} for dynamic content."
@@ -284,7 +304,11 @@ function GenerateModal({ template, onClose }) {
     try {
       const res = await hrmService.generateFromTemplate(template.id, form)
       setResult(res.data)
-    } catch {}
+      toast.success('Document generated')
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Failed to generate document'
+      toast.error(msg)
+    }
     setGenerating(false)
   }
 
@@ -321,6 +345,15 @@ function GenerateModal({ template, onClose }) {
                 />
               </div>
               <div>
+                <label className="text-sm font-medium text-gray-700">Department</label>
+                <input
+                  className="input w-full mt-1"
+                  placeholder="e.g. Engineering"
+                  value={form.department}
+                  onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
+                />
+              </div>
+              <div>
                 <label className="text-sm font-medium text-gray-700">CTC / Package</label>
                 <input
                   className="input w-full mt-1"
@@ -336,6 +369,33 @@ function GenerateModal({ template, onClose }) {
                   className="input w-full mt-1"
                   value={form.joining_date}
                   onChange={e => setForm(f => ({ ...f, joining_date: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Location</label>
+                <input
+                  className="input w-full mt-1"
+                  placeholder="e.g. Bangalore"
+                  value={form.location}
+                  onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Company Name</label>
+                <input
+                  className="input w-full mt-1"
+                  placeholder="Your company name"
+                  value={form.company_name}
+                  onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Reporting Manager</label>
+                <input
+                  className="input w-full mt-1"
+                  placeholder="Manager's full name"
+                  value={form.manager_name}
+                  onChange={e => setForm(f => ({ ...f, manager_name: e.target.value }))}
                 />
               </div>
             </div>
@@ -420,13 +480,18 @@ export default function OfferTemplates() {
     try {
       if (mode === 'create') {
         await hrmService.createTemplate(data)
+        toast.success('Template created')
       } else {
         await hrmService.updateTemplate(editing.id, data)
+        toast.success('Template updated')
       }
       setMode(null)
       setEditing(null)
       load()
-    } catch {}
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Failed to save template'
+      toast.error(msg)
+    }
     setSaving(false)
   }
 
@@ -434,8 +499,11 @@ export default function OfferTemplates() {
     if (!window.confirm('Delete this template?')) return
     try {
       await hrmService.deleteTemplate(id)
+      toast.success('Template deleted')
       load()
-    } catch {}
+    } catch {
+      toast.error('Failed to delete template')
+    }
   }
 
   const typeLabel = (val) => TEMPLATE_TYPES.find(t => t.value === val)?.label || val

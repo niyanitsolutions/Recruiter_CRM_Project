@@ -75,13 +75,15 @@ class OfferTemplateUpdate(BaseModel):
 
 class GenerateDocumentRequest(BaseModel):
     """Render a template with candidate/employee data."""
-    template_id: str
-    # Placeholder values — any key can be provided; backend merges with defaults
+    # template_id is passed via URL path, not body
     candidate_name: Optional[str] = None
     candidate_email: Optional[str] = None
     position: Optional[str] = None
     department: Optional[str] = None
     ctc: Optional[str] = None
     joining_date: Optional[str] = None
+    company_name: Optional[str] = None
+    manager_name: Optional[str] = None
+    location: Optional[str] = None
     # Arbitrary extra placeholders
     extra_fields: Optional[dict] = None

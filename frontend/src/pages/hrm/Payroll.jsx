@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Banknote, Play, CheckCircle, RefreshCw } from 'lucide-react'
+import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
 
 const STATUS_COLORS = {
@@ -33,13 +34,30 @@ export default function Payroll() {
 
   const generate = async () => {
     setGenerating(true)
-    try { await hrmService.generatePayroll({ month, year }); load() } catch {}
+    try {
+      const res = await hrmService.generatePayroll({ month, year })
+      const created = Array.isArray(res.data) ? res.data.length : 0
+      if (created === 0) {
+        toast('No active employees found. Add employees first.', { icon: 'ℹ️' })
+      } else {
+        toast.success(`Generated ${created} payslip${created !== 1 ? 's' : ''}`)
+      }
+      load()
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Failed to generate payroll'
+      toast.error(msg)
+    }
     setGenerating(false)
   }
 
   const markPaid = async (id) => {
-    await hrmService.updatePayslipStatus(id, { status: 'paid' })
-    load()
+    try {
+      await hrmService.updatePayslipStatus(id, { status: 'paid' })
+      toast.success('Marked as paid')
+      load()
+    } catch {
+      toast.error('Failed to update status')
+    }
   }
 
   const fmt = (n) => n?.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }) || '—'
