@@ -469,3 +469,236 @@ html[data-theme="system"] .card-hover:hover {
   border-radius: 6px;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   18. SURFACE SCALE — LIGHT MODE INVERSION
+   The Tailwind `surface` color scale is designed for dark mode (higher number =
+   lighter colour). In light mode the entire scale must be inverted so that
+   text-surface-800/900 (which is near-white on dark bg) becomes near-black on a
+   white background, and bg-surface-100 becomes a very light neutral.
+   ══════════════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] .text-surface-900,
+[data-theme="light"] .text-surface-800 { color: #1e293b !important; }
+[data-theme="light"] .text-surface-700 { color: #334155 !important; }
+[data-theme="light"] .text-surface-600 { color: #475569 !important; }
+[data-theme="light"] .text-surface-500 { color: #64748b !important; }
+[data-theme="light"] .text-surface-400 { color: #94a3b8 !important; }
+
+[data-theme="light"] .bg-surface-100     { background-color: #f1f5f9 !important; }
+[data-theme="light"] .bg-surface-200     { background-color: #e2e8f0 !important; }
+[data-theme="light"] .border-surface-200 { border-color: #e2e8f0   !important; }
+[data-theme="light"] .border-surface-300 { border-color: #cbd5e1   !important; }
+[data-theme="light"] .hover\:text-surface-700:hover { color: #334155 !important; }
+[data-theme="light"] .hover\:bg-surface-100:hover   { background-color: #f1f5f9 !important; }
+
+/* ── System light — same surface inversion ─────────────────────────────────── */
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] .text-surface-900,
+  [data-theme="system"] .text-surface-800 { color: #1e293b !important; }
+  [data-theme="system"] .text-surface-700 { color: #334155 !important; }
+  [data-theme="system"] .text-surface-600 { color: #475569 !important; }
+  [data-theme="system"] .text-surface-500 { color: #64748b !important; }
+  [data-theme="system"] .text-surface-400 { color: #94a3b8 !important; }
+  [data-theme="system"] .bg-surface-100   { background-color: #f0f9ff !important; }
+  [data-theme="system"] .bg-surface-200   { background-color: #e0f2fe !important; }
+  [data-theme="system"] .border-surface-200 { border-color: #bae6fd !important; }
+  [data-theme="system"] .hover\:bg-surface-100:hover { background-color: #e0f2fe !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   19. DARK + SYSTEM DARK — GRADIENT CARD BACKGROUNDS
+   Tailwind gradient utilities (from-primary-50, to-indigo-50, etc.) are
+   hard-coded light lavender/indigo.  In dark mode they produce light cards with
+   near-white text — completely invisible.  Override the CSS custom properties
+   that Tailwind's gradient system reads.
+   ══════════════════════════════════════════════════════════════════════════════ */
+[data-theme="dark"] .from-primary-50 {
+  --tw-gradient-from: #1a1730;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, transparent);
+}
+[data-theme="dark"] .to-indigo-50   { --tw-gradient-to: #1e1b4b; }
+[data-theme="dark"] .from-indigo-50 {
+  --tw-gradient-from: #1e1b4b;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, transparent);
+}
+[data-theme="dark"] .to-purple-50   { --tw-gradient-to: #1a1730; }
+[data-theme="dark"] .from-blue-50 {
+  --tw-gradient-from: #0f172a;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, transparent);
+}
+[data-theme="dark"] .to-blue-50     { --tw-gradient-to: #0f172a; }
+[data-theme="dark"] .to-cyan-50     { --tw-gradient-to: #0c1a2e; }
+
+[data-theme="dark"] .border-primary-200 { border-color: #2d2b55 !important; }
+[data-theme="dark"] .border-indigo-200  { border-color: #1e1b4b !important; }
+[data-theme="dark"] .text-primary-600   { color: #a78bfa !important; }
+[data-theme="dark"] .text-primary-700   { color: #c4b5fd !important; }
+[data-theme="dark"] .text-indigo-600    { color: #818cf8 !important; }
+[data-theme="dark"] .text-indigo-700    { color: #a5b4fc !important; }
+
+/* System dark — same but cyan-tinted */
+[data-theme="system"] .from-primary-50 {
+  --tw-gradient-from: #0a1628;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, transparent);
+}
+[data-theme="system"] .to-indigo-50     { --tw-gradient-to: #0e2448; }
+[data-theme="system"] .from-indigo-50 {
+  --tw-gradient-from: #0c1d3a;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, transparent);
+}
+[data-theme="system"] .border-primary-200 { border-color: #163660 !important; }
+[data-theme="system"] .text-primary-600   { color: #38bdf8 !important; }
+[data-theme="system"] .text-primary-700   { color: #7dd3fc !important; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   20. COLORFUL TAGS & BADGES — DARK MODE
+   Tailwind's -100 bg / -800 text combinations are hardcoded light pastels.
+   Override for dark + system themes so tags are vibrant & readable.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Blue */
+[data-theme="dark"] .bg-blue-100, [data-theme="system"] .bg-blue-100 {
+  background-color: rgba(59, 130, 246, 0.18) !important;
+}
+[data-theme="dark"] .text-blue-700, [data-theme="dark"] .text-blue-800 { color: #60a5fa !important; }
+[data-theme="system"] .text-blue-700, [data-theme="system"] .text-blue-800 { color: #38bdf8 !important; }
+[data-theme="dark"] .border-blue-200, [data-theme="system"] .border-blue-200 {
+  border-color: rgba(59, 130, 246, 0.30) !important;
+}
+
+/* Green */
+[data-theme="dark"] .bg-green-100, [data-theme="system"] .bg-green-100 {
+  background-color: rgba(34, 197, 94, 0.18) !important;
+}
+[data-theme="dark"] .text-green-600, [data-theme="dark"] .text-green-700,
+[data-theme="dark"] .text-green-800 { color: #4ade80 !important; }
+[data-theme="system"] .text-green-600, [data-theme="system"] .text-green-700,
+[data-theme="system"] .text-green-800 { color: #34d399 !important; }
+[data-theme="dark"] .border-green-200, [data-theme="system"] .border-green-200 {
+  border-color: rgba(34, 197, 94, 0.30) !important;
+}
+
+/* Amber / Yellow */
+[data-theme="dark"] .bg-amber-100, [data-theme="system"] .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.18) !important;
+}
+[data-theme="dark"] .text-amber-600, [data-theme="dark"] .text-amber-700,
+[data-theme="dark"] .text-amber-800 { color: #fbbf24 !important; }
+[data-theme="system"] .text-amber-600, [data-theme="system"] .text-amber-700,
+[data-theme="system"] .text-amber-800 { color: #fcd34d !important; }
+[data-theme="dark"] .border-amber-200, [data-theme="system"] .border-amber-200 {
+  border-color: rgba(245, 158, 11, 0.30) !important;
+}
+
+/* Red */
+[data-theme="dark"] .bg-red-100, [data-theme="system"] .bg-red-100 {
+  background-color: rgba(239, 68, 68, 0.18) !important;
+}
+[data-theme="dark"] .text-red-600, [data-theme="dark"] .text-red-700,
+[data-theme="dark"] .text-red-800 { color: #f87171 !important; }
+[data-theme="system"] .text-red-600, [data-theme="system"] .text-red-700,
+[data-theme="system"] .text-red-800 { color: #fca5a5 !important; }
+[data-theme="dark"] .border-red-200, [data-theme="system"] .border-red-200 {
+  border-color: rgba(239, 68, 68, 0.30) !important;
+}
+
+/* Purple */
+[data-theme="dark"] .bg-purple-100, [data-theme="system"] .bg-purple-100 {
+  background-color: rgba(168, 85, 247, 0.18) !important;
+}
+[data-theme="dark"] .text-purple-600, [data-theme="dark"] .text-purple-700,
+[data-theme="dark"] .text-purple-800 { color: #c084fc !important; }
+[data-theme="system"] .text-purple-700, [data-theme="system"] .text-purple-800 { color: #d8b4fe !important; }
+
+/* Indigo */
+[data-theme="dark"] .bg-indigo-100, [data-theme="system"] .bg-indigo-100 {
+  background-color: rgba(99, 102, 241, 0.18) !important;
+}
+[data-theme="dark"] .text-indigo-700, [data-theme="dark"] .text-indigo-800 { color: #818cf8 !important; }
+[data-theme="system"] .text-indigo-700, [data-theme="system"] .text-indigo-800 { color: #a5b4fc !important; }
+
+/* Orange */
+[data-theme="dark"] .bg-orange-100, [data-theme="system"] .bg-orange-100 {
+  background-color: rgba(249, 115, 22, 0.18) !important;
+}
+[data-theme="dark"] .text-orange-600, [data-theme="dark"] .text-orange-700,
+[data-theme="dark"] .text-orange-800 { color: #fb923c !important; }
+[data-theme="system"] .text-orange-700, [data-theme="system"] .text-orange-800 { color: #fdba74 !important; }
+
+/* Pink / Rose */
+[data-theme="dark"] .bg-pink-100, [data-theme="system"] .bg-pink-100 {
+  background-color: rgba(236, 72, 153, 0.18) !important;
+}
+[data-theme="dark"] .text-pink-600, [data-theme="dark"] .text-pink-700,
+[data-theme="dark"] .text-pink-800 { color: #f472b6 !important; }
+[data-theme="system"] .text-pink-700, [data-theme="system"] .text-pink-800 { color: #f9a8d4 !important; }
+
+/* Teal / Cyan */
+[data-theme="dark"] .bg-teal-100, [data-theme="system"] .bg-teal-100 {
+  background-color: rgba(20, 184, 166, 0.18) !important;
+}
+[data-theme="dark"] .text-teal-600, [data-theme="dark"] .text-teal-700,
+[data-theme="dark"] .text-teal-800 { color: #2dd4bf !important; }
+[data-theme="system"] .text-teal-700, [data-theme="system"] .text-teal-800 { color: #5eead4 !important; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   21. COLORFUL TAGS — LIGHT MODE VIBRANCY BOOST
+   Make the standard Tailwind pastel badges more vivid and punchy.
+   Uses subtle gradients so tags stand out without being garish.
+   ══════════════════════════════════════════════════════════════════════════════ */
+[data-theme="light"] .bg-blue-100   { background: linear-gradient(135deg, #dbeafe, #bfdbfe) !important; }
+[data-theme="light"] .text-blue-700 { color: #1d4ed8 !important; }
+[data-theme="light"] .text-blue-800 { color: #1e40af !important; }
+
+[data-theme="light"] .bg-green-100  { background: linear-gradient(135deg, #dcfce7, #bbf7d0) !important; }
+[data-theme="light"] .text-green-600 { color: #16a34a !important; }
+[data-theme="light"] .text-green-700 { color: #15803d !important; }
+[data-theme="light"] .text-green-800 { color: #166534 !important; }
+
+[data-theme="light"] .bg-amber-100  { background: linear-gradient(135deg, #fef3c7, #fde68a) !important; }
+[data-theme="light"] .text-amber-600 { color: #d97706 !important; }
+[data-theme="light"] .text-amber-700 { color: #b45309 !important; }
+[data-theme="light"] .text-amber-800 { color: #92400e !important; }
+
+[data-theme="light"] .bg-red-100    { background: linear-gradient(135deg, #fee2e2, #fecaca) !important; }
+[data-theme="light"] .text-red-600  { color: #dc2626 !important; }
+[data-theme="light"] .text-red-700  { color: #b91c1c !important; }
+[data-theme="light"] .text-red-800  { color: #991b1b !important; }
+
+[data-theme="light"] .bg-purple-100  { background: linear-gradient(135deg, #f3e8ff, #e9d5ff) !important; }
+[data-theme="light"] .text-purple-600 { color: #9333ea !important; }
+[data-theme="light"] .text-purple-700 { color: #7e22ce !important; }
+[data-theme="light"] .text-purple-800 { color: #6b21a8 !important; }
+
+[data-theme="light"] .bg-indigo-100  { background: linear-gradient(135deg, #e0e7ff, #c7d2fe) !important; }
+[data-theme="light"] .text-indigo-600 { color: #4f46e5 !important; }
+[data-theme="light"] .text-indigo-700 { color: #4338ca !important; }
+[data-theme="light"] .text-indigo-800 { color: #3730a3 !important; }
+
+[data-theme="light"] .bg-orange-100  { background: linear-gradient(135deg, #ffedd5, #fed7aa) !important; }
+[data-theme="light"] .text-orange-600 { color: #ea580c !important; }
+[data-theme="light"] .text-orange-700 { color: #c2410c !important; }
+[data-theme="light"] .text-orange-800 { color: #7c2d12 !important; }
+
+[data-theme="light"] .bg-pink-100    { background: linear-gradient(135deg, #fce7f3, #fbcfe8) !important; }
+[data-theme="light"] .text-pink-600  { color: #db2777 !important; }
+[data-theme="light"] .text-pink-700  { color: #be185d !important; }
+[data-theme="light"] .text-pink-800  { color: #9d174d !important; }
+
+[data-theme="light"] .bg-teal-100    { background: linear-gradient(135deg, #ccfbf1, #99f6e4) !important; }
+[data-theme="light"] .text-teal-600  { color: #0d9488 !important; }
+[data-theme="light"] .text-teal-700  { color: #0f766e !important; }
+[data-theme="light"] .text-teal-800  { color: #115e59 !important; }
+
+/* System light — same vibrancy boost */
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] .bg-blue-100  { background: linear-gradient(135deg, #e0f2fe, #bae6fd) !important; }
+  [data-theme="system"] .text-blue-700,
+  [data-theme="system"] .text-blue-800 { color: #0369a1 !important; }
+  [data-theme="system"] .bg-green-100  { background: linear-gradient(135deg, #dcfce7, #bbf7d0) !important; }
+  [data-theme="system"] .text-green-700,
+  [data-theme="system"] .text-green-800 { color: #15803d !important; }
+  [data-theme="system"] .bg-amber-100  { background: linear-gradient(135deg, #fef3c7, #fde68a) !important; }
+  [data-theme="system"] .text-amber-700,
+  [data-theme="system"] .text-amber-800 { color: #b45309 !important; }
+}
+
