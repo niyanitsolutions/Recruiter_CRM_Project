@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Building2, Plus, Search, Filter, MoreVertical,
-  Edit, Trash2, Eye, Phone, Mail, MapPin, Briefcase, Download, Upload
+  Edit, Trash2, Eye, Phone, Mail, MapPin, Briefcase, Download, Upload,
+  List, LayoutGrid
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import clientService from '../../services/clientService'
 import usePermissions from '../../hooks/usePermissions'
+import { formatDate } from '../../utils/format'
 import ExportModal from '../../components/common/ExportModal'
 import ClientImportModal from '../../components/common/ClientImportModal'
 
@@ -28,6 +30,7 @@ const Clients = () => {
   const [types, setTypes] = useState([])
   const [exportOpen, setExportOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [viewMode, setViewMode] = useState('table')
 
   useEffect(() => {
     loadDropdowns()
@@ -219,7 +222,87 @@ const Clients = () => {
         )}
       </div>
 
+      {/* View Toggle */}
+      <div className="flex items-center justify-end mb-4 gap-1">
+        <button
+          onClick={() => setViewMode('table')}
+          className={`p-2 rounded-lg transition-colors`}
+          style={viewMode === 'table' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }}
+          title="Table view"
+        >
+          <List className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => setViewMode('card')}
+          className={`p-2 rounded-lg transition-colors`}
+          style={viewMode === 'card' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }}
+          title="Card view"
+        >
+          <LayoutGrid className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Card View */}
+      {viewMode === 'card' && (
+        <div>
+          {loading ? (
+            <div className="p-8 text-center">
+              <div className="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full mx-auto"></div>
+              <p className="mt-2 text-surface-500">Loading clients...</p>
+            </div>
+          ) : clients.length === 0 ? (
+            <div className="p-8 text-center">
+              <Building2 className="w-12 h-12 text-surface-300 mx-auto mb-4" />
+              <p className="text-surface-500">No clients found</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+              {clients.map(client => (
+                <div key={client.id} className="bg-white rounded-xl border border-surface-200 p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
+                        <Building2 className="w-5 h-5 text-primary-600" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-surface-900">{client.name}</p>
+                        {client.code && <p className="text-xs text-surface-500">{client.code}</p>}
+                      </div>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(client.status)}`}>
+                      {client.status?.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 mb-3">
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${getTypeBadge(client.client_type)}`}>
+                      {client.client_type?.replace('_', ' ')}
+                    </span>
+                    {(client.city || client.state) && (
+                      <div className="flex items-center gap-1 text-sm text-surface-600">
+                        <MapPin className="w-3 h-3" />
+                        {client.city && client.state ? `${client.city}, ${client.state}` : client.city || client.state}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1 text-sm text-surface-600">
+                      <Briefcase className="w-3 h-3 text-surface-400" />
+                      <span className="text-surface-900">{client.active_jobs || 0}</span>
+                      <span className="text-surface-400">active jobs</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-1 pt-3 border-t border-surface-100">
+                    <button onClick={() => navigate(`/clients/${client.id}`)} className="p-2 hover:bg-surface-100 rounded-lg transition-colors" title="View"><Eye className="w-4 h-4 text-surface-500" /></button>
+                    {has('clients:edit') && <button onClick={() => navigate(`/clients/${client.id}/edit`)} className="p-2 hover:bg-surface-100 rounded-lg transition-colors" title="Edit"><Edit className="w-4 h-4 text-surface-500" /></button>}
+                    {has('clients:delete') && <button onClick={() => handleDelete(client.id, client.name)} className="p-2 hover:bg-red-50 rounded-lg transition-colors" title="Delete"><Trash2 className="w-4 h-4 text-red-500" /></button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Clients Table */}
+      {viewMode === 'table' && (
       <div className="bg-white rounded-xl shadow-sm border border-surface-200 overflow-hidden">
         {loading ? (
           <div className="p-8 text-center">
@@ -297,7 +380,7 @@ const Clients = () => {
                         </span>
                       </td>
                       <td className="px-4 py-4 text-sm text-surface-500">
-                        {client.rejected_at ? new Date(client.rejected_at).toLocaleDateString() : '-'}
+                        {formatDate(client.rejected_at)}
                       </td>
                     </>
                   )}
@@ -366,6 +449,7 @@ const Clients = () => {
           </div>
         )}
       </div>
+      )}
 
       <ExportModal
         isOpen={exportOpen}

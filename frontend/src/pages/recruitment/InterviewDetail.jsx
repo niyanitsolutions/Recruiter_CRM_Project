@@ -8,6 +8,7 @@ import {
 import { toast } from 'react-hot-toast'
 import interviewService from '../../services/interviewService'
 import usePermissions from '../../hooks/usePermissions'
+import { formatDate } from '../../utils/format'
 
 const RESULT_STYLES = {
   passed:   { bg: 'bg-green-100', text: 'text-green-800', icon: CheckCircle2, iconColor: 'text-green-600' },
@@ -234,7 +235,7 @@ const InterviewDetail = () => {
                     {r.feedback && <p className="text-sm text-surface-600 mt-1">{r.feedback}</p>}
                     {r.completed_date && (
                       <p className="text-xs text-surface-400 mt-1">
-                        {new Date(r.completed_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {formatDate(r.completed_date, 'dd MMM yyyy')}
                       </p>
                     )}
                   </div>

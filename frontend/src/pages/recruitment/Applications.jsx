@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  FileText, Eye, User, Download, X
+  FileText, Eye, User, Download, X, List, LayoutGrid
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import applicationService from '../../services/applicationService'
 import ExportModal from '../../components/common/ExportModal'
 import usePermissions from '../../hooks/usePermissions'
 import ModalPortal from '../../components/common/ModalPortal'
+import { formatDate } from '../../utils/format'
 
 const FALLBACK_STATUSES = [
   { value: 'applied', label: 'Applied' },
@@ -60,6 +61,7 @@ const Applications = () => {
   const [selectedIds, setSelectedIds] = useState([])
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [viewMode, setViewMode] = useState('table')
 
   useEffect(() => { loadDropdowns() }, [])
   useEffect(() => { loadApplications() }, [pagination.page, filters])
@@ -200,7 +202,65 @@ const Applications = () => {
         </div>
       </div>
 
+      {/* View Toggle */}
+      <div className="flex items-center justify-end mb-4 gap-1">
+        <button onClick={() => setViewMode('table')} className="p-2 rounded-lg transition-colors" style={viewMode === 'table' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Table view"><List className="w-4 h-4" /></button>
+        <button onClick={() => setViewMode('card')} className="p-2 rounded-lg transition-colors" style={viewMode === 'card' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Card view"><LayoutGrid className="w-4 h-4" /></button>
+      </div>
+
+      {/* Card View */}
+      {viewMode === 'card' && (
+        <div>
+          {loading ? (
+            <div className="p-8 text-center">
+              <div className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+            </div>
+          ) : applications.length === 0 ? (
+            <div className="p-8 text-center">
+              <FileText className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-disabled)' }} />
+              <p style={{ color: 'var(--text-muted)' }}>No applications found</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {applications.map(app => (
+                <div
+                  key={app.id}
+                  className="rounded-xl p-4 cursor-pointer transition-shadow hover:shadow-md"
+                  style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+                  onClick={() => navigate(`/applications/${app.id}`)}
+                >
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}>
+                      <User className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{app.candidate_name}</p>
+                      <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{app.candidate_email}</p>
+                    </div>
+                    {app.eligibility_score != null && (
+                      <span className="px-1.5 py-0.5 rounded-full text-xs font-bold flex-shrink-0" style={app.eligibility_score >= 70 ? { background: 'rgba(67,233,123,0.15)', color: '#43E97B' } : app.eligibility_score >= 50 ? { background: 'rgba(245,158,11,0.15)', color: '#F59E0B' } : { background: 'rgba(255,71,87,0.12)', color: '#FF4757' }}>
+                        {Math.round(app.eligibility_score)}%
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm font-medium mb-0.5 truncate" style={{ color: 'var(--text-primary)' }}>{app.job_title}</p>
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{app.client_name}</p>
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={getStatusStyle(app.status)}>{app.status?.replace('_', ' ')}</span>
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{formatDate(app.applied_at)}</span>
+                  </div>
+                  <div className="flex items-center justify-end mt-3 pt-2" style={{ borderTop: '1px solid var(--border-subtle)' }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => navigate(`/applications/${app.id}`)} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="View"><Eye className="w-4 h-4" /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Applications Table */}
+      {viewMode === 'table' && (
       <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
         {loading ? (
           <div>
@@ -329,13 +389,13 @@ const Applications = () => {
                   </td>
                   <td className="px-4 py-4">
                     <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                      {new Date(app.applied_at).toLocaleDateString()}
+                      {formatDate(app.applied_at)}
                     </span>
                   </td>
                   <td className="px-4 py-4">
                     <span className="text-sm" style={{ color: 'var(--text-muted)' }}>
                       {app.status_changed_at
-                        ? new Date(app.status_changed_at).toLocaleDateString()
+                        ? formatDate(app.status_changed_at)
                         : '—'}
                     </span>
                   </td>
@@ -384,6 +444,7 @@ const Applications = () => {
           </div>
         )}
       </div>
+      )}
 
       {/* Bulk Status Update Modal */}
       <ModalPortal isOpen={showStatusModal}>

@@ -4,7 +4,8 @@
  */
 import React from 'react';
 import { Activity, User, FileText, Settings, LogIn, LogOut, Edit, Trash2, Plus } from 'lucide-react';
-import auditAdvancedService from '../../services/auditAdvancedService';;
+import auditAdvancedService from '../../services/auditAdvancedService';
+import { formatDate, formatDateTime } from '../../../utils/format';
 
 const AuditTimeline = ({ events = [], loading = false }) => {
   if (loading) {
@@ -58,7 +59,7 @@ const AuditTimeline = ({ events = [], loading = false }) => {
 
   // Group events by date
   const groupedEvents = events.reduce((groups, event) => {
-    const date = new Date(event.timestamp).toLocaleDateString();
+    const date = formatDate(event.timestamp);
     if (!groups[date]) groups[date] = [];
     groups[date].push(event);
     return groups;
@@ -104,7 +105,7 @@ const AuditTimeline = ({ events = [], loading = false }) => {
                           )}
                         </div>
                         <span className="text-xs text-gray-400">
-                          {new Date(event.timestamp).toLocaleTimeString()}
+                          {new Date(event.timestamp).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })}
                         </span>
                       </div>
                       

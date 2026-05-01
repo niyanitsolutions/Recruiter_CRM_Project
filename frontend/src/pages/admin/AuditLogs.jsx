@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Search, Filter, ChevronLeft, ChevronRight, Eye, X, Activity, LogIn } from 'lucide-react'
 import auditService from '../../services/auditService'
 import ModalPortal from '../../components/common/ModalPortal'
+import { formatDateTime } from '../../utils/format'
 
 /* ─────────────────────────────────────────────
    System Activity Tab
@@ -160,7 +161,7 @@ const SystemActivity = () => {
                   <td className="px-6 py-4 text-surface-600">{log.entity_type_display || log.entity_type}</td>
                   <td className="px-6 py-4 text-surface-900 max-w-md truncate">{log.description}</td>
                   <td className="px-6 py-4 text-surface-600">{log.user_name}</td>
-                  <td className="px-6 py-4 text-surface-500 text-sm">{new Date(log.created_at).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-surface-500 text-sm">{formatDateTime(log.created_at)}</td>
                   <td className="px-6 py-4 text-right">
                     <button onClick={() => setSelectedLog(log)} className="p-2 hover:bg-surface-100 rounded-lg">
                       <Eye className="w-4 h-4 text-surface-500" />
@@ -196,7 +197,7 @@ const SystemActivity = () => {
                 <div><p className="text-sm text-surface-500">Action</p><p className="font-medium">{selectedLog?.action_display}</p></div>
                 <div><p className="text-sm text-surface-500">Entity</p><p className="font-medium">{selectedLog?.entity_type_display}</p></div>
                 <div><p className="text-sm text-surface-500">User</p><p className="font-medium">{selectedLog?.user_name}</p></div>
-                <div><p className="text-sm text-surface-500">Date</p><p className="font-medium">{selectedLog && new Date(selectedLog.created_at).toLocaleString()}</p></div>
+                <div><p className="text-sm text-surface-500">Date</p><p className="font-medium">{selectedLog && formatDateTime(selectedLog.created_at)}</p></div>
               </div>
               <div><p className="text-sm text-surface-500">Description</p><p className="font-medium">{selectedLog?.description}</p></div>
               {selectedLog?.changed_fields?.length > 0 && (
@@ -278,7 +279,7 @@ const LoginActivity = () => {
                   </span>
                 </td>
                 <td className="px-6 py-4 text-surface-500 text-sm">
-                  {log.login_time ? new Date(log.login_time).toLocaleString() : '—'}
+                  {log.login_time ? formatDateTime(log.login_time) : '—'}
                 </td>
                 <td className="px-6 py-4 text-surface-500 font-mono text-sm">{log.ip_address || '—'}</td>
               </tr>

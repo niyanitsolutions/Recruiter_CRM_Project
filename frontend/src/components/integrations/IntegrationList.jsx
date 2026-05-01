@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import integrationService from '../../services/integrationService'
+import { formatDate } from '../../utils/format'
 import DynamicIntegrationForm from './DynamicIntegrationForm'
 
 const TYPE_COLORS = {
@@ -154,7 +155,7 @@ const IntegrationList = () => {
                         : null
                     }
                     {inst.last_tested_at
-                      ? `Tested ${new Date(inst.last_tested_at).toLocaleDateString()}`
+                      ? `Tested ${formatDate(inst.last_tested_at)}`
                       : 'Not tested yet'
                     }
                   </div>

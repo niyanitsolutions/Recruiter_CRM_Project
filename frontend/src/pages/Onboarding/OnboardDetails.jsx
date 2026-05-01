@@ -8,6 +8,7 @@ import {
 import { toast } from 'react-hot-toast'
 import { onboardService } from '../../services'
 import ModalPortal from '../../components/common/ModalPortal'
+import { formatDateTime } from '../../utils/format'
 
 const STATUS_COLORS = {
   offer_released: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -317,7 +318,7 @@ const OnboardDetails = () => {
                       <p className="text-sm text-surface-600">{history.reason}</p>
                     )}
                     <p className="text-xs text-surface-400 mt-1">
-                      {new Date(history.changed_at).toLocaleString()}
+                      {formatDateTime(history.changed_at)}
                     </p>
                   </div>
                 </div>

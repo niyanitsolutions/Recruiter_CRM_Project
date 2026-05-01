@@ -20,12 +20,6 @@ const emptyBase = {
   module: 'crm_hrm',
 }
 
-const MODULE_OPTIONS = [
-  { value: 'crm_only', label: 'Only CRM', desc: 'Recruitment, clients & partners' },
-  { value: 'hrm_only', label: 'Only HRM', desc: 'Employees, attendance & payroll' },
-  { value: 'crm_hrm',  label: 'CRM + HRM', desc: 'Full access to both modules' },
-]
-
 const CreateTenantModal = ({ isOpen, onClose, onCreated }) => {
   const [mode, setMode] = useState('free')   // 'free' | 'paid'
   const [form, setForm] = useState({ ...emptyBase, amount_paid: '', payment_mode: 'upi', payment_date: '', payment_reference: '' })
@@ -250,30 +244,6 @@ const CreateTenantModal = ({ isOpen, onClose, onCreated }) => {
             </div>
           </div>
         )}
-
-        {/* Module Selection */}
-        <div>
-          <p className="text-xs font-semibold text-surface-500 uppercase mb-3">Module Access</p>
-          <div className="grid grid-cols-3 gap-3">
-            {MODULE_OPTIONS.map(opt => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setForm(prev => ({ ...prev, module: opt.value }))}
-                className={`flex flex-col items-start gap-1 rounded-xl border-2 p-3 text-left transition-all ${
-                  form.module === opt.value
-                    ? 'border-accent-500 bg-accent-50'
-                    : 'border-surface-200 bg-white hover:border-surface-300'
-                }`}
-              >
-                <span className={`text-sm font-semibold ${form.module === opt.value ? 'text-accent-700' : 'text-surface-800'}`}>
-                  {opt.label}
-                </span>
-                <span className="text-xs text-surface-500 leading-snug">{opt.desc}</span>
-              </button>
-            ))}
-          </div>
-        </div>
 
         {/* Options */}
         <div className="flex items-center gap-2">

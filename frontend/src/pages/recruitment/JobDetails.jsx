@@ -7,6 +7,7 @@ import {
 import { toast } from 'react-hot-toast'
 import jobService from '../../services/jobService'
 import applicationService from '../../services/applicationService'
+import { formatDate } from '../../utils/format'
 
 const JobDetails = () => {
   const navigate = useNavigate()
@@ -312,14 +313,14 @@ const JobDetails = () => {
               <div>
                 <p className="text-sm text-surface-500">Posted</p>
                 <p className="font-medium text-surface-900">
-                  {new Date(job.created_at).toLocaleDateString()}
+                  {formatDate(job.created_at)}
                 </p>
               </div>
               {job.target_date && (
                 <div>
                   <p className="text-sm text-surface-500">Target Date</p>
                   <p className="font-medium text-surface-900">
-                    {new Date(job.target_date).toLocaleDateString()}
+                    {formatDate(job.target_date)}
                   </p>
                 </div>
               )}
@@ -363,7 +364,7 @@ const JobDetails = () => {
                         {app.status?.replace('_', ' ')}
                       </span>
                       <span className="text-xs text-surface-500">
-                        {new Date(app.applied_at).toLocaleDateString()}
+                        {formatDate(app.applied_at)}
                       </span>
                     </div>
                   </Link>

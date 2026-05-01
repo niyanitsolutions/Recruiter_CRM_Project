@@ -8,6 +8,7 @@ import {
   User, Globe, CheckCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 import auditAdvancedService from '../../services/auditAdvancedService';
+import { formatDateTime } from '../../../utils/format';
 
 const AlertCard = ({
   alert,
@@ -167,7 +168,7 @@ const AlertCard = ({
 
           {is_resolved && (
             <p className="text-xs text-gray-500">
-              Resolved by {resolved_by_name} • {new Date(resolved_at).toLocaleString()}
+              Resolved by {resolved_by_name} • {formatDateTime(resolved_at)}
             </p>
           )}
         </div>

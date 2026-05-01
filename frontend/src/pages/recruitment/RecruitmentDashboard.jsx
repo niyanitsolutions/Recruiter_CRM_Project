@@ -9,6 +9,7 @@ import candidateService from '../../services/candidateService'
 import jobService from '../../services/jobService'
 import applicationService from '../../services/applicationService'
 import interviewService from '../../services/interviewService'
+import { formatDate } from '../../utils/format'
 
 const StatCard = ({ icon: Icon, label, value, subValue, color, link }) => (
   <Link
@@ -235,7 +236,7 @@ const RecruitmentDashboard = () => {
                     <div className="text-right">
                       <p className="text-sm text-orange-600 font-medium">Submit Feedback</p>
                       <p className="text-xs text-surface-500">
-                        {new Date(interview.scheduled_date).toLocaleDateString()}
+                        {formatDate(interview.scheduled_date)}
                       </p>
                     </div>
                   </Link>

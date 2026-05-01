@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Briefcase, Plus, Search, Filter, Eye, Edit, Trash2,
-  Building2, MapPin, Users, Clock, AlertCircle, Download, Upload
+  Building2, MapPin, Users, Clock, AlertCircle, Download, Upload,
+  List, LayoutGrid
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -50,6 +51,7 @@ const Jobs = () => {
   const [priorities, setPriorities] = useState([])
   const [exportOpen, setExportOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [viewMode, setViewMode] = useState('table')
 
   useEffect(() => { loadDropdowns() }, [])
   useEffect(() => { loadJobs() }, [pagination.page, filters])
@@ -205,7 +207,121 @@ const Jobs = () => {
         )}
       </div>
 
-      {/* Jobs Grid */}
+      {/* View Toggle */}
+      <div className="flex items-center justify-end mb-4 gap-1">
+        <button
+          onClick={() => setViewMode('table')}
+          className="p-2 rounded-lg transition-colors"
+          style={viewMode === 'table' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }}
+          title="Table view"
+        >
+          <List className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => setViewMode('card')}
+          className="p-2 rounded-lg transition-colors"
+          style={viewMode === 'card' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }}
+          title="Card view"
+        >
+          <LayoutGrid className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Table View */}
+      {viewMode === 'table' && (
+        <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          {loading ? (
+            <div className="p-8 text-center">
+              <div className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+              <p className="mt-2" style={{ color: 'var(--text-muted)' }}>Loading jobs...</p>
+            </div>
+          ) : jobs.length === 0 ? (
+            <div className="p-8 text-center">
+              <Briefcase className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-disabled)' }} />
+              <p style={{ color: 'var(--text-muted)' }}>No jobs found</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
+                <tr>
+                  <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Job</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Client</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Type / Mode</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Experience</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Positions</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Priority</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Status</th>
+                  <th className="text-right px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {jobs.map(job => (
+                  <tr
+                    key={job.id}
+                    className="transition-colors cursor-pointer"
+                    style={{ borderBottom: '1px solid var(--border-subtle)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = ''}
+                    onClick={() => navigate(`/jobs/view/${job.id}`)}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {job.priority === 'urgent' && <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#FF4757' }} />}
+                        <div>
+                          <p className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{job.title}</p>
+                          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{job.job_code}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                        <Building2 className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--text-muted)' }} />
+                        <span>{job.client_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                        {job.job_type?.replace('_', ' ')}
+                        {job.work_mode && ` · ${job.work_mode?.replace('_', ' ')}`}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                        {job.experience_min !== undefined ? `${job.experience_min}–${job.experience_max} yrs` : '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                        {job.filled_positions || 0}/{job.total_positions}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-0.5 rounded text-xs font-medium" style={PRIORITY_STYLES[job.priority] || PRIORITY_STYLES.low}>
+                        {job.priority}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-1 rounded-full text-xs font-medium" style={STATUS_COLORS[job.status]?.badge || STATUS_COLORS.draft.badge}>
+                        {job.status?.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => navigate(`/jobs/view/${job.id}`)} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="View"><Eye className="w-4 h-4" /></button>
+                        {has('jobs:edit') && <button onClick={() => navigate(`/jobs/edit/${job.id}`)} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="Edit"><Edit className="w-4 h-4" /></button>}
+                        {has('jobs:delete') && <button onClick={() => handleDelete(job.id, job.title)} className="p-2 rounded-lg transition-colors" style={{ color: '#FF4757' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,71,87,0.10)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="Delete"><Trash2 className="w-4 h-4" /></button>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Card View */}
+      {viewMode === 'card' && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
           <div className="col-span-full p-8 text-center">
@@ -358,6 +474,7 @@ const Jobs = () => {
           ))
         )}
       </div>
+      )}
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (

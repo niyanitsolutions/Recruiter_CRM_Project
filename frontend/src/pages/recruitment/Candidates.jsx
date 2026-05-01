@@ -260,6 +260,17 @@ const Candidates = () => {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
+  const downloadResume = (resumeUrl, candidateName) => {
+    const base = (import.meta.env.VITE_API_URL || '').replace(/\/api\/v1\/?$/, '')
+    const url = resumeUrl.startsWith('http') ? resumeUrl : `${base}${resumeUrl}`
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${candidateName}_Resume`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
   return (
     <div className="p-6 page-enter">
       {/* Header */}
@@ -604,6 +615,7 @@ const Candidates = () => {
                 </div>
                 <div className="flex items-center gap-1">
                   {candidate.resume_url && (
+                    <>
                     <button
                       onClick={() => openResume(candidate.resume_url)}
                       className="p-1.5 rounded-lg transition-colors"
@@ -614,6 +626,17 @@ const Candidates = () => {
                     >
                       <FileText className="w-3.5 h-3.5" />
                     </button>
+                    <button
+                      onClick={() => downloadResume(candidate.resume_url, candidate.full_name)}
+                      className="p-1.5 rounded-lg transition-colors"
+                      style={{ color: 'var(--text-muted)' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                      onMouseLeave={e => e.currentTarget.style.background = ''}
+                      title="Download Resume"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                    </>
                   )}
                   <button
                     onClick={() => navigate(`/candidates/${candidate.id}`)}
@@ -779,6 +802,7 @@ const Candidates = () => {
                   <td className="px-4 py-4">
                     <div className="flex items-center justify-end gap-2">
                       {candidate.resume_url && (
+                        <>
                         <button
                           onClick={() => openResume(candidate.resume_url)}
                           className="p-2 rounded-lg transition-colors"
@@ -789,6 +813,17 @@ const Candidates = () => {
                         >
                           <FileText className="w-4 h-4" />
                         </button>
+                        <button
+                          onClick={() => downloadResume(candidate.resume_url, candidate.full_name)}
+                          className="p-2 rounded-lg transition-colors"
+                          style={{ color: 'var(--text-muted)' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}
+                          title="Download Resume"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                        </>
                       )}
                       <button
                         onClick={() => navigate(`/candidates/${candidate.id}`)}

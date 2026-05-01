@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import partnerService from '../../services/partnerService'
 import ModalPortal from '../../components/common/ModalPortal'
+import { formatDateTime } from '../../utils/format'
 
 // Status Badge Component
 const StatusBadge = ({ status }) => {
@@ -473,7 +474,7 @@ const Partners = () => {
                       <StatusBadge status={partner.status} />
                     </td>
                     <td className="px-6 py-4 text-sm text-surface-500">
-                      {partner.last_login ? new Date(partner.last_login).toLocaleDateString() : 'Never'}
+                      {partner.last_login ? formatDateTime(partner.last_login) : 'Never'}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <PartnerActions

@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import { Download, FileSpreadsheet, Clock, CheckCircle, XCircle, RefreshCw, Plus } from 'lucide-react';
 import importExportService from '../../services/importExportService';
+import { formatDateTime } from '../../utils/format';
 import ExportModal from './components/ExportModal';
 
 const ExportsPage = () => {
@@ -93,7 +94,7 @@ const ExportsPage = () => {
                     </p>
                     <p className="text-sm text-gray-500">
                       {exp.format?.toUpperCase()} • {exp.total_records || 0} records • 
-                      {new Date(exp.created_at).toLocaleString()}
+                      {formatDateTime(exp.created_at)}
                     </p>
                   </div>
                 </div>

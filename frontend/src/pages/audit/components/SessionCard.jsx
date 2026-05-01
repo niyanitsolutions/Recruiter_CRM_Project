@@ -5,6 +5,7 @@
 import React from 'react';
 import { Monitor, Smartphone, Tablet, Globe, Clock, MapPin, Shield, X } from 'lucide-react';
 import auditAdvancedService from '../../services/auditAdvancedService';
+import { formatDateTime } from '../../../utils/format';
 
 const SessionCard = ({
   session,
@@ -96,9 +97,9 @@ const SessionCard = ({
 
           {/* Created & Expires */}
           <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
-            <span>Created: {new Date(created_at).toLocaleString()}</span>
+            <span>Created: {formatDateTime(created_at)}</span>
             {expires_at && (
-              <span>Expires: {new Date(expires_at).toLocaleString()}</span>
+              <span>Expires: {formatDateTime(expires_at)}</span>
             )}
           </div>
         </div>

@@ -26,6 +26,7 @@ import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 import SubscriptionBanner from '../../components/subscription/SubscriptionBanner'
 import ExportModal from '../../components/common/ExportModal'
 import ModalPortal from '../../components/common/ModalPortal'
+import { formatDateTime } from '../../utils/format'
 
 // Status Badge Component
 const StatusBadge = ({ status }) => {
@@ -621,7 +622,7 @@ const Users = () => {
                       <StatusBadge status={user.status} />
                     </td>
                     <td className="px-6 py-4 text-sm text-surface-500">
-                      {user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never'}
+                      {user.last_login ? formatDateTime(user.last_login) : 'Never'}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <UserActions

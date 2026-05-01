@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Edit, Mail, Phone, Building, Award, Calendar, Clock, User, Shield } from 'lucide-react'
 import userService from '../../services/userService'
 import auditService from '../../services/auditService'
+import { formatDate, formatDateTime } from '../../utils/format'
 
 const UserDetails = () => {
   const navigate = useNavigate()
@@ -83,9 +84,9 @@ const UserDetails = () => {
 
         <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-6">
           <h2 className="text-lg font-semibold mb-4">Employment</h2>
-          <InfoItem icon={Calendar} label="Joining Date" value={user.joining_date ? new Date(user.joining_date).toLocaleDateString() : '-'} />
+          <InfoItem icon={Calendar} label="Joining Date" value={formatDate(user.joining_date)} />
           <InfoItem icon={User} label="Employee ID" value={user.employee_id} />
-          <InfoItem icon={Clock} label="Last Login" value={user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'} />
+          <InfoItem icon={Clock} label="Last Login" value={user.last_login ? formatDateTime(user.last_login) : 'Never'} />
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-6">
@@ -100,7 +101,7 @@ const UserDetails = () => {
                   }`}>{item.action_display}</span>
                   <div>
                     <p className="text-sm text-surface-700">{item.description}</p>
-                    <p className="text-xs text-surface-500">{new Date(item.created_at).toLocaleString()}</p>
+                    <p className="text-xs text-surface-500">{formatDateTime(item.created_at)}</p>
                   </div>
                 </div>
               ))}

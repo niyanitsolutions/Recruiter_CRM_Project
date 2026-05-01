@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Calendar, Plus, Eye, Clock, User,
-  XCircle, Download, MessageSquare
+  XCircle, Download, MessageSquare, List, LayoutGrid
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import interviewService from '../../services/interviewService'
 import usePermissions from '../../hooks/usePermissions'
+import { formatDate } from '../../utils/format'
 import ExportModal from '../../components/common/ExportModal'
 
 const STATUS_STYLES = {
@@ -37,6 +38,7 @@ const Interviews = () => {
   })
   const [statuses, setStatuses] = useState([])
   const [exportOpen, setExportOpen] = useState(false)
+  const [viewMode, setViewMode] = useState('table')
 
   useEffect(() => { loadDropdowns() }, [])
   useEffect(() => { loadData() }, [activeTab, pagination.page, filters])
@@ -153,6 +155,12 @@ const Interviews = () => {
         </div>
       </div>
 
+      {/* View Toggle */}
+      <div className="flex items-center justify-end mb-2 gap-1">
+        <button onClick={() => setViewMode('table')} className="p-2 rounded-lg transition-colors" style={viewMode === 'table' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Table view"><List className="w-4 h-4" /></button>
+        <button onClick={() => setViewMode('card')} className="p-2 rounded-lg transition-colors" style={viewMode === 'card' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Card view"><LayoutGrid className="w-4 h-4" /></button>
+      </div>
+
       {/* Filters (only for All tab) */}
       {activeTab === 'all' && (
         <div className="rounded-xl p-4 mb-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
@@ -185,7 +193,74 @@ const Interviews = () => {
         </div>
       )}
 
+      {/* Card View */}
+      {viewMode === 'card' && (
+        <div>
+          {loading ? (
+            <div className="p-8 text-center">
+              <div className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
+            </div>
+          ) : currentData.length === 0 ? (
+            <div className="p-8 text-center">
+              <Calendar className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-disabled)' }} />
+              <p style={{ color: 'var(--text-muted)' }}>No interviews found</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {currentData.map(interview => (
+                <div
+                  key={interview.id}
+                  className="rounded-xl p-4 cursor-pointer transition-shadow hover:shadow-md"
+                  style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+                  onClick={() => navigate(`/interviews/${interview.id}`)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}>
+                        <User className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{interview.candidate_name}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          {interview.scheduled_date ? formatDate(interview.scheduled_date, 'dd MMM') : '—'}
+                          {interview.scheduled_time && ` · ${interview.scheduled_time}`}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={getStatusStyle(interview.overall_status || interview.status)}>
+                      {(interview.overall_status || interview.status)?.replace('_', ' ')}
+                    </span>
+                  </div>
+                  <p className="text-sm font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>{interview.job_title}</p>
+                  <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>{interview.client_name}</p>
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
+                    {interview.pipeline_name && `${interview.pipeline_name} · `}{interview.current_round_name || interview.stage_name || '—'}
+                  </p>
+                  {interview.total_rounds > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Round {Math.min(interview.current_round_index + 1, interview.total_rounds)} of {interview.total_rounds}</p>
+                      <div className="flex gap-0.5">
+                        {Array.from({ length: interview.total_rounds }).map((_, i) => (
+                          <div key={i} className="h-1.5 flex-1 rounded-full" style={{ background: i < interview.current_round_index || interview.overall_status === 'selected' ? '#43E97B' : i === interview.current_round_index && !['selected', 'failed'].includes(interview.overall_status) ? 'var(--accent)' : 'var(--border-strong)' }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-end gap-1 pt-2" style={{ borderTop: '1px solid var(--border-subtle)' }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => navigate(`/interviews/${interview.id}`)} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="View"><Eye className="w-4 h-4" /></button>
+                    {has('interviews:update_status') && ['scheduled', 'confirmed', 'rescheduled', 'in_progress'].includes(interview.status) && (
+                      <button onClick={() => handleCancel(interview.id)} className="p-2 rounded-lg transition-colors" style={{ color: '#FF4757' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,71,87,0.10)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="Cancel"><XCircle className="w-4 h-4" /></button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Interviews Table */}
+      {viewMode === 'table' && (
       <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
         {loading ? (
           <div className="p-8 text-center">
@@ -242,7 +317,7 @@ const Interviews = () => {
                         <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{interview.candidate_name}</p>
                         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                           {interview.scheduled_date
-                            ? new Date(interview.scheduled_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                            ? formatDate(interview.scheduled_date, 'dd MMM')
                             : '—'}
                           {interview.scheduled_time && ` · ${interview.scheduled_time}`}
                         </p>
@@ -357,6 +432,7 @@ const Interviews = () => {
           </div>
         )}
       </div>
+      )}
 
       <ExportModal
         isOpen={exportOpen}
