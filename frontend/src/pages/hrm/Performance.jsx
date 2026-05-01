@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, TrendingUp, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import hrmService from '../../services/hrmService'
+import ModalPortal from '../../components/common/ModalPortal'
 
 const RATING_COLORS = {
   exceptional:    'text-purple-600',
@@ -84,8 +85,8 @@ export default function Performance() {
         </button>
       </div>
 
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-8">
+      <ModalPortal isOpen={showCreate}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] overflow-y-auto py-8">
           <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-xl space-y-5 shadow-xl mx-4">
             <h2 className="text-lg font-semibold text-gray-900">Create Performance Review</h2>
 
@@ -234,7 +235,7 @@ export default function Performance() {
             </div>
           </form>
         </div>
-      )}
+      </ModalPortal>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">

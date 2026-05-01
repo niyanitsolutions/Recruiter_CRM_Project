@@ -2,15 +2,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { Plus, Pencil, Trash2, Briefcase, Tag, X, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import tenantSettingsService from '../../services/tenantSettingsService'
+import ModalPortal from '../../components/common/ModalPortal'
 import {
   Breadcrumb, PageHeader, SectionCard, Field, Input, SelectField,
   SaveBtn, CancelBtn, SkeletonLoader, Toggle,
 } from './SettingsLayout'
 
-const Modal = ({ open, title, children, onClose }) => {
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+const Modal = ({ open, title, children, onClose }) => (
+  <ModalPortal isOpen={open}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
         <div className="flex items-center justify-between px-6 py-4 border-b border-surface-100">
           <h3 className="font-semibold text-surface-900">{title}</h3>
@@ -19,8 +19,8 @@ const Modal = ({ open, title, children, onClose }) => {
         <div className="p-6">{children}</div>
       </div>
     </div>
-  )
-}
+  </ModalPortal>
+)
 
 const ItemRow = ({ item, onEdit, onDelete, deleting }) => (
   <div className="flex items-center gap-3 px-4 py-3 hover:bg-surface-50 transition-colors">

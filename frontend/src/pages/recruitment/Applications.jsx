@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast'
 import applicationService from '../../services/applicationService'
 import ExportModal from '../../components/common/ExportModal'
 import usePermissions from '../../hooks/usePermissions'
+import ModalPortal from '../../components/common/ModalPortal'
 
 const FALLBACK_STATUSES = [
   { value: 'applied', label: 'Applied' },
@@ -385,8 +386,8 @@ const Applications = () => {
       </div>
 
       {/* Bulk Status Update Modal */}
-      {showStatusModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={showStatusModal}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <div className="rounded-xl shadow-xl p-6 w-full max-w-md" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Update Status</h3>
             <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
@@ -413,7 +414,7 @@ const Applications = () => {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
 
       <ExportModal
         isOpen={exportOpen}

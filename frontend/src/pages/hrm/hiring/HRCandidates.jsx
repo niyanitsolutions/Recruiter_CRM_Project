@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Users, ChevronRight } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
+import ModalPortal from '../../../components/common/ModalPortal'
 
 const STAGE_COLORS = {
   applied:    'bg-gray-100 text-gray-600',
@@ -67,8 +68,8 @@ export default function HRCandidates() {
         ))}
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={showForm}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
             <h2 className="text-lg font-semibold">Add Candidate</h2>
             <div className="grid grid-cols-2 gap-4">
@@ -107,7 +108,7 @@ export default function HRCandidates() {
             </div>
           </form>
         </div>
-      )}
+      </ModalPortal>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">

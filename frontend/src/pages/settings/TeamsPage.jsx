@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, UsersRound, X, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import tenantSettingsService from '../../services/tenantSettingsService'
+import ModalPortal from '../../components/common/ModalPortal'
 import {
   Breadcrumb, PageHeader, SectionCard, Field, Input, Textarea,
   SelectField, SaveBtn, CancelBtn, SkeletonLoader,
@@ -16,10 +17,9 @@ const EMPTY_FORM = {
   description: '',
 }
 
-const Modal = ({ open, title, children, onClose }) => {
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+const Modal = ({ open, title, children, onClose }) => (
+  <ModalPortal isOpen={open}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
         <div className="flex items-center justify-between px-6 py-4 border-b border-surface-100">
           <h3 className="font-semibold text-surface-900">{title}</h3>
@@ -30,8 +30,8 @@ const Modal = ({ open, title, children, onClose }) => {
         <div className="p-6">{children}</div>
       </div>
     </div>
-  )
-}
+  </ModalPortal>
+)
 
 const TeamsPage = () => {
   const [teams, setTeams]       = useState([])

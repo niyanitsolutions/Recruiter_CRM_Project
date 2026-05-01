@@ -4,6 +4,7 @@ import { Plus, Edit, Trash2, Building, Users, MoreVertical } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import departmentService from '../../services/departmentService'
 import usePermissions from '../../hooks/usePermissions'
+import ModalPortal from '../../components/common/ModalPortal'
 
 const Departments = () => {
   const { has } = usePermissions()
@@ -95,8 +96,8 @@ const Departments = () => {
         </table>
       </div>
 
-      {deleteDialog.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <ModalPortal isOpen={deleteDialog.open}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
           <div className="fixed inset-0 bg-black/50" onClick={() => setDeleteDialog({ open: false, dept: null })} />
           <div className="relative bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <h3 className="text-lg font-semibold">Delete Department</h3>
@@ -107,7 +108,7 @@ const Departments = () => {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
     </div>
   )
 }

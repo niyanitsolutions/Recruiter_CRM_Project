@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Megaphone, Edit2, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
 import hrmService from '../../services/hrmService'
+import ModalPortal from '../../components/common/ModalPortal'
 
 const TYPE_COLORS = {
   general:     'bg-blue-100 text-blue-700',
@@ -72,8 +73,8 @@ export default function Announcements() {
         </button>
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={showForm}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <form onSubmit={handleSave} className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 shadow-xl">
             <h2 className="text-lg font-semibold">{editAnn ? 'Edit Announcement' : 'New Announcement'}</h2>
             <div>
@@ -98,7 +99,7 @@ export default function Announcements() {
             </div>
           </form>
         </div>
-      )}
+      </ModalPortal>
 
       <div className="space-y-3">
         {loading ? (

@@ -5,6 +5,7 @@ import pipelineService from '../../services/pipelineService'
 import clientService from '../../services/clientService'
 import jobService from '../../services/jobService'
 import usePermissions from '../../hooks/usePermissions'
+import ModalPortal from '../../components/common/ModalPortal'
 
 const MODES = [
   { value: 'video', label: 'Video Call' },
@@ -371,8 +372,8 @@ const InterviewSettings = () => {
       </div>
 
       {/* ── Pipeline Form Panel (right slide-in) ──────────────────────────────── */}
-      {panelOpen && (
-        <div className="fixed inset-0 z-50 flex items-stretch justify-end">
+      <ModalPortal isOpen={panelOpen}>
+        <div className="fixed inset-0 z-[9999] flex items-stretch justify-end">
           {/* Backdrop */}
           <div className="fixed inset-0 bg-black/40" onClick={closePanel} />
 
@@ -579,7 +580,7 @@ const InterviewSettings = () => {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
     </div>
   )
 }

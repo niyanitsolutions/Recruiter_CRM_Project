@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, FileText, CheckCircle, XCircle } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
+import ModalPortal from '../../../components/common/ModalPortal'
 
 const STATUS_COLORS = {
   draft:    'bg-gray-100 text-gray-600',
@@ -72,8 +73,8 @@ export default function HROffer() {
         </select>
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={showForm}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
             <h2 className="text-lg font-semibold">Create Offer Letter</h2>
             <div>
@@ -98,7 +99,7 @@ export default function HROffer() {
             </div>
           </form>
         </div>
-      )}
+      </ModalPortal>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">

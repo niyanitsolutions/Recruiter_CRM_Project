@@ -10,7 +10,8 @@
  *   defaultFilters object        initial filter values merged with base filters
  *   isSuperAdmin boolean         (reserved, all requests use same api instance)
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Download, Loader2, FileText, FileSpreadsheet } from 'lucide-react'
 import api from '../../services/api'
 import { toast } from 'react-hot-toast'
@@ -33,6 +34,12 @@ const ExportModal = ({
   const [status, setStatus] = useState('')
   const [extra, setExtra] = useState(defaultFilters)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) return
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -81,8 +88,8 @@ const ExportModal = ({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
 
@@ -208,7 +215,8 @@ const ExportModal = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Plus, Pencil, Trash2, FileText, ChevronDown, ChevronUp, Wand2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
@@ -312,8 +313,8 @@ function GenerateModal({ template, onClose }) {
     setGenerating(false)
   }
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 py-8 overflow-y-auto">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] py-8 overflow-y-auto">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4">
         <div className="flex items-center justify-between p-5 border-b border-gray-200">
           <div>
@@ -434,7 +435,8 @@ function GenerateModal({ template, onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

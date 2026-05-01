@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react'
 import partnerService from '../../services/partnerService'
+import ModalPortal from '../../components/common/ModalPortal'
 
 // Status Badge Component
 const StatusBadge = ({ status }) => {
@@ -140,11 +141,9 @@ const PartnerActions = ({ partner, onEdit, onDelete, onStatusChange, onResetPass
 }
 
 // Confirm Dialog
-const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Confirm', danger = false }) => {
-  if (!isOpen) return null
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Confirm', danger = false }) => (
+  <ModalPortal isOpen={isOpen}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50" onClick={onCancel} />
       <div className="relative bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
         <h3 className="text-lg font-semibold text-surface-900">{title}</h3>
@@ -167,62 +166,62 @@ const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel, confirmTex
         </div>
       </div>
     </div>
-  )
-}
+  </ModalPortal>
+)
 
 // Reset Password Dialog
 const ResetPasswordDialog = ({ isOpen, partner, onConfirm, onCancel }) => {
   const [password, setPassword] = useState('')
   const [mustChange, setMustChange] = useState(true)
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onCancel} />
-      <div className="relative bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
-        <h3 className="text-lg font-semibold text-surface-900">Reset Password</h3>
-        <p className="mt-2 text-surface-600">Reset password for {partner?.full_name}</p>
+    <ModalPortal isOpen={isOpen}>
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <div className="fixed inset-0 bg-black/50" onClick={onCancel} />
+        <div className="relative bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+          <h3 className="text-lg font-semibold text-surface-900">Reset Password</h3>
+          <p className="mt-2 text-surface-600">Reset password for {partner?.full_name}</p>
 
-        <div className="mt-4 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-surface-700 mb-1">New Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
-              placeholder="Enter new password"
-            />
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">New Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                placeholder="Enter new password"
+              />
+            </div>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={mustChange}
+                onChange={(e) => setMustChange(e.target.checked)}
+                className="rounded border-surface-300 text-accent-600 focus:ring-accent-500"
+              />
+              <span className="text-sm text-surface-700">Require password change on next login</span>
+            </label>
           </div>
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={mustChange}
-              onChange={(e) => setMustChange(e.target.checked)}
-              className="rounded border-surface-300 text-accent-600 focus:ring-accent-500"
-            />
-            <span className="text-sm text-surface-700">Require password change on next login</span>
-          </label>
-        </div>
 
-        <div className="mt-6 flex gap-3 justify-end">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-surface-700 hover:bg-surface-100 rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => onConfirm({ new_password: password, must_change_password: mustChange })}
-            disabled={!password || password.length < 8}
-            className="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Reset Password
-          </button>
+          <div className="mt-6 flex gap-3 justify-end">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-surface-700 hover:bg-surface-100 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onConfirm({ new_password: password, must_change_password: mustChange })}
+              disabled={!password || password.length < 8}
+              className="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Reset Password
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   )
 }
 

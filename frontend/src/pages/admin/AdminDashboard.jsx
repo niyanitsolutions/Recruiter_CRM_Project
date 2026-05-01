@@ -31,7 +31,6 @@ import applicationService from '../../services/applicationService'
 import subscriptionService from '../../services/subscriptionService'
 import SubscriptionBanner from '../../components/subscription/SubscriptionBanner'
 import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
-import RecentActivity from '../../components/dashboard/RecentActivity'
 
 // ── Animated counter ─────────────────────────────────────────────────────────
 const useCounter = (target, duration = 800) => {
@@ -403,19 +402,6 @@ const AdminDashboard = () => {
         <div className="rounded-2xl p-12 text-center" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
           <p style={{ color: 'var(--text-muted)' }}>No dashboard widgets available for your current permissions.</p>
         </div>
-      )}
-
-      {/* ── Recent Activity feed (below stat cards) ─────────────────────────── */}
-      {has('audit:view') && recent_activity?.length > 0 && (
-        <RecentActivity
-          activities={recent_activity.slice(0, 8).map((a, i) => ({
-            id: a.id || i,
-            type: a.action,
-            description: a.description,
-            actor: a.user_name,
-            time: new Date(a.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
-          }))}
-        />
       )}
 
       {/* ── Charts row ─────────────────────────────────────────────────────── */}

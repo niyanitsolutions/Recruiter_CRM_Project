@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Briefcase, Edit2, Trash2 } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
+import ModalPortal from '../../../components/common/ModalPortal'
 
 const STATUS_COLORS = {
   open:      'bg-green-100 text-green-700',
@@ -75,8 +76,8 @@ export default function HRJobs() {
         </select>
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={showForm}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <form onSubmit={handleSave} className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 shadow-xl max-h-screen overflow-y-auto">
             <h2 className="text-lg font-semibold">{editJob ? 'Edit Job' : 'New Job Opening'}</h2>
             <div className="grid grid-cols-2 gap-4">
@@ -111,7 +112,7 @@ export default function HRJobs() {
             </div>
           </form>
         </div>
-      )}
+      </ModalPortal>
 
       <div className="space-y-3">
         {loading ? (

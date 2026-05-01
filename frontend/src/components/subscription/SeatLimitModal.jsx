@@ -15,10 +15,17 @@
  *   seatStatus  – { total_user_seats, current_active_users, remaining_seats }
  */
 
-import React from 'react'
+import React, { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Users, ShieldAlert, ArrowRight, X } from 'lucide-react'
 
 export default function SeatLimitModal({ isOpen, onClose, onUpgrade, seatStatus = {} }) {
+  useEffect(() => {
+    if (!isOpen) return
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   const {
@@ -27,10 +34,10 @@ export default function SeatLimitModal({ isOpen, onClose, onUpgrade, seatStatus 
     remaining_seats     = 0,
   } = seatStatus
 
-  return (
+  return createPortal(
     /* Backdrop */
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm"
       onClick={onClose}
     >
       {/* Modal card */}
@@ -97,7 +104,8 @@ export default function SeatLimitModal({ isOpen, onClose, onUpgrade, seatStatus 
           Cancel
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

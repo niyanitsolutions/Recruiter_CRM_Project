@@ -2,22 +2,22 @@ import { useState, useEffect, useCallback } from 'react'
 import { UserPlus2, Plus, Pencil, Trash2, Loader2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import tenantSettingsService from '../../services/tenantSettingsService'
+import ModalPortal from '../../components/common/ModalPortal'
 import {
   Breadcrumb, PageHeader, SectionCard, Field, Input, SaveBtn, CancelBtn, SkeletonLoader, Toggle,
 } from './SettingsLayout'
 
 const EMPTY = { name: '', description: '', is_active: true }
 
-const Modal = ({ open, onClose, children }) => {
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+const Modal = ({ open, onClose, children }) => (
+  <ModalPortal isOpen={open}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
         {children}
       </div>
     </div>
-  )
-}
+  </ModalPortal>
+)
 
 const CandidateSourcesPage = () => {
   const [sources, setSources]   = useState([])

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Edit, Trash2, Shield, Users, MoreVertical, Lock } from 'lucide-react'
 import roleService from '../../services/roleService'
+import ModalPortal from '../../components/common/ModalPortal'
 
 const Roles = () => {
   const [roles, setRoles] = useState([])
@@ -116,8 +117,8 @@ const Roles = () => {
         )}
       </div>
 
-      {deleteDialog.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <ModalPortal isOpen={deleteDialog.open}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
           <div className="fixed inset-0 bg-black/50" onClick={() => setDeleteDialog({ open: false, role: null })} />
           <div className="relative bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <h3 className="text-lg font-semibold">Delete Role</h3>
@@ -128,7 +129,7 @@ const Roles = () => {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
     </div>
   )
 }

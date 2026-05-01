@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, CheckCircle, XCircle, Calendar, Clock } from 'lucide-react'
 import hrmService from '../../services/hrmService'
+import ModalPortal from '../../components/common/ModalPortal'
 
 const STATUS_COLORS = {
   pending:  'bg-yellow-100 text-yellow-700',
@@ -66,8 +67,8 @@ export default function LeaveManagement() {
         </select>
       </div>
 
-      {showApply && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={showApply}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <form onSubmit={handleApply} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
             <h2 className="text-lg font-semibold">Apply for Leave</h2>
             <div className="grid grid-cols-2 gap-4">
@@ -107,7 +108,7 @@ export default function LeaveManagement() {
             </div>
           </form>
         </div>
-      )}
+      </ModalPortal>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">

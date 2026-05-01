@@ -6,6 +6,7 @@ import {
 import { toast } from 'react-hot-toast'
 import trashService from '../../services/trashService'
 import usePermissions from '../../hooks/usePermissions'
+import ModalPortal from '../../components/common/ModalPortal'
 
 const MODULE_LABELS = {
   candidates: 'Candidates',
@@ -254,8 +255,8 @@ const DeletedHistory = () => {
       )}
 
       {/* Permanent delete confirm modal */}
-      {confirming && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center"
+      <ModalPortal isOpen={!!confirming}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center"
           style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div
             className="rounded-2xl p-6 w-full max-w-md shadow-2xl mx-4"
@@ -271,7 +272,7 @@ const DeletedHistory = () => {
                   Permanently Delete?
                 </h3>
                 <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  <strong style={{ color: 'var(--text-primary)' }}>{confirming.label}</strong> will be
+                  <strong style={{ color: 'var(--text-primary)' }}>{confirming?.label}</strong> will be
                   permanently removed. This cannot be undone.
                 </p>
               </div>
@@ -292,7 +293,7 @@ const DeletedHistory = () => {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
     </div>
   )
 }

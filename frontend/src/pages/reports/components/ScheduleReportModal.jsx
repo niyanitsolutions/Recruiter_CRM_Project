@@ -2,7 +2,8 @@
  * Schedule Report Modal - Phase 5
  * Modal for scheduling automated report delivery
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Clock, Mail, Calendar, AlertCircle } from 'lucide-react';
 import reportService from '../../../services/reportService';
 
@@ -86,8 +87,13 @@ const ScheduleReportModal = ({ report, onClose, onSave }) => {
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
       <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
@@ -272,7 +278,8 @@ const ScheduleReportModal = ({ report, onClose, onSave }) => {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import ModalPortal from '../common/ModalPortal'
 import {
   Plus, Settings, ToggleLeft, ToggleRight,
   CheckCircle, XCircle, Loader2, RefreshCw, Plug
@@ -176,9 +177,9 @@ const IntegrationList = () => {
       )}
 
       {/* Config slide-in panel */}
-      {selected && (
+      <ModalPortal isOpen={!!selected}>
         <div
-          className="fixed inset-0 z-50 flex items-center justify-end"
+          className="fixed inset-0 z-[9999] flex items-center justify-end"
           style={{ background: 'rgba(0,0,0,0.45)' }}
           onClick={() => setSelected(null)}
         >
@@ -190,10 +191,10 @@ const IntegrationList = () => {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-lg font-semibold" style={{ color: 'var(--text-heading)' }}>
-                  {selected.def.label}
+                  {selected?.def?.label}
                 </h2>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  {selected.inst ? 'Update configuration' : 'Connect this service'}
+                  {selected?.inst ? 'Update configuration' : 'Connect this service'}
                 </p>
               </div>
               <button
@@ -219,7 +220,7 @@ const IntegrationList = () => {
             />
           </div>
         </div>
-      )}
+      </ModalPortal>
     </div>
   )
 }

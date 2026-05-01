@@ -8,6 +8,7 @@ import { login, loginWithTenant, forceLogoutAndLogin, clearError, clearTenantSel
 import { Button, Input } from '../../components/common'
 import { formatDateTime } from '../../utils/format'
 import authService from '../../services/authService'
+import ModalPortal from '../../components/common/ModalPortal'
 import { getSavedEmail, setSavedEmail, removeSavedEmail, getSavedPassword, setSavedPassword, removeSavedPassword, getRememberMe } from '../../utils/token'
 
 const Login = () => {
@@ -414,43 +415,6 @@ const Login = () => {
     )
   }
 
-  // ── Active session conflict modal ────────────────────────────────────────
-  if (activeSessionModal) {
-    return (
-      <div className="animate-fade-in space-y-5">
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-auto">
-            <div className="text-center mb-4">
-              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-amber-100 mb-3">
-                <AlertCircle className="w-7 h-7 text-amber-600" />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900">Account Already Active</h3>
-              <p className="text-sm text-gray-600 mt-2">
-                This account is currently active on another device. Would you like to logout from that device and login here instead?
-              </p>
-            </div>
-            <div className="flex flex-col gap-3 mt-5">
-              <button
-                onClick={handleForceLogin}
-                disabled={forceLoginLoading}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-60"
-              >
-                {forceLoginLoading ? 'Logging in…' : 'Logout Other Device and Continue'}
-              </button>
-              <button
-                onClick={() => setActiveSessionModal(null)}
-                disabled={forceLoginLoading}
-                className="w-full py-2.5 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-60"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   // ── Login form (default) ──────────────────────────────────────────────────
   return (
     <div style={{ animation: 'cardEntrance 0.5s cubic-bezier(0.16,1,0.3,1) both' }}>
@@ -605,6 +569,39 @@ const Login = () => {
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+
+      {/* Active session conflict modal */}
+      <ModalPortal isOpen={!!activeSessionModal}>
+        <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-auto">
+            <div className="text-center mb-4">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-amber-100 mb-3">
+                <AlertCircle className="w-7 h-7 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Account Already Active</h3>
+              <p className="text-sm text-gray-600 mt-2">
+                This account is currently active on another device. Would you like to logout from that device and login here instead?
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 mt-5">
+              <button
+                onClick={handleForceLogin}
+                disabled={forceLoginLoading}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-60"
+              >
+                {forceLoginLoading ? 'Logging in…' : 'Logout Other Device and Continue'}
+              </button>
+              <button
+                onClick={() => setActiveSessionModal(null)}
+                disabled={forceLoginLoading}
+                className="w-full py-2.5 border border-gray-300 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      </ModalPortal>
     </div>
   )
 }

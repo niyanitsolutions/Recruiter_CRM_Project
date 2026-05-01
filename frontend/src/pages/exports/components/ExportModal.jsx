@@ -1,7 +1,8 @@
 /**
  * Export Modal Component - Phase 5
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Download, Users, Building, Briefcase, FileText } from 'lucide-react';
 import importExportService from '../../../services/importExportService';
 
@@ -28,8 +29,13 @@ const ExportModal = ({ onClose, onExportCreated }) => {
     { value: 'jobs', label: 'Jobs', icon: Briefcase }
   ];
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
       <div className="bg-white rounded-xl w-full max-w-md">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-lg font-semibold">Export Data</h3>
@@ -92,7 +98,8 @@ const ExportModal = ({ onClose, onExportCreated }) => {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

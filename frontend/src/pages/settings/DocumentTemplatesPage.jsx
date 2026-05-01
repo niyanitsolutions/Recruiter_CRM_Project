@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { FileText, Plus, Pencil, Trash2, X, Copy, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import tenantSettingsService from '../../services/tenantSettingsService'
+import ModalPortal from '../../components/common/ModalPortal'
 import {
   Breadcrumb, PageHeader, SectionCard, Field, Input, Textarea, SelectField,
   SaveBtn, CancelBtn, SkeletonLoader, Toggle,
@@ -22,16 +23,15 @@ const PLACEHOLDERS = [
   '{{department}}', '{{location}}', '{{today_date}}',
 ]
 
-const Modal = ({ open, children, onClose }) => {
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+const Modal = ({ open, children, onClose }) => (
+  <ModalPortal isOpen={open}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
         {children}
       </div>
     </div>
-  )
-}
+  </ModalPortal>
+)
 
 const DocumentTemplatesPage = () => {
   const [templates, setTemplates] = useState([])

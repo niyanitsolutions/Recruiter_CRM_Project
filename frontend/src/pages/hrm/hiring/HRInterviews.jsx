@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Plus, Calendar, CheckCircle, XCircle } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
+import ModalPortal from '../../../components/common/ModalPortal'
 
 const RESULT_COLORS = {
   pending:    'bg-gray-100 text-gray-600',
@@ -64,8 +65,8 @@ export default function HRInterviews() {
         </button>
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={showForm}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
             <h2 className="text-lg font-semibold">Schedule Interview</h2>
             <div>
@@ -100,10 +101,10 @@ export default function HRInterviews() {
             </div>
           </form>
         </div>
-      )}
+      </ModalPortal>
 
-      {feedbackModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={!!feedbackModal}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <form onSubmit={handleFeedback} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
             <h2 className="text-lg font-semibold">Submit Feedback</h2>
             <div>
@@ -126,7 +127,7 @@ export default function HRInterviews() {
             </div>
           </form>
         </div>
-      )}
+      </ModalPortal>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">

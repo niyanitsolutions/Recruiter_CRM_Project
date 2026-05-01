@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import userService from '../../services/userService'
 import toast from 'react-hot-toast'
+import ModalPortal from '../../components/common/ModalPortal'
 
 // Status Badge
 const StatusBadge = ({ status }) => {
@@ -29,10 +30,9 @@ const StatusBadge = ({ status }) => {
 }
 
 // Confirm Dialog
-const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Confirm', danger = false }) => {
-  if (!isOpen) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Confirm', danger = false }) => (
+  <ModalPortal isOpen={isOpen}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50" onClick={onCancel} />
       <div className="relative bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
         <h3 className="text-lg font-semibold text-surface-900">{title}</h3>
@@ -55,8 +55,8 @@ const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel, confirmTex
         </div>
       </div>
     </div>
-  )
-}
+  </ModalPortal>
+)
 
 const InactiveUsers = () => {
   const { has } = usePermissions()

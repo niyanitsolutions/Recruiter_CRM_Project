@@ -12,6 +12,7 @@ import applicationService from '../../services/applicationService'
 import usePermissions from '../../hooks/usePermissions'
 import ExportModal from '../../components/common/ExportModal'
 import CandidateImportModal from '../../components/common/CandidateImportModal'
+import ModalPortal from '../../components/common/ModalPortal'
 import { selectUserType } from '../../store/authSlice'
 
 const AVATAR_GRADIENTS = [
@@ -883,13 +884,13 @@ const Candidates = () => {
       )}
 
       {/* Eligible Jobs Modal (Apply action) */}
-      {applyModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <ModalPortal isOpen={!!applyModal}>
+        <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between p-5 border-b border-surface-200">
               <div>
                 <h3 className="text-lg font-semibold text-surface-900">
-                  Apply — {applyModal.candidate.full_name}
+                  Apply — {applyModal?.candidate?.full_name}
                 </h3>
                 <p className="text-sm text-surface-500 mt-0.5">Select a job to apply this candidate</p>
               </div>
@@ -962,11 +963,11 @@ const Candidates = () => {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
 
       {/* Form Link Modal */}
-      {formLinkModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setFormLinkModal(false)}>
+      <ModalPortal isOpen={!!formLinkModal}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setFormLinkModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-surface-900">Send Candidate Form Link</h3>
@@ -1003,7 +1004,7 @@ const Candidates = () => {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
 
       {/* Import Modal */}
       {importOpen && (

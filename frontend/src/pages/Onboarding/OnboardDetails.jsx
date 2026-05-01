@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { onboardService } from '../../services'
+import ModalPortal from '../../components/common/ModalPortal'
 
 const STATUS_COLORS = {
   offer_released: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -380,15 +381,15 @@ const OnboardDetails = () => {
       </div>
 
       {/* DOJ Modal */}
-      {showDOJModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={showDOJModal}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4">
-              {onboard.status === 'offer_released' ? 'Accept Offer' : 'Mark Joined'}
+              {onboard?.status === 'offer_released' ? 'Accept Offer' : 'Mark Joined'}
             </h3>
             <div className="mb-4">
               <label className="block text-sm font-medium text-surface-700 mb-1">
-                {onboard.status === 'offer_released' ? 'Expected DOJ' : 'Actual DOJ'}
+                {onboard?.status === 'offer_released' ? 'Expected DOJ' : 'Actual DOJ'}
               </label>
               <input
                 type="date"
@@ -405,7 +406,7 @@ const OnboardDetails = () => {
                 Cancel
               </button>
               <button
-                onClick={() => handleStatusAction(onboard.status === 'offer_released' ? 'accept' : 'mark_joined')}
+                onClick={() => handleStatusAction(onboard?.status === 'offer_released' ? 'accept' : 'mark_joined')}
                 disabled={!dojDate || actionLoading}
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg disabled:opacity-50"
               >
@@ -414,11 +415,11 @@ const OnboardDetails = () => {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
 
       {/* Extend DOJ Modal */}
-      {showExtendModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={showExtendModal}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4">Extend DOJ</h3>
             <div className="space-y-4">
@@ -458,7 +459,7 @@ const OnboardDetails = () => {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
     </div>
   )
 }

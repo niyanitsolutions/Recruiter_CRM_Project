@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   Search,
@@ -16,6 +16,7 @@ import {
   Monitor,
   ChevronRight,
   Menu,
+  Command,
 } from 'lucide-react'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsOwner, selectIsSeller } from '../../store/authSlice'
 import NotificationBell from '../notifications/NotificationBell'
@@ -48,14 +49,32 @@ const PATH_LABELS = {
   'upgrade-plan': 'Upgrade Plan',
   notifications: 'Notifications',
   'super-admin': 'Super Admin',
-  'seller': 'Seller',
+  seller: 'Seller',
   tenants: 'Tenants',
   sellers: 'Sellers',
   plans: 'Plans',
   discounts: 'Discounts',
   subscriptions: 'Subscriptions',
   payments: 'Payments',
+  hrm: 'HRM',
+  employees: 'Employees',
+  attendance: 'Attendance',
+  leaves: 'Leave Management',
+  payroll: 'Payroll',
+  performance: 'Performance',
+  announcements: 'Announcements',
+  hiring: 'Hiring',
+  offers: 'Offers',
+  onboarding: 'Onboarding',
+  new: 'New',
+  edit: 'Edit',
+  trash: 'Deleted History',
+  integrations: 'Integrations',
+  analytics: 'Analytics',
 }
+
+const segmentLabel = (seg) =>
+  PATH_LABELS[seg] || seg.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
 const Breadcrumbs = () => {
   const location = useLocation()
@@ -63,25 +82,47 @@ const Breadcrumbs = () => {
 
   if (segments.length <= 1) return null
 
+  // Build cumulative paths for each segment
+  const crumbs = segments.map((seg, i) => ({
+    label: segmentLabel(seg),
+    path: '/' + segments.slice(0, i + 1).join('/'),
+    isLast: i === segments.length - 1,
+    // Don't link to UUID segments or numeric IDs
+    isId: /^[0-9a-f-]{24,}$|^\d+$/.test(seg),
+  }))
+
   return (
-    <nav className="flex items-center gap-1 text-xs mt-0.5">
-      {segments.map((seg, i) => {
-        const label = PATH_LABELS[seg] || seg.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-        const isLast = i === segments.length - 1
-        return (
-          <React.Fragment key={i}>
-            {i > 0 && <ChevronRight className="w-3 h-3 flex-shrink-0" style={{ color: 'var(--text-disabled)' }} />}
-            <span style={{ color: isLast ? 'var(--accent)' : 'var(--text-muted)' }} className={isLast ? 'font-medium' : ''}>
-              {label}
+    <nav className="flex items-center gap-1 text-xs mt-0.5 flex-wrap">
+      {crumbs.map((crumb, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && (
+            <ChevronRight className="w-3 h-3 flex-shrink-0" style={{ color: 'var(--text-disabled)' }} />
+          )}
+          {crumb.isLast || crumb.isId ? (
+            <span
+              className={crumb.isLast ? 'font-medium' : ''}
+              style={{ color: crumb.isLast ? 'var(--accent)' : 'var(--text-muted)' }}
+            >
+              {crumb.label}
             </span>
-          </React.Fragment>
-        )
-      })}
+          ) : (
+            <Link
+              to={crumb.path}
+              className="transition-colors hover:underline"
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+            >
+              {crumb.label}
+            </Link>
+          )}
+        </React.Fragment>
+      ))}
     </nav>
   )
 }
 
-const TopBar = ({ title, subtitle, actions, onMobileToggle }) => {
+const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const location = useLocation()
@@ -89,7 +130,7 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle }) => {
   const isSuperAdmin = useSelector(selectIsSuperAdmin)
   const isOwner = useSelector(selectIsOwner)
   const isSeller = useSelector(selectIsSeller)
-  const { themeMode, setThemeMode, isDark } = useTheme()
+  const { themeMode, setThemeMode } = useTheme()
   const [themeOpen, setThemeOpen] = useState(false)
   const themeRef = useRef(null)
 
@@ -104,18 +145,14 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle }) => {
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const profileRef = useRef(null)
 
-  useEffect(() => {
-    setIsProfileOpen(false)
-  }, [location.pathname])
+  useEffect(() => { setIsProfileOpen(false) }, [location.pathname])
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (profileRef.current && !profileRef.current.contains(event.target)) {
-        setIsProfileOpen(false)
-      }
+    const handler = (e) => {
+      if (profileRef.current && !profileRef.current.contains(e.target)) setIsProfileOpen(false)
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
   }, [])
 
   const handleLogout = () => {
@@ -136,11 +173,13 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle }) => {
         { icon: HelpCircle, label: 'Help',             onClick: () => window.open('mailto:support@niyanhireflow.com') },
       ]
 
-  // Auto-derive title from path if not passed
   const segments = location.pathname.split('/').filter(Boolean)
   const derivedTitle = title || (segments.length > 0
-    ? PATH_LABELS[segments[segments.length - 1]] || segments[segments.length - 1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+    ? segmentLabel(segments[segments.length - 1])
     : 'Dashboard')
+
+  // Detect OS for shortcut hint
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 
   return (
     <header
@@ -178,20 +217,39 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle }) => {
       <div className="flex items-center gap-2 ml-4">
         {actions && <div className="flex items-center gap-2 mr-2">{actions}</div>}
 
-        {/* Search bar */}
-        <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
-          <input
-            type="text"
-            placeholder="Search..."
-            className="w-56 pl-9 pr-4 py-2 text-sm rounded-full focus:w-72 transition-all duration-300"
-            style={{
-              background: 'var(--bg-hover)',
-              border: '1px solid var(--border)',
-              color: 'var(--text-primary)',
-            }}
-          />
-        </div>
+        {/* Search trigger — opens GlobalSearch overlay */}
+        <button
+          onClick={onSearchOpen}
+          className="relative hidden md:flex items-center gap-2 px-3 py-2 text-sm rounded-full transition-all duration-200"
+          style={{
+            background: 'var(--bg-hover)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-muted)',
+            minWidth: 200,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.color = 'var(--text-primary)' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+          title="Global search (Ctrl+K)"
+        >
+          <Search className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1 text-left text-sm">Search...</span>
+          <kbd className="text-xs px-1.5 py-0.5 rounded border font-mono flex-shrink-0"
+            style={{ borderColor: 'var(--border)', background: 'var(--bg-card)', color: 'var(--text-disabled)' }}>
+            {isMac ? '⌘K' : 'Ctrl K'}
+          </kbd>
+        </button>
+
+        {/* Mobile search icon */}
+        <button
+          onClick={onSearchOpen}
+          className="md:hidden p-2 rounded-lg transition-colors"
+          style={{ color: 'var(--text-muted)' }}
+          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+          onMouseLeave={e => e.currentTarget.style.background = ''}
+          aria-label="Search"
+        >
+          <Search className="w-5 h-5" />
+        </button>
 
         {/* Theme toggle — 3-way: Dark / Light / System */}
         <div className="relative" ref={themeRef}>
@@ -257,7 +315,7 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle }) => {
               </p>
             </div>
             <ChevronDown className={clsx(
-              'w-3.5 h-3.5 hidden md:block transition-transform',
+              'w-3.5 h-3.5 hidden md:block transition-transform duration-200',
               isProfileOpen && 'rotate-180'
             )} style={{ color: 'var(--text-muted)' }} />
           </button>

@@ -3,6 +3,7 @@
  * Form for generating reports with filters and options
  */
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Calendar, Download, Save, Play, Filter,
@@ -310,8 +311,8 @@ const SaveReportModal = ({ onSave, onClose, reportType }) => {
     setSaving(false);
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
       <div className="bg-white rounded-xl p-6 w-full max-w-md">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Save Report</h3>
         
@@ -361,7 +362,8 @@ const SaveReportModal = ({ onSave, onClose, reportType }) => {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

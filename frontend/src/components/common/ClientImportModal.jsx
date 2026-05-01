@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Upload, AlertCircle, CheckCircle, SkipForward, ChevronRight } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import clientService from '../../services/clientService'
@@ -70,8 +71,13 @@ const ClientImportModal = ({ onClose, onImported }) => {
     return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Valid</span>
   }
 
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
 
         {/* Header */}
@@ -297,7 +303,8 @@ const ClientImportModal = ({ onClose, onImported }) => {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

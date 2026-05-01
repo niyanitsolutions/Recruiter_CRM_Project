@@ -8,6 +8,7 @@ import userService from '../../services/userService'
 import departmentService from '../../services/departmentService'
 import designationService from '../../services/designationService'
 import OrgTree from '../../components/OrgTree'
+import ModalPortal from '../../components/common/ModalPortal'
 
 // ── Department-based permission system ───────────────────────────────────────
 
@@ -625,8 +626,8 @@ const [errors,       setErrors]       = useState({})
       {error && <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg">{error}</div>}
 
       {/* ── Duplicate User Modal ──────────────────────────────────────────── */}
-      {duplicateModal.show && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+      <ModalPortal isOpen={duplicateModal.show}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md animate-fade-in">
 
             {/* Header */}
@@ -704,7 +705,7 @@ const [errors,       setErrors]       = useState({})
 
           </div>
         </div>
-      )}
+      </ModalPortal>
 
       <form onSubmit={handleSubmit} className="space-y-6">
 

@@ -257,6 +257,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       <NavLink
         to={item.path}
         end={item.exact}
+        title={isCollapsed ? item.label : undefined}
         className={({ isActive }) =>
           clsx('nav-item', isActive && 'nav-item-active', isCollapsed && 'justify-center px-3')
         }
@@ -283,6 +284,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       <li>
         <NavLink
           to={`${path}?${qKey}=${qVal}`}
+          title={isCollapsed ? label : undefined}
           className={clsx('nav-item', isActive && 'nav-item-active', isCollapsed && 'justify-center px-3')}
         >
           <Icon className="w-5 h-5 flex-shrink-0" />
@@ -379,6 +381,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
             <li>
               <NavLink
                 to="/notifications"
+                title={isCollapsed ? 'Notifications' : undefined}
                 className={({ isActive }) =>
                   clsx('nav-item', isActive && 'nav-item-active', isCollapsed && 'justify-center px-3')
                 }
@@ -390,6 +393,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
             <li>
               <NavLink
                 to="/my-profile"
+                title={isCollapsed ? 'My Profile' : undefined}
                 className={({ isActive }) =>
                   clsx('nav-item', isActive && 'nav-item-active', isCollapsed && 'justify-center px-3')
                 }

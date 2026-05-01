@@ -3,6 +3,7 @@
  * Allows users to customize dashboard layout and widgets
  */
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X, Plus, GripVertical, Eye, EyeOff, Save, RotateCcw,
   BarChart2, PieChart, TrendingUp, Activity, DollarSign, Users
@@ -86,8 +87,8 @@ const DashboardCustomizer = ({ layout, onSave, onClose }) => {
     setAvailableWidgets([]);
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
       <div className="bg-white rounded-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
@@ -239,7 +240,8 @@ const DashboardCustomizer = ({ layout, onSave, onClose }) => {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

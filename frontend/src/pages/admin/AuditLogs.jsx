@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Search, Filter, ChevronLeft, ChevronRight, Eye, X, Activity, LogIn } from 'lucide-react'
 import auditService from '../../services/auditService'
+import ModalPortal from '../../components/common/ModalPortal'
 
 /* ─────────────────────────────────────────────
    System Activity Tab
@@ -185,30 +186,30 @@ const SystemActivity = () => {
       </div>
 
       {/* Log Details Modal */}
-      {selectedLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <ModalPortal isOpen={!!selectedLog}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
           <div className="fixed inset-0 bg-black/50" onClick={() => setSelectedLog(null)} />
           <div className="relative bg-white rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">Log Details</h3>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div><p className="text-sm text-surface-500">Action</p><p className="font-medium">{selectedLog.action_display}</p></div>
-                <div><p className="text-sm text-surface-500">Entity</p><p className="font-medium">{selectedLog.entity_type_display}</p></div>
-                <div><p className="text-sm text-surface-500">User</p><p className="font-medium">{selectedLog.user_name}</p></div>
-                <div><p className="text-sm text-surface-500">Date</p><p className="font-medium">{new Date(selectedLog.created_at).toLocaleString()}</p></div>
+                <div><p className="text-sm text-surface-500">Action</p><p className="font-medium">{selectedLog?.action_display}</p></div>
+                <div><p className="text-sm text-surface-500">Entity</p><p className="font-medium">{selectedLog?.entity_type_display}</p></div>
+                <div><p className="text-sm text-surface-500">User</p><p className="font-medium">{selectedLog?.user_name}</p></div>
+                <div><p className="text-sm text-surface-500">Date</p><p className="font-medium">{selectedLog && new Date(selectedLog.created_at).toLocaleString()}</p></div>
               </div>
-              <div><p className="text-sm text-surface-500">Description</p><p className="font-medium">{selectedLog.description}</p></div>
-              {selectedLog.changed_fields?.length > 0 && (
+              <div><p className="text-sm text-surface-500">Description</p><p className="font-medium">{selectedLog?.description}</p></div>
+              {selectedLog?.changed_fields?.length > 0 && (
                 <div><p className="text-sm text-surface-500">Changed Fields</p><p className="font-medium">{selectedLog.changed_fields.join(', ')}</p></div>
               )}
-              {selectedLog.ip_address && (
+              {selectedLog?.ip_address && (
                 <div><p className="text-sm text-surface-500">IP Address</p><p className="font-medium">{selectedLog.ip_address}</p></div>
               )}
             </div>
             <button onClick={() => setSelectedLog(null)} className="mt-6 w-full px-4 py-2 border border-surface-300 rounded-lg">Close</button>
           </div>
         </div>
-      )}
+      </ModalPortal>
     </>
   )
 }

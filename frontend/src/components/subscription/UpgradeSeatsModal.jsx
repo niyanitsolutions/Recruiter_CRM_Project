@@ -13,7 +13,8 @@
  *                  plan_name, plan_display_name, plan_expiry, is_trial }
  */
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
@@ -23,6 +24,12 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
   const navigate = useNavigate()
   const user = useSelector(selectUser)
   const [additionalSeats, setAdditionalSeats] = useState(0)
+
+  useEffect(() => {
+    if (!isOpen) return
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -60,9 +67,9 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
     })
   }
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
@@ -182,6 +189,7 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
           Cancel
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

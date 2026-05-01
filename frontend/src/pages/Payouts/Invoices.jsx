@@ -8,6 +8,7 @@ import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
 import { selectUserRole } from '../../store/authSlice'
 import { payoutService } from '../../services'
+import ModalPortal from '../../components/common/ModalPortal'
 
 const STATUS_COLORS = {
   draft: 'bg-gray-100 text-gray-800',
@@ -311,13 +312,13 @@ const Invoices = () => {
       </div>
 
       {/* Approve Modal */}
-      {showApproveModal && selectedInvoice && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={showApproveModal && !!selectedInvoice}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4">Approve Invoice</h3>
             <p className="text-surface-600 mb-4">
-              Are you sure you want to approve invoice <strong>{selectedInvoice.invoice_number}</strong> for{' '}
-              <strong>{formatCurrency(selectedInvoice.total_amount)}</strong>?
+              Are you sure you want to approve invoice <strong>{selectedInvoice?.invoice_number}</strong> for{' '}
+              <strong>{selectedInvoice && formatCurrency(selectedInvoice.total_amount)}</strong>?
             </p>
             <div className="flex justify-end gap-3">
               <button
@@ -336,11 +337,11 @@ const Invoices = () => {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
 
       {/* Reject Modal */}
-      {showRejectModal && selectedInvoice && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={showRejectModal && !!selectedInvoice}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4">Reject Invoice</h3>
             <div className="mb-4">
@@ -372,11 +373,11 @@ const Invoices = () => {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
 
       {/* Payment Modal */}
-      {showPaymentModal && selectedInvoice && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <ModalPortal isOpen={showPaymentModal && !!selectedInvoice}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4">Record Payment</h3>
             <div className="space-y-4">
@@ -448,7 +449,7 @@ const Invoices = () => {
             </div>
           </div>
         </div>
-      )}
+      </ModalPortal>
     </div>
   )
 }

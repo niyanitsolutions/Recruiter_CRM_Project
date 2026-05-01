@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Plus, Pencil, Trash2, BadgeDollarSign, X, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import tenantSettingsService from '../../services/tenantSettingsService'
+import ModalPortal from '../../components/common/ModalPortal'
 import {
   Breadcrumb, PageHeader, SectionCard, Field, Input, SelectField,
   SaveBtn, CancelBtn, SkeletonLoader, Toggle,
@@ -12,16 +13,15 @@ const EMPTY = {
   slabs: [], applicable_to: 'all', is_active: true,
 }
 
-const Modal = ({ open, onClose, children }) => {
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+const Modal = ({ open, onClose, children }) => (
+  <ModalPortal isOpen={open}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-xl mx-4 max-h-[90vh] overflow-y-auto">
         {children}
       </div>
     </div>
-  )
-}
+  </ModalPortal>
+)
 
 const CommissionRulesPage = () => {
   const [rules, setRules]       = useState([])

@@ -3,6 +3,7 @@
  * Goals and targets management with leaderboard
  */
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Target, Plus, Trophy, TrendingUp, Users, DollarSign, Calendar,
@@ -320,8 +321,8 @@ const CreateTargetModal = ({ onClose, onCreated }) => {
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
       <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Create New Target</h3>
         
@@ -463,7 +464,8 @@ const CreateTargetModal = ({ onClose, onCreated }) => {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
