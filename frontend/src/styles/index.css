@@ -415,29 +415,42 @@ html[data-theme="system"] .card-hover:hover {
   border-right: 1px solid #0e2d5a !important;
 }
 
-/* System theme light — OS prefers light */
+/* System theme light — "Indigo Aurora" — visually distinct from [data-theme="light"] */
 @media (prefers-color-scheme: light) {
   html[data-theme="system"],
   html[data-theme="system"] body {
-    background-color: #f0f9ff !important;
-    background-image: none !important;
+    background-color: #eef2ff !important;
+    background-image: linear-gradient(135deg, #eef2ff 0%, #f0f4ff 55%, #e0f2fe 100%) !important;
+    background-attachment: fixed !important;
   }
 
   html[data-theme="system"] .card,
   html[data-theme="system"] .modal-content,
   html[data-theme="system"] .stat-card,
   html[data-theme="system"] .bg-white {
-    background-color: #ffffff !important;
-    border-color: #dbeafe !important;
+    background-color: rgba(255, 255, 255, 0.82) !important;
+    border-color: #e0e7ff !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
   }
 
   html[data-theme="system"] .card-hover:hover {
-    border-color: #93c5fd !important;
-    box-shadow: 0 2px 12px rgba(14, 165, 233, 0.12) !important;
+    border-color: #a5b4fc !important;
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.18) !important;
   }
 
   [data-theme="system"] aside {
-    border-right: 1px solid #bae6fd !important;
+    background: linear-gradient(160deg, #eaedff 0%, #e4e9ff 100%) !important;
+    border-right: 1px solid #c7d2fe !important;
+  }
+
+  html[data-theme="system"] .btn-primary {
+    background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%) !important;
+    box-shadow: 0 0 16px rgba(99, 102, 241, 0.40) !important;
+  }
+  html[data-theme="system"] .btn-primary:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%) !important;
+    box-shadow: 0 0 24px rgba(99, 102, 241, 0.60) !important;
   }
 }
 

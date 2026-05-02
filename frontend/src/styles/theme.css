@@ -352,109 +352,137 @@
   --bg-gray-200: #132540;
 }
 
-/* ── SYSTEM THEME — light OS preference override ─────────────────────────────── */
+/* ── SYSTEM THEME — "Indigo Aurora" — light OS preference ───────────────────── */
+/* Distinct from [data-theme="light"]: indigo/periwinkle accent, gradient bg,    */
+/* glass-tinted cards, vivid indigo nav glow.                                    */
 @media (prefers-color-scheme: light) {
   [data-theme="system"] {
-    /* ── Backgrounds ── */
-    --bg-app:            #f0f9ff;
-    --bg-base-solid:     #f0f9ff;
-    --bg-surface:        #ffffff;
-    --bg-sidebar:        #e0f2fe;
-    --bg-card:           #ffffff;
-    --bg-card-alt:       #f0f9ff;
-    --bg-topbar:         #ffffff;
-    --bg-hover:          #bae6fd;
-    --bg-active:         #dbeafe;
-    --bg-overlay:        rgba(0, 30, 60, 0.45);
+    /* ── Backgrounds — indigo/periwinkle tint ── */
+    --bg-app:            #eef2ff;           /* indigo-50 — gradient applied via index.css */
+    --bg-base-solid:     #eef2ff;
+    --bg-surface:        #f5f6ff;
+    --bg-sidebar:        #eaedff;           /* indigo-tinted sidebar */
+    --bg-card:           rgba(255, 255, 255, 0.82);
+    --bg-card-alt:       rgba(238, 242, 255, 0.72);
+    --bg-topbar:         rgba(255, 255, 255, 0.90);
+    --bg-hover:          #e0e7ff;           /* indigo-100 */
+    --bg-active:         #c7d2fe;           /* indigo-200 */
+    --bg-overlay:        rgba(15, 10, 50, 0.45);
 
     /* ── Text ── */
-    --text-primary:      #0c2340;
-    --text-secondary:    #0f4068;
-    --text-muted:        #2d6e8a;
-    --text-disabled:     #93c5fd;
-    --text-heading:      #03101e;
-    --text-label:        #0f4068;
-    --text-link:         #0284c7;
+    --text-primary:      #1e1b4b;           /* indigo-950 */
+    --text-secondary:    #3730a3;           /* indigo-800 */
+    --text-muted:        #6366f1;
+    --text-disabled:     #a5b4fc;
+    --text-heading:      #0f0d2e;
+    --text-label:        #4338ca;           /* indigo-700 */
+    --text-link:         #6366f1;
     --text-danger:       #dc2626;
 
     /* ── Borders ── */
-    --border:            #bae6fd;
-    --border-strong:     #7dd3fc;
-    --border-subtle:     #dbeafe;
-    --border-card:       #dbeafe;
+    --border:            #c7d2fe;           /* indigo-200 */
+    --border-strong:     #a5b4fc;           /* indigo-300 */
+    --border-subtle:     #e0e7ff;           /* indigo-100 */
+    --border-card:       #e0e7ff;
 
     /* ── Inputs ── */
-    --input-bg:           #f0f9ff;
-    --input-text:         #0c2340;
-    --input-placeholder:  #4da8d4;
-    --input-border:       #bae6fd;
-    --input-focus-border: #0284c7;
-    --input-focus-shadow: rgba(2, 132, 199, 0.15);
-    --input-autofill:     #e0f2fe;
-    --input-autofill-text: #0c2340;
-    --input-disabled-bg:  #e0f2fe;
-    --input-disabled-text: #4da8d4;
+    --input-bg:           #f5f6ff;
+    --input-text:         #1e1b4b;
+    --input-placeholder:  #818cf8;
+    --input-border:       #c7d2fe;
+    --input-focus-border: #6366f1;
+    --input-focus-shadow: rgba(99, 102, 241, 0.18);
+    --input-autofill:     #e0e7ff;
+    --input-autofill-text: #1e1b4b;
+    --input-disabled-bg:  #e0e7ff;
+    --input-disabled-text: #818cf8;
     --select-option-bg:   #ffffff;
-    --select-option-text: #0c2340;
-    --label-color:        #0f4068;
+    --select-option-text: #1e1b4b;
+    --label-color:        #4338ca;
 
     /* ── Status Backgrounds ── */
-    --bg-success: rgba(16,  185, 129, 0.12);
-    --bg-warning: rgba(245, 158,  11, 0.12);
-    --bg-danger:  rgba(220,  38,  38, 0.10);
-    --bg-info:    rgba(6,   182, 212, 0.12);
+    --bg-success: rgba(5,  150, 105, 0.12);
+    --bg-warning: rgba(217, 119,  6,  0.12);
+    --bg-danger:  rgba(220,  38, 38,  0.10);
+    --bg-info:    rgba(99,  102, 241, 0.12);
 
     /* ── Status Text ── */
     --text-success: #059669;
     --text-warning: #d97706;
     --text-danger:  #dc2626;
-    --text-info:    #0284c7;
+    --text-info:    #6366f1;
 
-    /* ── Navigation ── */
-    --nav-text:          #0f4068;
-    --nav-text-active:   #0284c7;
-    --nav-bg-active:     #dbeafe;
-    --nav-border-active: #0ea5e9;
-    --nav-hover-bg:      #e0f2fe;
-    --nav-glow-active:   rgba(14, 165, 233, 0.12);
+    /* ── Navigation — vivid indigo glow ── */
+    --nav-text:          #4338ca;           /* indigo-700 */
+    --nav-text-active:   #6366f1;           /* indigo-500 */
+    --nav-bg-active:     #e0e7ff;           /* indigo-100 */
+    --nav-border-active: #6366f1;
+    --nav-hover-bg:      #eaedff;
+    --nav-glow-active:   rgba(99, 102, 241, 0.22);
 
     /* ── UI elements ── */
-    --scrollbar-track:        #e0f2fe;
-    --scrollbar-thumb:        #7dd3fc;
-    --scrollbar-thumb-hover:  #38bdf8;
-    --selection-bg:           rgba(14, 165, 233, 0.15);
-    --selection-text:         #0c2340;
-    --dropdown-bg:            #ffffff;
-    --dropdown-border:        #bae6fd;
-    --dropdown-hover:         #e0f2fe;
-    --skeleton-from:          #e0f2fe;
-    --skeleton-via:           #f0f9ff;
-    --skeleton-to:            #e0f2fe;
+    --scrollbar-track:        #e0e7ff;
+    --scrollbar-thumb:        #a5b4fc;
+    --scrollbar-thumb-hover:  #818cf8;
+    --selection-bg:           rgba(99, 102, 241, 0.18);
+    --selection-text:         #1e1b4b;
+    --dropdown-bg:            rgba(255, 255, 255, 0.95);
+    --dropdown-border:        #c7d2fe;
+    --dropdown-hover:         #e0e7ff;
+    --skeleton-from:          #e0e7ff;
+    --skeleton-via:           #eef2ff;
+    --skeleton-to:            #e0e7ff;
 
-    /* ── Shadows ── */
-    --shadow-card:     0 2px 8px rgba(14, 165, 233, 0.08), 0 1px 3px rgba(14, 165, 233, 0.05);
-    --shadow-soft:     0 4px 16px rgba(14, 165, 233, 0.12);
-    --shadow-elevated: 0 20px 60px rgba(14, 165, 233, 0.14);
+    /* ── Shadows — vivid indigo glow ── */
+    --shadow-card:     0 2px 12px rgba(99, 102, 241, 0.12), 0 1px 3px rgba(99, 102, 241, 0.06);
+    --shadow-soft:     0 4px 20px rgba(99, 102, 241, 0.18);
+    --shadow-elevated: 0 20px 60px rgba(99, 102, 241, 0.20);
 
-    /* ── Accent ── */
-    --accent:       #0284c7;
-    --accent-hover: #0369a1;
-    --accent-light: rgba(2, 132, 199, 0.12);
-    --accent-2:     #0ea5e9;
+    /* ── Accent — vivid indigo (distinct from light theme's purple) ── */
+    --accent:       #6366f1;
+    --accent-hover: #4f46e5;
+    --accent-light: rgba(99, 102, 241, 0.12);
+    --accent-2:     #818cf8;
 
-    /* ── Gradients stay the same (already vivid) ── */
+    /* ── Stat border accent — vivid ── */
+    --stat-border-green:  #059669;
+    --stat-border-red:    #dc2626;
+    --stat-border-teal:   #0891b2;
+    --stat-border-orange: #ea580c;
+    --stat-border-purple: #6366f1;
+    --stat-border-blue:   #3b82f6;
+    --stat-border-pink:   #db2777;
+    --stat-border-yellow: #ca8a04;
 
-    /* ── Legacy gray overrides (light-OS) ── */
-    --gray-900: #03101e;
-    --gray-800: #0c2340;
-    --gray-700: #0f4068;
-    --gray-600: #2d6e8a;
-    --gray-500: #2d6e8a;
-    --gray-400: #4da8d4;
-    --border-gray-200: #bae6fd;
-    --bg-gray-50:  #f0f9ff;
-    --bg-gray-100: #e0f2fe;
-    --bg-gray-200: #bae6fd;
+    /* ── Gradients — indigo/blue premium ── */
+    --gradient-1: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+    --gradient-2: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+    --gradient-3: linear-gradient(135deg, #f97316 0%, #ec4899 100%);
+    --gradient-4: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    --gradient-5: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+    --gradient-6: linear-gradient(135deg, #06b6d4 0%, #6366f1 100%);
+
+    /* ── Stat icon gradients ── */
+    --stat-purple:  linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+    --stat-green:   linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+    --stat-orange:  linear-gradient(135deg, #f97316 0%, #ec4899 100%);
+    --stat-blue:    linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+    --stat-red:     linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+    --stat-pink:    linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+    --stat-teal:    linear-gradient(135deg, #06b6d4 0%, #10b981 100%);
+    --stat-yellow:  linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+
+    /* ── Legacy gray overrides (light-OS, indigo tint) ── */
+    --gray-900: #0f0d2e;
+    --gray-800: #1e1b4b;
+    --gray-700: #3730a3;
+    --gray-600: #4f46e5;
+    --gray-500: #6366f1;
+    --gray-400: #818cf8;
+    --border-gray-200: #c7d2fe;
+    --bg-gray-50:  #eef2ff;
+    --bg-gray-100: #e0e7ff;
+    --bg-gray-200: #c7d2fe;
   }
 }
 
