@@ -415,42 +415,135 @@ html[data-theme="system"] .card-hover:hover {
   border-right: 1px solid #0e2d5a !important;
 }
 
-/* System theme light — "Indigo Aurora" — visually distinct from [data-theme="light"] */
+/* ══════════════════════════════════════════════════════════════════════════════
+   SYSTEM THEME LIGHT — "Vivid Pro"
+   Dramatic, unmistakable distinction from [data-theme="light"]:
+     • Vivid purple → indigo → blue gradient body background
+     • Dark indigo sidebar (instantly recognizable)
+     • Glass-white cards pop against the colorful background
+     • Vivid indigo gradient buttons
+   ══════════════════════════════════════════════════════════════════════════════ */
 @media (prefers-color-scheme: light) {
+
+  /* ── 1. Vivid gradient background on html + body ── */
   html[data-theme="system"],
   html[data-theme="system"] body {
-    background-color: #eef2ff !important;
-    background-image: linear-gradient(135deg, #eef2ff 0%, #f0f4ff 55%, #e0f2fe 100%) !important;
+    background-color: #4f46e5 !important;
+    background-image: linear-gradient(135deg, #4f46e5 0%, #6366f1 25%, #7c3aed 50%, #3b82f6 75%, #0ea5e9 100%) !important;
     background-attachment: fixed !important;
   }
 
+  /* ── 2. Outer layout wrapper: transparent so gradient shows through ── */
+  html[data-theme="system"] .min-h-screen {
+    background-color: transparent !important;
+    background-image: none !important;
+  }
+
+  /* ── 3. Dark sidebar — CSS variable overrides cascade to all child elements ── */
+  [data-theme="system"] aside {
+    background: linear-gradient(180deg, #0d0b2e 0%, #141260 55%, #1a1870 100%) !important;
+    border-right: 1px solid rgba(99, 102, 241, 0.30) !important;
+    box-shadow: 4px 0 32px rgba(0, 0, 0, 0.45), inset -1px 0 0 rgba(99, 102, 241, 0.20) !important;
+    /* Local CSS variable overrides — child elements inherit these */
+    --text-muted:    rgba(165, 180, 252, 0.70);
+    --text-primary:  #e0e7ff;
+    --text-secondary: #c7d2fe;
+    --text-heading:  #f5f3ff;
+    --text-label:    #a5b4fc;
+    --text-disabled: rgba(165, 180, 252, 0.35);
+    --border:        rgba(99, 102, 241, 0.18);
+    --border-subtle: rgba(99, 102, 241, 0.10);
+    --bg-hover:      rgba(255, 255, 255, 0.08);
+    --bg-active:     rgba(99, 102, 241, 0.28);
+    --skeleton-from: rgba(99, 102, 241, 0.18);
+    --skeleton-via:  rgba(99, 102, 241, 0.08);
+    --skeleton-to:   rgba(99, 102, 241, 0.18);
+  }
+
+  /* ── 4. Glass-white cards on the gradient background ── */
   html[data-theme="system"] .card,
   html[data-theme="system"] .modal-content,
-  html[data-theme="system"] .stat-card,
+  html[data-theme="system"] .stat-card {
+    background-color: rgba(255, 255, 255, 0.93) !important;
+    border-color: rgba(99, 102, 241, 0.18) !important;
+    backdrop-filter: blur(14px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(14px) saturate(180%) !important;
+    box-shadow: 0 4px 20px rgba(79, 70, 229, 0.20), 0 1px 4px rgba(79, 70, 229, 0.12) !important;
+  }
+
   html[data-theme="system"] .bg-white {
-    background-color: rgba(255, 255, 255, 0.82) !important;
-    border-color: #e0e7ff !important;
-    backdrop-filter: blur(10px) !important;
-    -webkit-backdrop-filter: blur(10px) !important;
+    background-color: rgba(255, 255, 255, 0.93) !important;
   }
 
   html[data-theme="system"] .card-hover:hover {
-    border-color: #a5b4fc !important;
-    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.18) !important;
+    border-color: rgba(99, 102, 241, 0.38) !important;
+    box-shadow: 0 8px 36px rgba(79, 70, 229, 0.30), 0 2px 8px rgba(79, 70, 229, 0.15) !important;
+    transform: translateY(-2px) !important;
   }
 
-  [data-theme="system"] aside {
-    background: linear-gradient(160deg, #eaedff 0%, #e4e9ff 100%) !important;
-    border-right: 1px solid #c7d2fe !important;
+  /* ── 5. Topbar: frosted glass ── */
+  html[data-theme="system"] header {
+    background-color: rgba(255, 255, 255, 0.88) !important;
+    border-bottom-color: rgba(99, 102, 241, 0.20) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
   }
 
+  /* ── 6. Vivid indigo→blue gradient buttons ── */
   html[data-theme="system"] .btn-primary {
-    background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%) !important;
-    box-shadow: 0 0 16px rgba(99, 102, 241, 0.40) !important;
+    background: linear-gradient(135deg, #7c3aed 0%, #6366f1 45%, #3b82f6 100%) !important;
+    box-shadow: 0 0 22px rgba(99, 102, 241, 0.50) !important;
+    border: none !important;
   }
   html[data-theme="system"] .btn-primary:hover {
-    background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%) !important;
-    box-shadow: 0 0 24px rgba(99, 102, 241, 0.60) !important;
+    background: linear-gradient(135deg, #6d28d9 0%, #4f46e5 45%, #2563eb 100%) !important;
+    box-shadow: 0 0 32px rgba(99, 102, 241, 0.70) !important;
+  }
+
+  /* ── 7. Main content area: slight tint so text is fully readable ── */
+  html[data-theme="system"] main {
+    background-color: transparent !important;
+  }
+
+  /* ── 8. Table backgrounds: glass white ── */
+  html[data-theme="system"] table,
+  html[data-theme="system"] thead,
+  html[data-theme="system"] .overflow-auto,
+  html[data-theme="system"] .overflow-x-auto {
+    background-color: transparent !important;
+  }
+
+  html[data-theme="system"] thead th {
+    background-color: rgba(238, 242, 255, 0.90) !important;
+    color: #3730a3 !important;
+  }
+
+  html[data-theme="system"] tbody tr:hover {
+    background-color: rgba(99, 102, 241, 0.06) !important;
+  }
+
+  /* ── 9. Input fields: white glass ── */
+  html[data-theme="system"] .input {
+    background-color: rgba(255, 255, 255, 0.88) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    border-color: rgba(99, 102, 241, 0.28) !important;
+    color: #1e1b4b !important;
+  }
+  html[data-theme="system"] .input:focus {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+  }
+
+  /* ── 10. Select / dropdown ── */
+  html[data-theme="system"] select {
+    background-color: rgba(255, 255, 255, 0.90) !important;
+  }
+
+  /* ── 11. bg-surface elements (page section backgrounds) ── */
+  html[data-theme="system"] .bg-surface,
+  html[data-theme="system"] [class*="bg-surface"] {
+    background-color: rgba(255, 255, 255, 0.88) !important;
   }
 }
 

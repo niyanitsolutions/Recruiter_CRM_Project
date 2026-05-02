@@ -352,59 +352,63 @@
   --bg-gray-200: #132540;
 }
 
-/* ── SYSTEM THEME — "Indigo Aurora" — light OS preference ───────────────────── */
-/* Distinct from [data-theme="light"]: indigo/periwinkle accent, gradient bg,    */
-/* glass-tinted cards, vivid indigo nav glow.                                    */
+/* ── SYSTEM THEME — "Vivid Pro" — light OS preference ───────────────────────── */
+/* MAXIMALLY DISTINCT from [data-theme="light"]:                                  */
+/*   • Vivid purple→indigo→blue gradient body (visible between cards)             */
+/*   • Dark indigo sidebar (key differentiator — sidebar is dark, content light)  */
+/*   • Glass-white cards + vivid indigo shadows                                   */
+/*   • Indigo gradient buttons                                                     */
+/* ─────────────────────────────────────────────────────────────────────────────── */
 @media (prefers-color-scheme: light) {
   [data-theme="system"] {
-    /* ── Backgrounds — indigo/periwinkle tint ── */
-    --bg-app:            #eef2ff;           /* indigo-50 — gradient applied via index.css */
-    --bg-base-solid:     #eef2ff;
-    --bg-surface:        #f5f6ff;
-    --bg-sidebar:        #eaedff;           /* indigo-tinted sidebar */
-    --bg-card:           rgba(255, 255, 255, 0.82);
-    --bg-card-alt:       rgba(238, 242, 255, 0.72);
-    --bg-topbar:         rgba(255, 255, 255, 0.90);
-    --bg-hover:          #e0e7ff;           /* indigo-100 */
-    --bg-active:         #c7d2fe;           /* indigo-200 */
-    --bg-overlay:        rgba(15, 10, 50, 0.45);
+    /* ── Backgrounds ── */
+    --bg-app:            #4f46e5;           /* outer layout div fallback (transparent in index.css) */
+    --bg-base-solid:     #4f46e5;
+    --bg-surface:        rgba(255, 255, 255, 0.92);
+    --bg-sidebar:        #0d0b2e;           /* ★ DARK — key visual differentiator */
+    --bg-card:           rgba(255, 255, 255, 0.92);
+    --bg-card-alt:       rgba(240, 242, 255, 0.85);
+    --bg-topbar:         rgba(255, 255, 255, 0.94);
+    --bg-hover:          rgba(255, 255, 255, 0.12);
+    --bg-active:         rgba(99, 102, 241, 0.25);
+    --bg-overlay:        rgba(10, 8, 40, 0.60);
 
-    /* ── Text ── */
-    --text-primary:      #1e1b4b;           /* indigo-950 */
-    --text-secondary:    #3730a3;           /* indigo-800 */
+    /* ── Text (main content on white cards) ── */
+    --text-primary:      #1e1b4b;
+    --text-secondary:    #3730a3;
     --text-muted:        #6366f1;
     --text-disabled:     #a5b4fc;
     --text-heading:      #0f0d2e;
-    --text-label:        #4338ca;           /* indigo-700 */
+    --text-label:        #4338ca;
     --text-link:         #6366f1;
     --text-danger:       #dc2626;
 
     /* ── Borders ── */
-    --border:            #c7d2fe;           /* indigo-200 */
-    --border-strong:     #a5b4fc;           /* indigo-300 */
-    --border-subtle:     #e0e7ff;           /* indigo-100 */
-    --border-card:       #e0e7ff;
+    --border:            rgba(99, 102, 241, 0.25);
+    --border-strong:     rgba(99, 102, 241, 0.45);
+    --border-subtle:     rgba(99, 102, 241, 0.15);
+    --border-card:       rgba(99, 102, 241, 0.18);
 
     /* ── Inputs ── */
-    --input-bg:           #f5f6ff;
+    --input-bg:           rgba(255, 255, 255, 0.88);
     --input-text:         #1e1b4b;
     --input-placeholder:  #818cf8;
-    --input-border:       #c7d2fe;
+    --input-border:       rgba(99, 102, 241, 0.30);
     --input-focus-border: #6366f1;
-    --input-focus-shadow: rgba(99, 102, 241, 0.18);
+    --input-focus-shadow: rgba(99, 102, 241, 0.22);
     --input-autofill:     #e0e7ff;
     --input-autofill-text: #1e1b4b;
-    --input-disabled-bg:  #e0e7ff;
+    --input-disabled-bg:  rgba(224, 231, 255, 0.70);
     --input-disabled-text: #818cf8;
     --select-option-bg:   #ffffff;
     --select-option-text: #1e1b4b;
     --label-color:        #4338ca;
 
     /* ── Status Backgrounds ── */
-    --bg-success: rgba(5,  150, 105, 0.12);
-    --bg-warning: rgba(217, 119,  6,  0.12);
-    --bg-danger:  rgba(220,  38, 38,  0.10);
-    --bg-info:    rgba(99,  102, 241, 0.12);
+    --bg-success: rgba(5,  150, 105, 0.14);
+    --bg-warning: rgba(217, 119,  6,  0.14);
+    --bg-danger:  rgba(220,  38, 38,  0.12);
+    --bg-info:    rgba(99,  102, 241, 0.14);
 
     /* ── Status Text ── */
     --text-success: #059669;
@@ -412,36 +416,36 @@
     --text-danger:  #dc2626;
     --text-info:    #6366f1;
 
-    /* ── Navigation — vivid indigo glow ── */
-    --nav-text:          #4338ca;           /* indigo-700 */
-    --nav-text-active:   #6366f1;           /* indigo-500 */
-    --nav-bg-active:     #e0e7ff;           /* indigo-100 */
-    --nav-border-active: #6366f1;
-    --nav-hover-bg:      #eaedff;
-    --nav-glow-active:   rgba(99, 102, 241, 0.22);
+    /* ── Navigation — LIGHT text on DARK sidebar ── */
+    --nav-text:          #a5b4fc;           /* soft indigo on dark */
+    --nav-text-active:   #ffffff;           /* white when active */
+    --nav-bg-active:     rgba(99, 102, 241, 0.32);
+    --nav-border-active: #818cf8;
+    --nav-hover-bg:      rgba(255, 255, 255, 0.09);
+    --nav-glow-active:   rgba(129, 140, 248, 0.55);
 
     /* ── UI elements ── */
-    --scrollbar-track:        #e0e7ff;
-    --scrollbar-thumb:        #a5b4fc;
-    --scrollbar-thumb-hover:  #818cf8;
-    --selection-bg:           rgba(99, 102, 241, 0.18);
+    --scrollbar-track:        rgba(99, 102, 241, 0.12);
+    --scrollbar-thumb:        rgba(165, 180, 252, 0.55);
+    --scrollbar-thumb-hover:  rgba(165, 180, 252, 0.80);
+    --selection-bg:           rgba(99, 102, 241, 0.25);
     --selection-text:         #1e1b4b;
-    --dropdown-bg:            rgba(255, 255, 255, 0.95);
-    --dropdown-border:        #c7d2fe;
-    --dropdown-hover:         #e0e7ff;
-    --skeleton-from:          #e0e7ff;
-    --skeleton-via:           #eef2ff;
-    --skeleton-to:            #e0e7ff;
+    --dropdown-bg:            rgba(255, 255, 255, 0.96);
+    --dropdown-border:        rgba(99, 102, 241, 0.22);
+    --dropdown-hover:         rgba(99, 102, 241, 0.08);
+    --skeleton-from:          rgba(99, 102, 241, 0.14);
+    --skeleton-via:           rgba(99, 102, 241, 0.06);
+    --skeleton-to:            rgba(99, 102, 241, 0.14);
 
     /* ── Shadows — vivid indigo glow ── */
-    --shadow-card:     0 2px 12px rgba(99, 102, 241, 0.12), 0 1px 3px rgba(99, 102, 241, 0.06);
-    --shadow-soft:     0 4px 20px rgba(99, 102, 241, 0.18);
-    --shadow-elevated: 0 20px 60px rgba(99, 102, 241, 0.20);
+    --shadow-card:     0 4px 20px rgba(79, 70, 229, 0.20), 0 1px 4px rgba(79, 70, 229, 0.12);
+    --shadow-soft:     0 8px 30px rgba(79, 70, 229, 0.28);
+    --shadow-elevated: 0 20px 60px rgba(79, 70, 229, 0.35);
 
-    /* ── Accent — vivid indigo (distinct from light theme's purple) ── */
+    /* ── Accent — vivid indigo ── */
     --accent:       #6366f1;
     --accent-hover: #4f46e5;
-    --accent-light: rgba(99, 102, 241, 0.12);
+    --accent-light: rgba(99, 102, 241, 0.14);
     --accent-2:     #818cf8;
 
     /* ── Stat border accent — vivid ── */
@@ -454,7 +458,7 @@
     --stat-border-pink:   #db2777;
     --stat-border-yellow: #ca8a04;
 
-    /* ── Gradients — indigo/blue premium ── */
+    /* ── Gradients — premium indigo/blue spectrum ── */
     --gradient-1: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
     --gradient-2: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
     --gradient-3: linear-gradient(135deg, #f97316 0%, #ec4899 100%);
@@ -472,17 +476,17 @@
     --stat-teal:    linear-gradient(135deg, #06b6d4 0%, #10b981 100%);
     --stat-yellow:  linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
 
-    /* ── Legacy gray overrides (light-OS, indigo tint) ── */
+    /* ── Legacy gray overrides ── */
     --gray-900: #0f0d2e;
     --gray-800: #1e1b4b;
     --gray-700: #3730a3;
     --gray-600: #4f46e5;
     --gray-500: #6366f1;
     --gray-400: #818cf8;
-    --border-gray-200: #c7d2fe;
-    --bg-gray-50:  #eef2ff;
-    --bg-gray-100: #e0e7ff;
-    --bg-gray-200: #c7d2fe;
+    --border-gray-200: rgba(99, 102, 241, 0.28);
+    --bg-gray-50:  rgba(255, 255, 255, 0.88);
+    --bg-gray-100: rgba(224, 231, 255, 0.70);
+    --bg-gray-200: rgba(199, 210, 254, 0.60);
   }
 }
 

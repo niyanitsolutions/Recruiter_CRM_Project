@@ -318,10 +318,14 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
               className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base flex-shrink-0 text-white"
               style={{
                 background: themeMode === 'system'
-                  ? 'linear-gradient(135deg, #0ea5e9, #6366f1)'
+                  ? isDark
+                    ? 'linear-gradient(135deg, #0ea5e9, #6366f1)'
+                    : 'linear-gradient(135deg, #7c3aed, #6366f1)'
                   : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
                 boxShadow: themeMode === 'system'
-                  ? '0 0 18px rgba(14,165,233,0.6)'
+                  ? isDark
+                    ? '0 0 18px rgba(14,165,233,0.6)'
+                    : '0 0 22px rgba(99,102,241,0.75)'
                   : '0 0 18px rgba(124,58,237,0.6)',
               }}
             >N</div>
@@ -335,10 +339,14 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
             className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base text-white"
             style={{
               background: themeMode === 'system'
-                ? 'linear-gradient(135deg, #0ea5e9, #6366f1)'
+                ? isDark
+                  ? 'linear-gradient(135deg, #0ea5e9, #6366f1)'
+                  : 'linear-gradient(135deg, #7c3aed, #6366f1)'
                 : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
               boxShadow: themeMode === 'system'
-                ? '0 0 18px rgba(14,165,233,0.6)'
+                ? isDark
+                  ? '0 0 18px rgba(14,165,233,0.6)'
+                  : '0 0 22px rgba(99,102,241,0.75)'
                 : '0 0 18px rgba(124,58,237,0.6)',
             }}
           >N</div>
