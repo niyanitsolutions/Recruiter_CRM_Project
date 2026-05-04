@@ -67,6 +67,70 @@ from app.api.v1 import tenant_settings
 from app.api.v1 import email_test
 
 
+# ─── Default super admin auto-seed ────────────────────────────────────────────
+async def _seed_default_superadmin() -> None:
+    """
+    Creates the default super admin account on first startup if none exists.
+    Credentials are read from .env:
+        DEFAULT_SUPERADMIN_USERNAME   (default: superadmin)
+        DEFAULT_SUPERADMIN_EMAIL      (default: superadmin@niyanhireflow.com)
+        DEFAULT_SUPERADMIN_NAME       (default: Super Administrator)
+        DEFAULT_SUPERADMIN_PASSWORD   (default: SuperAdmin@123  ← change in production!)
+    Safe to call on every restart — skips silently if any super admin already exists.
+    """
+    import uuid
+    from datetime import datetime, timezone
+    from passlib.context import CryptContext
+
+    master_db = get_master_db()
+    if await master_db.super_admins.find_one({"is_deleted": False}):
+        return  # already seeded — nothing to do
+
+    username  = os.getenv("DEFAULT_SUPERADMIN_USERNAME", "superadmin")
+    email     = os.getenv("DEFAULT_SUPERADMIN_EMAIL",    "superadmin@niyanhireflow.com")
+    full_name = os.getenv("DEFAULT_SUPERADMIN_NAME",     "Super Administrator")
+    password  = os.getenv("DEFAULT_SUPERADMIN_PASSWORD", "SuperAdmin@123")
+
+    rounds     = int(os.getenv("BCRYPT_ROUNDS", "12"))
+    pwd_ctx    = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=rounds)
+    now        = datetime.now(timezone.utc)
+
+    doc = {
+        "_id":                   str(uuid.uuid4()),
+        "username":              username,
+        "email":                 email,
+        "full_name":             full_name,
+        "mobile":                None,
+        "password_hash":         pwd_ctx.hash(password),
+        "status":                "active",
+        "is_primary":            True,
+        "is_deleted":            False,
+        "deleted_at":            None,
+        "permissions": [
+            "tenants:read", "tenants:write", "tenants:delete",
+            "plans:read", "plans:write",
+            "payments:read",
+            "analytics:read",
+            "super_admins:read", "super_admins:write",
+            "sellers:read", "sellers:write",
+            "discounts:read", "discounts:write",
+        ],
+        "failed_login_attempts": 0,
+        "locked_until":          None,
+        "last_login":            None,
+        "last_login_ip":         None,
+        "created_at":            now,
+        "updated_at":            now,
+        "created_by":            "system_startup",
+    }
+
+    await master_db.super_admins.insert_one(doc)
+    logger.info(f"Default super admin created — username: {username}  email: {email}")
+    if password == "SuperAdmin@123":
+        logger.warning("Default super admin is using the default password! "
+                       "Set DEFAULT_SUPERADMIN_PASSWORD in .env before going to production.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager - handles startup and shutdown"""
@@ -81,6 +145,8 @@ async def lifespan(app: FastAPI):
     print(f" Plans seeded/updated: {seeded}")
     await ensure_global_indexes(get_master_db())
     print(" Global user indexes ensured")
+    await _seed_default_superadmin()
+    print(" Default super admin checked/seeded")
     from app.services.email_service import validate_smtp_on_startup
     validate_smtp_on_startup()
     print(" SMTP configuration validated")

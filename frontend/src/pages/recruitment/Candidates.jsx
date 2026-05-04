@@ -614,30 +614,35 @@ const Candidates = () => {
                   )}
                 </div>
                 <div className="flex items-center gap-1">
-                  {candidate.resume_url && (
-                    <>
-                    <button
-                      onClick={() => openResume(candidate.resume_url)}
-                      className="p-1.5 rounded-lg transition-colors"
-                      style={{ color: 'var(--text-muted)' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                      onMouseLeave={e => e.currentTarget.style.background = ''}
-                      title="View Resume"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => downloadResume(candidate.resume_url, candidate.full_name)}
-                      className="p-1.5 rounded-lg transition-colors"
-                      style={{ color: 'var(--text-muted)' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                      onMouseLeave={e => e.currentTarget.style.background = ''}
-                      title="Download Resume"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                    </button>
-                    </>
-                  )}
+                  {/* Resume View */}
+                  <button
+                    onClick={() => candidate.resume_url ? openResume(candidate.resume_url) : toast.error('No resume uploaded for this candidate')}
+                    className="p-1.5 rounded-lg transition-colors flex items-center gap-1"
+                    style={{
+                      color: candidate.resume_url ? 'var(--accent)' : 'var(--text-disabled)',
+                      cursor: candidate.resume_url ? 'pointer' : 'default',
+                    }}
+                    onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--accent-light)' }}
+                    onMouseLeave={e => e.currentTarget.style.background = ''}
+                    title={candidate.resume_url ? 'View Resume' : 'No resume uploaded'}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium hidden sm:inline">Resume</span>
+                  </button>
+                  {/* Resume Download */}
+                  <button
+                    onClick={() => candidate.resume_url ? downloadResume(candidate.resume_url, candidate.full_name) : toast.error('No resume uploaded for this candidate')}
+                    className="p-1.5 rounded-lg transition-colors"
+                    style={{
+                      color: candidate.resume_url ? '#43E97B' : 'var(--text-disabled)',
+                      cursor: candidate.resume_url ? 'pointer' : 'default',
+                    }}
+                    onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'rgba(67,233,123,0.12)' }}
+                    onMouseLeave={e => e.currentTarget.style.background = ''}
+                    title={candidate.resume_url ? 'Download Resume' : 'No resume uploaded'}
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
                   <button
                     onClick={() => navigate(`/candidates/${candidate.id}`)}
                     className="p-1.5 rounded-lg transition-colors"
@@ -801,30 +806,29 @@ const Candidates = () => {
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex items-center justify-end gap-2">
-                      {candidate.resume_url && (
-                        <>
-                        <button
-                          onClick={() => openResume(candidate.resume_url)}
-                          className="p-2 rounded-lg transition-colors"
-                          style={{ color: 'var(--text-muted)' }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                          onMouseLeave={e => e.currentTarget.style.background = ''}
-                          title="View Resume"
-                        >
-                          <FileText className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => downloadResume(candidate.resume_url, candidate.full_name)}
-                          className="p-2 rounded-lg transition-colors"
-                          style={{ color: 'var(--text-muted)' }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                          onMouseLeave={e => e.currentTarget.style.background = ''}
-                          title="Download Resume"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
-                        </>
-                      )}
+                      {/* Resume View — always visible, disabled when no resume */}
+                      <button
+                        onClick={() => candidate.resume_url ? openResume(candidate.resume_url) : toast.error('No resume uploaded for this candidate')}
+                        className="p-2 rounded-lg transition-colors flex items-center gap-1.5"
+                        style={{ color: candidate.resume_url ? 'var(--accent)' : 'var(--text-disabled)' }}
+                        onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--accent-light)' }}
+                        onMouseLeave={e => e.currentTarget.style.background = ''}
+                        title={candidate.resume_url ? 'View Resume' : 'No resume uploaded'}
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span className="text-xs font-semibold">Resume</span>
+                      </button>
+                      {/* Resume Download — always visible, disabled when no resume */}
+                      <button
+                        onClick={() => candidate.resume_url ? downloadResume(candidate.resume_url, candidate.full_name) : toast.error('No resume uploaded for this candidate')}
+                        className="p-2 rounded-lg transition-colors"
+                        style={{ color: candidate.resume_url ? '#43E97B' : 'var(--text-disabled)' }}
+                        onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'rgba(67,233,123,0.12)' }}
+                        onMouseLeave={e => e.currentTarget.style.background = ''}
+                        title={candidate.resume_url ? 'Download Resume' : 'No resume uploaded'}
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => navigate(`/candidates/${candidate.id}`)}
                         className="p-2 rounded-lg transition-colors"

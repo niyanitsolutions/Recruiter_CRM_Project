@@ -46,23 +46,29 @@ async def seed_plans():
 
 
 async def seed_super_admin():
-    """Seed default SuperAdmin user"""
+    """Seed default SuperAdmin from env vars — runs once, skips if any super admin exists."""
     master_db = get_master_db()
-    
+
     print("🌱 Seeding SuperAdmin...")
-    
-    existing = await master_db.super_admins.find_one({"username": "superadmin"})
+
+    # Read credentials from environment (set in .env)
+    username  = os.getenv("DEFAULT_SUPERADMIN_USERNAME", "superadmin")
+    email     = os.getenv("DEFAULT_SUPERADMIN_EMAIL",    "superadmin@niyanhireflow.com")
+    full_name = os.getenv("DEFAULT_SUPERADMIN_NAME",     "Super Administrator")
+    password  = os.getenv("DEFAULT_SUPERADMIN_PASSWORD", "SuperAdmin@123")
+
+    existing = await master_db.super_admins.find_one({"is_deleted": False})
     if existing:
-        print("  ⏭️  SuperAdmin already exists")
+        print(f"  ⏭️  SuperAdmin already exists (username: {existing.get('username')})")
         return
-    
+
     super_admin = {
         "_id": str(uuid.uuid4()),
-        "username": "superadmin",
-        "email": "superadmin@niyanhireflow.com",
-        "full_name": "Super Administrator",
-        "mobile": "+919999999999",
-        "password_hash": hash_password("SuperAdmin@123"),
+        "username": username,
+        "email": email,
+        "full_name": full_name,
+        "mobile": None,
+        "password_hash": hash_password(password),
         "status": SuperAdminStatus.ACTIVE,
         "is_primary": True,
         "permissions": [
@@ -74,20 +80,28 @@ async def seed_super_admin():
             "payments:read",
             "analytics:read",
             "super_admins:read",
-            "super_admins:write"
+            "super_admins:write",
+            "sellers:read",
+            "sellers:write",
+            "discounts:read",
+            "discounts:write",
         ],
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
-        "created_by": "system",
-        "is_deleted": False
+        "created_by": "system_seed",
+        "is_deleted": False,
+        "failed_login_attempts": 0,
+        "locked_until": None,
+        "last_login": None,
+        "last_login_ip": None,
     }
-    
+
     await master_db.super_admins.insert_one(super_admin)
-    print("  ✅ Created SuperAdmin")
-    print("     Username: superadmin")
-    print("     Password: SuperAdmin@123")
-    print("     ⚠️  Change this password immediately in production!")
-    
+    print(f"  ✅ Created SuperAdmin — username: {username}  email: {email}")
+    print(f"     Password sourced from: DEFAULT_SUPERADMIN_PASSWORD in .env")
+    if password == "SuperAdmin@123":
+        print("     ⚠️  Using default password — set DEFAULT_SUPERADMIN_PASSWORD in .env before production!")
+
     print("✅ SuperAdmin seeded successfully")
 
 
