@@ -15,6 +15,12 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:8000',
           changeOrigin: true,
         },
+        // Proxy /uploads so resume files served by FastAPI StaticFiles
+        // are accessible during local development without setting VITE_API_URL.
+        '/uploads': {
+          target: 'http://127.0.0.1:8000',
+          changeOrigin: true,
+        },
       },
     },
 

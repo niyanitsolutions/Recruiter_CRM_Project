@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Save, Plus, Trash2, Sparkles, Upload } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Upload, FileText } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import candidateService from '../../services/candidateService'
 
@@ -106,6 +106,11 @@ const CandidateForm = () => {
     try {
       setLoading(true)
       const response = await candidateService.getCandidate(id)
+      if (!response.data) {
+        toast.error('Candidate not found')
+        navigate('/candidates')
+        return
+      }
       if (response.data) {
         const data = response.data
 
@@ -552,10 +557,37 @@ const CandidateForm = () => {
 
   const errCls = 'text-red-500 text-xs mt-1'
   const inputErrCls = (field) => errors[field] ? 'input w-full border-red-400 focus:ring-red-400' : 'input w-full'
-  const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/api\/v1\/?$/, '')
-  const fullResumeUrl = formData.resume_url
-    ? (formData.resume_url.startsWith('http') ? formData.resume_url : `${API_BASE}${formData.resume_url}`)
-    : ''
+
+  // Resolve a stored path (relative or absolute) to a full URL.
+  // In dev, Vite proxies /uploads → backend, so a relative path just works.
+  const resolveFileUrl = (path) => {
+    if (!path) return ''
+    if (path.startsWith('http')) return path
+    const base = (import.meta.env.VITE_API_URL || '').replace(/\/api\/v1\/?$/, '')
+    return `${base}${path}`
+  }
+  const fullResumeUrl = resolveFileUrl(formData.resume_url)
+
+  const handleResumeDownload = async () => {
+    if (!fullResumeUrl) return
+    const ext = (formData.resume_url?.split('.').pop() || 'pdf').toLowerCase()
+    const filename = `Resume.${ext}`
+    try {
+      const resp = await fetch(fullResumeUrl)
+      if (!resp.ok) throw new Error()
+      const blob = await resp.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objectUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(objectUrl)
+    } catch {
+      window.open(fullResumeUrl, '_blank', 'noopener,noreferrer')
+    }
+  }
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -605,26 +637,55 @@ const CandidateForm = () => {
           {isEdit ? (
             <div className="space-y-3">
               {formData.resume_url ? (
-                <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-lg border border-surface-200">
-                  <Upload className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <FileText className="w-5 h-5 text-green-600 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-surface-700 truncate">Resume on file</p>
-                    <p className="text-xs text-surface-500 truncate">{formData.resume_url.split('/').pop()}</p>
+                    <p className="text-sm font-medium text-green-800">Resume uploaded</p>
+                    <p className="text-xs text-green-600 truncate">
+                      {formData.resume_url.split('/').pop()}
+                    </p>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
-                    <a href={fullResumeUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:text-primary-800 font-medium">View</a>
-                    <a href={fullResumeUrl} download className="text-xs text-primary-600 hover:text-primary-800 font-medium">Download</a>
+                    <button
+                      type="button"
+                      onClick={() => window.open(fullResumeUrl, '_blank', 'noopener,noreferrer')}
+                      className="text-xs text-primary-600 hover:text-primary-800 font-medium px-2 py-1 rounded hover:bg-primary-50 transition-colors"
+                    >
+                      View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResumeDownload}
+                      className="text-xs text-primary-600 hover:text-primary-800 font-medium px-2 py-1 rounded hover:bg-primary-50 transition-colors"
+                    >
+                      Download
+                    </button>
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-surface-500">No resume uploaded yet.</p>
+                <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <Upload className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  <p className="text-sm text-amber-700">No resume uploaded yet.</p>
+                </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-surface-700 mb-1">{formData.resume_url ? 'Replace Resume' : 'Upload Resume'}</label>
-                <input type="file" accept=".pdf,.doc,.docx" onChange={handleResumeUpload} disabled={resumeUploading}
-                  className="block w-full text-sm text-surface-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 disabled:opacity-50" />
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  {formData.resume_url ? 'Replace Resume' : 'Upload Resume'}
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={handleResumeUpload}
+                  disabled={resumeUploading}
+                  className="block w-full text-sm text-surface-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 disabled:opacity-50"
+                />
                 <p className="text-xs text-surface-400 mt-1">PDF, DOC, DOCX — max 5 MB</p>
-                {resumeUploading && <p className="text-xs text-primary-600 mt-1 flex items-center gap-1"><span className="animate-spin inline-block w-3 h-3 border border-primary-500 border-t-transparent rounded-full" />Uploading…</p>}
+                {resumeUploading && (
+                  <p className="text-xs text-primary-600 mt-1 flex items-center gap-1">
+                    <span className="animate-spin inline-block w-3 h-3 border border-primary-500 border-t-transparent rounded-full" />
+                    Uploading…
+                  </p>
+                )}
               </div>
             </div>
           ) : (
@@ -696,6 +757,10 @@ const CandidateForm = () => {
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">Current City</label>
               <input type="text" name="current_city" value={formData.current_city} onChange={handleChange} className="input w-full" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">Current State</label>
+              <input type="text" name="current_state" value={formData.current_state} onChange={handleChange} className="input w-full" placeholder="e.g., Tamil Nadu" />
             </div>
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">Source</label>

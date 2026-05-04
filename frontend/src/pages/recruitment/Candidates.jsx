@@ -254,21 +254,50 @@ const Candidates = () => {
     ? { background: 'rgba(255,71,87,0.15)', color: '#FF4757' }
     : { background: 'rgba(67,233,123,0.15)', color: '#43E97B' }
 
-  const openResume = (resumeUrl) => {
+  const resolveFileUrl = (fileUrl) => {
+    if (!fileUrl) return ''
+    if (fileUrl.startsWith('http')) return fileUrl
+    // Strip /api/v1 from VITE_API_URL to get the backend origin.
+    // In dev without VITE_API_URL set, Vite proxies /uploads → backend.
     const base = (import.meta.env.VITE_API_URL || '').replace(/\/api\/v1\/?$/, '')
-    const url = resumeUrl.startsWith('http') ? resumeUrl : `${base}${resumeUrl}`
+    return `${base}${fileUrl}`
+  }
+
+  const openResume = (resumeUrl) => {
+    const url = resolveFileUrl(resumeUrl)
+    if (!url) return
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
-  const downloadResume = (resumeUrl, candidateName) => {
-    const base = (import.meta.env.VITE_API_URL || '').replace(/\/api\/v1\/?$/, '')
-    const url = resumeUrl.startsWith('http') ? resumeUrl : `${base}${resumeUrl}`
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${candidateName}_Resume`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+  const downloadResume = async (resumeUrl, candidateName) => {
+    const url = resolveFileUrl(resumeUrl)
+    if (!url) return
+    // Extract original file extension so the download has the correct format
+    const ext = (resumeUrl.split('.').pop() || 'pdf').toLowerCase()
+    const safeName = (candidateName || 'Resume').replace(/[^a-zA-Z0-9\s_-]/g, '').trim()
+    const filename = `${safeName}_Resume.${ext}`
+    try {
+      // fetch + Blob works for both same-origin and cross-origin (CORS) files
+      const resp = await fetch(url)
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const blob = await resp.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objectUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(objectUrl)
+    } catch {
+      // Fallback: direct link (works for same-origin or when fetch CORS is blocked)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    }
   }
 
   return (

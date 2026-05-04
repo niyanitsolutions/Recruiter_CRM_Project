@@ -13,6 +13,71 @@ const emptyForm = {
   reseller_discount_percent: '0',
 }
 
+// Defined OUTSIDE Plans so React never unmounts/remounts it on parent re-render.
+// Passing form + setForm as props keeps the inputs stable.
+const PlanForm = ({ form, setForm, onSubmit, onCancel, isActionLoading, submitLabel }) => (
+  <div className="space-y-4">
+    <div className="grid grid-cols-2 gap-4">
+      <div>
+        <label className="form-label">Plan Key (slug)</label>
+        <input className="input" placeholder="e.g. basic" value={form.name}
+          onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} />
+      </div>
+      <div>
+        <label className="form-label">Display Name</label>
+        <input className="input" placeholder="e.g. Basic Plan" value={form.display_name}
+          onChange={(e) => setForm(f => ({ ...f, display_name: e.target.value }))} />
+      </div>
+      <div className="col-span-2">
+        <label className="form-label">Description</label>
+        <input className="input" value={form.description}
+          onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} />
+      </div>
+      <div>
+        <label className="form-label">Monthly Price (₹)</label>
+        <input type="number" className="input" value={form.price_monthly}
+          onChange={(e) => setForm(f => ({ ...f, price_monthly: e.target.value }))} />
+      </div>
+      <div>
+        <label className="form-label">Annual Price (₹)</label>
+        <input type="number" className="input" value={form.price_yearly}
+          onChange={(e) => setForm(f => ({ ...f, price_yearly: e.target.value }))} />
+      </div>
+      <div>
+        <label className="form-label">Max Users</label>
+        <input type="number" className="input" value={form.max_users}
+          onChange={(e) => setForm(f => ({ ...f, max_users: e.target.value }))} />
+      </div>
+      <div>
+        <label className="form-label">Max Candidates</label>
+        <input type="number" className="input" value={form.max_candidates}
+          onChange={(e) => setForm(f => ({ ...f, max_candidates: e.target.value }))} />
+      </div>
+      <div>
+        <label className="form-label">Max Jobs</label>
+        <input type="number" className="input" value={form.max_jobs}
+          onChange={(e) => setForm(f => ({ ...f, max_jobs: e.target.value }))} />
+      </div>
+      <div>
+        <label className="form-label">Reseller Discount (%)</label>
+        <input type="number" className="input" min="0" max="100" value={form.reseller_discount_percent}
+          onChange={(e) => setForm(f => ({ ...f, reseller_discount_percent: e.target.value }))}
+          placeholder="0" />
+        <p className="text-xs text-surface-500 mt-1">% discount applied to reseller pricing</p>
+      </div>
+      <div className="col-span-2">
+        <label className="form-label">Features (comma-separated)</label>
+        <input className="input" placeholder="e.g. ATS, Email Integration, Reports" value={form.features}
+          onChange={(e) => setForm(f => ({ ...f, features: e.target.value }))} />
+      </div>
+    </div>
+    <div className="flex justify-end gap-3 pt-2 border-t border-surface-200">
+      <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+      <Button onClick={onSubmit} isLoading={isActionLoading}>{submitLabel}</Button>
+    </div>
+  </div>
+)
+
 const Plans = () => {
   const [plans, setPlans] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -195,69 +260,6 @@ const Plans = () => {
     },
   ]
 
-  const PlanForm = ({ onSubmit, submitLabel }) => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="form-label">Plan Key (slug)</label>
-          <input className="input" placeholder="e.g. basic" value={form.name}
-            onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} />
-        </div>
-        <div>
-          <label className="form-label">Display Name</label>
-          <input className="input" placeholder="e.g. Basic Plan" value={form.display_name}
-            onChange={(e) => setForm(f => ({ ...f, display_name: e.target.value }))} />
-        </div>
-        <div className="col-span-2">
-          <label className="form-label">Description</label>
-          <input className="input" value={form.description}
-            onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} />
-        </div>
-        <div>
-          <label className="form-label">Monthly Price (₹)</label>
-          <input type="number" className="input" value={form.price_monthly}
-            onChange={(e) => setForm(f => ({ ...f, price_monthly: e.target.value }))} />
-        </div>
-        <div>
-          <label className="form-label">Annual Price (₹)</label>
-          <input type="number" className="input" value={form.price_yearly}
-            onChange={(e) => setForm(f => ({ ...f, price_yearly: e.target.value }))} />
-        </div>
-        <div>
-          <label className="form-label">Max Users</label>
-          <input type="number" className="input" value={form.max_users}
-            onChange={(e) => setForm(f => ({ ...f, max_users: e.target.value }))} />
-        </div>
-        <div>
-          <label className="form-label">Max Candidates</label>
-          <input type="number" className="input" value={form.max_candidates}
-            onChange={(e) => setForm(f => ({ ...f, max_candidates: e.target.value }))} />
-        </div>
-        <div>
-          <label className="form-label">Max Jobs</label>
-          <input type="number" className="input" value={form.max_jobs}
-            onChange={(e) => setForm(f => ({ ...f, max_jobs: e.target.value }))} />
-        </div>
-        <div>
-          <label className="form-label">Reseller Discount (%)</label>
-          <input type="number" className="input" min="0" max="100" value={form.reseller_discount_percent}
-            onChange={(e) => setForm(f => ({ ...f, reseller_discount_percent: e.target.value }))}
-            placeholder="0" />
-          <p className="text-xs text-surface-500 mt-1">% discount applied to reseller pricing</p>
-        </div>
-        <div className="col-span-2">
-          <label className="form-label">Features (comma-separated)</label>
-          <input className="input" placeholder="e.g. ATS, Email Integration, Reports" value={form.features}
-            onChange={(e) => setForm(f => ({ ...f, features: e.target.value }))} />
-        </div>
-      </div>
-      <div className="flex justify-end gap-3 pt-2 border-t border-surface-200">
-        <Button variant="secondary" onClick={() => { setIsCreateOpen(false); setIsEditOpen(false) }}>Cancel</Button>
-        <Button onClick={onSubmit} isLoading={isActionLoading}>{submitLabel}</Button>
-      </div>
-    </div>
-  )
-
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -276,11 +278,23 @@ const Plans = () => {
       </Card>
 
       <Modal isOpen={isCreateOpen} onClose={() => setIsCreateOpen(false)} title="Create Plan" size="lg">
-        <PlanForm onSubmit={handleCreate} submitLabel="Create Plan" />
+        <PlanForm
+          form={form} setForm={setForm}
+          onSubmit={handleCreate}
+          onCancel={() => setIsCreateOpen(false)}
+          isActionLoading={isActionLoading}
+          submitLabel="Create Plan"
+        />
       </Modal>
 
       <Modal isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} title="Edit Plan" size="lg">
-        <PlanForm onSubmit={handleEdit} submitLabel="Save Changes" />
+        <PlanForm
+          form={form} setForm={setForm}
+          onSubmit={handleEdit}
+          onCancel={() => setIsEditOpen(false)}
+          isActionLoading={isActionLoading}
+          submitLabel="Save Changes"
+        />
       </Modal>
     </div>
   )

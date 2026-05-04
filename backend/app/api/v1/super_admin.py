@@ -9,15 +9,44 @@ from datetime import datetime, timezone
 import logging
 import uuid
 
+from pydantic import BaseModel, field_validator
+
 from app.middleware.auth import require_super_admin, AuthContext
 from app.middleware.tenant import get_master_database
 from app.services.tenant_service import tenant_service
 from app.services.plan_service import plan_service
 from app.services.payment_service import payment_service
 from app.services.seller_service import SellerService
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.models.master.super_admin import SuperAdminStatus
 from app.models.master.tenant import TenantAdminCreate, TenantAdminCreateWithPayment
+
+
+class UpdateProfilePayload(BaseModel):
+    full_name: Optional[str] = None
+    username: Optional[str] = None
+    email: Optional[str] = None
+    mobile: Optional[str] = None
+
+    @field_validator("username", "email", "full_name", mode="before")
+    @classmethod
+    def strip_blank(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            return v if v else None
+        return v
+
+
+class ChangePasswordPayload(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v):
+        if len(v) < 8:
+            raise ValueError("New password must be at least 8 characters")
+        return v
 
 logger = logging.getLogger(__name__)
 
@@ -556,3 +585,79 @@ async def get_reports(
         }
 
     raise HTTPException(status_code=400, detail=f"Unknown report_type: {report_type}")
+
+
+@router.put("/profile")
+async def update_super_admin_profile(
+    payload: UpdateProfilePayload,
+    auth: AuthContext = Depends(require_super_admin),
+):
+    """
+    Update the logged-in super admin's own profile fields.
+    Allowed fields: full_name, username, email, mobile.
+    """
+    from app.core.database import get_master_db
+    master_db = get_master_db()
+
+    updates: dict = {}
+    if payload.full_name is not None:
+        updates["full_name"] = payload.full_name
+    if payload.username is not None:
+        updates["username"] = payload.username
+    if payload.email is not None:
+        updates["email"] = payload.email
+    if payload.mobile is not None:
+        updates["mobile"] = payload.mobile
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    # Uniqueness checks for username and email
+    if "username" in updates or "email" in updates:
+        or_clauses = []
+        if "username" in updates:
+            or_clauses.append({"username": updates["username"]})
+        if "email" in updates:
+            or_clauses.append({"email": updates["email"]})
+        conflict = await master_db.super_admins.find_one({
+            "$or": or_clauses,
+            "_id": {"$ne": auth.user_id},
+            "is_deleted": {"$ne": True},
+        })
+        if conflict:
+            field = "Username" if conflict.get("username") == updates.get("username") else "Email"
+            raise HTTPException(status_code=400, detail=f"{field} is already taken")
+
+    updates["updated_at"] = datetime.now(timezone.utc)
+    await master_db.super_admins.update_one({"_id": auth.user_id}, {"$set": updates})
+
+    admin = await master_db.super_admins.find_one({"_id": auth.user_id})
+    admin.pop("password_hash", None)
+    return {"success": True, "message": "Profile updated successfully", "data": admin}
+
+
+@router.post("/change-password")
+async def change_super_admin_password(
+    payload: ChangePasswordPayload,
+    auth: AuthContext = Depends(require_super_admin),
+):
+    """
+    Change the logged-in super admin's own password.
+    Requires current_password for verification.
+    """
+    from app.core.database import get_master_db
+    master_db = get_master_db()
+
+    admin = await master_db.super_admins.find_one({"_id": auth.user_id, "is_deleted": {"$ne": True}})
+    if not admin:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    if not verify_password(payload.current_password, admin.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    new_hash = hash_password(payload.new_password)
+    await master_db.super_admins.update_one(
+        {"_id": auth.user_id},
+        {"$set": {"password_hash": new_hash, "updated_at": datetime.now(timezone.utc)}},
+    )
+    return {"success": True, "message": "Password updated successfully"}

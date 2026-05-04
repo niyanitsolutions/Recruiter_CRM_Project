@@ -97,6 +97,27 @@ const superAdminService = {
   getPlans: (params = {}) => {
     return api.get('/auth/plans', { params })
   },
+
+  /**
+   * Update super admin profile (full_name, username, email, mobile)
+   */
+  updateProfile: (data) => {
+    return api.put('/super-admin/profile', data)
+  },
+
+  /**
+   * Change super admin password
+   */
+  changePassword: (data) => {
+    return api.post('/super-admin/change-password', data)
+  },
+
+  /**
+   * Get payment invoice data for a specific payment
+   */
+  getPaymentInvoice: (paymentId) => {
+    return api.get(`/super-admin/payments/${paymentId}/invoice`)
+  },
 }
 
 export default superAdminService
