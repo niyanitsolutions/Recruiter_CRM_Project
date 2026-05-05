@@ -21,6 +21,10 @@ const taskService = {
     const response = await api.delete(`/tasks/${id}`)
     return response.data
   },
+  addComment: async (id, text) => {
+    const response = await api.post(`/tasks/${id}/comments`, { text })
+    return response.data
+  },
 }
 
 export default taskService

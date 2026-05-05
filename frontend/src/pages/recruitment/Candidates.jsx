@@ -14,6 +14,7 @@ import ExportModal from '../../components/common/ExportModal'
 import CandidateImportModal from '../../components/common/CandidateImportModal'
 import ModalPortal from '../../components/common/ModalPortal'
 import { selectUserType } from '../../store/authSlice'
+import { getToken } from '../../utils/token'
 
 const AVATAR_GRADIENTS = [
   'var(--stat-purple)',
@@ -254,49 +255,40 @@ const Candidates = () => {
     ? { background: 'rgba(255,71,87,0.15)', color: '#FF4757' }
     : { background: 'rgba(67,233,123,0.15)', color: '#43E97B' }
 
-  const resolveFileUrl = (fileUrl) => {
-    if (!fileUrl) return ''
-    if (fileUrl.startsWith('http')) return fileUrl
-    // Strip /api/v1 from VITE_API_URL to get the backend origin.
-    // In dev without VITE_API_URL set, Vite proxies /uploads → backend.
-    const base = (import.meta.env.VITE_API_URL || '').replace(/\/api\/v1\/?$/, '')
-    return `${base}${fileUrl}`
+  // Fetch resume bytes with auth header, then open/download via Blob URL
+  const fetchResumeBlob = async (candidateId) => {
+    const apiBase = import.meta.env.VITE_API_URL || '/api/v1'
+    const url = `${apiBase}/candidates/${candidateId}/resume`
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return resp.blob()
   }
 
-  const openResume = (resumeUrl) => {
-    const url = resolveFileUrl(resumeUrl)
-    if (!url) return
-    window.open(url, '_blank', 'noopener,noreferrer')
-  }
-
-  const downloadResume = async (resumeUrl, candidateName) => {
-    const url = resolveFileUrl(resumeUrl)
-    if (!url) return
-    // Extract original file extension so the download has the correct format
-    const ext = (resumeUrl.split('.').pop() || 'pdf').toLowerCase()
-    const safeName = (candidateName || 'Resume').replace(/[^a-zA-Z0-9\s_-]/g, '').trim()
-    const filename = `${safeName}_Resume.${ext}`
+  const openResume = async (candidateId) => {
     try {
-      // fetch + Blob works for both same-origin and cross-origin (CORS) files
-      const resp = await fetch(url)
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const blob = await resp.blob()
+      const blob = await fetchResumeBlob(candidateId)
+      const objectUrl = URL.createObjectURL(blob)
+      window.open(objectUrl, '_blank', 'noopener,noreferrer')
+    } catch {
+      toast.error('Failed to open resume')
+    }
+  }
+
+  const downloadResume = async (candidateId, candidateName, resumeUrl) => {
+    const ext = (resumeUrl?.split('.').pop() || 'pdf').toLowerCase()
+    const safeName = (candidateName || 'Resume').replace(/[^a-zA-Z0-9\s_-]/g, '').trim()
+    try {
+      const blob = await fetchResumeBlob(candidateId)
       const objectUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = objectUrl
-      a.download = filename
+      a.download = `${safeName}_Resume.${ext}`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(objectUrl)
     } catch {
-      // Fallback: direct link (works for same-origin or when fetch CORS is blocked)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      toast.error('Failed to download resume')
     }
   }
 
@@ -645,7 +637,7 @@ const Candidates = () => {
                 <div className="flex items-center gap-1">
                   {/* Resume View */}
                   <button
-                    onClick={() => candidate.resume_url ? openResume(candidate.resume_url) : toast.error('No resume uploaded for this candidate')}
+                    onClick={() => candidate.resume_url ? openResume(candidate.id) : toast.error('No resume uploaded for this candidate')}
                     className="p-1.5 rounded-lg transition-colors flex items-center gap-1"
                     style={{
                       color: candidate.resume_url ? 'var(--accent)' : 'var(--text-disabled)',
@@ -660,7 +652,7 @@ const Candidates = () => {
                   </button>
                   {/* Resume Download */}
                   <button
-                    onClick={() => candidate.resume_url ? downloadResume(candidate.resume_url, candidate.full_name) : toast.error('No resume uploaded for this candidate')}
+                    onClick={() => candidate.resume_url ? downloadResume(candidate.id, candidate.full_name, candidate.resume_url) : toast.error('No resume uploaded for this candidate')}
                     className="p-1.5 rounded-lg transition-colors"
                     style={{
                       color: candidate.resume_url ? '#43E97B' : 'var(--text-disabled)',
@@ -837,7 +829,7 @@ const Candidates = () => {
                     <div className="flex items-center justify-end gap-2">
                       {/* Resume View — always visible, disabled when no resume */}
                       <button
-                        onClick={() => candidate.resume_url ? openResume(candidate.resume_url) : toast.error('No resume uploaded for this candidate')}
+                        onClick={() => candidate.resume_url ? openResume(candidate.id) : toast.error('No resume uploaded for this candidate')}
                         className="p-2 rounded-lg transition-colors flex items-center gap-1.5"
                         style={{ color: candidate.resume_url ? 'var(--accent)' : 'var(--text-disabled)' }}
                         onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--accent-light)' }}
@@ -849,7 +841,7 @@ const Candidates = () => {
                       </button>
                       {/* Resume Download — always visible, disabled when no resume */}
                       <button
-                        onClick={() => candidate.resume_url ? downloadResume(candidate.resume_url, candidate.full_name) : toast.error('No resume uploaded for this candidate')}
+                        onClick={() => candidate.resume_url ? downloadResume(candidate.id, candidate.full_name, candidate.resume_url) : toast.error('No resume uploaded for this candidate')}
                         className="p-2 rounded-lg transition-colors"
                         style={{ color: candidate.resume_url ? '#43E97B' : 'var(--text-disabled)' }}
                         onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'rgba(67,233,123,0.12)' }}

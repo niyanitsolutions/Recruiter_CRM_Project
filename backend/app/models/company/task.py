@@ -4,9 +4,8 @@ Internal task management for CRM teams
 """
 from datetime import datetime, date, timezone
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from enum import Enum
-from bson import ObjectId
 
 
 class TaskPriority(str, Enum):
@@ -44,6 +43,14 @@ class TaskUpdate(BaseModel):
     related_entity_id: Optional[str] = None
 
 
+class TaskComment(BaseModel):
+    id: str
+    text: str
+    author_id: str
+    author_name: str
+    created_at: datetime
+
+
 class TaskResponse(BaseModel):
     id: str
     title: str
@@ -61,3 +68,4 @@ class TaskResponse(BaseModel):
     updated_at: datetime
     completed_at: Optional[datetime] = None
     is_overdue: bool = False
+    comments: List[TaskComment] = []

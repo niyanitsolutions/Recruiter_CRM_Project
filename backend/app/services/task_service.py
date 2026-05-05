@@ -9,7 +9,7 @@ from bson import ObjectId
 from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.models.company.task import TaskCreate, TaskUpdate, TaskResponse, TaskStatus
+from app.models.company.task import TaskCreate, TaskUpdate, TaskResponse, TaskStatus, TaskComment
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +232,36 @@ class TaskService:
     # ── Response builder ──────────────────────────────────────────────────────
 
     @staticmethod
+    async def add_comment(
+        db: AsyncIOMotorDatabase,
+        task_id: str,
+        text: str,
+        author_id: str,
+        author_name: str,
+    ) -> TaskResponse:
+        """Append a comment to a task. Access: creator or assignee."""
+        doc = await TaskService._get_task_doc(db, task_id)
+        if not TaskService._is_involved(doc, author_id):
+            raise HTTPException(status_code=403, detail="Access denied: not involved in this task")
+
+        comment = {
+            "id": str(ObjectId()),
+            "text": text.strip(),
+            "author_id": author_id,
+            "author_name": author_name,
+            "created_at": datetime.now(timezone.utc),
+        }
+        await db[TaskService.COLLECTION].update_one(
+            {"_id": task_id},
+            {
+                "$push": {"comments": comment},
+                "$set":  {"updated_at": datetime.now(timezone.utc)},
+            }
+        )
+        updated = await TaskService._get_task_doc(db, task_id)
+        return TaskService._to_response(updated)
+
+    @staticmethod
     def _to_response(doc: dict) -> TaskResponse:
         due = doc.get("due_date")
         if isinstance(due, datetime):
@@ -241,6 +271,20 @@ class TaskService:
             and due < date.today()
             and doc.get("status") not in (TaskStatus.COMPLETED.value, TaskStatus.CANCELLED.value)
         )
+        raw_comments = doc.get("comments") or []
+        comments = []
+        for c in raw_comments:
+            try:
+                comments.append(TaskComment(
+                    id=c["id"],
+                    text=c["text"],
+                    author_id=c["author_id"],
+                    author_name=c["author_name"],
+                    created_at=c["created_at"],
+                ))
+            except Exception:
+                pass
+
         return TaskResponse(
             id=doc["_id"],
             title=doc["title"],
@@ -258,4 +302,5 @@ class TaskService:
             updated_at=doc["updated_at"],
             completed_at=doc.get("completed_at"),
             is_overdue=is_overdue,
+            comments=comments,
         )

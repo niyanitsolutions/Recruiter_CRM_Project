@@ -3,9 +3,14 @@ Tasks API - Phase 6
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from app.core.dependencies import get_current_user, get_company_db, require_permissions
 from app.services.task_service import TaskService
 from app.models.company.task import TaskCreate, TaskUpdate
+
+
+class AddCommentPayload(BaseModel):
+    text: str
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -91,3 +96,24 @@ async def delete_task(
     """
     await TaskService.delete_task(db, task_id, current_user["id"])
     return {"success": True, "message": "Task deleted"}
+
+
+@router.post("/{task_id}/comments")
+async def add_task_comment(
+    task_id: str,
+    payload: AddCommentPayload,
+    current_user: dict = Depends(require_permissions(["tasks:view"])),
+    db=Depends(get_company_db),
+):
+    """Add a comment to a task. Access: creator or assignee."""
+    if not payload.text.strip():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Comment text cannot be empty")
+    task = await TaskService.add_comment(
+        db,
+        task_id,
+        text=payload.text,
+        author_id=current_user["id"],
+        author_name=current_user.get("full_name", "Unknown"),
+    )
+    return {"success": True, "data": task}

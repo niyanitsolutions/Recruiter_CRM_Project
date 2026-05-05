@@ -2,7 +2,8 @@
 Candidates API - Phase 3
 Handles candidate management with AI resume parsing and keyword search
 """
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, Form, status as http_status
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime, timezone, timedelta
@@ -442,6 +443,43 @@ Resume text:
             "experience":             experience,
         },
     }
+
+
+@router.get("/{candidate_id}/resume")
+async def view_candidate_resume(
+    candidate_id: str,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db),
+    _: bool = Depends(require_permissions(["candidates:view"]))
+):
+    """Stream or redirect to the candidate's resume file."""
+    import os
+    from app.core.config import settings
+
+    candidate = await CandidateService.get_candidate(db, candidate_id)
+    resume_url = candidate.resume_url
+    if not resume_url:
+        raise HTTPException(status_code=404, detail="No resume uploaded for this candidate")
+
+    # S3 / external URL — redirect the browser directly to it
+    if resume_url.startswith("http"):
+        return RedirectResponse(url=resume_url, status_code=302)
+
+    # Local dev file — serve from disk
+    # resume_url looks like "/uploads/resumes/abc.pdf"
+    relative = resume_url.lstrip("/uploads/")          # "resumes/abc.pdf"
+    file_path = os.path.join(settings.UPLOAD_DIR, relative)  # "uploads/resumes/abc.pdf"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Resume file not found on server")
+
+    ext = os.path.splitext(file_path)[1].lower()
+    media_types = {
+        ".pdf":  "application/pdf",
+        ".doc":  "application/msword",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
+    media_type = media_types.get(ext, "application/octet-stream")
+    return FileResponse(file_path, media_type=media_type, filename=os.path.basename(file_path))
 
 
 @router.post("/{candidate_id}/resume")
