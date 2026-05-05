@@ -61,24 +61,44 @@ const StatCard = ({ title, value, icon: Icon, color = 'purple', linkTo, trend })
   const grad    = CARD_GRADIENTS[color] || CARD_GRADIENTS.purple
   const [hov, setHov] = useState(false)
   const trendUp = trend && !trend.startsWith('-')
+  // derive tint from glow color (replace alpha with 0.07)
+  const tint = grad.glow.replace(/[\d.]+\)$/, '0.07)')
 
   return (
     <div
-      className="rounded-2xl p-5 transition-all duration-300 cursor-default"
+      className="rounded-2xl p-5 cursor-default relative overflow-hidden"
       style={{
         backgroundColor: 'var(--bg-card)',
-        border:      '1px solid var(--border-card)',
-        borderLeft:  `4px solid ${grad.border}`,
-        boxShadow:   hov ? `0 8px 24px ${grad.glow}, var(--shadow-card)` : 'var(--shadow-card)',
-        transform:   hov ? 'translateY(-3px)' : 'translateY(0)',
+        border:      hov ? `1.5px solid ${grad.border}88` : '1px solid var(--border-card)',
+        borderLeft:  hov ? `4px solid ${grad.border}` : `4px solid ${grad.border}`,
+        boxShadow:   hov
+          ? `0 0 25px ${grad.glow}, 0 8px 32px ${grad.glow}, var(--shadow-card)`
+          : 'var(--shadow-card)',
+        transform:   hov ? 'scale(1.03) translateY(-2px)' : 'scale(1) translateY(0)',
+        transition:  'all 0.3s ease',
       }}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
     >
-      <div className="flex items-start justify-between mb-3">
+      {/* Gradient tint overlay */}
+      <div
+        className="absolute inset-0 rounded-2xl pointer-events-none"
+        style={{
+          background: `linear-gradient(135deg, ${tint} 0%, transparent 65%)`,
+          opacity:    hov ? 1 : 0,
+          transition: 'opacity 0.3s ease',
+        }}
+      />
+
+      <div className="relative flex items-start justify-between mb-3">
         <div
           className="w-11 h-11 rounded-xl flex items-center justify-center text-white flex-shrink-0"
-          style={{ background: grad.icon, boxShadow: `0 4px 12px ${grad.glow}` }}
+          style={{
+            background:  grad.icon,
+            boxShadow:   `0 4px 12px ${grad.glow}`,
+            transform:   hov ? 'scale(1.1)' : 'scale(1)',
+            transition:  'transform 0.3s ease',
+          }}
         >
           <Icon className="w-5 h-5" />
         </div>
@@ -94,10 +114,10 @@ const StatCard = ({ title, value, icon: Icon, color = 'purple', linkTo, trend })
           </Link>
         )}
       </div>
-      <p className="text-2xl font-bold leading-none mb-1" style={{ color: 'var(--text-heading)' }}>
+      <p className="relative text-2xl font-bold leading-none mb-1" style={{ color: 'var(--text-heading)' }}>
         {value == null ? <span style={{ color: 'var(--text-disabled)' }}>—</span> : count}
       </p>
-      <div className="flex items-center gap-2">
+      <div className="relative flex items-center gap-2">
         <p className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{title}</p>
         {trend && (
           <span

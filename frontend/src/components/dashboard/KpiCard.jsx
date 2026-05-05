@@ -45,6 +45,7 @@ const KpiCard = ({
 }) => {
   const count  = useCounter(typeof value === 'number' ? value : null)
   const [mounted, setMounted] = useState(false)
+  const [hov, setHov] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), delay)
@@ -55,19 +56,38 @@ const KpiCard = ({
   const maxSp  = sparkline ? Math.max(...sparkline, 1) : 1
   const TIcon  = trend?.dir === 'up' ? TrendingUp : trend?.dir === 'down' ? TrendingDown : Minus
   const tColor = trend?.dir === 'up' ? '#43E97B'  : trend?.dir === 'down' ? '#FF4757'  : '#8B8FA8'
+  const tint   = pal.glow.replace(/[\d.]+\)$/, '0.07)')
 
   const card = (
     <div
       className="rounded-2xl p-5 relative overflow-hidden cursor-default"
       style={{
         background:  'var(--bg-card)',
-        border:      '1px solid var(--border-card)',
-        boxShadow:   `0 4px 24px ${pal.glow}, var(--shadow-card)`,
+        border:      hov ? `1.5px solid ${pal.a}55` : '1px solid var(--border-card)',
+        boxShadow:   hov
+          ? `0 0 25px ${pal.glow}, 0 8px 32px ${pal.glow}, var(--shadow-card)`
+          : `0 4px 24px ${pal.glow}, var(--shadow-card)`,
         opacity:     mounted ? 1 : 0,
-        transform:   mounted ? 'translateY(0)' : 'translateY(20px)',
-        transition:  `opacity 0.45s ease ${delay}ms, transform 0.45s ease ${delay}ms, box-shadow 0.3s ease`,
+        transform:   mounted
+          ? (hov ? 'translateY(-2px) scale(1.03)' : 'translateY(0) scale(1)')
+          : 'translateY(20px) scale(1)',
+        transition:  mounted
+          ? 'border 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease'
+          : `opacity 0.45s ease ${delay}ms, transform 0.45s ease ${delay}ms`,
       }}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
     >
+      {/* Gradient tint overlay — fades in on hover */}
+      <div
+        className="absolute inset-0 rounded-2xl pointer-events-none"
+        style={{
+          background: `linear-gradient(135deg, ${tint} 0%, transparent 65%)`,
+          opacity:    hov ? 1 : 0,
+          transition: 'opacity 0.3s ease',
+        }}
+      />
+
       {/* Gradient accent bar */}
       <div
         className="absolute top-0 left-0 right-0 h-[3px] rounded-t-2xl"
@@ -75,12 +95,14 @@ const KpiCard = ({
       />
 
       {/* Icon + trend badge */}
-      <div className="flex items-start justify-between mb-4">
+      <div className="relative flex items-start justify-between mb-4">
         <div
           className="w-11 h-11 rounded-xl flex items-center justify-center"
           style={{
             background: `linear-gradient(135deg, ${pal.a}22, ${pal.b}33)`,
             border:     `1px solid ${pal.a}40`,
+            transform:  hov ? 'scale(1.1)' : 'scale(1)',
+            transition: 'transform 0.3s ease',
           }}
         >
           {Icon && <Icon className="w-5 h-5" style={{ color: pal.a }} />}
@@ -99,7 +121,7 @@ const KpiCard = ({
 
       {/* Value */}
       <p
-        className="text-3xl font-bold leading-none mb-1"
+        className="relative text-3xl font-bold leading-none mb-1"
         style={{ color: 'var(--text-heading)', letterSpacing: '-0.5px' }}
       >
         {value == null
@@ -110,18 +132,18 @@ const KpiCard = ({
       </p>
 
       {/* Title */}
-      <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{title}</p>
+      <p className="relative text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{title}</p>
 
       {/* Subtitle / trend label */}
       {(subtitle || trend?.label) && (
-        <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+        <p className="relative text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
           {subtitle ?? trend?.label}
         </p>
       )}
 
       {/* Micro sparkline */}
       {sparkline && sparkline.length > 0 && (
-        <div className="flex items-end gap-0.5 mt-3 h-8">
+        <div className="relative flex items-end gap-0.5 mt-3 h-8">
           {sparkline.map((v, i) => (
             <div
               key={i}
