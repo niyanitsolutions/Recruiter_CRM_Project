@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import {
   Download,
-  CreditCard,
   RefreshCw,
-  FileText,
   Eye,
   Loader2,
 } from 'lucide-react'
@@ -108,16 +106,18 @@ const Payments = () => {
 <div class="footer">Thank you for your business · Niyan HireFlow · support@niyanhireflow.com</div>
 </body></html>`
 
-      const blob = new Blob([html], { type: 'text/html' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `Invoice_${invoiceNo}_${companyName}.html`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      toast.success('Invoice downloaded')
+      const printWin = window.open('', '_blank', 'width=900,height=700,menubar=no,toolbar=no')
+      if (!printWin) {
+        toast.error('Pop-up blocked — please allow pop-ups and try again')
+        return
+      }
+      printWin.document.write(html)
+      printWin.document.close()
+      printWin.onload = () => {
+        printWin.focus()
+        printWin.print()
+      }
+      toast.success('Invoice opened — use Print → Save as PDF')
     } catch {
       toast.error('Failed to download invoice')
     } finally {
@@ -209,7 +209,7 @@ const Payments = () => {
               onClick={() => downloadInvoice(row)}
               disabled={!!downloadingId}
               className="p-2 text-surface-400 hover:text-success-600 hover:bg-success-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Download Invoice"
+              title="Print / Save Invoice as PDF"
             >
               {downloadingId === (row._id || row.id)
                 ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -288,7 +288,7 @@ const Payments = () => {
                   disabled={!!downloadingId}
                 >
                   <Download className="w-4 h-4 mr-2" />
-                  Download Invoice
+                  Print / Save PDF
                 </Button>
               )}
               <Button variant="secondary" onClick={() => setIsViewModalOpen(false)}>Close</Button>

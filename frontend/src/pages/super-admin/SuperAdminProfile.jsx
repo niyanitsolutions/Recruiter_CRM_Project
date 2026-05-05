@@ -110,6 +110,30 @@ const ChangePasswordModal = ({ onClose }) => {
   )
 }
 
+// Defined outside SuperAdminProfile so the component identity is stable across re-renders.
+// If defined inside, every keystroke triggers a new function ref → React unmounts/remounts
+// the input → cursor resets to end.
+const InfoRow = ({ icon: Icon, label, field, value, isEditing, editForm, setEditForm }) => (
+  <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
+    <div className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center flex-shrink-0">
+      <Icon className="w-4.5 h-4.5 text-gray-400" />
+    </div>
+    <div className="flex-1 min-w-0">
+      <p className="text-xs text-gray-500 mb-0.5">{label}</p>
+      {isEditing && field ? (
+        <input
+          className="w-full text-sm font-medium bg-white border border-blue-300 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+          value={editForm[field] || ''}
+          onChange={(e) => setEditForm(f => ({ ...f, [field]: e.target.value }))}
+          placeholder={`Enter ${label.toLowerCase()}`}
+        />
+      ) : (
+        <p className="text-sm font-medium text-gray-900 truncate">{value || '—'}</p>
+      )}
+    </div>
+  </div>
+)
+
 // ── Main Profile Page ─────────────────────────────────────────────────────────
 const SuperAdminProfile = () => {
   const dispatch = useDispatch()
@@ -141,7 +165,6 @@ const SuperAdminProfile = () => {
       const res = await superAdminService.updateProfile(editForm)
       const updated = res.data?.data || {}
 
-      // Patch the Redux user state so the sidebar/header reflect changes immediately
       const token = getToken()
       const refreshToken = getRefreshToken()
       dispatch(setCredentials({
@@ -164,27 +187,6 @@ const SuperAdminProfile = () => {
       setIsSaving(false)
     }
   }
-
-  const InfoRow = ({ icon: Icon, label, field, value }) => (
-    <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
-      <div className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center flex-shrink-0">
-        <Icon className="w-4.5 h-4.5 text-gray-400" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-gray-500 mb-0.5">{label}</p>
-        {isEditing && field ? (
-          <input
-            className="w-full text-sm font-medium bg-white border border-blue-300 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            value={editForm[field] || ''}
-            onChange={(e) => setEditForm(f => ({ ...f, [field]: e.target.value }))}
-            placeholder={`Enter ${label.toLowerCase()}`}
-          />
-        ) : (
-          <p className="text-sm font-medium text-gray-900 truncate">{value || '—'}</p>
-        )}
-      </div>
-    </div>
-  )
 
   return (
     <>
@@ -250,11 +252,11 @@ const SuperAdminProfile = () => {
 
             {/* Info rows */}
             <div className="space-y-3">
-              <InfoRow icon={User}   label="Full Name" field="full_name" value={user?.fullName} />
-              <InfoRow icon={User}   label="Username"  field="username"  value={user?.username} />
-              <InfoRow icon={Mail}   label="Email"     field="email"     value={user?.email} />
-              <InfoRow icon={Phone}  label="Phone"     field="mobile"    value={user?.mobile} />
-              <InfoRow icon={Shield} label="Role"      field={null}      value="Super Administrator" />
+              <InfoRow icon={User}   label="Full Name" field="full_name" value={user?.fullName} isEditing={isEditing} editForm={editForm} setEditForm={setEditForm} />
+              <InfoRow icon={User}   label="Username"  field="username"  value={user?.username} isEditing={isEditing} editForm={editForm} setEditForm={setEditForm} />
+              <InfoRow icon={Mail}   label="Email"     field="email"     value={user?.email}    isEditing={isEditing} editForm={editForm} setEditForm={setEditForm} />
+              <InfoRow icon={Phone}  label="Phone"     field="mobile"    value={user?.mobile}   isEditing={isEditing} editForm={editForm} setEditForm={setEditForm} />
+              <InfoRow icon={Shield} label="Role"      field={null}      value="Super Administrator" isEditing={isEditing} editForm={editForm} setEditForm={setEditForm} />
             </div>
           </Card.Content>
         </Card>
