@@ -66,12 +66,12 @@ const DashboardCard = ({
       className={`rounded-2xl p-5 relative overflow-hidden ${className}`}
       style={{
         background:  'var(--bg-card)',
-        border:      hov ? `1.5px solid ${pal.a}55` : '1px solid var(--border-card)',
+        border:      '1px solid var(--border-card)',
         boxShadow:   hov
           ? `0 0 25px ${pal.glow}, 0 8px 32px ${pal.glow}, var(--shadow-card)`
           : `0 2px 8px ${pal.glow}50, var(--shadow-card)`,
         transform:   hov ? 'scale(1.03) translateY(-2px)' : 'scale(1) translateY(0)',
-        transition:  'all 0.3s ease',
+        transition:  'box-shadow 0.3s ease, transform 0.3s ease',
         cursor:      linkTo ? 'pointer' : 'default',
       }}
       onMouseEnter={() => setHov(true)}

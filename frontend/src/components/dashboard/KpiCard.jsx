@@ -63,7 +63,7 @@ const KpiCard = ({
       className="rounded-2xl p-5 relative overflow-hidden cursor-default"
       style={{
         background:  'var(--bg-card)',
-        border:      hov ? `1.5px solid ${pal.a}55` : '1px solid var(--border-card)',
+        border:      '1px solid var(--border-card)',
         boxShadow:   hov
           ? `0 0 25px ${pal.glow}, 0 8px 32px ${pal.glow}, var(--shadow-card)`
           : `0 4px 24px ${pal.glow}, var(--shadow-card)`,
@@ -72,7 +72,7 @@ const KpiCard = ({
           ? (hov ? 'translateY(-2px) scale(1.03)' : 'translateY(0) scale(1)')
           : 'translateY(20px) scale(1)',
         transition:  mounted
-          ? 'border 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease'
+          ? 'box-shadow 0.3s ease, transform 0.3s ease'
           : `opacity 0.45s ease ${delay}ms, transform 0.45s ease ${delay}ms`,
       }}
       onMouseEnter={() => setHov(true)}

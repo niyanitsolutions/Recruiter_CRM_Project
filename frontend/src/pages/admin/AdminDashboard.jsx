@@ -69,13 +69,13 @@ const StatCard = ({ title, value, icon: Icon, color = 'purple', linkTo, trend })
       className="rounded-2xl p-5 cursor-default relative overflow-hidden"
       style={{
         backgroundColor: 'var(--bg-card)',
-        border:      hov ? `1.5px solid ${grad.border}88` : '1px solid var(--border-card)',
-        borderLeft:  hov ? `4px solid ${grad.border}` : `4px solid ${grad.border}`,
+        border:      '1px solid var(--border-card)',
+        borderLeft:  `4px solid ${grad.border}`,
         boxShadow:   hov
           ? `0 0 25px ${grad.glow}, 0 8px 32px ${grad.glow}, var(--shadow-card)`
           : 'var(--shadow-card)',
         transform:   hov ? 'scale(1.03) translateY(-2px)' : 'scale(1) translateY(0)',
-        transition:  'all 0.3s ease',
+        transition:  'box-shadow 0.3s ease, transform 0.3s ease',
       }}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
