@@ -1,0 +1,1824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Niyan HireFlow CRM — Product Brochure</title>
+  <style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --primary:  #6C63FF;
+  --accent:   #4FACFE;
+  --green:    #43E97B;
+  --gold:     #F6D365;
+  --danger:   #FF4757;
+  --bg:       #0F0E1A;
+  --bg2:      #14112A;
+  --bg3:      #1A1830;
+  --card:     #1E1B33;
+  --card2:    #252140;
+  --border:   #2D2A50;
+  --border2:  #3A3660;
+  --txt:      #DDD9F5;
+  --txt2:     #A8A4D4;
+  --txt3:     #6E6A9A;
+}
+
+/* ── PAGE SETUP ─────────────────────────────────────────────────────────── */
+@page          { size: A4; margin: 0; }
+@page content  { size: A4; margin: 14mm 18mm 16mm; }
+
+html { font-size: 11px; }
+
+body {
+  font-family: 'Segoe UI', 'Inter', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--txt);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ── COVER ──────────────────────────────────────────────────────────────── */
+.cover {
+  width: 210mm;
+  min-height: 297mm;
+  background: linear-gradient(150deg, #08071A 0%, #130F2D 30%, #1C183C 60%, #0F0E1A 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 50px 60px;
+  page-break-after: always;
+  position: relative;
+  overflow: hidden;
+}
+.cg1 { position:absolute;top:-80px;right:-80px;width:420px;height:420px;border-radius:50%;
+        background:radial-gradient(circle,rgba(108,99,255,.22)0%,transparent 70%); }
+.cg2 { position:absolute;bottom:-100px;left:-60px;width:360px;height:360px;border-radius:50%;
+        background:radial-gradient(circle,rgba(79,172,254,.14)0%,transparent 70%); }
+.cg3 { position:absolute;top:50%;right:12%;width:180px;height:180px;border-radius:50%;
+        background:radial-gradient(circle,rgba(67,233,123,.08)0%,transparent 70%); }
+.c-z { position:relative; z-index:2; }
+
+.c-pill {
+  background: linear-gradient(135deg,rgba(108,99,255,.22),rgba(79,172,254,.12));
+  border: 1px solid rgba(108,99,255,.45);
+  border-radius: 50px;
+  padding: 7px 22px;
+  font-size: 7.5px; font-weight:700; letter-spacing:3.5px; text-transform:uppercase;
+  color: #B0ABFF; margin-bottom:38px;
+}
+.c-icon {
+  width:88px;height:88px;border-radius:22px;
+  background:linear-gradient(135deg,#6C63FF,#4FACFE);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:30px;
+  box-shadow:0 18px 56px rgba(108,99,255,.55),0 4px 16px rgba(0,0,0,.4);
+  font-size:38px;font-weight:900;color:#fff;
+}
+.c-name {
+  font-size:36px;font-weight:900;color:#fff;
+  text-align:center;letter-spacing:-1px;line-height:1.1;margin-bottom:8px;
+}
+.c-name-g {
+  background:linear-gradient(135deg,#9C96FF,#4FACFE,#43E97B);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.c-tag  { font-size:12px;color:#8A86C0;text-align:center;margin-bottom:36px;font-style:italic;font-weight:300; }
+.c-line { width:100px;height:3px;background:linear-gradient(90deg,#6C63FF,#4FACFE,#43E97B);
+          border-radius:3px;margin:0 auto 36px; }
+.c-desc { font-size:10.5px;color:#B8B4D8;text-align:center;max-width:440px;line-height:1.8;margin-bottom:42px; }
+
+.c-chips { display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:480px;margin-bottom:54px; }
+.c-chip  {
+  background:rgba(255,255,255,.045);border:1px solid rgba(108,99,255,.28);
+  border-radius:9px;padding:10px 14px;font-size:9px;color:#C4C0E0;
+  display:flex;align-items:center;gap:9px;
+}
+.c-chip::before { content:''; width:6px;height:6px;border-radius:50%;
+                  background:linear-gradient(135deg,#6C63FF,#4FACFE);flex-shrink:0; }
+
+.c-footer {
+  text-align:center;padding-top:30px;
+  border-top:1px solid rgba(255,255,255,.07);
+  width:100%;max-width:480px;
+}
+.c-footer p { font-size:7.5px;color:#3E3B68;line-height:2.1; }
+
+/* ── TOC PAGE ───────────────────────────────────────────────────────────── */
+.toc-page {
+  width:210mm;min-height:297mm;
+  background:var(--bg);padding:44px 56px 44px;
+  page-break-after:always;
+}
+.toc-box {
+  background:linear-gradient(135deg,#181530,#1E1B38);
+  border:1px solid var(--border);border-radius:14px;
+  padding:28px 26px;margin-top:22px;
+}
+.toc-head {
+  font-size:9px;font-weight:700;color:#FFFFFF;
+  margin-bottom:18px;padding-bottom:12px;
+  border-bottom:1px solid var(--border);
+  letter-spacing:2px;text-transform:uppercase;
+}
+.tr { display:flex;align-items:baseline;padding:5.5px 0;border-bottom:1px solid rgba(45,42,80,.45);font-size:9px; }
+.tr.m  { margin-top:5px; }
+.tr.s  { padding-left:18px; }
+.tm    { font-weight:700;color:#C4C0E0; }
+.ts    { font-weight:400;color:#8A86C0; }
+.td    { flex:1;border-bottom:1px dotted #2D2A50;margin:0 8px;min-width:10px; }
+.tp    { color:var(--primary);font-weight:700;font-size:8px;white-space:nowrap; }
+
+.stats-g { display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:26px; }
+.stat {
+  background:linear-gradient(135deg,var(--card),var(--card2));
+  border:1px solid var(--border);border-top:3px solid var(--primary);
+  border-radius:10px;padding:16px 12px;text-align:center;
+}
+.sv { font-size:22px;font-weight:900;color:var(--primary);line-height:1; }
+.sl { font-size:7px;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px;margin-top:5px; }
+
+/* ── SECTION BREAK ──────────────────────────────────────────────────────── */
+.sec-break {
+  width: 210mm;
+  background: linear-gradient(150deg, #08071A 0%, #14102C 50%, #0F0E1A 100%);
+  border-bottom: 3px solid;
+  border-image: linear-gradient(90deg,var(--primary),var(--accent),var(--green)) 1;
+  padding: 36px 56px 32px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  page-break-before: always;
+  break-before: page;
+}
+.sn {
+  width:52px;height:52px;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  border-radius:14px;display:flex;align-items:center;justify-content:center;
+  font-size:19px;font-weight:900;color:#fff;flex-shrink:0;
+  box-shadow:0 8px 24px rgba(108,99,255,.45);
+}
+.sl2 { font-size:7px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--primary);margin-bottom:4px; }
+.st  { font-size:21px;font-weight:800;color:#fff;line-height:1.2; }
+
+/* ── CONTENT ────────────────────────────────────────────────────────────── */
+.content {
+  padding: 38px 56px 46px;
+  background: var(--bg);
+}
+
+/* Headings */
+h1 {
+  font-size:19px;font-weight:800;color:#fff;
+  margin:30px 0 16px;letter-spacing:-.4px;line-height:1.2;
+  page-break-after: avoid;
+}
+h1:first-child { margin-top:0; }
+
+h2 {
+  font-size:13.5px;font-weight:700;color:#fff;
+  margin:26px 0 12px;padding-bottom:9px;
+  border-bottom:2px solid var(--border);
+  position:relative;
+  page-break-after: avoid;
+}
+h2::after {
+  content:'';position:absolute;bottom:-2px;left:0;
+  width:50px;height:2px;
+  background:linear-gradient(90deg,var(--primary),var(--accent));
+}
+
+h3 { font-size:11px;font-weight:700;color:#A8A3FF;margin:20px 0 8px; page-break-after:avoid; }
+h4 { font-size:8.5px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:1px;margin:14px 0 6px; }
+
+p  { margin-bottom:12px;font-size:10.5px;line-height:1.8;color:var(--txt); }
+
+hr {
+  border:none;height:1px;
+  background:linear-gradient(90deg,transparent,var(--border),transparent);
+  margin:22px 0;
+}
+
+blockquote {
+  margin:14px 0;padding:14px 20px;
+  background:linear-gradient(135deg,rgba(108,99,255,.1),rgba(79,172,254,.05));
+  border-left:3px solid var(--primary);border-radius:0 8px 8px 0;
+}
+blockquote p { color:#C4C0E0;font-style:italic;margin:0;font-size:10.5px; }
+
+/* Tables */
+table { width:100%;border-collapse:collapse;margin:14px 0 18px;font-size:9px; }
+thead tr { background:linear-gradient(135deg,var(--card2),#2D2A50); }
+thead th {
+  padding:9px 12px;text-align:left;font-weight:700;color:#A8A3FF;
+  font-size:8px;letter-spacing:.5px;text-transform:uppercase;
+  border-bottom:2px solid var(--primary);
+}
+tbody tr { border-bottom:1px solid #1E1B38; }
+tbody tr:nth-child(odd)  { background:rgba(255,255,255,.018); }
+tbody tr:nth-child(even) { background:rgba(108,99,255,.035); }
+tbody td { padding:8px 12px;color:var(--txt);vertical-align:top;line-height:1.6; }
+tbody td:first-child { font-weight:600;color:#C4C0E0; }
+
+/* Lists */
+ul, ol { margin:9px 0 13px; }
+li { margin-bottom:4px;line-height:1.7;font-size:10.5px;color:var(--txt); }
+ul { list-style:none;padding-left:0; }
+ul > li { padding-left:18px;position:relative; }
+ul > li::before { content:'▸';color:var(--primary);position:absolute;left:0;font-size:9px;top:2px; }
+ul ul > li::before { content:'◦';color:var(--accent); }
+ol { padding-left:18px; }
+
+/* Code */
+code {
+  font-family:'Consolas','Courier New',monospace;
+  font-size:8.5px;color:#A8A3FF;
+  background:rgba(108,99,255,.12);
+  padding:1px 5px;border-radius:3px;
+}
+pre {
+  background:linear-gradient(135deg,#0D0C1A,#14112A);
+  border:1px solid var(--border);border-left:3px solid var(--primary);
+  border-radius:8px;padding:14px 16px;margin:12px 0 16px;
+  page-break-inside:avoid;overflow:hidden;
+}
+pre code {
+  font-size:7.5px;color:#C4C0E0;background:none;padding:0;
+  white-space:pre-wrap;word-break:break-all;line-height:1.85;
+}
+
+strong { color:#fff;font-weight:700; }
+em     { color:#A8A3FF;font-style:italic; }
+
+/* Manual page break */
+.pb { page-break-before:always;break-before:page; }
+
+/* Running footer */
+.footer {
+  position:fixed;bottom:0;left:0;right:0;height:34px;
+  background:#09081A;border-top:1px solid #1E1B38;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 56px;font-size:7px;color:var(--txt3);
+}
+.fb { color:var(--primary);font-weight:700; }
+</style>
+</head>
+<body>
+
+
+<div class="cover">
+  <div class="cg1"></div><div class="cg2"></div><div class="cg3"></div>
+  <div class="c-z c-pill">Product Overview &amp; Feature Brochure</div>
+  <div class="c-z c-icon">N</div>
+  <div class="c-z c-name">NIYAN <span class="c-name-g">HIREFLOW</span> CRM</div>
+  <div class="c-z c-tag">&ldquo;Recruit Smarter. Hire Faster. Grow Together.&rdquo;</div>
+  <div class="c-z c-line"></div>
+  <div class="c-z c-desc">
+    A Complete End-to-End Recruitment &amp; HR Management Platform built for
+    Recruitment Agencies, Staffing Firms, HR Consultancies, and Growing Enterprises.
+  </div>
+  <div class="c-z c-chips">
+    <div class="c-chip">Candidate Management</div>
+    <div class="c-chip">Interview Automation</div>
+    <div class="c-chip">Client &amp; Job Tracking</div>
+    <div class="c-chip">Onboarding Workflows</div>
+    <div class="c-chip">HR &amp; Payroll Management</div>
+    <div class="c-chip">Analytics &amp; Reports</div>
+    <div class="c-chip">Partner Management</div>
+    <div class="c-chip">AI-Powered Features</div>
+  </div>
+  <div class="c-z c-footer">
+    <p><strong style="color:#8A86C0;">Document Type:</strong> Product Overview &amp; Feature Brochure</p>
+    <p><strong style="color:#8A86C0;">Audience:</strong> Clients &nbsp;&middot;&nbsp; Investors &nbsp;&middot;&nbsp; Business Partners &nbsp;&middot;&nbsp; HR Leaders</p>
+    <p style="margin-top:10px;">&copy; 2025 Niyan HireFlow &nbsp;&middot;&nbsp; All Rights Reserved &nbsp;&middot;&nbsp; Confidential</p>
+  </div>
+</div>
+
+
+
+<div class="toc-page">
+  <h1 style="margin-bottom:0;">Table of Contents</h1>
+  <div class="toc-box">
+    <div class="toc-head">Document Outline</div>
+    <div class="tr m"><span class="tm">1. Cover Page &amp; Introduction</span><span class="td"></span><span class="tp">1</span></div>
+<div class="tr m"><span class="tm">2. About the Product</span><span class="td"></span><span class="tp">2</span></div>
+<div class="tr s"><span class="ts">What Is Niyan HireFlow CRM?</span><span class="td"></span><span class="tp">2</span></div>
+<div class="tr s"><span class="ts">Who Is This Platform For?</span><span class="td"></span><span class="tp">2</span></div>
+<div class="tr s"><span class="ts">Platform Scope at a Glance</span><span class="td"></span><span class="tp">3</span></div>
+<div class="tr m"><span class="tm">3. Problems Businesses Face</span><span class="td"></span><span class="tp">4</span></div>
+<div class="tr s"><span class="ts">7 Critical Pain Points &amp; How We Solve Them</span><span class="td"></span><span class="tp">4</span></div>
+<div class="tr m"><span class="tm">4. Core Modules Overview</span><span class="td"></span><span class="tp">6</span></div>
+<div class="tr s"><span class="ts">Module 1 — Candidate Management</span><span class="td"></span><span class="tp">6</span></div>
+<div class="tr s"><span class="ts">Module 2 — Job Management</span><span class="td"></span><span class="tp">7</span></div>
+<div class="tr s"><span class="ts">Module 3 — Client Management</span><span class="td"></span><span class="tp">8</span></div>
+<div class="tr s"><span class="ts">Module 4 — Application Tracking</span><span class="td"></span><span class="tp">8</span></div>
+<div class="tr s"><span class="ts">Module 5 — Interview Management</span><span class="td"></span><span class="tp">9</span></div>
+<div class="tr s"><span class="ts">Module 6 — Onboarding Management</span><span class="td"></span><span class="tp">10</span></div>
+<div class="tr s"><span class="ts">Module 7 — Partner Management</span><span class="td"></span><span class="tp">11</span></div>
+<div class="tr s"><span class="ts">Module 8 — Human Resource Management (HRM)</span><span class="td"></span><span class="tp">12</span></div>
+<div class="tr s"><span class="ts">Module 9 — Task Management</span><span class="td"></span><span class="tp">14</span></div>
+<div class="tr s"><span class="ts">Module 10 — Analytics &amp; Reports</span><span class="td"></span><span class="tp">14</span></div>
+<div class="tr s"><span class="ts">Module 11 — Import &amp; Export</span><span class="td"></span><span class="tp">16</span></div>
+<div class="tr s"><span class="ts">Module 12 — Notification System</span><span class="td"></span><span class="tp">17</span></div>
+<div class="tr s"><span class="ts">Module 13 — User &amp; Role Management</span><span class="td"></span><span class="tp">17</span></div>
+<div class="tr s"><span class="ts">Module 14 — Security &amp; Compliance</span><span class="td"></span><span class="tp">19</span></div>
+<div class="tr m"><span class="tm">5. Dashboard Analysis</span><span class="td"></span><span class="tp">20</span></div>
+<div class="tr m"><span class="tm">6. Workflow Explanations (5 Workflows)</span><span class="td"></span><span class="tp">22</span></div>
+<div class="tr m"><span class="tm">7. Role-Based Access &amp; Security</span><span class="td"></span><span class="tp">26</span></div>
+<div class="tr m"><span class="tm">8. Reports &amp; Export Features</span><span class="td"></span><span class="tp">28</span></div>
+<div class="tr m"><span class="tm">9. Automation &amp; Smart Features</span><span class="td"></span><span class="tp">30</span></div>
+<div class="tr m"><span class="tm">10. UI/UX Experience</span><span class="td"></span><span class="tp">32</span></div>
+<div class="tr m"><span class="tm">11. Technical Architecture</span><span class="td"></span><span class="tp">33</span></div>
+<div class="tr m"><span class="tm">12. Why Choose Niyan HireFlow CRM</span><span class="td"></span><span class="tp">34</span></div>
+<div class="tr m"><span class="tm">13. Unique Selling Points (10 USPs)</span><span class="td"></span><span class="tp">35</span></div>
+<div class="tr m"><span class="tm">14. Future Scalability</span><span class="td"></span><span class="tp">37</span></div>
+<div class="tr m"><span class="tm">15. Conclusion</span><span class="td"></span><span class="tp">38</span></div>
+<div class="tr m"><span class="tm">16. Contact &amp; Demo Section</span><span class="td"></span><span class="tp">39</span></div>
+<div class="tr s"><span class="ts">Appendix — Feature Quick Reference</span><span class="td"></span><span class="tp">40</span></div>
+
+  </div>
+  <div class="stats-g">
+    <div class="stat"><div class="sv">25+</div><div class="sl">Core Modules</div></div>
+    <div class="stat"><div class="sv">60+</div><div class="sl">Permissions</div></div>
+    <div class="stat"><div class="sv">18+</div><div class="sl">Report Types</div></div>
+    <div class="stat"><div class="sv">200+</div><div class="sl">API Endpoints</div></div>
+  </div>
+</div>
+
+
+<div class="content">
+
+<hr />
+<div class="sec-break"><div class="sn">1</div><div><div class="sl2">Section 1</div><div class="st">COVER PAGE</div></div></div>
+<p><strong>Product Name:</strong> Niyan HireFlow CRM 
+<strong>Tagline:</strong> "Recruit Smarter. Hire Faster. Grow Together."<br />
+<strong>Document Type:</strong> Product Overview &amp; Feature Brochure<br />
+<strong>Audience:</strong> Clients · Investors · Business Partners · HR Leaders</p>
+<p>A Complete End-to-End Recruitment &amp; HR Management Platform built for Recruitment Agencies, Staffing Firms, HR Consultancies, and Growing Enterprises.</p>
+<p><strong>Key Capabilities:</strong><br />
+- Candidate Management &amp; AI Resume Parsing<br />
+- Interview Automation &amp; Multi-Round Pipelines<br />
+- Client &amp; Job Tracking<br />
+- Onboarding Workflows &amp; Payout Automation<br />
+- HR &amp; Payroll Management<br />
+- Analytics &amp; Reporting Dashboards<br />
+- Partner Management &amp; Commission Tracking<br />
+- AI-Powered Candidate Matching</p>
+<hr />
+<div class="sec-break"><div class="sn">2</div><div><div class="sl2">Section 2</div><div class="st">ABOUT THE PRODUCT</div></div></div>
+<h2>What Is Niyan HireFlow CRM?</h2>
+<p><strong>Niyan HireFlow CRM</strong> is a modern, cloud-based Recruitment and Human Resource Management platform purpose-built for recruitment agencies, staffing companies, HR consultancies, and growing businesses that need a centralized, intelligent system to manage their entire talent pipeline — from sourcing candidates all the way through to employee onboarding, payroll, and performance.</p>
+<p>Unlike generic CRMs that force you to adapt your hiring process to fit the software, Niyan HireFlow is built around the actual workflows of recruitment professionals — making it intuitive, fast, and genuinely powerful from day one.</p>
+<h2>The Core Purpose</h2>
+<p>At its heart, Niyan HireFlow CRM answers a single critical business question:</p>
+<blockquote>
+<p>"How do we place the right talent, with the right client, at the right time — and track every step of the journey without losing data or momentum?"</p>
+</blockquote>
+<p>The platform creates a single, unified workspace where recruiters, HR managers, account managers, and business owners all operate from the same data — eliminating silos, reducing manual work, and accelerating hiring outcomes.</p>
+<h2>Who Is This Platform For?</h2>
+<table>
+<thead>
+<tr>
+<th>Industry / Team</th>
+<th>How They Benefit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Recruitment Agencies</strong></td>
+<td>Manage multiple clients, hundreds of candidates, and complex pipelines from a single dashboard</td>
+</tr>
+<tr>
+<td><strong>Staffing Firms</strong></td>
+<td>Track placements, partner commissions, onboarding timelines, and payout eligibility automatically</td>
+</tr>
+<tr>
+<td><strong>HR Consultancies</strong></td>
+<td>Deliver professional client-facing recruitment services with branded workflows</td>
+</tr>
+<tr>
+<td><strong>Corporate HR Departments</strong></td>
+<td>Manage internal hiring alongside full employee lifecycle — attendance, leave, payroll, and performance</td>
+</tr>
+<tr>
+<td><strong>Placement Companies</strong></td>
+<td>Track candidate journey from sourcing to joining, with automated reminders and commission tracking</td>
+</tr>
+<tr>
+<td><strong>Growing SMEs</strong></td>
+<td>Replace scattered spreadsheets with a structured, role-based platform that scales with the team</td>
+</tr>
+</tbody>
+</table>
+<h2>Platform Scope at a Glance</h2>
+<p>Niyan HireFlow is not just an Applicant Tracking System (ATS). It is a <strong>complete business operating platform</strong> covering:</p>
+<ul>
+<li><strong>Recruitment CRM</strong> — End-to-end candidate and client management</li>
+<li><strong>Interview Management</strong> — Multi-round pipelines with structured feedback</li>
+<li><strong>Onboarding Automation</strong> — From offer letter to Day 90 payout tracking</li>
+<li><strong>Human Resource Management (HRM)</strong> — Employees, attendance, leave, and payroll</li>
+<li><strong>Partner Management</strong> — External recruiter networks with commission tracking</li>
+<li><strong>Analytics &amp; Reporting</strong> — Deep insights across the entire business</li>
+<li><strong>Finance &amp; Accounts</strong> — Invoicing, payouts, and target management</li>
+<li><strong>Task Management</strong> — Internal team task tracking with entity linking</li>
+<li><strong>Security &amp; Compliance</strong> — Role-based access, audit trails, and data governance</li>
+</ul>
+<hr />
+<div class="sec-break"><div class="sn">3</div><div><div class="sl2">Section 3</div><div class="st">PROBLEMS BUSINESSES FACE</div></div></div>
+<h2>The Real Cost of Unorganized Recruitment</h2>
+<p>Most recruitment teams operate in a chaotic mix of spreadsheets, email threads, WhatsApp messages, and disconnected tools. This approach creates serious business problems — and most businesses don't even realize how much money and opportunity they're losing.</p>
+<h3>Problem 1 — Data Scattered Everywhere</h3>
+<p><strong>The Pain:</strong> Candidate information lives in Excel files. Client contacts sit in email. Interview feedback arrives over WhatsApp. Offer details are on a shared Google Sheet. When someone asks "What's the status of this candidate?", nobody has the full picture.</p>
+<p><strong>The Cost:</strong> Hours wasted daily in status meetings. Deals lost because follow-ups were missed. Candidates dropped because nobody remembered to follow up.</p>
+<p><strong>Niyan HireFlow Solves This:</strong> Every candidate, job, client, application, interview, and offer lives in one centralized platform. Any authorized team member can see the complete picture in seconds — with full history.</p>
+<h3>Problem 2 — Manual Follow-Up = Missed Opportunities</h3>
+<p><strong>The Pain:</strong> Interview reminders are forgotten. Offer validity deadlines pass unnoticed. A candidate who joined 90 days ago should trigger a payout — but nobody remembered.</p>
+<p><strong>The Cost:</strong> Lost revenue from missed payout windows. Strained client relationships from lack of follow-through.</p>
+<p><strong>Niyan HireFlow Solves This:</strong> Automated reminders trigger at Day 10, Day 30, and Day 90 after a candidate joins. Offer expiry alerts fire automatically. Interview reminders go out without anyone lifting a finger.</p>
+<h3>Problem 3 — No Visibility Into Team Performance</h3>
+<p><strong>The Pain:</strong> Managers have no real-time insight into which coordinators are active, which jobs are aging, which clients are underserved, or which sourcing channels are actually delivering.</p>
+<p><strong>The Cost:</strong> Underperforming team members go unchecked. Best-performing channels get no extra investment. Bad hiring patterns repeat because there's no data to learn from.</p>
+<p><strong>Niyan HireFlow Solves This:</strong> A live analytics dashboard tracks placements, application funnel conversion, coordinator activity, client revenue, and source effectiveness — all in real time, with exportable reports.</p>
+<h3>Problem 4 — Hiring Delays From Poor Coordination</h3>
+<p><strong>The Pain:</strong> Scheduling interviews requires back-and-forth between coordinators, clients, and candidates. Round 1 results don't automatically trigger Round 2 scheduling. Documents for onboarding are chased manually.</p>
+<p><strong>The Cost:</strong> Candidates drop out during slow hiring processes. Clients lose confidence. Time-to-hire stretches from weeks to months.</p>
+<p><strong>Niyan HireFlow Solves This:</strong> Multi-round interview pipelines are pre-configured. Passing a round automatically opens the next. Document checklists are auto-assigned during onboarding. The entire workflow runs on structured stages — not memory.</p>
+<h3>Problem 5 — Partner &amp; Commission Chaos</h3>
+<p><strong>The Pain:</strong> Recruitment agencies that work with external partner consultants struggle to track who referred which candidate, what the commission percentage is, and when the 45/60/90-day payout window opens.</p>
+<p><strong>The Cost:</strong> Commission disputes. Delayed payments. Partners losing trust and taking candidates elsewhere.</p>
+<p><strong>Niyan HireFlow Solves This:</strong> Every application carries its source and partner reference. Payout eligibility is automatically calculated from the candidate's joining date. Invoices are generated in the system, and payment status is tracked end-to-end.</p>
+<h3>Problem 6 — Security &amp; Access Control Gaps</h3>
+<p><strong>The Pain:</strong> In most agencies, everyone sees everything. Partners can see client details they shouldn't. Junior coordinators can edit data they shouldn't touch. There's no audit trail when data goes missing or changes unexpectedly.</p>
+<p><strong>The Cost:</strong> Data breaches. Confidential client information leaks. Compliance failures. No accountability when errors happen.</p>
+<p><strong>Niyan HireFlow Solves This:</strong> 60+ granular permissions, 8 system roles, and unlimited custom roles ensure every user sees exactly what they need — and nothing more. A complete audit trail logs every login, every data change, and every sensitive action.</p>
+<h3>Problem 7 — HR and Recruitment Completely Disconnected</h3>
+<p><strong>The Pain:</strong> When a candidate joins as an employee, the information has to be manually re-entered into the HR system. Leave requests are managed separately. Payroll is calculated elsewhere.</p>
+<p><strong>The Cost:</strong> Duplicate data entry. Errors from re-keying. Time wasted on administrative work that adds no value.</p>
+<p><strong>Niyan HireFlow Solves This:</strong> A single click converts a joined candidate into an employee record. Attendance, leave, payroll, and performance management are all part of the same platform — fully connected to the original recruitment journey.</p>
+<hr />
+<div class="sec-break"><div class="sn">4</div><div><div class="sl2">Section 4</div><div class="st">CORE MODULES OVERVIEW</div></div></div>
+<h2>A Complete Platform Built Around Your Workflow</h2>
+<p>Niyan HireFlow CRM is organized into powerful, deeply integrated modules. Each module is purpose-built, connected to the others, and designed to eliminate the gaps that cost businesses time and money.</p>
+<h2>MODULE 1 — CANDIDATE MANAGEMENT</h2>
+<blockquote>
+<p>"Your candidates are your product. Manage them like it."</p>
+</blockquote>
+<h3>What It Does</h3>
+<p>The Candidate Management module is the central hub for every individual talent profile in your system. From the moment a candidate enters your pipeline — whether through a form submission, bulk import, partner referral, or manual entry — their complete professional profile is captured, stored, and searchable.</p>
+<h3>Key Capabilities</h3>
+<p><strong>Rich Candidate Profiles:</strong> Every candidate record captures a complete professional profile including personal details, contact information, preferred locations, complete work history with responsibilities and reason for leaving, education qualifications, certifications, language proficiency, skills with proficiency level and years of experience, current and expected compensation details, notice period, resume, photograph, and document attachments, internal notes and searchable tags, and source tracking (LinkedIn, Job Portals, Referral, Campus, Walk-in, Partner, etc.).</p>
+<p><strong>AI-Powered Resume Parsing:</strong> Upload a resume and the system automatically extracts name, contact details, skills, work experience, education, and certifications with confidence scoring. No manual data entry required.</p>
+<p><strong>Advanced Search &amp; Filtering:</strong> Find the right candidate instantly using natural language filters — Skills (Python with 3+ years), Experience range, CTC expectations, notice period, Location, availability, source, status, and date.</p>
+<p><strong>Bulk Import with Validation:</strong> Import hundreds of candidates from Excel or CSV with a smart column mapping interface. The system validates data, shows a preview of errors, and reports exactly what was imported versus what failed.</p>
+<p><strong>Source &amp; Partner Attribution:</strong> Know exactly where your best candidates come from. Every profile is tagged with its source channel and partner reference, enabling clear ROI analysis on your sourcing investments.</p>
+<h3>Business Benefits</h3>
+<ul>
+<li>Never lose track of a strong candidate again</li>
+<li>Reduce time-to-shortlist by finding talent instantly</li>
+<li>Build a searchable talent pool that grows with every placement</li>
+<li>Eliminate duplicate profiles with merge capability</li>
+<li>Give partners a structured channel to submit candidates</li>
+</ul>
+<hr />
+<h2>MODULE 2 — JOB MANAGEMENT</h2>
+<blockquote>
+<p>"Every open position deserves a structured pursuit."</p>
+</blockquote>
+<h3>What It Does</h3>
+<p>The Job Management module tracks every open position across your clients — from initial brief to final placement. Jobs are not just stored; they are actively managed, with assignment, status tracking, auto-matching, and real-time application counters.</p>
+<h3>Key Capabilities</h3>
+<p><strong>Comprehensive Job Profiles:</strong> Each job record captures everything needed to pursue and fill the position: Job title, code, type (full-time, part-time, contract, internship, freelance), Work mode (onsite, remote, hybrid) and location, Salary range, currency, compensation type, and benefits, Required skills (with mandatory vs. preferred distinction), Experience requirements, education level, and additional eligibility criteria, Number of open positions and positions filled, Target fill date and job priority level.</p>
+<p><strong>Eligibility &amp; Auto-Matching Engine:</strong> Configure precise eligibility criteria per job — mandatory skills, experience range, CTC limits, notice period, preferred locations. The system automatically scores every applicant from 0–100% based on how well their profile matches the requirement.</p>
+<p><strong>Job Aging Alerts:</strong> Jobs that have been open too long are automatically flagged. Teams never lose sight of stale mandates that need attention.</p>
+<p><strong>Partner Job Sharing:</strong> Control which jobs are visible to your external partner network. Partners see only the mandates you choose to share — with information they need to submit candidates, but not sensitive internal notes.</p>
+<h3>Business Benefits</h3>
+<ul>
+<li>Move from reactive to proactive placement management</li>
+<li>Score and rank candidates automatically — fill positions faster</li>
+<li>Keep clients updated with current, accurate job status</li>
+<li>Manage large volumes of mandates without losing control</li>
+</ul>
+<hr />
+<h2>MODULE 3 — CLIENT MANAGEMENT</h2>
+<blockquote>
+<p>"Stronger client relationships start with better client intelligence."</p>
+</blockquote>
+<h3>What It Does</h3>
+<p>The Client Management module tracks every business relationship — the companies that give you mandates. From first contact to long-term partnership, every interaction, agreement, and placement is associated with the right client record.</p>
+<h3>Key Capabilities</h3>
+<p><strong>Complete Client Profiles:</strong> Company name, type, industry, website, and address. Multiple contact persons with designations and primary contact flag. GSTIN, PAN, and business documentation. Commission percentage and payment terms configured per client. Agreement start and end date tracking. Historical stats: total jobs, active jobs, placements.</p>
+<p><strong>Status Management:</strong> Clients can be marked as Active, On Hold, Inactive, or Blacklisted — with reasons recorded for every status change.</p>
+<p><strong>Commission Configuration:</strong> Set the commission percentage at the client level. This flows automatically into payout calculations for every placement made against that client's jobs.</p>
+<h3>Business Benefits</h3>
+<ul>
+<li>Present a professional, organized face to clients</li>
+<li>Never miss contract renewal or agreement expiry dates</li>
+<li>Know your most valuable clients by placement volume and revenue</li>
+<li>Control who in your team has access to sensitive client data</li>
+</ul>
+<hr />
+<h2>MODULE 4 — APPLICATION TRACKING</h2>
+<blockquote>
+<p>"Know exactly where every candidate stands — at every moment."</p>
+</blockquote>
+<h3>What It Does</h3>
+<p>The Application module is the bridge between a candidate and a job. Every time a candidate is considered for a position, an application is created — and that application flows through a structured status pipeline with complete history tracking.</p>
+<h3>Key Capabilities</h3>
+<p><strong>14-Stage Application Pipeline:</strong> Applications move through a clear, structured journey:</p>
+<pre><code>Applied → Eligible → Screening → Shortlisted → Interview →
+Next Round → Selected → Offered → Offer Accepted → Offer Declined →
+Joined → Rejected → Withdrawn → On Hold
+</code></pre>
+<p>Every stage transition is recorded with the user who made the change, the timestamp, and any remarks — creating an immutable audit trail.</p>
+<p><strong>Auto-Eligibility Scoring:</strong> When a candidate is applied to a job with eligibility criteria, the system automatically calculates a match score (0–100%) based on skills, experience, location, CTC, and education.</p>
+<p><strong>Rejection with Reason Tracking:</strong> Rejections capture why — not qualified, overqualified, salary mismatch, notice period issue, failed interview, background check, offer declined, no-show, or position closed — enabling pattern analysis and process improvement.</p>
+<p><strong>Offer Management:</strong> When a candidate is selected, the offer details (CTC, designation, location, offer date, validity) are recorded directly in the application — creating a single source of truth.</p>
+<p><strong>Joining &amp; DOJ Tracking:</strong> Expected and actual joining dates are tracked. When a candidate joins, the system automatically links the application to the onboarding module for continued tracking.</p>
+<h3>Business Benefits</h3>
+<ul>
+<li>Give every team member complete visibility into application status</li>
+<li>Eliminate "I thought someone else was following up" situations</li>
+<li>Build institutional knowledge from rejection patterns</li>
+<li>Generate accurate placement success metrics</li>
+</ul>
+<hr />
+<h2>MODULE 5 — INTERVIEW MANAGEMENT</h2>
+<blockquote>
+<p>"Structured interviews. Faster decisions. Better hires."</p>
+</blockquote>
+<h3>What It Does</h3>
+<p>The Interview Management module transforms the chaotic, informal interview process into a structured, trackable workflow. From scheduling the first round to capturing final feedback and advancing to the offer stage — every step is managed in the system.</p>
+<h3>Key Capabilities</h3>
+<p><strong>Multi-Round Interview Pipelines:</strong> Interviews follow pre-configured pipelines that define number of rounds and their sequence, round type (technical, HR, managerial, cultural fit), mode (In-Person, Phone, or Video with meeting links), duration per round, whether feedback is mandatory before advancing, and auto-advance on pass/auto-reject on fail.</p>
+<p><strong>Full Scheduling System:</strong> Schedule interviews with date, time, and duration, interview mode details (venue address, video meeting link, phone dial-in), assigned interviewer(s) with primary interviewer designation, candidate instructions and internal coordinator notes.</p>
+<p><strong>Round-by-Round Feedback:</strong> After each round, interviewers submit structured feedback including overall rating (1–5 stars), skill-by-skill ratings with individual remarks, category scores (Technical Skills, Communication, Problem-Solving, Cultural Fit, Experience Relevance), hiring decision (Hire / Reject / Next Round / Hold), and strengths and weaknesses summary.</p>
+<p><strong>Reschedule Management:</strong> Reschedules are tracked with complete history — original date, new date, reason for rescheduling, and who initiated it. Reschedule count is tracked to identify patterns.</p>
+<p><strong>Automated Notifications:</strong> When an interview is scheduled, both the candidate and the interviewer receive notifications automatically. Reminders fire before the scheduled time.</p>
+<h3>Business Benefits</h3>
+<ul>
+<li>Reduce interview no-shows through automated reminders</li>
+<li>Collect structured, consistent feedback across all rounds</li>
+<li>Accelerate hiring decisions with clear round outcomes</li>
+<li>Maintain a professional experience for both candidates and clients</li>
+<li>Never lose track of where a candidate is in the interview pipeline</li>
+</ul>
+<hr />
+<h2>MODULE 6 — ONBOARDING MANAGEMENT</h2>
+<blockquote>
+<p>"The placement doesn't end at the offer. It ends at the payout."</p>
+</blockquote>
+<h3>What It Does</h3>
+<p>The Onboarding module manages everything that happens after a candidate accepts an offer — through their joining, their first 90 days, and the payout to your team or partner. It is the financial completion of every placement.</p>
+<h3>Key Capabilities</h3>
+<p><strong>Offer-to-Joining Workflow:</strong> The moment an offer is accepted, an onboarding record is created with offer CTC, designation, and location, offer release date and validity window, expected Date of Joining (DOJ), payout timeline (45, 60, or 90 days after joining), and offer letter document attachment.</p>
+<p><strong>Automated Reminder System:</strong> The system automatically sends reminders at key milestones: Before DOJ (joining confirmation reminder), Day 10 (early check-in), Day 30 (mid-point review), and Day 45/60/90 (payout eligibility notification to accounts team).</p>
+<p><strong>Document Verification Workflow:</strong> Required documents are defined per onboarding record. The system tracks submission status, verification, and flags missing documents.</p>
+<p><strong>Payout Eligibility Automation:</strong> The system calculates payout eligibility automatically based on the candidate's actual joining date and the configured payout timeline. The accounts team receives an alert when a placement is ready for billing.</p>
+<p><strong>Status Lifecycle:</strong></p>
+<pre><code>Offer Released → Offer Accepted → DOJ Confirmed →
+DOJ Extended (if applicable) → Joined → Payout Eligible → Completed
+</code></pre>
+<p><strong>Invoice Generation:</strong> Raise client invoices directly from the onboarding record — with placement details, commission amounts, and payment terms pre-filled.</p>
+<h3>Business Benefits</h3>
+<ul>
+<li>Never miss a payout deadline again — fully automated tracking</li>
+<li>Reduce no-shows through structured joining confirmation</li>
+<li>Build a compliant document trail for every placement</li>
+<li>Convert more placed candidates to revenue through proactive follow-up</li>
+</ul>
+<hr />
+<h2>MODULE 7 — PARTNER MANAGEMENT</h2>
+<blockquote>
+<p>"Grow your talent network without losing control."</p>
+</blockquote>
+<h3>What It Does</h3>
+<p>Many recruitment agencies work with external partner consultants who submit candidates for open positions. The Partner module gives these partners a structured, permission-controlled workspace while keeping sensitive internal data completely protected.</p>
+<h3>Key Capabilities</h3>
+<p><strong>Partner User Accounts:</strong> External partners log in with their own credentials and access only what they're authorized to see: jobs your company has shared with them, candidates they've submitted, application status of their submissions, and their commission statements and invoice history.</p>
+<p><strong>Controlled Job Sharing:</strong> Not every job is shared with every partner. You control which mandates are visible to partners — and at what commission rate. Internal notes on jobs remain invisible to partners.</p>
+<p><strong>Commission &amp; Payout Management:</strong> Partner commission percentages are configured at the company or job level. Payout eligibility is calculated automatically when candidates cross the 45/60/90-day threshold. Partners can view their earnings and invoice status from their portal.</p>
+<p><strong>Partner Performance Tracking:</strong> See which partners are submitting strong candidates vs. sending low-quality profiles. Track placement rates, offer acceptance rates, and revenue generated per partner.</p>
+<h3>Business Benefits</h3>
+<ul>
+<li>Scale your talent network without hiring more internal staff</li>
+<li>Eliminate commission disputes with transparent, automated tracking</li>
+<li>Give partners a professional experience that keeps them engaged</li>
+<li>Protect sensitive client and internal business data from external access</li>
+</ul>
+<hr />
+<h2>MODULE 8 — HUMAN RESOURCE MANAGEMENT (HRM)</h2>
+<blockquote>
+<p>"From the first interview to the last payslip — one platform."</p>
+</blockquote>
+<h3>What It Does</h3>
+<p>Niyan HireFlow's HRM module extends the platform beyond recruitment into full employee lifecycle management. When a candidate joins, they can be converted into an employee record — and managed through attendance, leave, payroll, and performance without touching a separate system.</p>
+<h3>8A — Employee Management</h3>
+<p><strong>Complete Employee Records:</strong> Employee ID (auto-generated: EMP001, EMP002...), personal details, emergency contacts, and address, department, designation, reporting manager, employment type (full-time, part-time, contract, intern), salary structure (CTC breakdown, basic, HRA, PF, professional tax, gross and net monthly salary), bank account details and payroll compliance numbers (PAN, PF, UAN, Aadhaar), educational qualifications and professional certifications, uploaded documents (ID proofs, offer letters, contracts), background check status and verification records, and disciplinary records with dates and actions taken.</p>
+<h3>8B — Attendance Management</h3>
+<p><strong>Daily Attendance Tracking:</strong> Employees check in and check out through the system. Status options include Present, Absent, Half Day, Late, On Leave, Work From Home, Holiday, and Weekend.</p>
+<p><strong>Automated Calculations:</strong> Total work hours computed from check-in/check-out, late arrival flagged with minutes-late tracking, and overtime hours calculated automatically.</p>
+<h3>8C — Leave Management</h3>
+<p><strong>Self-Service Leave Applications:</strong> Employees apply for leave with type (Casual, Sick, Earned, Maternity, Paternity, Compensatory, Unpaid), duration, dates, and reason.</p>
+<p><strong>Leave Types &amp; Balance Tracking:</strong> The system tracks separate balances for each leave type. Balances are automatically deducted when a leave is approved and restored if cancelled or rejected.</p>
+<p><strong>Approval Workflow:</strong> Leave applications route to the assigned approver. Approvers can approve, reject (with reason), or put on hold. The employee receives a notification at each stage.</p>
+<h3>8D — Payroll Management</h3>
+<p><strong>Monthly Payroll Processing:</strong> Generate payslips for individual employees or process the entire team in one batch. Earnings include Basic, HRA, Special Allowance, Overtime, and Bonus. Deductions include PF (employee &amp; employer), Professional Tax, TDS, and Advance Deductions. Net salary is computed automatically.</p>
+<p><strong>Payslip Generation:</strong> Professional PDF payslips are generated with complete breakdowns. They can be emailed directly to employees or downloaded in bulk.</p>
+<h3>8E — Performance Management</h3>
+<p><strong>Review Cycles:</strong> Configure quarterly, half-yearly, or annual performance review cycles. Employees complete self-reviews, managers assess their direct reports, HR finalizes ratings. All reviews are stored permanently for trend analysis.</p>
+<h3>8F — Announcements</h3>
+<p>Broadcast company-wide announcements to all employees — from policy updates to holiday calendars to team achievements.</p>
+<h3>Business Benefits</h3>
+<ul>
+<li>Eliminate duplicate data entry between recruitment and HR systems</li>
+<li>Give employees a self-service portal for attendance and leave</li>
+<li>Run payroll without spreadsheets or external software</li>
+<li>Maintain a complete, auditable employee record from day one</li>
+<li>Scale HR operations without hiring additional HR staff</li>
+</ul>
+<hr />
+<h2>MODULE 9 — TASK MANAGEMENT</h2>
+<blockquote>
+<p>"Nothing falls through the cracks when everything has an owner."</p>
+</blockquote>
+<h3>What It Does</h3>
+<p>The Task Management module gives your team a structured internal to-do system — directly linked to candidates, applications, interviews, and onboarding records.</p>
+<h3>Key Capabilities</h3>
+<p><strong>Task Creation &amp; Assignment:</strong> Create tasks with title, description, priority level (Low, Medium, High, Urgent), due date, assigned team member, and linked entity (candidate, application, interview, or onboarding).</p>
+<p><strong>Status Tracking:</strong> Tasks move through: Pending → In Progress → Completed → Cancelled</p>
+<p><strong>Views:</strong> Kanban board view (drag tasks across status columns), Calendar view (see tasks by due date), and List view with priority and status filters.</p>
+<p><strong>Comments &amp; Collaboration:</strong> Team members can leave comments on tasks — creating a discussion thread linked to the actual work item.</p>
+<h3>Business Benefits</h3>
+<ul>
+<li>Eliminate missed follow-ups and forgotten commitments</li>
+<li>Give managers visibility into team workload and task completion</li>
+<li>Create accountability for every action in the recruitment process</li>
+<li>Link tasks directly to business outcomes (candidates, deals, placements)</li>
+</ul>
+<hr />
+<h2>MODULE 10 — ANALYTICS &amp; REPORTS</h2>
+<blockquote>
+<p>"Data you can act on. Insights that drive results."</p>
+</blockquote>
+<h3>What It Does</h3>
+<p>The Analytics and Reporting module transforms raw activity data into actionable business intelligence. From real-time dashboards to scheduled exports, every decision-maker gets the information they need — in the format they need it.</p>
+<h3>Analytics Dashboard</h3>
+<p><strong>Live KPI Cards:</strong> Real-time counters for Total Candidates, Active Jobs, Interviews Scheduled, Placements This Month, Offer Acceptance Rate, Time to Hire, Partner Submissions, and Pending Payouts.</p>
+<p><strong>Hiring Funnel Visualization:</strong> A visual funnel shows exactly how many candidates are at each stage — Applied → Screening → Shortlisted → Interview → Offered → Joined — revealing where candidates are dropping off.</p>
+<p><strong>Activity Trend Chart:</strong> A time-series line chart shows platform activity over the past 7, 30, 90, or 365 days — helping managers spot productivity trends and seasonal patterns.</p>
+<h3>Pre-Built Reports (18+ Report Types)</h3>
+<p><strong>Recruitment Reports:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Report</th>
+<th>What It Tells You</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Placements Summary</td>
+<td>Total placements, success rates, and placement trends over time</td>
+</tr>
+<tr>
+<td>Application Funnel</td>
+<td>Conversion rates at every stage — where candidates are won or lost</td>
+</tr>
+<tr>
+<td>Time to Hire</td>
+<td>Average days from first application to joining date</td>
+</tr>
+<tr>
+<td>Source Effectiveness</td>
+<td>Which sourcing channels deliver the most placements</td>
+</tr>
+<tr>
+<td>Job Aging Report</td>
+<td>Which open positions have been active longest and need intervention</td>
+</tr>
+<tr>
+<td>Interview Conversion</td>
+<td>Interview-to-offer ratio — how effective your interview process is</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Financial Reports:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Report</th>
+<th>What It Tells You</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Payout Summary</td>
+<td>Total partner payouts by period</td>
+</tr>
+<tr>
+<td>Invoice Aging</td>
+<td>Outstanding invoices and how long they've been pending</td>
+</tr>
+<tr>
+<td>Revenue by Client</td>
+<td>Placement revenue broken down per client</td>
+</tr>
+<tr>
+<td>Commission Trends</td>
+<td>Month-over-month commission tracking</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Onboarding Reports:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Report</th>
+<th>What It Tells You</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Offer Acceptance Rate</td>
+<td>What percentage of offers are being accepted</td>
+</tr>
+<tr>
+<td>No-Show Analysis</td>
+<td>Candidates who didn't join and why</td>
+</tr>
+<tr>
+<td>DOJ Extensions</td>
+<td>Frequency and reasons for joining date delays</td>
+</tr>
+<tr>
+<td>Payout Eligibility</td>
+<td>Which placements are ready for billing</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Team Reports:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Report</th>
+<th>What It Tells You</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Coordinator Activity</td>
+<td>Individual recruiter performance and workload</td>
+</tr>
+<tr>
+<td>User Productivity</td>
+<td>Actions completed per user over a period</td>
+</tr>
+</tbody>
+</table>
+<h3>Report Features</h3>
+<p><strong>Export Formats:</strong> Excel, CSV, PDF, JSON</p>
+<p><strong>Scheduling:</strong> Reports can run automatically — Daily, Weekly, Monthly, or Quarterly — and delivered to specified email addresses.</p>
+<p><strong>Saved Reports:</strong> Save filter configurations as named reports for one-click access.</p>
+<h3>Business Benefits</h3>
+<ul>
+<li>Replace weekly status meetings with live dashboard reviews</li>
+<li>Make data-driven decisions about hiring channels, team performance, and client focus</li>
+<li>Provide clients with professional placement reports</li>
+<li>Identify bottlenecks in the hiring funnel before they cost you placements</li>
+</ul>
+<hr />
+<h2>MODULE 11 — IMPORT &amp; EXPORT</h2>
+<blockquote>
+<p>"Move data in and out at speed — with zero guesswork."</p>
+</blockquote>
+<h3>What It Does</h3>
+<p>The Import/Export module handles bulk data operations — allowing companies to migrate existing data into the platform and extract reports and records in their preferred format.</p>
+<h3>Import Capabilities</h3>
+<p><strong>Supported Entities:</strong> Candidates, Clients, Jobs, Applications, Users</p>
+<p><strong>Smart Column Mapping:</strong> Upload any Excel or CSV file — even if the column names don't match the system's field names. A visual column mapping interface lets you map columns to the right fields. The system then validates every row before importing.</p>
+<p><strong>Pre-Import Validation:</strong> Before a single record is created, the system runs full validation — required fields present, email format, duplicate detection, and data type validation. A preview shows exactly which rows will import successfully and which have errors.</p>
+<p><strong>Duplicate Handling:</strong> Choose how to handle duplicates: Skip the existing record, Update it with new data, or Create a new record alongside it.</p>
+<h3>Export Capabilities</h3>
+<p><strong>Flexible Column Selection:</strong> Export only the columns you need.</p>
+<p><strong>Multi-Format Output:</strong> Export to Excel (XLSX), CSV, PDF, or JSON — depending on what the recipient needs.</p>
+<p><strong>Filtered Exports:</strong> Apply the same filters you use in list views to export subsets of data.</p>
+<p><strong>Template Downloads:</strong> Download a properly formatted import template for any entity.</p>
+<h3>Business Benefits</h3>
+<ul>
+<li>Migrate from any existing system with zero data loss</li>
+<li>Share structured data with clients, partners, or accountants</li>
+<li>Backup records in multiple formats</li>
+</ul>
+<hr />
+<h2>MODULE 12 — NOTIFICATION SYSTEM</h2>
+<blockquote>
+<p>"The right person gets the right alert at exactly the right time."</p>
+</blockquote>
+<h3>What It Does</h3>
+<p>The Notification module ensures that every important event in the platform automatically reaches the right stakeholders — without anyone needing to manually trigger a communication.</p>
+<h3>Event-Based Triggers (20+ Notification Types)</h3>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Who Gets Notified</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Offer Released</td>
+<td>Candidate, Assigned Coordinator</td>
+</tr>
+<tr>
+<td>Offer Accepted / Declined</td>
+<td>Coordinator, Accounts Team</td>
+</tr>
+<tr>
+<td>DOJ Confirmed</td>
+<td>Coordinator, HR Team</td>
+</tr>
+<tr>
+<td>Candidate Joined</td>
+<td>Accounts, HR, Coordinator</td>
+</tr>
+<tr>
+<td>Day 10 / Day 30 Milestone</td>
+<td>Accounts, Coordinator</td>
+</tr>
+<tr>
+<td>Payout Eligible</td>
+<td>Accounts Team</td>
+</tr>
+<tr>
+<td>Document Submitted / Verified</td>
+<td>Coordinator, HR</td>
+</tr>
+<tr>
+<td>Invoice Raised / Approved</td>
+<td>Accounts, Partner</td>
+</tr>
+<tr>
+<td>Interview Scheduled</td>
+<td>Candidate, Interviewer</td>
+</tr>
+<tr>
+<td>Task Assigned</td>
+<td>Assigned Team Member</td>
+</tr>
+<tr>
+<td>Leave Applied / Approved</td>
+<td>Employee, Manager</td>
+</tr>
+</tbody>
+</table>
+<h3>Delivery Channels</h3>
+<ul>
+<li><strong>In-App:</strong> Real-time notification bell in the platform UI</li>
+<li><strong>Email:</strong> Formatted email alerts to the relevant user</li>
+<li><strong>SMS:</strong> Direct text message for time-sensitive alerts</li>
+<li><strong>Push Notifications:</strong> Browser push alerts (when enabled)</li>
+<li><strong>WhatsApp:</strong> WhatsApp message integration</li>
+</ul>
+<h3>Business Benefits</h3>
+<ul>
+<li>Eliminate manual follow-up reminders — the system handles them</li>
+<li>Ensure no financial milestone (payout, invoice, commission) is ever missed</li>
+<li>Keep candidates engaged through automated, timely communications</li>
+</ul>
+<hr />
+<h2>MODULE 13 — USER &amp; ROLE MANAGEMENT</h2>
+<blockquote>
+<p>"Right access for the right people — automatically."</p>
+</blockquote>
+<h3>System Roles</h3>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Core Access</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Owner</strong></td>
+<td>Full platform access — all modules, all data, all settings</td>
+</tr>
+<tr>
+<td><strong>Admin</strong></td>
+<td>Full platform access within their company</td>
+</tr>
+<tr>
+<td><strong>Candidate Coordinator</strong></td>
+<td>Manage candidates, applications, and interviews</td>
+</tr>
+<tr>
+<td><strong>Client Coordinator</strong></td>
+<td>Manage clients, jobs, and job-related activities</td>
+</tr>
+<tr>
+<td><strong>HR</strong></td>
+<td>Onboarding management and full HRM module</td>
+</tr>
+<tr>
+<td><strong>Accounts</strong></td>
+<td>Invoicing, payouts, commissions, and financial reports</td>
+</tr>
+<tr>
+<td><strong>Partner</strong></td>
+<td>Limited view — own submissions, shared jobs, invoice history</td>
+</tr>
+<tr>
+<td><strong>Manager (HRM)</strong></td>
+<td>Team-level HR management (leave approval, performance review)</td>
+</tr>
+<tr>
+<td><strong>Employee (HRM)</strong></td>
+<td>Self-service — own attendance, leave, payslip, profile</td>
+</tr>
+</tbody>
+</table>
+<h3>60+ Granular Permissions</h3>
+<p>Permissions cover every action in the platform: 
+- Dashboard Access, Users (View/Create/Edit/Delete), Roles Management, Departments &amp; Designations<br />
+- Clients (CRUD), Candidates (CRUD), Jobs (CRUD), Applications (View/Update)<br />
+- Interviews (CRUD), Onboarding (View/Edit), Partners (CRUD), Payouts &amp; Invoices<br />
+- Reports &amp; Analytics, Import/Export, Audit Logs, Notification Settings<br />
+- HRM: Employees, Attendance, Leave Approval, Payroll, Performance, Announcements<br />
+- Security Settings, CRM Settings, and 30+ more</p>
+<h3>Custom Roles</h3>
+<p>Beyond the system roles, administrators can create unlimited custom roles — selecting exactly the permissions each role should have.</p>
+<h3>Individual Permission Override</h3>
+<p>For special cases, individual users can be granted specific permissions that differ from their role — without creating a new role. Changes apply immediately and persist across sessions.</p>
+<hr />
+<h2>MODULE 14 — SECURITY &amp; COMPLIANCE</h2>
+<blockquote>
+<p>"Enterprise-grade security built into every layer."</p>
+</blockquote>
+<h3>Security Features</h3>
+<p><strong>Authentication &amp; Session Management:</strong> Secure login with email and password. Account lockout after multiple failed login attempts. Concurrent session prevention — only one active session per user. Session expiry and automatic logout. IP address logging for every login event.</p>
+<p><strong>Password Policies:</strong> Minimum 8 characters with uppercase, lowercase, and numeric requirements. Forced password change for new users (configurable). Password history prevention. Admin-triggered password resets.</p>
+<p><strong>Audit Trail:</strong> Every single action in the platform is logged — who performed the action, what they did (created, updated, deleted, viewed), which record was affected, when the action occurred, and from which IP address. Audit logs are immutable — they cannot be modified or deleted.</p>
+<p><strong>Data Isolation (Multi-Tenancy):</strong> Each company's data is stored in a completely separate, isolated database. No data from one company is ever visible or accessible to another company — at any level.</p>
+<p><strong>Soft Delete Architecture:</strong> Nothing is truly deleted. Records that are "deleted" by users are moved to an archived state — recoverable by administrators and visible in deletion history. This prevents accidental permanent data loss.</p>
+<h3>Security Features Table</h3>
+<table>
+<thead>
+<tr>
+<th>Protection</th>
+<th>How It Works</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Session Security</strong></td>
+<td>Each user can only have one active session at a time</td>
+</tr>
+<tr>
+<td><strong>Login Protection</strong></td>
+<td>Account automatically locked after multiple failed attempts</td>
+</tr>
+<tr>
+<td><strong>IP Logging</strong></td>
+<td>Every login event records the user's IP address</td>
+</tr>
+<tr>
+<td><strong>Audit Trail</strong></td>
+<td>Every create, update, and delete action is logged permanently</td>
+</tr>
+<tr>
+<td><strong>Data Isolation</strong></td>
+<td>Each company's data lives in a completely separate database</td>
+</tr>
+<tr>
+<td><strong>Soft Delete</strong></td>
+<td>Deleted records are archived, not permanently removed</td>
+</tr>
+<tr>
+<td><strong>Encrypted Credentials</strong></td>
+<td>SMTP passwords and sensitive configuration values stored encrypted</td>
+</tr>
+<tr>
+<td><strong>Password Policies</strong></td>
+<td>Configurable: minimum length, complexity, expiry, history</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<div class="sec-break"><div class="sn">5</div><div><div class="sl2">Section 5</div><div class="st">DASHBOARD ANALYSIS</div></div></div>
+<h2>Multiple Dashboards — One for Every Role</h2>
+<p>Niyan HireFlow doesn't give everyone the same dashboard and expect it to be useful. Different roles have different priorities — and the platform serves each with a tailored, permission-aware dashboard.</p>
+<h2>The Main Recruitment Dashboard</h2>
+<p><strong>Built for:</strong> Admins, Senior Coordinators, Business Owners</p>
+<p><strong>At-a-Glance KPI Cards:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Card</th>
+<th>What It Shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Total Candidates</td>
+<td>All profiles in the talent pool</td>
+</tr>
+<tr>
+<td>Active Jobs</td>
+<td>Open positions across all clients</td>
+</tr>
+<tr>
+<td>Interviews Scheduled</td>
+<td>Upcoming interviews in the pipeline</td>
+</tr>
+<tr>
+<td>Placements</td>
+<td>Total successful joinings this period</td>
+</tr>
+<tr>
+<td>Active Users</td>
+<td>Team members currently active</td>
+</tr>
+<tr>
+<td>Active Clients</td>
+<td>Client accounts in good standing</td>
+</tr>
+<tr>
+<td>Partner Submissions</td>
+<td>Candidates submitted by external partners</td>
+</tr>
+<tr>
+<td>Pending Payouts</td>
+<td>Placements awaiting billing</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Secondary Stat Cards:</strong> A secondary grid of cards gives immediate visibility into totals for departments, designations, targets, and more — color-coded by module with subtle hover animations.</p>
+<p><strong>Hiring Funnel Chart:</strong> A visual funnel shows the recruitment pipeline from Applied to Joined — allowing managers to see exactly where candidates are converting and where they're being lost. Conversion rates (offer rate, join rate, reject rate) are displayed as instant KPIs.</p>
+<p><strong>Candidate Pipeline Donut Chart:</strong> A color-coded breakdown of all active applications by status — giving a clear picture of pipeline health.</p>
+<p><strong>Activity Trend Line Chart:</strong> Track platform activity (actions taken) over 7 days, 30 days, 90 days, or 1 year. Switch time periods with a single click. Identify spikes and troughs at a glance.</p>
+<p><strong>Users by Role Chart:</strong> Understand team composition — how many people are in each role, helping with capacity planning and workload balancing.</p>
+<p><strong>Recent Activity Feed:</strong> A live feed of the last 6 platform actions — who did what, when — so managers always know what's happening without asking.</p>
+<p><strong>Quick Insights Panel:</strong> Auto-generated smart bullets — "14 new applications this week", "42% offer acceptance rate", "3 users active today".</p>
+<h2>The HRM Dashboard</h2>
+<p><strong>Built for:</strong> HR Managers, HR Administrators</p>
+<p>Focused on employee and workforce metrics: headcount by department, attendance today vs. average, leave pending approvals, upcoming payroll dates, performance review completion status, and new joiners this month.</p>
+<h2>The Analytics Dashboard</h2>
+<p><strong>Built for:</strong> Business Owners, Senior Management, Reporting Users</p>
+<p>A fully configurable analytics environment with multiple widget types: Line Charts (trend analysis), Bar Charts (comparative analysis), Pie/Donut Charts (distribution breakdowns), Funnel Charts (pipeline conversion), Gauge Charts (target achievement), and Data Tables (tabular summaries).</p>
+<h2>The Subscription &amp; Billing Card</h2>
+<p>For account owners and admins, the dashboard includes a live subscription panel showing current plan name, seats purchased vs. active users, remaining available seats, plan expiry date, and a one-click upgrade button.</p>
+<p><strong>Business Value of the Dashboard:</strong> A business owner or manager walking into Monday morning can review the dashboard in 90 seconds and know how many placements happened last week, what's in the pipeline, who on the team is active, and what needs attention today.</p>
+<hr />
+<div class="sec-break"><div class="sn">6</div><div><div class="sl2">Section 6</div><div class="st">WORKFLOW EXPLANATIONS</div></div></div>
+<h2>How Work Actually Flows Through the System</h2>
+<h3>WORKFLOW 1 — The Full Recruitment Lifecycle</h3>
+<pre><code>STEP 1: Client Requirement Received
+Coordinator creates a new Job record under the client.
+Sets job details, eligibility criteria, priority, and coordinator assignment.
+Job status: OPEN. If shared with partners: visible in partner portal immediately.
+
+STEP 2: Candidate Sourcing
+Candidates found via search of existing talent pool.
+New candidates added manually, via resume parsing, or bulk import.
+Partners submit candidates through their portal.
+Source attribution recorded automatically.
+
+STEP 3: Application Created
+Coordinator applies candidate to the job.
+System auto-scores match (0-100%) based on eligibility criteria.
+Application status: APPLIED → AUTO-SCORED.
+
+STEP 4: Screening
+Coordinator reviews profile and match score.
+Moves qualified candidates: SCREENING → SHORTLISTED.
+Rejected candidates: status updated with reason recorded.
+
+STEP 5: Interview Pipeline Activated
+First interview round scheduled (date, time, mode, interviewer).
+Automated notifications sent to candidate and interviewer.
+Application moves to: INTERVIEW.
+
+STEP 6: Interview Round Executed
+Interview conducted on scheduled date.
+Interviewer submits structured feedback with rating and decision.
+
+STEP 7: Round Outcome
+PASS: System opens next round scheduling.
+FAIL: Candidate notified; application moves to REJECTED with reason.
+HOLD: Application parked for later consideration.
+
+STEP 8: Final Round Complete → Selection
+All rounds passed: application status → SELECTED.
+Coordinator notified: proceed to offer stage.
+
+STEP 9: Offer Released
+Offer details logged: CTC, designation, location, offer date, validity.
+Offer letter uploaded to system. Candidate notified: OFFER RELEASED.
+
+STEP 10: Offer Outcome
+Accepted: Application → OFFER ACCEPTED; Onboarding record auto-created.
+Declined: Application → OFFER DECLINED; decline reason recorded.
+
+STEP 11: Onboarding Begins
+Expected Date of Joining confirmed. Document checklist assigned.
+Automated reminder sent before DOJ.
+
+STEP 12: Candidate Joins
+Status → JOINED; actual DOJ recorded.
+Day 10 and Day 30 reminder timers started automatically.
+If converting to employee: HR creates employee record from onboarding record.
+
+STEP 13: Payout Tracking
+System counts days from actual joining date.
+At Day 45/60/90: Payout Eligible alert sent to accounts team.
+Invoice raised against client. Partner commission calculated and payout initiated.
+
+COMPLETE: Placement revenue realized, data archived, talent pool updated.
+</code></pre>
+<h3>WORKFLOW 2 — The Interview Pipeline in Detail</h3>
+<pre><code>JOB CREATED with Interview Pipeline Attached
+Pipeline defines: 3 rounds (Technical → HR → Director)
+Each round has mode, duration, and feedback requirements.
+
+ROUND 1 — TECHNICAL INTERVIEW
+Scheduled: Date / Time / Video Link / Interviewer
+Notifications sent automatically (T-24 hours reminder)
+Interview conducted → Feedback submitted → Decision: NEXT ROUND
+
+ROUND 2 — HR INTERVIEW
+Next round scheduling unlocked automatically.
+Coordinator schedules HR round.
+Conducted → Feedback submitted → Decision: NEXT ROUND
+
+ROUND 3 — DIRECTOR ROUND
+Final round scheduled and confirmed.
+Conducted → Feedback: Strong hire recommendation.
+Decision: HIRE
+
+OUTCOME: APPLICATION STATUS → SELECTED → Proceed to offer
+</code></pre>
+<h3>WORKFLOW 3 — Onboarding Automation</h3>
+<pre><code>OFFER ACCEPTED
+Onboarding record created automatically.
+Expected DOJ: 15th of next month.
+
+DAY -3 (3 days before DOJ)
+Automated joining reminder sent to candidate.
+Document checklist follow-up sent.
+
+DAY 0 — CANDIDATE JOINS
+Coordinator updates status: JOINED.
+Actual DOJ recorded; payout timer starts.
+
+DAY +10
+Automatic reminder to coordinator: &quot;10-day check-in due&quot;.
+Email/notification triggered asking for early feedback.
+
+DAY +30
+Automatic reminder to coordinator: &quot;30-day check-in due&quot;.
+Mid-point health check notification.
+
+DAY +90 (or 45/60 depending on configuration)
+Accounts team receives PAYOUT ELIGIBLE notification.
+Placement flagged in accounts dashboard.
+Invoice can be raised directly from onboarding record.
+Partner commission statement generated.
+
+PLACEMENT COMPLETE
+</code></pre>
+<h3>WORKFLOW 4 — Partner Candidate Submission</h3>
+<pre><code>PARTNER LOGS IN
+Sees only jobs shared with them (visibility-controlled).
+Selects a job to submit for.
+
+CANDIDATE SUBMISSION
+Partner searches their candidate database or creates a new profile.
+Submits candidate against the selected job.
+System records: partner attribution, submission timestamp.
+
+COORDINATOR REVIEW
+Coordinator receives notification of new partner submission.
+Reviews candidate profile and auto-match score.
+Moves to screening or rejects with reason.
+
+IF CANDIDATE JOINS
+Commission calculated based on partner's commission rate.
+Payout eligibility tracked automatically.
+Partner sees commission statement in their portal.
+Accounts team generates payout at eligible date.
+</code></pre>
+<h3>WORKFLOW 5 — HRM Integration (Candidate to Employee)</h3>
+<pre><code>CANDIDATE JOINS (Recruitment Module)
+Onboarding status: JOINED.
+
+CONVERT TO EMPLOYEE (One Click)
+HR creates employee record from onboarding.
+Personal and contact data copied automatically.
+Employment details added: Department, Designation, Reporting Manager.
+Salary structure configured.
+Employee ID auto-generated: EMP001.
+
+EMPLOYEE ACTIVATED
+Employee login created if needed.
+Attendance tracking begins.
+Leave balance initialized.
+Payroll schedule configured.
+
+MONTHLY OPERATIONS
+Employee marks attendance daily (or admin marks bulk).
+Leave applications submitted by employee → approved by manager.
+Monthly payslip generated from attendance + salary structure.
+Payslip delivered to employee via email or portal.
+
+PERFORMANCE REVIEW (Quarterly/Annual)
+Employee completes self-review.
+Manager submits assessment.
+HR finalizes rating.
+Review stored permanently in employee record.
+</code></pre>
+<hr />
+<div class="sec-break"><div class="sn">7</div><div><div class="sl2">Section 7</div><div class="st">ROLE-BASED ACCESS &amp; SECURITY</div></div></div>
+<h2>The Right Access for the Right Person</h2>
+<p>One of the most critical — and most often overlooked — elements of a business software platform is controlling who sees what. Niyan HireFlow CRM is built with a deeply layered access control system that protects data, creates accountability, and gives every user a clean, focused workspace.</p>
+<h2>How Role-Based Access Works</h2>
+<p>When a user logs into Niyan HireFlow: 
+- Their role is identified<br />
+- Their permissions (from role + any individual overrides) are loaded<br />
+- The navigation menu shows only modules they're authorized to access<br />
+- API calls for restricted data are blocked at the server level — not just hidden in the UI<br />
+- Every action they perform is logged with their identity</p>
+<h2>Role Access Summary</h2>
+<p><strong>Owner &amp; Admin:</strong> Full platform access — every module, every record, all settings. Can create, edit, and delete any data. Can manage users, roles, and permissions. Can view all audit logs and reports.</p>
+<p><strong>Candidate Coordinator:</strong> Can add, edit, and manage candidate profiles. Can create applications and move them through the pipeline. Can schedule and manage interviews. Cannot access financial modules (payouts, invoices, commissions).</p>
+<p><strong>Client Coordinator:</strong> Can add, edit, and manage client accounts and job mandates. Can view candidate applications on their assigned jobs.</p>
+<p><strong>HR (Onboarding &amp; HRM):</strong> Full access to the onboarding module. Full HRM access: employees, attendance, leave, payroll, performance.</p>
+<p><strong>Accounts Team:</strong> Access to payouts, invoices, commissions, and financial reports. Can view onboarding records for payout eligibility.</p>
+<p><strong>Partner (External):</strong> Limited portal: only sees jobs shared with them. Can only view and manage their own candidate submissions. Can view commission statements and invoice history.</p>
+<p><strong>Employee (HRM Self-Service):</strong> Can view and manage their own profile, attendance, leave, and payslip. Cannot access other employees' records.</p>
+<p><strong>Manager (HRM):</strong> All employee self-service capabilities. Can approve/reject leave requests for their team. Can view team attendance and conduct performance reviews.</p>
+<h2>Security Protections</h2>
+<table>
+<thead>
+<tr>
+<th>Protection</th>
+<th>How It Works</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Session Security</strong></td>
+<td>Each user can only have one active session. Logging in from a new device ends all previous sessions.</td>
+</tr>
+<tr>
+<td><strong>Login Protection</strong></td>
+<td>After multiple failed login attempts, the account is automatically locked.</td>
+</tr>
+<tr>
+<td><strong>IP Logging</strong></td>
+<td>Every login event records the user's IP address for security review.</td>
+</tr>
+<tr>
+<td><strong>Audit Trail</strong></td>
+<td>Every create, update, and delete action is logged permanently.</td>
+</tr>
+<tr>
+<td><strong>Data Isolation</strong></td>
+<td>Each company's data lives in a completely separate database — no cross-contamination possible.</td>
+</tr>
+<tr>
+<td><strong>Soft Delete</strong></td>
+<td>Deleted records are archived, not permanently removed — recoverable by authorized admins.</td>
+</tr>
+<tr>
+<td><strong>Encrypted Credentials</strong></td>
+<td>SMTP passwords and sensitive configuration values are stored encrypted.</td>
+</tr>
+<tr>
+<td><strong>Password Policies</strong></td>
+<td>Configurable: minimum length, complexity, expiry, history, and forced change on first login.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<div class="sec-break"><div class="sn">8</div><div><div class="sl2">Section 8</div><div class="st">REPORTS &amp; EXPORT FEATURES</div></div></div>
+<h2>From Raw Data to Business Intelligence</h2>
+<p>Niyan HireFlow generates meaningful reports — not just raw data dumps. Every report is designed around a specific business question, with relevant filters, clear metrics, and multiple export options.</p>
+<h2>Recruitment Reports</h2>
+<p><strong>1. Placements Summary:</strong> Total applications vs. total placements, placement rate by period (week, month, quarter, year), and placement breakdown by client, coordinator, and job type.</p>
+<p><strong>2. Application Funnel:</strong> Conversion rate at every stage of the pipeline, drop-off analysis (which stages have the highest rejection rate), and trend analysis (is the funnel improving or degrading over time?).</p>
+<p><strong>3. Time to Hire:</strong> Average days from application to offer acceptance, average days from shortlist to interview to offer, breakdown by client, job type, or coordinator.</p>
+<p><strong>4. Source Effectiveness:</strong> Placements made by source (LinkedIn, Job Portal, Referral, Partner, Walk-in, Campus), conversion rate per source.</p>
+<p><strong>5. Job Aging Report:</strong> All open jobs sorted by time since posted, jobs approaching or past target fill date.</p>
+<p><strong>6. Interview Conversion:</strong> Total interviews vs. offers made, offer conversion rate per round type.</p>
+<h2>Financial Reports</h2>
+<p><strong>7. Payout Summary:</strong> Total partner payouts by period, broken down by partner and placement.</p>
+<p><strong>8. Invoice Aging:</strong> Outstanding invoices with days-since-raised, allowing proactive follow-up on overdue payments.</p>
+<p><strong>9. Revenue by Client:</strong> Which clients are generating the most placement revenue.</p>
+<p><strong>10. Commission Trends:</strong> Month-over-month commission tracking for business forecasting.</p>
+<h2>Onboarding Reports</h2>
+<p><strong>11. Offer Acceptance Rate:</strong> What percentage of offers are being accepted.</p>
+<p><strong>12. No-Show Analysis:</strong> Which candidates committed to joining but didn't show up.</p>
+<p><strong>13. DOJ Extension Frequency:</strong> Are joining delays systemic?</p>
+<p><strong>14. Payout Eligibility Tracker:</strong> All placements approaching or at the payout milestone.</p>
+<h2>Team Performance Reports</h2>
+<p><strong>15. Coordinator Activity:</strong> How many applications, interviews, and placements did each coordinator handle?</p>
+<p><strong>16. User Productivity:</strong> Actions taken per user — creating a clear performance baseline for team management.</p>
+<h2>Export Capabilities</h2>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Best For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Excel (XLSX)</strong></td>
+<td>Further analysis, pivot tables, client-facing reports with formatting</td>
+</tr>
+<tr>
+<td><strong>CSV</strong></td>
+<td>Data migration, third-party tool import, bulk manipulation</td>
+</tr>
+<tr>
+<td><strong>PDF</strong></td>
+<td>Client presentations, formal reports, archiving</td>
+</tr>
+<tr>
+<td><strong>JSON</strong></td>
+<td>Technical integrations, API-level data exchange</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Scheduled Reports:</strong> Configure any report to run automatically on a schedule (Daily / Weekly / Monthly / Quarterly) and have it delivered to specified email addresses.</p>
+<p><strong>Saved Report Configurations:</strong> Save filter combinations as named reports. A manager can save "This Week's Active Pipeline — Bangalore Jobs" and access it in one click at any time.</p>
+<hr />
+<div class="sec-break"><div class="sn">9</div><div><div class="sl2">Section 9</div><div class="st">AUTOMATION &amp; SMART FEATURES</div></div></div>
+<h2>The System That Works While You Work</h2>
+<p>The real competitive advantage of Niyan HireFlow is not just what it stores — it's what it does automatically.</p>
+<h2>AI-Powered Resume Parsing</h2>
+<p>Upload any resume — in PDF or Word format — and the system automatically extracts full name and contact information, work experience (company, designation, duration, responsibilities), education (degree, institution, year, specialization), skills (with inferred proficiency levels), certifications and achievements, and languages known. Each extraction includes a confidence score.</p>
+<p><strong>Business Impact:</strong> A coordinator that used to spend 10 minutes manually entering a candidate's resume data can now do it in under 60 seconds. At 20 resumes a day, that's over 3 hours saved — per coordinator, per day.</p>
+<h2>Intelligent Candidate-Job Matching (ATS Scoring Engine)</h2>
+<p>When a candidate is applied to a job, the system automatically calculates an eligibility match score (0–100%) based on: skill match (mandatory vs. preferred skills), years of experience (within required range), location preference, education level, CTC expectations vs. offered range, and notice period vs. maximum acceptable.</p>
+<p><strong>Business Impact:</strong> Coordinators no longer read through profiles and make judgment calls alone. They see ranked, scored candidates — and focus their time on the highest-potential matches.</p>
+<h2>Automated Email Notifications</h2>
+<p>The system sends professionally formatted emails automatically when a user account is created (welcome email), an interview is scheduled (candidate and interviewer notifications), an offer is released, a document is verified or rejected, a leave application is approved or rejected, a payout becomes eligible, an invoice is raised or approved, and when a password reset is requested.</p>
+<h2>Automated Reminder Sequences</h2>
+<pre><code>Day 0:    Candidate joined → onboarding record created, timer starts
+Day -3:   DOJ reminder sent to candidate (joining confirmation)
+Day 10:   Automated check-in reminder to coordinator
+Day 30:   Automated mid-point reminder to coordinator
+Day 90:   Payout eligible alert to accounts team
+</code></pre>
+<h2>Application Stats Auto-Update</h2>
+<p>When candidate applications move through statuses, connected records are automatically updated — the Job record's application count, shortlisted count, interview count, and offered count update in real time. Dashboard KPIs reflect changes immediately.</p>
+<h2>Payout Eligibility Calculation (Background Processing)</h2>
+<p>The system runs a daily background process that scans all onboarding records with status JOINED, calculates days elapsed from actual joining date, flags placements that have crossed the configured payout threshold (45, 60, or 90 days), sends alerts to the accounts team, and updates payout eligibility status.</p>
+<h2>Business Impact Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Automation</th>
+<th>Hours Saved Per Month (Avg. Team of 5)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Resume parsing</td>
+<td>50–80 hours</td>
+</tr>
+<tr>
+<td>Candidate-job matching</td>
+<td>15–25 hours</td>
+</tr>
+<tr>
+<td>Follow-up reminders</td>
+<td>10–20 hours</td>
+</tr>
+<tr>
+<td>Report generation</td>
+<td>5–10 hours</td>
+</tr>
+<tr>
+<td>Payout tracking</td>
+<td>5–8 hours</td>
+</tr>
+<tr>
+<td>Notification management</td>
+<td>8–15 hours</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>93–158 hours/month</strong></td>
+</tr>
+</tbody>
+</table>
+<p><em>Equivalent to 2.5–4 full-time working weeks saved every month — for a team of five.</em></p>
+<hr />
+<div class="sec-break"><div class="sn">10</div><div><div class="sl2">Section 10</div><div class="st">UI/UX EXPERIENCE</div></div></div>
+<h2>Designed for People Who Work Fast</h2>
+<p>Niyan HireFlow is built with a modern, dark-theme first interface that reduces eye strain during long work sessions, organizes information by priority, and keeps the most important actions one click away.</p>
+<h2>Design Philosophy</h2>
+<p>"Productivity-first, beautiful by design." The UI is not decorative. Every design decision serves the goal of helping users complete their tasks faster, find information quicker, and make decisions with more confidence.</p>
+<h2>Interface Highlights</h2>
+<p><strong>Collapsible Sidebar Navigation:</strong> The sidebar groups all modules by category (Recruitment, HRM, Analytics, Administration, Settings). It can be collapsed to a compact icon-only view. Navigation items are permission-filtered — users see only what they're authorized to access.</p>
+<p><strong>Responsive Dashboard Cards:</strong> Dashboard cards use animated counters (numbers count up on page load), hover effects with color glow and subtle scale animations, and color-coded category indicators — making data instantly scannable.</p>
+<p><strong>Consistent Color-Coding:</strong> 
+- Green: Active, Passed, Approved, Joined<br />
+- Orange: Pending, In Progress, On Hold<br />
+- Red: Rejected, Failed, Overdue, Blacklisted<br />
+- Blue: Information, In Review, Scheduled<br />
+- Purple: Primary actions, Admin elements</p>
+<p><strong>Global Search:</strong> A top-bar search field allows users to find candidates, jobs, clients, and applications by name, email, or keyword without navigating through menus.</p>
+<p><strong>Advanced Filters with Persistence:</strong> Every list view has a comprehensive filter panel. Filter combinations stay applied while navigating.</p>
+<p><strong>Dark Mode &amp; Light Mode:</strong> Full dark mode and light mode support — the user's preference is saved and applied automatically on every login.</p>
+<p><strong>Mobile-Responsive Design:</strong> All pages adapt to tablet and mobile screen sizes. Coordinators in the field can check application status, confirm interviews, and review candidate profiles from their phones.</p>
+<p><strong>Bulk Actions:</strong> Select multiple records and apply actions (status change, assignment, export) in one click.</p>
+<p><strong>Drag-and-Drop:</strong> Kanban views support drag-and-drop status changes for tasks.</p>
+<hr />
+<div class="sec-break"><div class="sn">11</div><div><div class="sl2">Section 11</div><div class="st">TECHNICAL ARCHITECTURE</div></div></div>
+<h2>How the Platform Is Built</h2>
+<p>This section provides a business-friendly overview of the technical architecture.</p>
+<h2>What This Means for Your Business</h2>
+<table>
+<thead>
+<tr>
+<th>Technical Fact</th>
+<th>Business Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cloud-hosted platform</td>
+<td>Access from anywhere — office, home, or field</td>
+</tr>
+<tr>
+<td>Modern async backend</td>
+<td>Fast responses, even with large datasets</td>
+</tr>
+<tr>
+<td>Separate database per company</td>
+<td>Your data is completely isolated from other companies</td>
+</tr>
+<tr>
+<td>Encrypted credentials</td>
+<td>Passwords and sensitive settings are never stored as plain text</td>
+</tr>
+<tr>
+<td>Background task scheduler</td>
+<td>Automated reminders and calculations run without user intervention</td>
+</tr>
+<tr>
+<td>REST API architecture</td>
+<td>Can integrate with other tools and systems your business uses</td>
+</tr>
+</tbody>
+</table>
+<h2>The Three-Layer Architecture</h2>
+<p><strong>Frontend Layer (User Interface):</strong> React.js — Modern, responsive web application. Redux — Centralized state management. Tailwind CSS — Consistent, professional styling. Recharts — Interactive data visualization. Communicates via REST API (HTTPS).</p>
+<p><strong>Backend Layer (Business Logic):</strong> FastAPI (Python) — High-performance API server. Async processing — Handles high request volumes. Pydantic — Data validation and type safety. Background Tasks — Scheduled automation. Email Service — Dual SMTP (system + tenant).</p>
+<p><strong>Database Layer (Data Storage):</strong> MongoDB — Flexible, scalable NoSQL database. Master Database — System config, tenant registry. Company Databases — One isolated DB per company. 50+ Collections — Structured data per tenant.</p>
+<h2>Multi-Tenant Architecture</h2>
+<p>Niyan HireFlow uses a <strong>true multi-tenant architecture</strong>: one platform installation serves multiple companies, each company gets its own isolated database, no company can access another company's data — ever, and adding a new company takes minutes, not days.</p>
+<h2>Integration Capabilities</h2>
+<p>The platform exposes a REST API that can connect with Job portals (Naukri, Indeed, LinkedIn), HRMS platforms, Accounting software, Communication tools (WhatsApp Business API, SMS gateways), and custom internal tools your business already uses.</p>
+<hr />
+<div class="sec-break"><div class="sn">12</div><div><div class="sl2">Section 12</div><div class="st">WHY BUSINESSES SHOULD CHOOSE THIS CRM</div></div></div>
+<h2>The Business Case for Niyan HireFlow CRM</h2>
+<h3>1. Everything in One Place — Zero Tool Sprawl</h3>
+<p>The average recruitment agency uses 6–8 different tools. Niyan HireFlow replaces all of them with a single, unified platform — one login, one interface, one source of truth.</p>
+<h3>2. Built for Recruitment — Not Adapted From Something Else</h3>
+<p>Many CRMs are built for sales and adapted for recruitment. Niyan HireFlow is built from the ground up for the specific workflows of staffing, placement, and HR services.</p>
+<h3>3. Automation Pays for Itself</h3>
+<p>The platform's automation features save the average team of 5 users between 90–150 hours of manual work per month. At even a modest hourly labor cost, the time savings from automation alone covers the subscription cost many times over.</p>
+<h3>4. Scalable Without Growing Your Admin Overhead</h3>
+<p>As your team grows from 5 to 50, as your client list grows from 10 to 100, as your candidate database grows from 500 to 50,000 — the platform scales with you without requiring you to hire additional administrators.</p>
+<h3>5. Partners Extend Your Reach Without Adding Risk</h3>
+<p>The partner management module allows you to work with an external network of recruiters and consultants — extending your sourcing reach — without giving them access to confidential client data.</p>
+<h3>6. Clients Get Professional Service</h3>
+<p>When you use Niyan HireFlow, your clients experience the difference. They receive structured interview schedules, formatted offer details, compliant document workflows, and professional reports.</p>
+<h3>7. Management Gets Real Visibility</h3>
+<p>Business owners and managers no longer depend on weekly status meetings to understand what's happening. The dashboard gives them live, accurate intelligence about team performance, pipeline health, and financial status.</p>
+<h3>8. Security and Compliance Without the Cost</h3>
+<p>Building secure, compliant data handling infrastructure from scratch would cost hundreds of thousands of rupees in development. Niyan HireFlow delivers enterprise-grade security as part of the subscription.</p>
+<hr />
+<div class="sec-break"><div class="sn">13</div><div><div class="sl2">Section 13</div><div class="st">UNIQUE SELLING POINTS (USP)</div></div></div>
+<h2>What Makes Niyan HireFlow Different</h2>
+<h3>USP 1 — End-to-End in One Platform</h3>
+<p>From sourcing a candidate to paying the commission on their 90th day at the client — every step happens inside Niyan HireFlow. No other handoffs. No other tools. This end-to-end completeness is rare and genuinely valuable.</p>
+<h3>USP 2 — AI-Powered ATS Scoring Engine</h3>
+<p>The automatic candidate-job matching score (0–100%) gives coordinators an instant shortlisting signal. Competitors offer keyword matching; Niyan HireFlow offers weighted eligibility scoring that considers skills, experience, location, CTC, education, and notice period simultaneously.</p>
+<h3>USP 3 — Automated Payout Lifecycle</h3>
+<p>Most recruitment platforms stop at the placement. Niyan HireFlow continues tracking the candidate through Days 10, 30, 45, 60, and 90 — automatically alerting the accounts team at the right moment. This directly protects revenue and prevents payout windows from being missed.</p>
+<h3>USP 4 — Dual SMTP Email Architecture</h3>
+<p>Outbound emails can come from your own company's email domain — not a generic platform sender. With a fallback to the system SMTP if the company SMTP fails, email delivery is reliable, branded, and professional.</p>
+<h3>USP 5 — True Multi-Tenant with Seller/Reseller Architecture</h3>
+<p>Niyan HireFlow supports a three-tier deployment: the platform provider (super admin), resellers/sellers, and end companies (tenants). This makes it an ideal platform for businesses that want to white-label and resell the software.</p>
+<h3>USP 6 — Granular 60+ Permission System</h3>
+<p>With 60+ individual permissions that can be mixed and matched into unlimited custom roles — and the ability to override permissions at the individual user level — businesses have fine-grained control over exactly what each person can see and do.</p>
+<h3>USP 7 — CRM + HRM in a Single Platform</h3>
+<p>The seamless connection between the recruitment journey (CRM) and the employee lifecycle (HRM) is a feature most platforms in this space do not offer. A candidate sourced, placed, and joined through the CRM can be directly managed as an employee — attendance, leave, payroll, performance — without any duplicate data entry.</p>
+<h3>USP 8 — Partner Portal with Commission Automation</h3>
+<p>A built-in partner network management system — with job sharing, candidate submission, commission tracking, and payout eligibility — gives agencies a complete framework for operating with external consultants.</p>
+<h3>USP 9 — Comprehensive Audit Trail</h3>
+<p>The immutable audit log tracks every action — not just data changes, but logins, logouts, failed access attempts, and permission changes. For businesses that need to demonstrate compliance, accountability, or resolve disputes, this is a critical capability.</p>
+<h3>USP 10 — Built for the Indian Recruitment Market</h3>
+<p>The platform's workflows, terminology, status options, compensation structures (CTC, HRA, PF calculations), payout windows (45/60/90 days), and commission models are aligned with how recruitment and staffing businesses operate in India — while remaining adaptable for other markets.</p>
+<hr />
+<div class="sec-break"><div class="sn">14</div><div><div class="sl2">Section 14</div><div class="st">FUTURE SCALABILITY</div></div></div>
+<h2>Built to Grow With Your Business</h2>
+<h3>Multi-Company &amp; Multi-Branch Support</h3>
+<p>The platform's multi-tenant architecture means a single installation can serve thousands of independent companies. Branch management is built in — companies can define multiple office locations, assign users to specific branches, and filter data by branch for localized reporting.</p>
+<h3>White-Label / Reseller Ready</h3>
+<p>The three-tier seller-tenant architecture means the platform can be rebranded and resold by channel partners or franchisees. Sellers manage their own portfolio of client companies with independent subscription control.</p>
+<h3>Team Scalability</h3>
+<p>As your team grows: new users are onboarded with pre-defined roles in minutes, permissions are inherited automatically from roles, new departments and designations are configured without developer involvement, and seat limits expand with subscription upgrades.</p>
+<h3>AI Enhancement Roadmap</h3>
+<p>The existing AI infrastructure (resume parsing, eligibility scoring) provides the foundation for: 
+- Predictive offer acceptance likelihood scoring<br />
+- Candidate-to-job recommendation engine<br />
+- Attrition risk prediction for placed candidates<br />
+- Intelligent sourcing channel recommendations<br />
+- Natural language candidate search</p>
+<h3>Mobile Application</h3>
+<p>The responsive web platform is mobile-ready today. A dedicated mobile application (iOS and Android) for coordinators — enabling candidate management, interview management, and status updates on the go — is a natural next evolution.</p>
+<h3>Integration Ecosystem</h3>
+<p>The REST API architecture positions the platform for deep integrations with: 
+- Major Indian job boards (Naukri, Shine, Monster, Indeed)<br />
+- LinkedIn Recruiter<br />
+- WhatsApp Business API for candidate communication<br />
+- Accounting platforms (Tally, Zoho Books, QuickBooks)<br />
+- Calendar integrations (Google Calendar, Outlook)<br />
+- Video conferencing (Zoom, Google Meet, Microsoft Teams)</p>
+<h3>Enterprise Readiness</h3>
+<p>For large enterprises, the platform's roadmap includes: SSO (Single Sign-On) via SAML/OAuth, custom subdomain per company, advanced data archival and retention policies, SLA-based alerting and escalation management, custom report builder with drag-and-drop widgets, and API access for enterprise-level integrations.</p>
+<hr />
+<div class="sec-break"><div class="sn">15</div><div><div class="sl2">Section 15</div><div class="st">CONCLUSION</div></div></div>
+<h2>The Recruitment Platform That Works As Hard As You Do</h2>
+<p>The recruitment and staffing industry is high-pressure, high-volume, and relationship-driven. Success depends on speed, accuracy, follow-through, and the ability to manage dozens — or hundreds — of moving pieces simultaneously.</p>
+<p>For too long, recruitment teams have made do with tools designed for other industries, adapted imperfectly for their needs. The result: manual work that drains time, missed opportunities that cost revenue, and data chaos that damages client relationships.</p>
+<p><strong>Niyan HireFlow CRM is built differently.</strong></p>
+<p>It starts with a deep understanding of how recruitment businesses actually work — the workflows, the stakeholders, the financial milestones, the compliance requirements, and the competitive pressures. Every feature in the platform exists to solve a real problem that real recruitment teams face every day.</p>
+<p>The result is a platform that:</p>
+<p><strong>Centralizes</strong> everything — candidates, clients, jobs, interviews, offers, onboarding, employees, payroll, and reports — in a single workspace accessible to everyone who needs it.</p>
+<p><strong>Automates</strong> the time-consuming, repetitive work — reminders, scoring, calculations, notifications, and reporting — so your team spends their time on the work only humans can do: building relationships, closing deals, and delivering outcomes.</p>
+<p><strong>Protects</strong> your business with enterprise-grade security — role-based access, immutable audit trails, encrypted data, and isolated multi-tenant databases.</p>
+<p><strong>Scales</strong> with your ambitions — from a team of 3 to a company of 300, from 100 candidates to 100,000 profiles, from one client to a hundred.</p>
+<p><strong>Delivers insights</strong> that turn data into decisions — so leaders can manage by visibility rather than intuition.</p>
+<p>Whether you are a boutique placement firm looking to professionalize your operations, a mid-size staffing agency seeking to scale without hiring more administrators, or an enterprise HR department wanting to unify recruitment and employee management — Niyan HireFlow CRM is built for you.</p>
+<p><strong>The future of recruitment is structured, automated, and data-driven. Niyan HireFlow gets you there today.</strong></p>
+<hr />
+<div class="sec-break"><div class="sn">16</div><div><div class="sl2">Section 16</div><div class="st">CONTACT &amp; DEMO SECTION</div></div></div>
+<h2>See Niyan HireFlow in Action</h2>
+<p>Words and documents describe the platform. A live demonstration shows you what it can do for your specific business.</p>
+<h2>Schedule a Free Demo</h2>
+<p>In a personalized 45-minute demonstration, our team will walk you through a live walkthrough of the candidate-to-placement workflow, your specific module requirements (recruitment, HRM, or both), customization and configuration options for your business, role-based access setup for your team structure, integration capabilities with your existing tools, and subscription options and pricing.</p>
+<h2>Get Started in 3 Steps</h2>
+<p><strong>STEP 1 — Schedule Demo:</strong> 45-minute live walkthrough with your team.</p>
+<p><strong>STEP 2 — Trial Setup:</strong> Your company configured and ready to use in 24 hours.</p>
+<p><strong>STEP 3 — Go Live:</strong> Your team trained and productive in 1 week.</p>
+<h2>Contact Information</h2>
+<table>
+<thead>
+<tr>
+<th>Channel</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Website</strong></td>
+<td>www.niyanhireflow.com</td>
+</tr>
+<tr>
+<td><strong>Email</strong></td>
+<td>hello@niyanhireflow.com</td>
+</tr>
+<tr>
+<td><strong>Phone</strong></td>
+<td>+91 XXXXX XXXXX</td>
+</tr>
+<tr>
+<td><strong>WhatsApp</strong></td>
+<td>+91 XXXXX XXXXX</td>
+</tr>
+<tr>
+<td><strong>LinkedIn</strong></td>
+<td>linkedin.com/company/niyanhireflow</td>
+</tr>
+</tbody>
+</table>
+<h2>Free Trial Offer</h2>
+<p>Start your 30-day free trial — no credit card required. Full access to all modules. Up to 5 users. Unlimited candidates. Experience the complete platform before making any commitment.</p>
+<h2>What Customers Say</h2>
+<blockquote>
+<p>"Niyan HireFlow replaced 4 different tools we were using and cut our placement cycle time by 40%." — Recruitment Agency, Bangalore</p>
+<p>"The automated payout tracking alone saved us from missing three billing windows in the first month." — Staffing Firm, Mumbai</p>
+<p>"Our clients love the professional onboarding workflow. It's changed how they perceive our service quality." — HR Consultancy, Hyderabad</p>
+</blockquote>
+<hr />
+<div class="pb"></div><h2>APPENDIX — Feature Quick Reference</h2>
+<h3>Complete Module List</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Module</th>
+<th>Key Features</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Candidate Management</td>
+<td>AI parsing, rich profiles, bulk import, talent pool, source tracking</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Job Management</td>
+<td>Eligibility criteria, auto-matching, job aging, partner sharing</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Client Management</td>
+<td>Contact management, agreement tracking, commission configuration</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Application Tracking</td>
+<td>14-stage pipeline, history tracking, auto-scoring, offer management</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Interview Management</td>
+<td>Multi-round pipelines, structured feedback, scheduling, notifications</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Onboarding Management</td>
+<td>Offer lifecycle, DOJ tracking, document verification, payout automation</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Partner Management</td>
+<td>Job sharing, submission tracking, commission calculation</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Task Management</td>
+<td>Kanban board, calendar view, comments, entity linking</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Employee Management</td>
+<td>Full employee records, salary structure, compliance tracking</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Attendance Management</td>
+<td>Check-in/out, overtime, late tracking, admin override</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Leave Management</td>
+<td>Multi-type leave, balance tracking, approval workflow</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Payroll Management</td>
+<td>Salary structure, payslip generation, bulk processing</td>
+</tr>
+<tr>
+<td>13</td>
+<td>Performance Management</td>
+<td>Self-review, manager review, HR finalization, history</td>
+</tr>
+<tr>
+<td>14</td>
+<td>Analytics Dashboard</td>
+<td>Live KPIs, funnel charts, trend analysis, role-specific views</td>
+</tr>
+<tr>
+<td>15</td>
+<td>Reports</td>
+<td>18+ pre-built reports, scheduling, 4 export formats</td>
+</tr>
+<tr>
+<td>16</td>
+<td>Import/Export</td>
+<td>Smart column mapping, validation preview, bulk operations</td>
+</tr>
+<tr>
+<td>17</td>
+<td>Notification System</td>
+<td>20+ event types, 5 delivery channels, user preferences</td>
+</tr>
+<tr>
+<td>18</td>
+<td>User Management</td>
+<td>User CRUD, status management, profile completion tracking</td>
+</tr>
+<tr>
+<td>19</td>
+<td>Role Management</td>
+<td>8 system roles, unlimited custom roles, 60+ permissions</td>
+</tr>
+<tr>
+<td>20</td>
+<td>Security &amp; Audit</td>
+<td>Immutable audit trail, session management, IP logging</td>
+</tr>
+<tr>
+<td>21</td>
+<td>Company Settings</td>
+<td>Email, notifications, security, branding, custom fields</td>
+</tr>
+<tr>
+<td>22</td>
+<td>Targets &amp; Leaderboard</td>
+<td>Target assignment, achievement tracking, leaderboard</td>
+</tr>
+<tr>
+<td>23</td>
+<td>Announcements</td>
+<td>Company-wide broadcasting, time-stamped records</td>
+</tr>
+<tr>
+<td>24</td>
+<td>Pipeline Management</td>
+<td>Interview pipeline configuration, stage management</td>
+</tr>
+<tr>
+<td>25</td>
+<td>Subscription Management</td>
+<td>Plan management, seat tracking, upgrade workflows</td>
+</tr>
+</tbody>
+</table>
+<h3>Technology Stack Summary</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Technology</th>
+<th>Why It Matters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frontend</td>
+<td>React.js + Redux</td>
+<td>Fast, responsive UI that updates in real time</td>
+</tr>
+<tr>
+<td>Styling</td>
+<td>Tailwind CSS</td>
+<td>Consistent, professional design system</td>
+</tr>
+<tr>
+<td>Charts</td>
+<td>Recharts</td>
+<td>Interactive, animated data visualization</td>
+</tr>
+<tr>
+<td>Backend</td>
+<td>FastAPI (Python)</td>
+<td>High-performance, async request processing</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>MongoDB</td>
+<td>Flexible, scalable data storage</td>
+</tr>
+<tr>
+<td>Auth</td>
+<td>JWT Tokens</td>
+<td>Secure, stateless authentication</td>
+</tr>
+<tr>
+<td>Email</td>
+<td>Dual SMTP</td>
+<td>Branded outbound emails with reliable fallback</td>
+</tr>
+<tr>
+<td>Architecture</td>
+<td>Multi-Tenant</td>
+<td>Isolated company data with shared platform infrastructure</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>Document Version: 1.0 | Generated: May 2026 | Niyan HireFlow CRM</em><br />
+<em>This document contains proprietary information. Distribution to unauthorized parties is prohibited.</em></p>
+</div>
+
+<div class="footer">
+  <span class="fb">Niyan HireFlow CRM</span>
+  <span>Recruit Smarter. Hire Faster. Grow Together.</span>
+  <span>&copy; 2025 Niyan HireFlow &nbsp;|&nbsp; Confidential</span>
+</div>
+
+</body>
+</html>

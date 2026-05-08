@@ -49,13 +49,36 @@ export default defineConfig(({ mode }) => {
       // Split vendor chunks for better long-term caching
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor:  ['react', 'react-dom', 'react-router-dom'],
-            redux:   ['@reduxjs/toolkit', 'react-redux'],
-            charts:  ['recharts'],
-            icons:   ['lucide-react'],
-            forms:   ['react-hook-form'],
-            dates:   ['date-fns'],
+          manualChunks(id) {
+            // Core React runtime — loaded on every page, cache forever
+            if (id.includes('node_modules/react/') ||
+                id.includes('node_modules/react-dom/') ||
+                id.includes('node_modules/react-router-dom/') ||
+                id.includes('node_modules/scheduler/')) {
+              return 'vendor-react'
+            }
+            // Redux — loaded on every page
+            if (id.includes('@reduxjs/toolkit') || id.includes('react-redux')) {
+              return 'vendor-redux'
+            }
+            // Heavy chart library — only loaded on dashboard/analytics pages
+            if (id.includes('recharts') || id.includes('d3-')) {
+              return 'vendor-charts'
+            }
+            // Icon library — large but tree-shaken; keep separate for caching
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons'
+            }
+            // Utilities — small, group together
+            if (id.includes('react-hook-form') ||
+                id.includes('date-fns') ||
+                id.includes('react-hot-toast')) {
+              return 'vendor-utils'
+            }
+            // Axios + its deps — loaded on every page
+            if (id.includes('node_modules/axios')) {
+              return 'vendor-http'
+            }
           },
         },
       },

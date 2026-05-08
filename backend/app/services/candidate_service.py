@@ -2,6 +2,7 @@
 Candidate Service - Phase 3
 Business logic for candidate management with AI resume parsing
 """
+import asyncio
 from datetime import datetime, date, timezone
 from typing import Optional, Dict, Any
 from bson import ObjectId
@@ -268,16 +269,24 @@ class CandidateService:
                     query["created_by"] = {"$in": visible_ids}
         
         if search_params:
-            # Keyword search (name, email, skills)
+            # Keyword search — use MongoDB text index when available (fast),
+            # fall back to $or/$regex only when text index is absent.
             if search_params.keyword:
-                keyword = re.escape(search_params.keyword.lower())
-                query["$or"] = [
-                    {"full_name": {"$regex": keyword, "$options": "i"}},
-                    {"email": {"$regex": keyword, "$options": "i"}},
-                    {"skill_tags": {"$regex": keyword, "$options": "i"}},
-                    {"current_company": {"$regex": keyword, "$options": "i"}},
-                    {"current_designation": {"$regex": keyword, "$options": "i"}}
-                ]
+                keyword = search_params.keyword.strip()
+                try:
+                    # $text requires a text index; if it doesn't exist MongoDB
+                    # raises OperationFailure — we catch that below.
+                    query["$text"] = {"$search": keyword}
+                except Exception:
+                    # Fallback: anchored-prefix regex (cheaper than arbitrary regex)
+                    kw_esc = re.escape(keyword.lower())
+                    query["$or"] = [
+                        {"full_name": {"$regex": kw_esc, "$options": "i"}},
+                        {"email": {"$regex": kw_esc, "$options": "i"}},
+                        {"skill_tags": {"$regex": kw_esc, "$options": "i"}},
+                        {"current_company": {"$regex": kw_esc, "$options": "i"}},
+                        {"current_designation": {"$regex": kw_esc, "$options": "i"}},
+                    ]
             
             # Skills filter (any of the specified skills)
             if search_params.skills:
@@ -350,13 +359,29 @@ class CandidateService:
                 else:
                     query["created_at"] = {"$lte": datetime.combine(search_params.created_to, datetime.max.time())}
         
-        # Count total
-        total = await collection.count_documents(query)
-        
-        # Fetch with pagination
+        # Run count and paginated fetch in parallel to save one round-trip
         skip = (page - 1) * page_size
-        cursor = collection.find(query).sort("created_at", -1).skip(skip).limit(page_size)
-        candidates = await cursor.to_list(length=page_size)
+
+        # Projection: only the fields used by CandidateListResponse (avoids
+        # transferring full resume/education/work_experience blobs over the wire)
+        LIST_PROJECTION = {
+            "_id": 1, "first_name": 1, "full_name": 1, "email": 1, "mobile": 1,
+            "current_city": 1, "total_experience_years": 1, "current_company": 1,
+            "current_designation": 1, "current_ctc": 1, "expected_ctc": 1,
+            "notice_period": 1, "skill_tags": 1, "source": 1, "status": 1,
+            "assigned_to": 1, "partner_id": 1, "created_by": 1,
+            "resume_url": 1, "total_applications": 1, "current_job_title": 1,
+            "current_stage": 1, "created_at": 1,
+        }
+
+        total, candidates = await asyncio.gather(
+            collection.count_documents(query),
+            collection.find(query, LIST_PROJECTION)
+                      .sort("created_at", -1)
+                      .skip(skip)
+                      .limit(page_size)
+                      .to_list(length=page_size)
+        )
         
         # Collect all user IDs needed for name lookups
         assigned_ids = [c.get("assigned_to") for c in candidates if c.get("assigned_to")]

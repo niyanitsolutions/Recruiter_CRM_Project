@@ -75,21 +75,22 @@ async def _resolve_effective_permissions(user: dict, role_doc: Optional[dict], d
         perms = set(ROLE_PERMISSIONS.get(role_name, []))
 
     # ── Step 4: merge assigned_departments (multi-role support) ───────────────
-    # Each entry is a role/department slug (e.g. "hr", "accounts"). We fetch the
-    # role doc for each and union its permissions into the base set.
-    assigned_departments = user.get("assigned_departments") or []
+    # Batch-fetch all department role docs with a single $in query instead of
+    # one find_one per department — eliminates N round-trips to MongoDB.
+    assigned_departments = [d for d in (user.get("assigned_departments") or []) if d]
     if assigned_departments and db is not None and not bool(user.get("override_permissions")):
-        for dept_slug in assigned_departments:
-            if not dept_slug:
-                continue
-            # Treat the slug as a role name (primary_department == role slug pattern)
-            dept_role_doc = await db.roles.find_one(
-                {"name": dept_slug, "is_deleted": False}
-            )
-            if dept_role_doc and dept_role_doc.get("permissions"):
+        dept_docs = await db.roles.find(
+            {"name": {"$in": assigned_departments}, "is_deleted": False},
+            {"name": 1, "permissions": 1}
+        ).to_list(length=len(assigned_departments))
+        found_slugs = set()
+        for dept_role_doc in dept_docs:
+            found_slugs.add(dept_role_doc.get("name"))
+            if dept_role_doc.get("permissions"):
                 perms.update(dept_role_doc["permissions"])
-            else:
-                # Fall back to hardcoded defaults for that role
+        # Hardcoded fallback for any slugs not found in DB
+        for dept_slug in assigned_departments:
+            if dept_slug not in found_slugs:
                 perms.update(ROLE_PERMISSIONS.get(dept_slug, []))
 
     # ── Step 5: subtract restricted_modules ───────────────────────────────────

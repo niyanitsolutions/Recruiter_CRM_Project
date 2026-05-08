@@ -13,7 +13,7 @@ from app.core.dependencies import (
 )
 from app.core.redis import get_cache, set_cache
 
-DASHBOARD_CACHE_TTL = 60  # seconds
+DASHBOARD_CACHE_TTL = 300  # 5 minutes — safe for aggregate counts
 
 router = APIRouter(prefix="/admin/dashboard", tags=["Admin Dashboard"])
 
@@ -126,9 +126,10 @@ async def get_recent_users(
 ):
     """Get recently added users"""
     cursor = db.users.find(
-        {"is_deleted": False}
+        {"is_deleted": False},
+        {"_id": 1, "full_name": 1, "email": 1, "role": 1, "status": 1, "created_at": 1}
     ).sort("created_at", -1).limit(limit)
-    
+
     users = []
     async for user in cursor:
         users.append({

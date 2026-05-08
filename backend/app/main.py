@@ -154,6 +154,17 @@ async def lifespan(app: FastAPI):
     from app.migrations.runner import run_migrations
     await run_migrations()
     print(" Schema migrations applied")
+    # Ensure indexes are up-to-date for all existing tenant databases.
+    # create_index is idempotent — safe to call on every restart.
+    from app.core.database import DatabaseManager, get_master_db as _get_mdb
+    _master = _get_mdb()
+    try:
+        tenant_ids = await _master.tenants.distinct("_id", {"is_deleted": {"$ne": True}})
+        if tenant_ids:
+            await asyncio.gather(*[DatabaseManager.ensure_indexes(tid) for tid in tenant_ids])
+            print(f" Indexes ensured for {len(tenant_ids)} tenant DB(s)")
+    except Exception as _idx_err:
+        logger.warning("Index migration skipped: %s", _idx_err)
     # Start subscription reminder background task (runs every 24 hours)
     reminder_task = asyncio.create_task(reminder_background_loop())
     print(" Subscription reminder scheduler started")
@@ -212,8 +223,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
-# GZip — compress any response ≥ 1 kB (JSON payloads, HTML, JS chunks)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+# GZip — compress any response ≥ 512 B; most list/dashboard JSON payloads
+# are 2–20 kB and compress 60–80%, which matters on slow mobile connections.
+app.add_middleware(GZipMiddleware, minimum_size=512)
 
 # CORS Configuration
 app.add_middleware(

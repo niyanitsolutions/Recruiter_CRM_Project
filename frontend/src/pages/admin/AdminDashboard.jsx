@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import {
@@ -18,10 +18,16 @@ import subscriptionService from '../../services/subscriptionService'
 import SubscriptionBanner from '../../components/subscription/SubscriptionBanner'
 import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 import KpiCard from '../../components/dashboard/KpiCard'
+import { SkeletonKpiRow, SkeletonBox } from '../../components/common/SkeletonLoader'
 import HiringFunnel from '../../components/dashboard/HiringFunnel'
 import CandidatePipelineChart from '../../components/dashboard/CandidatePipelineChart'
 import HiringTrend from '../../components/dashboard/HiringTrend'
 import { formatDateTime } from '../../utils/format'
+
+// ── Module-level dashboard cache — survives SPA navigation ───────────────────
+// TTL: 5 minutes. Matches backend cache so we never show data older than backend.
+const DASH_CACHE_TTL = 5 * 60 * 1000
+const _dashCache = { data: null, recruit: null, seat: null, ts: 0 }
 
 // ── Animated counter (used in compact stat cards) ─────────────────────────────
 const useCounter = (target, duration = 800) => {
@@ -291,15 +297,33 @@ const AdminDashboard = () => {
   }, [])
 
   // ── Fetch main dashboard data ───────────────────────────────────────────────
-  const fetchDashboardData = useCallback(async () => {
+  const fetchDashboardData = useCallback(async (force = false) => {
+    // Serve from module-level cache if fresh (within TTL) and not forced
+    if (!force && _dashCache.ts && (Date.now() - _dashCache.ts) < DASH_CACHE_TTL) {
+      setDashboardData(_dashCache.data)
+      setRecruitStats(_dashCache.recruit)
+      setSeatStatus(_dashCache.seat)
+      setLoading(false)
+      return
+    }
     try {
       setLoading(true)
-      const [mainRes, recruitRes] = await Promise.allSettled([
+      const [mainRes, recruitRes, seatRes] = await Promise.allSettled([
         adminDashboardService.getDashboardData(),
         applicationService.getDashboardStats(),
+        subscriptionService.getTenantSeatStatus(),
       ])
-      if (mainRes.status   === 'fulfilled') setDashboardData(mainRes.value.data)
-      if (recruitRes.status === 'fulfilled') setRecruitStats(recruitRes.value.data)
+      const data    = mainRes.status   === 'fulfilled' ? mainRes.value.data   : _dashCache.data
+      const recruit = recruitRes.status === 'fulfilled' ? recruitRes.value.data : _dashCache.recruit
+      const seat    = seatRes.status   === 'fulfilled' ? (seatRes.value.data?.data || null) : _dashCache.seat
+      // Write-through to module cache
+      _dashCache.data    = data
+      _dashCache.recruit = recruit
+      _dashCache.seat    = seat
+      _dashCache.ts      = Date.now()
+      setDashboardData(data)
+      setRecruitStats(recruit)
+      setSeatStatus(seat)
       setError(null)
     } catch (err) {
       setError('Failed to load dashboard data')
@@ -312,10 +336,7 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchDashboardData()
     fetchTrend(period.days)
-    subscriptionService.getTenantSeatStatus()
-      .then(res => setSeatStatus(res.data?.data || null))
-      .catch(() => {})
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-fetch trend when period changes
   useEffect(() => {
@@ -353,7 +374,7 @@ const AdminDashboard = () => {
           style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}
         >
           {error}
-          <button onClick={fetchDashboardData} className="ml-4 underline">Retry</button>
+          <button onClick={() => fetchDashboardData(true)} className="ml-4 underline">Retry</button>
         </div>
       </div>
     )
@@ -487,7 +508,7 @@ const AdminDashboard = () => {
               </Link>
             )}
             <button
-              onClick={fetchDashboardData}
+              onClick={() => fetchDashboardData(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
               style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: '1px solid rgba(255,255,255,0.25)' }}
               onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.25)'}

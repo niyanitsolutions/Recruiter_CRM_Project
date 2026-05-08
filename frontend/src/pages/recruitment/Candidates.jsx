@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Users, Plus, Search, Filter, Eye, Edit, Trash2,
@@ -12,9 +12,15 @@ import applicationService from '../../services/applicationService'
 import usePermissions from '../../hooks/usePermissions'
 import ExportModal from '../../components/common/ExportModal'
 import CandidateImportModal from '../../components/common/CandidateImportModal'
+import { SkeletonTableRows, SkeletonCards } from '../../components/common/SkeletonLoader'
 import ModalPortal from '../../components/common/ModalPortal'
 import { selectUserType } from '../../store/authSlice'
 import { getToken } from '../../utils/token'
+
+// Module-level cache — survives navigation, resets only on hard reload.
+// Dropdown options (statuses, sources, notice periods) are static reference
+// data that never change during a session, so fetching them once is enough.
+const _dropdownCache = { statuses: null, sources: null, noticePeriods: null }
 
 const AVATAR_GRADIENTS = [
   'var(--stat-purple)',
@@ -114,31 +120,43 @@ const Candidates = () => {
   const [eligibleLoading, setEligibleLoading] = useState(false)
   const [applyingJobId, setApplyingJobId] = useState(null)
 
-  useEffect(() => { loadDropdowns() }, [])
-  useEffect(() => { loadCandidates() }, [pagination.page, filters, activeTab])
+  // Debounce refs — keyword waits 400 ms, all other changes are immediate
+  const _debounceTimer  = useRef(null)
+  const _prevKeyword    = useRef(filters.keyword)
 
-  const loadDropdowns = async () => {
+  const loadDropdowns = useCallback(async () => {
+    // Serve from module-level cache so navigating back here costs 0 API calls
+    if (_dropdownCache.statuses) {
+      setStatuses(_dropdownCache.statuses)
+      setSources(_dropdownCache.sources)
+      setNoticePeriods(_dropdownCache.noticePeriods)
+      return
+    }
     try {
       const [statusRes, sourceRes, noticeRes] = await Promise.all([
         candidateService.getStatuses(),
         candidateService.getSources(),
         candidateService.getNoticePeriods()
       ])
-      setStatuses(statusRes.data || [])
-      setSources(sourceRes.data || [])
-      setNoticePeriods(noticeRes.data || [])
+      _dropdownCache.statuses     = statusRes.data || []
+      _dropdownCache.sources      = sourceRes.data || []
+      _dropdownCache.noticePeriods = noticeRes.data || []
+      setStatuses(_dropdownCache.statuses)
+      setSources(_dropdownCache.sources)
+      setNoticePeriods(_dropdownCache.noticePeriods)
     } catch (error) {
       console.error('Error loading dropdowns:', error)
     }
-  }
+  }, [])
 
-  const loadCandidates = async () => {
+  const loadCandidates = useCallback(async (overrideFilters) => {
     try {
       setLoading(true)
+      const activeFilters = overrideFilters ?? filters
       const params = {
         page: pagination.page,
         page_size: 20,
-        ...Object.fromEntries(Object.entries(filters).filter(([_, v]) => v))
+        ...Object.fromEntries(Object.entries(activeFilters).filter(([_, v]) => v))
       }
       if (activeTab === 'active') params.status = 'active'
       if (activeTab === 'blacklisted') params.status = 'blacklisted'
@@ -154,7 +172,19 @@ const Candidates = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filters, pagination.page, activeTab])
+
+  useEffect(() => { loadDropdowns() }, [loadDropdowns])
+
+  // Debounce keyword typing; fire immediately for everything else
+  useEffect(() => {
+    if (_debounceTimer.current) clearTimeout(_debounceTimer.current)
+    const keywordChanged = filters.keyword !== _prevKeyword.current
+    _prevKeyword.current = filters.keyword
+    const delay = keywordChanged ? 400 : 0
+    _debounceTimer.current = setTimeout(() => { loadCandidates() }, delay)
+    return () => clearTimeout(_debounceTimer.current)
+  }, [pagination.page, filters, activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleKeywordSearch = async () => {
     if (!keywordSearch.trim()) return
@@ -512,16 +542,9 @@ const Candidates = () => {
         )}
       </div>
 
-      {/* Loading state */}
-      {loading && (
-        <div className="p-8 text-center">
-          <div
-            className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto"
-            style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
-          />
-          <p className="mt-2" style={{ color: 'var(--text-muted)' }}>Loading candidates...</p>
-        </div>
-      )}
+      {/* Loading state — skeleton instead of blocking spinner */}
+      {loading && viewMode === 'table' && <SkeletonTableRows rows={10} cols={8} />}
+      {loading && viewMode === 'card'  && <SkeletonCards count={6} />}
 
       {/* Empty state */}
       {!loading && candidates.length === 0 && (
