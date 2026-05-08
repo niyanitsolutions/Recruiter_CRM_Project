@@ -118,19 +118,13 @@ const SUBSCRIPTION_STEPS = [
 // TRIAL SETUP — Single-page form
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const MODULE_OPTIONS = [
-  { value: 'crm_only', label: 'Only CRM', desc: 'Recruitment, clients & partner management' },
-  { value: 'hrm_only', label: 'Only HRM', desc: 'Employees, attendance, payroll & leaves' },
-  { value: 'crm_hrm',  label: 'CRM + HRM', desc: 'Full access to both modules' },
-]
-
 const TrialSetupForm = () => {
   const navigate  = useNavigate()
   const [isLoading, setIsLoading] = useState(false)
   const [done, setDone] = useState(null)           // holds success response data
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm,  setShowConfirm]  = useState(false)
-  const [selectedModule, setSelectedModule] = useState('crm_hrm')
+  const selectedModule = 'crm_hrm'
 
   // "No website" checkbox — use a ref so validate closure reads the latest value
   const [noWebsite, setNoWebsite] = useState(false)
@@ -554,36 +548,6 @@ const TrialSetupForm = () => {
               </div>
             </div>
 
-            {/* ── SECTION 4: Module Selection ────────────────────────────── */}
-            <div className="bg-white rounded-2xl border border-surface-200 shadow-sm p-6">
-              <div className="flex items-center gap-2 mb-5">
-                <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center">
-                  <Monitor className="w-4 h-4 text-green-600" />
-                </div>
-                <h3 className="font-semibold text-surface-900">Module Selection</h3>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                {MODULE_OPTIONS.map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setSelectedModule(opt.value)}
-                    className={clsx(
-                      'flex flex-col items-start gap-1 rounded-xl border-2 p-4 text-left transition-all',
-                      selectedModule === opt.value
-                        ? 'border-indigo-500 bg-indigo-50 shadow-sm'
-                        : 'border-surface-200 bg-white hover:border-surface-300'
-                    )}
-                  >
-                    <span className={clsx('text-sm font-semibold', selectedModule === opt.value ? 'text-indigo-700' : 'text-surface-800')}>
-                      {opt.label}
-                    </span>
-                    <span className="text-xs text-surface-500 leading-snug">{opt.desc}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* ── Submit ─────────────────────────────────────────────────── */}
             <div className="flex items-center justify-between gap-4 pb-4">
               <Link to="/login" className="text-sm text-surface-500 hover:text-surface-700 font-medium flex items-center gap-1">
@@ -642,7 +606,7 @@ const SubscriptionRegister = () => {
   const [ownerMobileCode, setOwnerMobileCode]   = useState('+91')
   const [noWebsite, setNoWebsite]               = useState(false)
   const noWebsiteRef                            = useRef(false)
-  const [selectedModule, setSelectedModule]     = useState('crm_hrm')
+  const selectedModule                          = 'crm_hrm'
   const [selectedCountry, setSelectedCountry]   = useState('India')
   const [selectedState, setSelectedState]       = useState('')
   const [selectedDistrict, setSelectedDistrict] = useState('')
@@ -1024,31 +988,6 @@ const SubscriptionRegister = () => {
                       </div>
                     )
                   })}
-                </div>
-
-                {/* Module Selection */}
-                <div className="mt-5">
-                  <label className="block text-sm font-medium text-surface-700 mb-3">Module Selection</label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {MODULE_OPTIONS.map(opt => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setSelectedModule(opt.value)}
-                        className={clsx(
-                          'flex flex-col items-start gap-1 rounded-xl border-2 p-4 text-left transition-all',
-                          selectedModule === opt.value
-                            ? 'border-accent-500 bg-accent-50 shadow-sm'
-                            : 'border-surface-200 bg-white hover:border-surface-300'
-                        )}
-                      >
-                        <span className={clsx('text-sm font-semibold', selectedModule === opt.value ? 'text-accent-700' : 'text-surface-800')}>
-                          {opt.label}
-                        </span>
-                        <span className="text-xs text-surface-500 leading-snug">{opt.desc}</span>
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 {/* User count */}
