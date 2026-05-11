@@ -37,6 +37,18 @@ const MODULE_PERMS = {
   crm_settings:            ['crm_settings:view','crm_settings:edit'],
   audit:                   ['audit:view','audit:sessions','audit:alerts','audit:admin'],
   notifications:           ['notifications:create'],
+  // HRM modules
+  hrm_employees:           ['employees:view','employees:create','employees:edit','employees:delete'],
+  hrm_attendance:          ['attendance:view','attendance:create','attendance:edit'],
+  hrm_leaves:              ['leaves:view','leaves:create','leaves:edit','leaves:approve'],
+  hrm_payroll:             ['payroll:view','payroll:create','payroll:edit'],
+  hrm_performance:         ['performance:view','performance:create','performance:edit'],
+  hrm_announcements:       ['announcements:view','announcements:create','announcements:edit','announcements:delete'],
+  // Internal hiring modules
+  hrm_requisitions:        ['requisitions:view','requisitions:create','requisitions:edit','requisitions:delete','requisitions:approve'],
+  hrm_internal_jobs:       ['internal_jobs:view','internal_jobs:create','internal_jobs:edit','internal_jobs:delete'],
+  hrm_internal_apps:       ['internal_apps:view','internal_apps:create','internal_apps:edit','internal_apps:approve'],
+  hrm_referrals:           ['referrals:view','referrals:create','referrals:edit','referrals:approve'],
 }
 
 const MODULE_LABELS = {
@@ -48,6 +60,12 @@ const MODULE_LABELS = {
   exports: 'Exports', targets: 'Targets', tasks: 'Tasks', analytics: 'Analytics',
   reports: 'Reports', crm_settings: 'CRM Settings', audit: 'Audit',
   notifications: 'Notifications',
+  // HRM modules
+  hrm_employees: 'Employees', hrm_attendance: 'Attendance', hrm_leaves: 'Leaves',
+  hrm_payroll: 'Payroll', hrm_performance: 'Performance', hrm_announcements: 'Announcements',
+  // Internal hiring
+  hrm_requisitions: 'Job Requisitions', hrm_internal_jobs: 'Internal Job Board',
+  hrm_internal_apps: 'Internal Applications', hrm_referrals: 'Referrals',
 }
 
 const DEPT_MODULES = {
@@ -56,7 +74,7 @@ const DEPT_MODULES = {
   client_coordinator:   { full: ['clients','jobs','interviews','interview_settings','onboards'], view_only: ['candidates','reports'] },
   candidate_coordinator:{ full: ['candidates','interviews_no_schedule','interview_settings'], view_only: ['jobs','clients','onboards','reports'] },
   recruiter:            { full: ['candidates','interviews','clients','jobs','interview_settings'], view_only: ['onboards','reports'] },
-  hr:                   { full: ['users','candidates','onboards'], view_only: ['reports'] },
+  hr:                   { full: ['users','candidates','onboards','hrm_employees','hrm_attendance','hrm_leaves','hrm_payroll','hrm_performance','hrm_announcements','hrm_requisitions','hrm_internal_jobs','hrm_internal_apps','hrm_referrals'], view_only: ['reports'] },
   accounts:             { full: ['accounts','payouts','invoices','imports','exports'], view_only: ['clients','partners','reports'] },
   partner:              { full: ['candidates'], view_only: ['jobs','interviews'] },
 }
