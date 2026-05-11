@@ -421,17 +421,6 @@ const Sellers = () => {
               </div>
             </div>
 
-            {/* Subscription Info */}
-            <div className="bg-surface-50 rounded-lg p-4 space-y-2">
-              <p className="text-xs font-semibold text-surface-500 uppercase">Subscription</p>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div><span className="text-surface-500">Plan:</span> <strong>{selected.plan_display_name || selected.plan_name}</strong></div>
-                <div><span className="text-surface-500">Seats:</span> <strong>{selected.total_user_seats}</strong></div>
-                <div><span className="text-surface-500">Expiry:</span> {formatDate(selected.plan_expiry_date)}</div>
-                <div><span className="text-surface-500">Trial:</span> {selected.is_trial ? 'Yes' : 'No'}</div>
-              </div>
-            </div>
-
             <div className="flex justify-end pt-4 border-t border-surface-200">
               <Button variant="secondary" onClick={() => setIsViewOpen(false)}>Close</Button>
             </div>

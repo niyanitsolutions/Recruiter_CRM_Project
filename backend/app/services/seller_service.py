@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, Tuple
 import uuid
 import logging
+import re
 
 from app.core.security import hash_password, verify_password
 from app.models.master.seller import SellerCreate, SellerUpdate
@@ -48,6 +49,8 @@ class SellerService:
             "is_trial": True,
             "billing_cycle": None,
             "total_user_seats": data.total_user_seats,
+            # Commission margin (None = use platform default)
+            "margin_percentage": data.margin_percentage,
             # Stats
             "total_tenants": 0,
             "active_tenants": 0,
@@ -118,7 +121,7 @@ class SellerService:
             return False, "Seller not found", None
 
         updates: dict = {"updated_at": datetime.now(timezone.utc)}
-        for field, value in data.model_dump(exclude_none=True).items():
+        for field, value in data.model_dump(exclude_unset=True).items():
             updates[field] = value
 
         await master_db.sellers.update_one({"_id": seller_id}, {"$set": updates})

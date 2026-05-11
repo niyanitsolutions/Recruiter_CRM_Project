@@ -381,6 +381,20 @@ const Tenants = () => {
       ),
     },
     {
+      header: 'Source',
+      render: (row) => (
+        row.seller_id
+          ? <div>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                {row.seller_name || 'Seller'}
+              </span>
+            </div>
+          : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-surface-100 text-surface-600">
+              Direct
+            </span>
+      ),
+    },
+    {
       header: 'Seats',
       render: (row) => (
         <p className="text-sm font-medium text-surface-700">{row.max_users || '—'}</p>
@@ -512,6 +526,12 @@ const Tenants = () => {
                 <div><p className="text-xs text-surface-500">Company ID</p><p className="font-mono text-sm">{selectedTenant.company_id}</p></div>
                 <div><p className="text-xs text-surface-500">Industry</p><p className="capitalize">{selectedTenant.industry}</p></div>
                 <div><p className="text-xs text-surface-500">Phone</p><p>{selectedTenant.phone}</p></div>
+                <div>
+                  <p className="text-xs text-surface-500">Source</p>
+                  {selectedTenant.seller_id
+                    ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">{selectedTenant.seller_name || 'Seller'}</span>
+                    : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-surface-100 text-surface-600">Direct</span>}
+                </div>
               </div>
             </div>
 

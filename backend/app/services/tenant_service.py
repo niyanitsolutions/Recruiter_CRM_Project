@@ -584,15 +584,30 @@ class TenantService:
             ]
 
         total = await master_db.tenants.count_documents(query)
-        
+
         skip = (page - 1) * limit
-        tenants = await master_db.tenants.find(query).skip(skip).limit(limit).to_list(limit)
-        
+        tenants = await master_db.tenants.find(query).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+
         # Remove sensitive data
         for tenant in tenants:
             if "owner" in tenant:
                 tenant["owner"].pop("password_hash", None)
-        
+
+        # Batch-resolve seller names so the frontend can show "Direct" vs seller name
+        seller_ids = list({t["seller_id"] for t in tenants if t.get("seller_id")})
+        if seller_ids:
+            seller_docs = await master_db.sellers.find(
+                {"_id": {"$in": seller_ids}},
+                {"_id": 1, "seller_name": 1},
+            ).to_list(length=len(seller_ids))
+            seller_map = {s["_id"]: s["seller_name"] for s in seller_docs}
+            for tenant in tenants:
+                sid = tenant.get("seller_id")
+                tenant["seller_name"] = seller_map.get(sid) if sid else None
+        else:
+            for tenant in tenants:
+                tenant["seller_name"] = None
+
         return tenants, total
     
     @staticmethod
