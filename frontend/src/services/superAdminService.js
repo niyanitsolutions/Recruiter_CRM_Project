@@ -113,10 +113,18 @@ const superAdminService = {
   },
 
   /**
-   * Get payment invoice data for a specific payment
+   * List all tenant subscriptions with optional status filter
    */
-  getPaymentInvoice: (paymentId) => {
-    return api.get(`/super-admin/payments/${paymentId}/invoice`)
+  getSubscriptions: (params = {}) => {
+    return api.get('/super-admin/subscriptions', { params })
+  },
+
+  /**
+   * Get platform-level report data
+   * report_type: 'revenue' | 'seller_performance' | 'tenant_growth' | 'subscriptions'
+   */
+  getReports: (reportType = 'revenue') => {
+    return api.get('/super-admin/reports', { params: { report_type: reportType } })
   },
 }
 

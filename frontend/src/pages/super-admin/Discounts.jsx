@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Plus, RefreshCw, Tag } from 'lucide-react'
 import { Button, Card, Table, Badge, Modal } from '../../components/common'
 import discountService from '../../services/discountService'
-import planService from '../../services/planService'
+import api from '../../services/api'
 import { formatDate } from '../../utils/format'
 import toast from 'react-hot-toast'
 
@@ -161,8 +161,8 @@ const Discounts = () => {
 
   const fetchPlans = async () => {
     try {
-      const res = await planService.getPlans(true)
-      setPlans(res.data.plans || res.data || [])
+      const res = await api.get('/plans/', { params: { include_inactive: true, include_trial: true } })
+      setPlans(res.data.plans || [])
     } catch {
       // non-critical
     }

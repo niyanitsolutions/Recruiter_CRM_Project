@@ -16,9 +16,6 @@ const sellerService = {
   // Update margin
   updateMargin: (id, marginPercentage) =>
     api.put(`/sellers/${id}`, { margin_percentage: marginPercentage }),
-
-  getSubscriptions: (params = {}) => api.get('/super-admin/subscriptions', { params }),
-  getReports: (reportType = 'revenue') => api.get('/super-admin/reports', { params: { report_type: reportType } }),
 }
 
 export default sellerService

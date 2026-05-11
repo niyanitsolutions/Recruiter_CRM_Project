@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { Button, Card, Table, Badge } from '../../components/common'
-import sellerService from '../../services/sellerService'
+import superAdminService from '../../services/superAdminService'
 import { formatCurrency, formatNumber } from '../../utils/format'
 import toast from 'react-hot-toast'
 
@@ -16,7 +16,7 @@ const SuperAdminReports = () => {
   const fetchReport = async (type) => {
     setIsLoading(true)
     try {
-      const res = await sellerService.getReports(type)
+      const res = await superAdminService.getReports(type)
       setData(res.data)
     } catch {
       toast.error('Failed to load report')

@@ -55,11 +55,17 @@ const SuperAdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [dashboardData, setDashboardData] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [revenueChartData, setRevenueChartData] = useState([])
 
   const fetchDashboard = async () => {
     try {
-      const response = await superAdminService.getDashboard()
-      setDashboardData(response.data)
+      const [dashRes, revenueRes] = await Promise.all([
+        superAdminService.getDashboard(),
+        superAdminService.getReports('revenue'),
+      ])
+      setDashboardData(dashRes.data)
+      const chartRows = revenueRes.data?.data || []
+      setRevenueChartData(chartRows.map((r) => ({ month: r.label, revenue: r.amount })))
     } catch (error) {
       toast.error('Failed to load dashboard data')
     } finally {
@@ -76,16 +82,6 @@ const SuperAdminDashboard = () => {
     setIsRefreshing(true)
     fetchDashboard()
   }
-
-  // Sample chart data (replace with actual data)
-  const revenueChartData = [
-    { month: 'Jan', revenue: 45000 },
-    { month: 'Feb', revenue: 52000 },
-    { month: 'Mar', revenue: 48000 },
-    { month: 'Apr', revenue: 61000 },
-    { month: 'May', revenue: 55000 },
-    { month: 'Jun', revenue: 67000 },
-  ]
 
   const planDistribution = [
     { name: 'Trial', value: dashboardData?.tenants?.trial_tenants || 0, color: '#f59e0b' },
@@ -194,6 +190,9 @@ const SuperAdminDashboard = () => {
           </Card.Header>
           <Card.Content>
             <div className="h-64">
+              {revenueChartData.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-surface-400 text-sm">No revenue data yet</div>
+              ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={revenueChartData}>
                   <defs>
@@ -203,8 +202,16 @@ const SuperAdminDashboard = () => {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                  <XAxis dataKey="month" stroke="#737373" fontSize={12} />
-                  <YAxis stroke="#737373" fontSize={12} tickFormatter={(v) => `₹${v/1000}k`} />
+                  <XAxis
+                    dataKey="month"
+                    stroke="#737373"
+                    fontSize={12}
+                    tickFormatter={(v) => {
+                      const [year, month] = v.split('-')
+                      return new Date(Number(year), Number(month) - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' })
+                    }}
+                  />
+                  <YAxis stroke="#737373" fontSize={12} tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: '#1a1a2e',
@@ -213,6 +220,10 @@ const SuperAdminDashboard = () => {
                       color: '#fff',
                     }}
                     formatter={(value) => [formatCurrency(value * 100), 'Revenue']}
+                    labelFormatter={(label) => {
+                      const [year, month] = label.split('-')
+                      return new Date(Number(year), Number(month) - 1).toLocaleDateString('en', { month: 'long', year: 'numeric' })
+                    }}
                   />
                   <Area
                     type="monotone"
@@ -223,6 +234,7 @@ const SuperAdminDashboard = () => {
                   />
                 </AreaChart>
               </ResponsiveContainer>
+              )}
             </div>
           </Card.Content>
         </Card>

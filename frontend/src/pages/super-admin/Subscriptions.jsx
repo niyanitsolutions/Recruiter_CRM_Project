@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { Button, Card, Table, Badge, Select } from '../../components/common'
-import sellerService from '../../services/sellerService'
+import superAdminService from '../../services/superAdminService'
 import { formatDate } from '../../utils/format'
 import toast from 'react-hot-toast'
 
@@ -25,7 +25,7 @@ const Subscriptions = () => {
   const fetchSubscriptions = async () => {
     setIsLoading(true)
     try {
-      const res = await sellerService.getSubscriptions({
+      const res = await superAdminService.getSubscriptions({
         page: currentPage,
         limit,
         status: statusFilter || undefined,
