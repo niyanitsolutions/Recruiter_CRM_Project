@@ -73,6 +73,8 @@ const PATH_LABELS = {
   analytics: 'Analytics',
 }
 
+const isIdSegment = (seg) => /^[0-9a-f-]{20,}$|^\d{5,}$/.test(seg)
+
 const segmentLabel = (seg) =>
   PATH_LABELS[seg] || seg.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
@@ -83,13 +85,21 @@ const Breadcrumbs = () => {
   if (segments.length <= 1) return null
 
   // Build cumulative paths for each segment
-  const crumbs = segments.map((seg, i) => ({
-    label: segmentLabel(seg),
-    path: '/' + segments.slice(0, i + 1).join('/'),
-    isLast: i === segments.length - 1,
-    // Don't link to UUID segments or numeric IDs
-    isId: /^[0-9a-f-]{24,}$|^\d+$/.test(seg),
-  }))
+  const crumbs = segments.map((seg, i) => {
+    const isId = isIdSegment(seg)
+    // For ID segments, show the parent's singular label e.g. "Candidate"
+    let label = segmentLabel(seg)
+    if (isId && i > 0) {
+      const parentLabel = segmentLabel(segments[i - 1])
+      label = parentLabel.replace(/s$/, '')
+    }
+    return {
+      label,
+      path: '/' + segments.slice(0, i + 1).join('/'),
+      isLast: i === segments.length - 1,
+      isId,
+    }
+  })
 
   return (
     <nav className="flex items-center gap-1 text-xs mt-0.5 flex-wrap">
@@ -174,9 +184,18 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
       ]
 
   const segments = location.pathname.split('/').filter(Boolean)
-  const derivedTitle = title || (segments.length > 0
-    ? segmentLabel(segments[segments.length - 1])
-    : 'Dashboard')
+  const derivedTitle = title || (() => {
+    if (segments.length === 0) return 'Dashboard'
+    const last = segments[segments.length - 1]
+    const isId = /^[0-9a-f-]{20,}$|^\d{5,}$/.test(last)
+    if (isId && segments.length >= 2) {
+      // /candidates/:id → "Candidate Details"
+      const parentLabel = segmentLabel(segments[segments.length - 2])
+      const singular = parentLabel.replace(/s$/, '')
+      return singular + ' Details'
+    }
+    return segmentLabel(last)
+  })()
 
   // Detect OS for shortcut hint
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
