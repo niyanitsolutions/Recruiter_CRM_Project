@@ -6,6 +6,7 @@ export { default as RecruitmentDashboard } from './RecruitmentDashboard'
 // Clients
 export { default as Clients } from './Clients'
 export { default as ClientForm } from './ClientForm'
+export { default as ClientDetails } from './ClientDetails'
 
 // Candidates
 export { default as Candidates } from './Candidates'

@@ -74,6 +74,7 @@ const IntegrationList   = lazy(() => import('./components/integrations/Integrati
 const RecruitmentDashboard  = lazy(() => import('./pages/recruitment').then(m => ({ default: m.RecruitmentDashboard })))
 const Clients               = lazy(() => import('./pages/recruitment').then(m => ({ default: m.Clients })))
 const ClientForm            = lazy(() => import('./pages/recruitment').then(m => ({ default: m.ClientForm })))
+const ClientDetails         = lazy(() => import('./pages/recruitment/ClientDetails'))
 const Candidates            = lazy(() => import('./pages/recruitment').then(m => ({ default: m.Candidates })))
 const CandidateForm         = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidateForm })))
 const CandidateDetails      = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidateDetails })))
@@ -759,7 +760,7 @@ function App() {
         <Route path="/clients/new"
           element={<PermissionRoute permission="clients:create"><ClientForm /></PermissionRoute>} />
         <Route path="/clients/:id"
-          element={<PermissionRoute permission="clients:view"><ClientForm /></PermissionRoute>} />
+          element={<PermissionRoute permission="clients:view"><ClientDetails /></PermissionRoute>} />
         <Route path="/clients/:id/edit"
           element={<PermissionRoute permission="clients:edit"><ClientForm /></PermissionRoute>} />
 
