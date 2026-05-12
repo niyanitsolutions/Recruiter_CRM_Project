@@ -648,9 +648,49 @@ html[data-theme="system"] .card-hover:hover {
     box-shadow: 0 0 32px rgba(99, 102, 241, 0.70) !important;
   }
 
-  /* ── 7. Main content area: slight tint so text is fully readable ── */
+  /* ── 7. Main content area — dark overlay + white-text CSS vars on gradient ── */
   html[data-theme="system"] main {
-    background-color: transparent !important;
+    background-color: rgba(8, 6, 32, 0.28) !important;
+    /* All content directly on the vivid gradient: use white/light-indigo text */
+    --text-primary:   #ffffff;
+    --text-secondary: #e0e7ff;
+    --text-muted:     #c7d2fe;
+    --text-heading:   #ffffff;
+    --text-label:     #c7d2fe;
+    --text-disabled:  rgba(165, 180, 252, 0.55);
+    --gray-900: #ffffff;
+    --gray-800: #e0e7ff;
+    --gray-700: #c7d2fe;
+    --gray-600: #a5b4fc;
+    --gray-500: #a5b4fc;
+    --gray-400: rgba(165, 180, 252, 0.70);
+    --border:        rgba(255, 255, 255, 0.22);
+    --border-subtle: rgba(255, 255, 255, 0.10);
+    --bg-hover:      rgba(255, 255, 255, 0.12);
+    --bg-active:     rgba(255, 255, 255, 0.20);
+  }
+
+  /* Restore dark indigo text inside white-glass cards / stat-cards / bg-white */
+  html[data-theme="system"] main .card,
+  html[data-theme="system"] main .stat-card,
+  html[data-theme="system"] main .modal-content,
+  html[data-theme="system"] main .bg-white {
+    --text-primary:   #1e1b4b;
+    --text-secondary: #312e81;
+    --text-muted:     #6366f1;
+    --text-heading:   #0d0b2e;
+    --text-label:     #4338ca;
+    --text-disabled:  #818cf8;
+    --gray-900: #0d0b2e;
+    --gray-800: #1e1b4b;
+    --gray-700: #312e81;
+    --gray-600: #3730a3;
+    --gray-500: #4f46e5;
+    --gray-400: #6366f1;
+    --border:        rgba(99, 102, 241, 0.22);
+    --border-subtle: rgba(99, 102, 241, 0.10);
+    --bg-hover:      rgba(99, 102, 241, 0.08);
+    --bg-active:     rgba(99, 102, 241, 0.16);
   }
 
   /* ── 8. Table backgrounds: glass white ── */
@@ -744,18 +784,70 @@ html[data-theme="system"] .card-hover:hover {
 [data-theme="light"] .hover\:text-surface-700:hover { color: #334155 !important; }
 [data-theme="light"] .hover\:bg-surface-100:hover   { background-color: #f1f5f9 !important; }
 
-/* ── System light — same surface inversion ─────────────────────────────────── */
+/* ── System light — surface text: white on gradient, dark indigo inside cards ─ */
 @media (prefers-color-scheme: light) {
-  [data-theme="system"] .text-surface-900,
-  [data-theme="system"] .text-surface-800 { color: #1e293b !important; }
-  [data-theme="system"] .text-surface-700 { color: #334155 !important; }
-  [data-theme="system"] .text-surface-600 { color: #475569 !important; }
-  [data-theme="system"] .text-surface-500 { color: #64748b !important; }
-  [data-theme="system"] .text-surface-400 { color: #94a3b8 !important; }
-  [data-theme="system"] .bg-surface-100   { background-color: #f0f9ff !important; }
-  [data-theme="system"] .bg-surface-200   { background-color: #e0f2fe !important; }
-  [data-theme="system"] .border-surface-200 { border-color: #bae6fd !important; }
-  [data-theme="system"] .hover\:bg-surface-100:hover { background-color: #e0f2fe !important; }
+  /* Content directly on vivid gradient → white/light-indigo */
+  html[data-theme="system"] main .text-surface-900,
+  html[data-theme="system"] main .text-surface-800 { color: #ffffff !important; }
+  html[data-theme="system"] main .text-surface-700 { color: #e0e7ff !important; }
+  html[data-theme="system"] main .text-surface-600 { color: #c7d2fe !important; }
+  html[data-theme="system"] main .text-surface-500 { color: #a5b4fc !important; }
+  html[data-theme="system"] main .text-surface-400 { color: rgba(165,180,252,0.75) !important; }
+  html[data-theme="system"] main .hover\:text-surface-700:hover { color: #ffffff !important; }
+
+  /* Content inside white-glass cards → dark indigo */
+  html[data-theme="system"] main .card .text-surface-900,
+  html[data-theme="system"] main .card .text-surface-800,
+  html[data-theme="system"] main .stat-card .text-surface-900,
+  html[data-theme="system"] main .stat-card .text-surface-800,
+  html[data-theme="system"] main .bg-white .text-surface-900,
+  html[data-theme="system"] main .bg-white .text-surface-800 { color: #1e1b4b !important; }
+
+  html[data-theme="system"] main .card .text-surface-700,
+  html[data-theme="system"] main .stat-card .text-surface-700,
+  html[data-theme="system"] main .bg-white .text-surface-700 { color: #312e81 !important; }
+
+  html[data-theme="system"] main .card .text-surface-600,
+  html[data-theme="system"] main .stat-card .text-surface-600,
+  html[data-theme="system"] main .bg-white .text-surface-600 { color: #3730a3 !important; }
+
+  html[data-theme="system"] main .card .text-surface-500,
+  html[data-theme="system"] main .stat-card .text-surface-500,
+  html[data-theme="system"] main .bg-white .text-surface-500 { color: #6366f1 !important; }
+
+  html[data-theme="system"] main .card .text-surface-400,
+  html[data-theme="system"] main .stat-card .text-surface-400,
+  html[data-theme="system"] main .bg-white .text-surface-400 { color: #818cf8 !important; }
+
+  html[data-theme="system"] main .card .hover\:text-surface-700:hover,
+  html[data-theme="system"] main .stat-card .hover\:text-surface-700:hover,
+  html[data-theme="system"] main .bg-white .hover\:text-surface-700:hover { color: #1e1b4b !important; }
+
+  /* Surface background utilities: frosted on gradient, solid in cards */
+  html[data-theme="system"] main .bg-surface-100 { background-color: rgba(255,255,255,0.15) !important; }
+  html[data-theme="system"] main .bg-surface-200 { background-color: rgba(255,255,255,0.22) !important; }
+  html[data-theme="system"] main .card .bg-surface-100,
+  html[data-theme="system"] main .stat-card .bg-surface-100 { background-color: #eef2ff !important; }
+  html[data-theme="system"] main .card .bg-surface-200,
+  html[data-theme="system"] main .stat-card .bg-surface-200 { background-color: #e0e7ff !important; }
+  html[data-theme="system"] main .border-surface-200 { border-color: rgba(255,255,255,0.25) !important; }
+  html[data-theme="system"] main .card .border-surface-200,
+  html[data-theme="system"] main .stat-card .border-surface-200 { border-color: rgba(99,102,241,0.22) !important; }
+  html[data-theme="system"] main .hover\:bg-surface-100:hover { background-color: rgba(255,255,255,0.15) !important; }
+  html[data-theme="system"] main .card .hover\:bg-surface-100:hover { background-color: #eef2ff !important; }
+
+  /* text-primary-600/700 on gradient → white; inside cards → indigo */
+  html[data-theme="system"] main .text-primary-600,
+  html[data-theme="system"] main .text-primary-700 { color: #ffffff !important; }
+  html[data-theme="system"] main .card .text-primary-600,
+  html[data-theme="system"] main .stat-card .text-primary-600 { color: #4f46e5 !important; }
+  html[data-theme="system"] main .card .text-primary-700,
+  html[data-theme="system"] main .stat-card .text-primary-700 { color: #4338ca !important; }
+
+  /* border-primary-500 on gradient → white-ish; inside cards → indigo */
+  html[data-theme="system"] main .border-primary-500 { border-color: rgba(255,255,255,0.55) !important; }
+  html[data-theme="system"] main .card .border-primary-500,
+  html[data-theme="system"] main .stat-card .border-primary-500 { border-color: #6366f1 !important; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
