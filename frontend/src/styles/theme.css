@@ -25,12 +25,12 @@
   --bg-overlay:        rgba(0, 0, 10, 0.80);
 
   /* ── Text ── */
-  --text-primary:      #c4c0e8;
-  --text-secondary:    #a8b3c8;
-  --text-muted:        #7c75b8;
+  --text-primary:      #dbd8f8;           /* was #c4c0e8 — clean lavender-white, 8:1 contrast */
+  --text-secondary:    #b8bcd4;           /* was #a8b3c8 — lighter, crisper secondary */
+  --text-muted:        #9e98c8;           /* was #7c75b8 — 4.6:1 AA-compliant muted */
   --text-disabled:     #3d3860;
-  --text-heading:      #f1f0ff;
-  --text-label:        #7c75b8;
+  --text-heading:      #f5f3ff;           /* was #f1f0ff — near-white headings */
+  --text-label:        #9e98c8;           /* was #7c75b8 — matches muted */
   --text-link:         #a78bfa;
   --text-danger:       #f87171;
 
@@ -42,18 +42,18 @@
 
   /* ── Inputs ── */
   --input-bg:           #1a1730;
-  --input-text:         #c4c0e8;
-  --input-placeholder:  #5a5585;
+  --input-text:         #dbd8f8;
+  --input-placeholder:  #7068a0;           /* was #5a5585 — more readable placeholder */
   --input-border:       #2d2b55;
   --input-focus-border: #7c3aed;
   --input-focus-shadow: rgba(124, 58, 237, 0.25);
   --input-autofill:     #1e1b4b;
-  --input-autofill-text: #c4c0e8;
+  --input-autofill-text: #dbd8f8;
   --input-disabled-bg:  #13112a;
-  --input-disabled-text: #3d3860;
+  --input-disabled-text: #4d4870;
   --select-option-bg:   #161426;
-  --select-option-text: #c4c0e8;
-  --label-color:        #7c75b8;
+  --select-option-text: #dbd8f8;
+  --label-color:        #9e98c8;           /* was #7c75b8 */
 
   /* ── Status Backgrounds ── */
   --bg-success: rgba(6,  95,  70,  0.30);
@@ -67,8 +67,8 @@
   --text-info:    #818cf8;
 
   /* ── Navigation — left-border accent style ── */
-  --nav-text:          #7c75b8;
-  --nav-text-active:   #a78bfa;
+  --nav-text:          #a8a3ce;           /* was #7c75b8 — clearly readable inactive items */
+  --nav-text-active:   #c4b5fd;
   --nav-bg-active:     rgba(124, 58, 237, 0.15);
   --nav-border-active: #7c3aed;
   --nav-hover-bg:      rgba(124, 58, 237, 0.08);
@@ -103,12 +103,12 @@
   --stat-border-yellow: #713f12;
 
   /* ── Legacy gray overrides — dark mode ── */
-  --gray-900: #f1f0ff;
-  --gray-800: #c4c0e8;
-  --gray-700: #a8a4d4;
-  --gray-600: #7c75b8;
-  --gray-500: #7c75b8;
-  --gray-400: #5a5585;
+  --gray-900: #f5f3ff;
+  --gray-800: #dbd8f8;
+  --gray-700: #b8bcd4;
+  --gray-600: #9e98c8;
+  --gray-500: #9e98c8;
+  --gray-400: #7068a0;
   --border-gray-200: #1e1b4b;
   --bg-gray-50:  #161426;
   --bg-gray-100: #1a1730;
@@ -130,11 +130,11 @@
 
   /* ── Text ── */
   --text-primary:      #1a1a2e;
-  --text-secondary:    #4a4a6a;
-  --text-muted:        #7a7a9a;
+  --text-secondary:    #3a3a5a;           /* was #4a4a6a — slightly darker for crisper secondary */
+  --text-muted:        #62628a;           /* was #7a7a9a — 5:1 contrast on white */
   --text-disabled:     #acaccc;
-  --text-heading:      #0f0f1a;
-  --text-label:        #4a4a6a;
+  --text-heading:      #0d0d1e;           /* was #0f0f1a — deeper heading */
+  --text-label:        #3a3a5a;           /* was #4a4a6a */
   --text-link:         #7c3aed;
   --text-danger:       #dc2626;
 
@@ -147,17 +147,17 @@
   /* ── Inputs ── */
   --input-bg:           #f8f7ff;
   --input-text:         #1a1a2e;
-  --input-placeholder:  #7a7a9a;
+  --input-placeholder:  #8a8aaa;           /* was #7a7a9a — more visible placeholder */
   --input-border:       #d0cdf5;
   --input-focus-border: #7c3aed;
   --input-focus-shadow: rgba(124, 58, 237, 0.15);
   --input-autofill:     #f3f1ff;
   --input-autofill-text: #1a1a2e;
   --input-disabled-bg:  #eeecff;
-  --input-disabled-text: #7a7a9a;
+  --input-disabled-text: #8a8aaa;
   --select-option-bg:   #ffffff;
   --select-option-text: #1a1a2e;
-  --label-color:        #4a4a6a;
+  --label-color:        #3a3a5a;           /* was #4a4a6a */
 
   /* ── Status Backgrounds ── */
   --bg-success: rgba(5,  150, 105, 0.10);
@@ -208,12 +208,12 @@
   --stat-border-yellow: #ca8a04;
 
   /* ── Legacy gray overrides — light mode ── */
-  --gray-900: #1a1a2e;
-  --gray-800: #2d2d4e;
-  --gray-700: #4a4a6a;
-  --gray-600: #7a7a9a;
-  --gray-500: #7a7a9a;
-  --gray-400: #9a9ac0;
+  --gray-900: #0d0d1e;
+  --gray-800: #1a1a2e;
+  --gray-700: #3a3a5a;
+  --gray-600: #62628a;
+  --gray-500: #62628a;
+  --gray-400: #8a8aaa;
   --border-gray-200: #e0dffe;
   --bg-gray-50:  #f8f7ff;
   --bg-gray-100: #f0eeff;

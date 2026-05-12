@@ -145,6 +145,75 @@
     box-shadow: inset 0 0 0 1px var(--border);
   }
 
+  /* ── Tabs ─────────────────────────────────────────────────────────────────── */
+  .tab-nav {
+    @apply flex gap-1 border-b;
+    border-color: var(--border);
+  }
+  .tab-btn {
+    @apply px-4 py-2.5 text-sm font-medium transition-all duration-200 border-b-2 -mb-px whitespace-nowrap;
+    color: var(--text-muted);
+    border-color: transparent;
+  }
+  .tab-btn:hover {
+    color: var(--text-secondary);
+    background-color: var(--bg-hover);
+  }
+  .tab-btn.tab-active {
+    color: var(--nav-text-active);
+    border-color: var(--accent);
+    background-color: var(--bg-active);
+  }
+
+  /* ── Empty State ────────────────────────────────────────────────────────── */
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-16 px-6 text-center;
+  }
+  .empty-state-icon {
+    @apply mb-4 opacity-40;
+    color: var(--text-muted);
+  }
+  .empty-state-title {
+    @apply text-base font-semibold mb-2;
+    color: var(--text-secondary);
+  }
+  .empty-state-body {
+    @apply text-sm max-w-xs;
+    color: var(--text-muted);
+  }
+
+  /* ── Card sections / page structure ─────────────────────────────────────── */
+  .section-label {
+    @apply text-xs font-semibold uppercase tracking-widest mb-3;
+    color: var(--text-muted);
+  }
+  .card-heading {
+    @apply text-base font-semibold;
+    color: var(--text-heading);
+  }
+  .card-subheading {
+    @apply text-sm;
+    color: var(--text-secondary);
+  }
+  .meta-label {
+    @apply text-xs font-medium uppercase tracking-wide;
+    color: var(--text-muted);
+  }
+  .meta-value {
+    @apply text-sm font-medium;
+    color: var(--text-primary);
+  }
+
+  /* ── Divider ────────────────────────────────────────────────────────────── */
+  .divider {
+    @apply my-4 border-t;
+    border-color: var(--border);
+  }
+  .divider-subtle {
+    @apply my-3 border-t;
+    border-color: var(--border-subtle);
+  }
+
   .step-indicator { @apply flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold transition-all duration-300; }
   .step-active    { @apply step-indicator text-white; background: var(--gradient-1); box-shadow: 0 0 16px rgba(108,99,255,0.4); }
   .step-completed { @apply step-indicator bg-emerald-600 text-white; }
@@ -389,6 +458,46 @@ html[data-theme="dark"] .card-hover:hover {
 /* ── 15. Purple glow shadow utilities ───────────────────────────────────────── */
 .shadow-purple-glow    { box-shadow: 0 0 20px rgba(124, 58, 237, 0.5) !important; }
 .shadow-purple-glow-sm { box-shadow: 0 0 12px rgba(124, 58, 237, 0.35) !important; }
+
+/* ── 15b. Text on gradient/colored hero backgrounds ─────────────────────────── */
+/* Apply to elements inside gradient cards so text is always legible.           */
+.text-on-color         { color: rgba(255, 255, 255, 0.97) !important; }
+.text-on-color-muted   { color: rgba(255, 255, 255, 0.72) !important; }
+.text-on-color-faint   { color: rgba(255, 255, 255, 0.50) !important; }
+
+/* ── 15c. Dark-mode table enhancements ──────────────────────────────────────── */
+[data-theme="dark"] .table th,
+[data-theme="system"] .table th {
+  color: var(--text-secondary) !important;
+  letter-spacing: 0.07em;
+}
+[data-theme="dark"] .table td,
+[data-theme="system"] .table td {
+  color: var(--text-primary) !important;
+}
+
+/* ── 15d. Stat label boost ───────────────────────────────────────────────────── */
+[data-theme="dark"] .stat-label,
+[data-theme="system"] .stat-label {
+  color: var(--text-secondary) !important;
+}
+
+/* ── 15e. Active nav item font weight ───────────────────────────────────────── */
+[data-theme="dark"] .nav-item-active,
+[data-theme="system"] .nav-item-active {
+  font-weight: 600;
+}
+
+/* ── 15f. Tab button dark-mode boost ────────────────────────────────────────── */
+[data-theme="dark"] .tab-btn,
+[data-theme="system"] .tab-btn {
+  color: var(--text-secondary) !important;
+}
+[data-theme="dark"] .tab-btn.tab-active,
+[data-theme="system"] .tab-btn.tab-active {
+  color: var(--nav-text-active) !important;
+  font-weight: 600;
+}
 
 /* ── 16. System theme — solid backgrounds (dark default, OS-adaptive) ─────── */
 html[data-theme="system"],
