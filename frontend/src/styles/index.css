@@ -648,49 +648,9 @@ html[data-theme="system"] .card-hover:hover {
     box-shadow: 0 0 32px rgba(99, 102, 241, 0.70) !important;
   }
 
-  /* ── 7. Main content area — dark overlay + white-text CSS vars on gradient ── */
+  /* ── 7. Main content area — subtle dark overlay; root Vivid Pro CSS vars handle card text ── */
   html[data-theme="system"] main {
     background-color: rgba(8, 6, 32, 0.28) !important;
-    /* All content directly on the vivid gradient: use white/light-indigo text */
-    --text-primary:   #ffffff;
-    --text-secondary: #e0e7ff;
-    --text-muted:     #c7d2fe;
-    --text-heading:   #ffffff;
-    --text-label:     #c7d2fe;
-    --text-disabled:  rgba(165, 180, 252, 0.55);
-    --gray-900: #ffffff;
-    --gray-800: #e0e7ff;
-    --gray-700: #c7d2fe;
-    --gray-600: #a5b4fc;
-    --gray-500: #a5b4fc;
-    --gray-400: rgba(165, 180, 252, 0.70);
-    --border:        rgba(255, 255, 255, 0.22);
-    --border-subtle: rgba(255, 255, 255, 0.10);
-    --bg-hover:      rgba(255, 255, 255, 0.12);
-    --bg-active:     rgba(255, 255, 255, 0.20);
-  }
-
-  /* Restore dark indigo text inside white-glass cards / stat-cards / bg-white */
-  html[data-theme="system"] main .card,
-  html[data-theme="system"] main .stat-card,
-  html[data-theme="system"] main .modal-content,
-  html[data-theme="system"] main .bg-white {
-    --text-primary:   #1e1b4b;
-    --text-secondary: #312e81;
-    --text-muted:     #6366f1;
-    --text-heading:   #0d0b2e;
-    --text-label:     #4338ca;
-    --text-disabled:  #818cf8;
-    --gray-900: #0d0b2e;
-    --gray-800: #1e1b4b;
-    --gray-700: #312e81;
-    --gray-600: #3730a3;
-    --gray-500: #4f46e5;
-    --gray-400: #6366f1;
-    --border:        rgba(99, 102, 241, 0.22);
-    --border-subtle: rgba(99, 102, 241, 0.10);
-    --bg-hover:      rgba(99, 102, 241, 0.08);
-    --bg-active:     rgba(99, 102, 241, 0.16);
   }
 
   /* ── 8. Table backgrounds: glass white ── */
@@ -784,18 +744,25 @@ html[data-theme="system"] .card-hover:hover {
 [data-theme="light"] .hover\:text-surface-700:hover { color: #334155 !important; }
 [data-theme="light"] .hover\:bg-surface-100:hover   { background-color: #f1f5f9 !important; }
 
-/* ── System light — surface text: white on gradient, dark indigo inside cards ─ */
+/* ── System light (Vivid Pro) — Tailwind surface class overrides ──────────────
+   Root CSS vars (--text-primary, --text-muted etc.) are already correct dark
+   indigo (theme.css Vivid Pro block) — they work for all var()-based card text.
+   Only Tailwind utility classes (text-surface-*, bg-surface-*, etc.) need
+   adjustment: white/light on the vivid gradient, dark indigo inside bg-white.
+   ─────────────────────────────────────────────────────────────────────────── */
 @media (prefers-color-scheme: light) {
-  /* Content directly on vivid gradient → white/light-indigo */
+  /* ── Text on vivid gradient → white / light-indigo ── */
   html[data-theme="system"] main .text-surface-900,
   html[data-theme="system"] main .text-surface-800 { color: #ffffff !important; }
   html[data-theme="system"] main .text-surface-700 { color: #e0e7ff !important; }
   html[data-theme="system"] main .text-surface-600 { color: #c7d2fe !important; }
   html[data-theme="system"] main .text-surface-500 { color: #a5b4fc !important; }
-  html[data-theme="system"] main .text-surface-400 { color: rgba(165,180,252,0.75) !important; }
+  html[data-theme="system"] main .text-surface-400 { color: rgba(165,180,252,0.80) !important; }
+  html[data-theme="system"] main .text-surface-300 { color: rgba(165,180,252,0.65) !important; }
   html[data-theme="system"] main .hover\:text-surface-700:hover { color: #ffffff !important; }
+  html[data-theme="system"] main .hover\:text-surface-900:hover { color: #ffffff !important; }
 
-  /* Content inside white-glass cards → dark indigo */
+  /* ── Text inside white-glass containers (bg-white / .card) → dark indigo ── */
   html[data-theme="system"] main .card .text-surface-900,
   html[data-theme="system"] main .card .text-surface-800,
   html[data-theme="system"] main .stat-card .text-surface-900,
@@ -813,41 +780,70 @@ html[data-theme="system"] .card-hover:hover {
 
   html[data-theme="system"] main .card .text-surface-500,
   html[data-theme="system"] main .stat-card .text-surface-500,
-  html[data-theme="system"] main .bg-white .text-surface-500 { color: #6366f1 !important; }
+  html[data-theme="system"] main .bg-white .text-surface-500 { color: #4f46e5 !important; }
 
+  /* surface-400: #4f46e5 = 5.2:1 on white (was #818cf8 at 2.84:1 — WCAG fail) */
   html[data-theme="system"] main .card .text-surface-400,
   html[data-theme="system"] main .stat-card .text-surface-400,
-  html[data-theme="system"] main .bg-white .text-surface-400 { color: #818cf8 !important; }
+  html[data-theme="system"] main .bg-white .text-surface-400 { color: #4f46e5 !important; }
+
+  html[data-theme="system"] main .card .text-surface-300,
+  html[data-theme="system"] main .stat-card .text-surface-300,
+  html[data-theme="system"] main .bg-white .text-surface-300 { color: #6366f1 !important; }
 
   html[data-theme="system"] main .card .hover\:text-surface-700:hover,
   html[data-theme="system"] main .stat-card .hover\:text-surface-700:hover,
   html[data-theme="system"] main .bg-white .hover\:text-surface-700:hover { color: #1e1b4b !important; }
 
-  /* Surface background utilities: frosted on gradient, solid in cards */
+  html[data-theme="system"] main .card .hover\:text-surface-900:hover,
+  html[data-theme="system"] main .bg-white .hover\:text-surface-900:hover { color: #1e1b4b !important; }
+
+  /* ── Backgrounds on gradient → frosted white ── */
+  html[data-theme="system"] main .bg-surface-50  { background-color: rgba(255,255,255,0.10) !important; }
   html[data-theme="system"] main .bg-surface-100 { background-color: rgba(255,255,255,0.15) !important; }
   html[data-theme="system"] main .bg-surface-200 { background-color: rgba(255,255,255,0.22) !important; }
+  html[data-theme="system"] main .hover\:bg-surface-50:hover  { background-color: rgba(255,255,255,0.14) !important; }
+  html[data-theme="system"] main .hover\:bg-surface-100:hover { background-color: rgba(255,255,255,0.18) !important; }
+
+  /* ── Backgrounds inside white-glass containers → light indigo tints ── */
+  html[data-theme="system"] main .bg-white .bg-surface-50,
+  html[data-theme="system"] main .card .bg-surface-50   { background-color: rgba(238,242,255,0.70) !important; }
+  html[data-theme="system"] main .bg-white .bg-surface-100,
   html[data-theme="system"] main .card .bg-surface-100,
   html[data-theme="system"] main .stat-card .bg-surface-100 { background-color: #eef2ff !important; }
+  html[data-theme="system"] main .bg-white .bg-surface-200,
   html[data-theme="system"] main .card .bg-surface-200,
   html[data-theme="system"] main .stat-card .bg-surface-200 { background-color: #e0e7ff !important; }
-  html[data-theme="system"] main .border-surface-200 { border-color: rgba(255,255,255,0.25) !important; }
-  html[data-theme="system"] main .card .border-surface-200,
-  html[data-theme="system"] main .stat-card .border-surface-200 { border-color: rgba(99,102,241,0.22) !important; }
-  html[data-theme="system"] main .hover\:bg-surface-100:hover { background-color: rgba(255,255,255,0.15) !important; }
+  html[data-theme="system"] main .bg-white .hover\:bg-surface-50:hover,
+  html[data-theme="system"] main .bg-white .hover\:bg-surface-100:hover,
   html[data-theme="system"] main .card .hover\:bg-surface-100:hover { background-color: #eef2ff !important; }
 
-  /* text-primary-600/700 on gradient → white; inside cards → indigo */
+  /* ── Row dividers inside white-glass containers ── */
+  html[data-theme="system"] main .bg-white .divide-surface-100 > * + *,
+  html[data-theme="system"] main .bg-white .divide-surface-200 > * + *,
+  html[data-theme="system"] main .card .divide-surface-100 > * + * { border-color: rgba(99,102,241,0.10) !important; }
+
+  /* ── Borders ── */
+  html[data-theme="system"] main .border-surface-200 { border-color: rgba(255,255,255,0.25) !important; }
+  html[data-theme="system"] main .card .border-surface-200,
+  html[data-theme="system"] main .stat-card .border-surface-200,
+  html[data-theme="system"] main .bg-white .border-surface-200 { border-color: rgba(99,102,241,0.20) !important; }
+
+  /* ── text-primary-*: gradient → white; white-glass → indigo ── */
   html[data-theme="system"] main .text-primary-600,
   html[data-theme="system"] main .text-primary-700 { color: #ffffff !important; }
   html[data-theme="system"] main .card .text-primary-600,
-  html[data-theme="system"] main .stat-card .text-primary-600 { color: #4f46e5 !important; }
+  html[data-theme="system"] main .stat-card .text-primary-600,
+  html[data-theme="system"] main .bg-white .text-primary-600 { color: #4f46e5 !important; }
   html[data-theme="system"] main .card .text-primary-700,
-  html[data-theme="system"] main .stat-card .text-primary-700 { color: #4338ca !important; }
+  html[data-theme="system"] main .stat-card .text-primary-700,
+  html[data-theme="system"] main .bg-white .text-primary-700 { color: #4338ca !important; }
 
-  /* border-primary-500 on gradient → white-ish; inside cards → indigo */
+  /* ── border-primary-500: gradient → white-ish; white-glass → indigo ── */
   html[data-theme="system"] main .border-primary-500 { border-color: rgba(255,255,255,0.55) !important; }
   html[data-theme="system"] main .card .border-primary-500,
-  html[data-theme="system"] main .stat-card .border-primary-500 { border-color: #6366f1 !important; }
+  html[data-theme="system"] main .stat-card .border-primary-500,
+  html[data-theme="system"] main .bg-white .border-primary-500 { border-color: #6366f1 !important; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
