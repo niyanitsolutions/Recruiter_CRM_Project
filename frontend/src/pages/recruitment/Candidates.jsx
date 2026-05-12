@@ -850,22 +850,19 @@ const Candidates = () => {
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex items-center justify-end gap-2">
-                      {/* Resume View — always visible, disabled when no resume */}
                       <button
                         onClick={() => candidate.resume_url ? openResume(candidate.id) : toast.error('No resume uploaded for this candidate')}
-                        className="p-2 rounded-lg transition-colors flex items-center gap-1.5"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0"
                         style={{ color: candidate.resume_url ? 'var(--accent)' : 'var(--text-disabled)' }}
                         onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--accent-light)' }}
                         onMouseLeave={e => e.currentTarget.style.background = ''}
                         title={candidate.resume_url ? 'View Resume' : 'No resume uploaded'}
                       >
                         <FileText className="w-4 h-4" />
-                        <span className="text-xs font-semibold">Resume</span>
                       </button>
-                      {/* Resume Download — always visible, disabled when no resume */}
                       <button
                         onClick={() => candidate.resume_url ? downloadResume(candidate.id, candidate.full_name, candidate.resume_url) : toast.error('No resume uploaded for this candidate')}
-                        className="p-2 rounded-lg transition-colors"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0"
                         style={{ color: candidate.resume_url ? '#43E97B' : 'var(--text-disabled)' }}
                         onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'rgba(67,233,123,0.12)' }}
                         onMouseLeave={e => e.currentTarget.style.background = ''}
@@ -875,22 +872,22 @@ const Candidates = () => {
                       </button>
                       <button
                         onClick={() => navigate(`/candidates/${candidate.id}`)}
-                        className="p-2 rounded-lg transition-colors"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0"
                         style={{ color: 'var(--text-muted)' }}
                         onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                         onMouseLeave={e => e.currentTarget.style.background = ''}
-                        title="View"
+                        title="View Candidate"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
                       {has('candidates:edit') && (
                         <button
                           onClick={() => navigate(`/candidates/${candidate.id}/edit`)}
-                          className="p-2 rounded-lg transition-colors"
+                          className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0"
                           style={{ color: 'var(--text-muted)' }}
                           onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                           onMouseLeave={e => e.currentTarget.style.background = ''}
-                          title="Edit"
+                          title="Edit Candidate"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
@@ -898,11 +895,11 @@ const Candidates = () => {
                       {has('candidates:delete') && (
                         <button
                           onClick={() => handleDelete(candidate.id, candidate.full_name)}
-                          className="p-2 rounded-lg transition-colors"
+                          className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0"
                           style={{ color: '#FF4757' }}
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,71,87,0.10)'}
                           onMouseLeave={e => e.currentTarget.style.background = ''}
-                          title="Delete"
+                          title="Delete Candidate"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
