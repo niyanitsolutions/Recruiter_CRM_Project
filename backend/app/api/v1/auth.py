@@ -709,6 +709,7 @@ async def get_login_activity(
     auth: AuthContext = Depends(get_current_user),
 ):
     """Return paginated login activity logs for the current tenant."""
+    from datetime import timezone
     from app.core.database import get_company_db as _get_company_db
     company_db = _get_company_db(auth.company_id)
     skip = (page - 1) * page_size
@@ -717,7 +718,234 @@ async def get_login_activity(
     async for doc in cursor:
         doc["id"] = str(doc.pop("_id", ""))
         if doc.get("login_time"):
-            doc["login_time"] = doc["login_time"].isoformat()
+            dt = doc["login_time"]
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            doc["login_time"] = dt.isoformat()
         logs.append(doc)
     total = await company_db.login_logs.count_documents({})
     return {"data": logs, "total": total, "page": page, "page_size": page_size}
+
+
+@router.get("/login-summary")
+async def get_login_summary(
+    auth: AuthContext = Depends(get_current_user),
+):
+    """
+    Per-user aggregated login summary for the enterprise dashboard.
+    Groups login_logs by user, computes today / week / month counts,
+    last login time, last IP, and last device.
+    """
+    from datetime import datetime, timezone, timedelta
+    from app.core.database import get_company_db as _get_company_db
+    from app.core.database import get_master_db as _get_master_db
+
+    company_db = _get_company_db(auth.company_id)
+    now = datetime.now(timezone.utc)
+    # IST offset for day boundaries
+    ist_offset = timedelta(hours=5, minutes=30)
+    ist_now = now + ist_offset
+    today_start_ist = ist_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = today_start_ist - ist_offset
+    week_start_utc  = today_start_utc - timedelta(days=6)
+    month_start_utc = today_start_utc - timedelta(days=29)
+
+    pipeline = [
+        {"$sort": {"login_time": -1}},
+        {"$group": {
+            "_id": "$user_id",
+            "full_name":    {"$first": "$full_name"},
+            "role":         {"$first": "$role"},
+            "last_login":   {"$first": "$login_time"},
+            "last_ip":      {"$first": "$ip_address"},
+            "last_device":  {"$first": "$device"},
+            "total_all":    {"$sum": 1},
+            "total_today":  {"$sum": {"$cond": [{"$gte": ["$login_time", today_start_utc]}, 1, 0]}},
+            "total_week":   {"$sum": {"$cond": [{"$gte": ["$login_time", week_start_utc]},  1, 0]}},
+            "total_month":  {"$sum": {"$cond": [{"$gte": ["$login_time", month_start_utc]}, 1, 0]}},
+        }},
+        {"$sort": {"last_login": -1}},
+    ]
+
+    rows = []
+    async for doc in company_db.login_logs.aggregate(pipeline):
+        last_login = doc.get("last_login")
+        if last_login:
+            if last_login.tzinfo is None:
+                last_login = last_login.replace(tzinfo=timezone.utc)
+            doc["last_login"] = last_login.isoformat()
+
+        # Check if user has an active session in master_db
+        rows.append({
+            "user_id":     doc["_id"],
+            "full_name":   doc.get("full_name") or "Unknown",
+            "role":        doc.get("role") or "—",
+            "last_login":  doc.get("last_login"),
+            "last_ip":     doc.get("last_ip") or "—",
+            "last_device": doc.get("last_device") or "—",
+            "total_all":   doc.get("total_all", 0),
+            "total_today": doc.get("total_today", 0),
+            "total_week":  doc.get("total_week", 0),
+            "total_month": doc.get("total_month", 0),
+        })
+
+    # Annotate active sessions from master_db
+    master_db = _get_master_db()
+    user_ids = [r["user_id"] for r in rows]
+    active_sessions = set()
+    async for sess in master_db.sessions.find(
+        {"user_id": {"$in": user_ids}, "is_active": True},
+        {"user_id": 1}
+    ):
+        active_sessions.add(sess["user_id"])
+
+    for row in rows:
+        row["is_active"] = row["user_id"] in active_sessions
+
+    return {"data": rows, "total": len(rows)}
+
+
+@router.get("/login-analytics")
+async def get_login_analytics(
+    days: int = 30,
+    auth: AuthContext = Depends(get_current_user),
+):
+    """
+    KPI cards + chart data for the audit analytics dashboard.
+    Returns: today counts, unique users, hourly distribution,
+    daily trend, role breakdown.
+    """
+    from datetime import datetime, timezone, timedelta
+    from app.core.database import get_company_db as _get_company_db
+    from app.core.database import get_master_db as _get_master_db
+
+    company_db = _get_company_db(auth.company_id)
+    master_db  = _get_master_db()
+    now = datetime.now(timezone.utc)
+
+    ist_offset = timedelta(hours=5, minutes=30)
+    ist_now = now + ist_offset
+    today_start_ist = ist_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = today_start_ist - ist_offset
+    range_start_utc = today_start_utc - timedelta(days=days - 1)
+
+    base_match = {"login_time": {"$gte": range_start_utc}}
+    today_match = {"login_time": {"$gte": today_start_utc}}
+
+    # KPI: total today
+    total_today = await company_db.login_logs.count_documents(today_match)
+
+    # KPI: unique users today
+    unique_today_pipeline = [
+        {"$match": today_match},
+        {"$group": {"_id": "$user_id"}},
+        {"$count": "count"},
+    ]
+    unique_today = 0
+    async for doc in company_db.login_logs.aggregate(unique_today_pipeline):
+        unique_today = doc.get("count", 0)
+
+    # KPI: total in range
+    total_range = await company_db.login_logs.count_documents(base_match)
+
+    # KPI: active sessions
+    active_sessions = await master_db.sessions.count_documents(
+        {"company_id": auth.company_id, "is_active": True}
+    )
+
+    # Daily trend
+    daily_pipeline = [
+        {"$match": base_match},
+        {"$addFields": {
+            "ist_time": {"$add": ["$login_time", 19800000]}  # +5:30 in ms
+        }},
+        {"$group": {
+            "_id": {
+                "y": {"$year": "$ist_time"},
+                "m": {"$month": "$ist_time"},
+                "d": {"$dayOfMonth": "$ist_time"},
+            },
+            "count": {"$sum": 1},
+        }},
+        {"$sort": {"_id.y": 1, "_id.m": 1, "_id.d": 1}},
+    ]
+    daily_trend = []
+    async for doc in company_db.login_logs.aggregate(daily_pipeline):
+        d = doc["_id"]
+        daily_trend.append({
+            "date": f"{d['y']}-{d['m']:02d}-{d['d']:02d}",
+            "count": doc["count"],
+        })
+
+    # Hourly distribution (IST hours, all-time in range)
+    hourly_pipeline = [
+        {"$match": base_match},
+        {"$addFields": {"ist_time": {"$add": ["$login_time", 19800000]}}},
+        {"$group": {
+            "_id": {"$hour": "$ist_time"},
+            "count": {"$sum": 1},
+        }},
+        {"$sort": {"_id": 1}},
+    ]
+    hourly = [{"hour": h, "count": 0} for h in range(24)]
+    async for doc in company_db.login_logs.aggregate(hourly_pipeline):
+        h = doc["_id"]
+        if 0 <= h < 24:
+            hourly[h]["count"] = doc["count"]
+
+    # Role breakdown
+    role_pipeline = [
+        {"$match": base_match},
+        {"$group": {"_id": "$role", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    role_breakdown = []
+    async for doc in company_db.login_logs.aggregate(role_pipeline):
+        role_breakdown.append({"role": doc["_id"] or "unknown", "count": doc["count"]})
+
+    return {
+        "kpi": {
+            "total_today":     total_today,
+            "unique_today":    unique_today,
+            "active_sessions": active_sessions,
+            "total_range":     total_range,
+            "days":            days,
+        },
+        "daily_trend":    daily_trend,
+        "hourly_dist":    hourly,
+        "role_breakdown": role_breakdown,
+    }
+
+
+@router.get("/login-history-by-user/{user_id}")
+async def get_login_history_by_user(
+    user_id: str,
+    page: int = 1,
+    page_size: int = 30,
+    auth: AuthContext = Depends(get_current_user),
+):
+    """Return paginated login history for a specific user (newest first)."""
+    from datetime import timezone
+    from app.core.database import get_company_db as _get_company_db
+
+    company_db = _get_company_db(auth.company_id)
+    query = {"user_id": user_id}
+    skip = (page - 1) * page_size
+    total = await company_db.login_logs.count_documents(query)
+    cursor = company_db.login_logs.find(query).sort("login_time", -1).skip(skip).limit(page_size)
+    logs = []
+    async for doc in cursor:
+        doc["id"] = str(doc.pop("_id", ""))
+        if doc.get("login_time"):
+            dt = doc["login_time"]
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            doc["login_time"] = dt.isoformat()
+        logs.append(doc)
+    return {
+        "data": logs,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size,
+    }

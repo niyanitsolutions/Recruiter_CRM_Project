@@ -508,7 +508,8 @@ class AuthService:
         await AuthService._update_last_login(company_id, user.get("_id") or user.get("id"), user.get("is_owner", False))
         await AuthService._log_login_activity(
             company_id=company_id, user_id=user_id,
-            full_name=user.get("full_name", ""), role=role_name,
+            full_name=user.get("full_name", ""),
+            role="owner" if user.get("is_owner", False) else role_name,
             ip_address=ip_address, device_info=device_info,
         )
 
