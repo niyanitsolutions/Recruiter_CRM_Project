@@ -9,6 +9,7 @@ import interviewService from '../../services/interviewService'
 import usePermissions from '../../hooks/usePermissions'
 import { formatDate } from '../../utils/format'
 import ExportModal from '../../components/common/ExportModal'
+import { SkeletonTableRows, SkeletonCards } from '../../components/common/SkeletonLoader'
 
 const STATUS_STYLES = {
   scheduled:   { background: 'rgba(79,172,254,0.15)',  color: '#4FACFE' },
@@ -197,9 +198,7 @@ const Interviews = () => {
       {viewMode === 'card' && (
         <div>
           {loading ? (
-            <div className="p-8 text-center">
-              <div className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
-            </div>
+            <SkeletonCards count={6} />
           ) : currentData.length === 0 ? (
             <div className="p-8 text-center">
               <Calendar className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-disabled)' }} />
@@ -210,8 +209,20 @@ const Interviews = () => {
               {currentData.map(interview => (
                 <div
                   key={interview.id}
-                  className="rounded-xl p-4 cursor-pointer transition-shadow hover:shadow-md"
-                  style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+                  className="rounded-xl p-4 cursor-pointer animate-stagger"
+                  style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-card)',
+                    transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-2px)'
+                    e.currentTarget.style.boxShadow = 'var(--shadow-elevated)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = ''
+                    e.currentTarget.style.boxShadow = ''
+                  }}
                   onClick={() => navigate(`/interviews/${interview.id}`)}
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -263,13 +274,7 @@ const Interviews = () => {
       {viewMode === 'table' && (
       <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
         {loading ? (
-          <div className="p-8 text-center">
-            <div
-              className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto"
-              style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
-            />
-            <p className="mt-2" style={{ color: 'var(--text-muted)' }}>Loading interviews...</p>
-          </div>
+          <SkeletonTableRows rows={8} cols={8} />
         ) : currentData.length === 0 ? (
           <div className="p-8 text-center">
             <Calendar className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-disabled)' }} />

@@ -966,48 +966,56 @@ const Candidates = () => {
       {/* Eligible Jobs Modal (Apply action) */}
       <ModalPortal isOpen={!!applyModal}>
         <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between p-5 border-b border-surface-200">
+          <div className="rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+            <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border)' }}>
               <div>
-                <h3 className="text-lg font-semibold text-surface-900">
+                <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
                   Apply — {applyModal?.candidate?.full_name}
                 </h3>
-                <p className="text-sm text-surface-500 mt-0.5">Select a job to apply this candidate</p>
+                <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Select a job to apply this candidate</p>
               </div>
               <button
                 onClick={() => setApplyModal(null)}
-                className="p-2 hover:bg-surface-100 rounded-lg transition-colors"
+                className="p-2 rounded-lg transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                onMouseLeave={e => e.currentTarget.style.background = ''}
               >
-                <X className="w-5 h-5 text-surface-500" />
+                <X className="w-5 h-5" />
               </button>
             </div>
             <div className="overflow-y-auto flex-1 p-5">
               {eligibleLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full" />
+                  <div className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
                 </div>
               ) : eligibleJobs.length === 0 ? (
-                <p className="text-center text-surface-500 py-12">No open jobs found.</p>
+                <p className="text-center py-12" style={{ color: 'var(--text-muted)' }}>No open jobs found.</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-surface-200">
-                      <th className="text-left py-2 px-3 font-medium text-surface-600">Job</th>
-                      <th className="text-left py-2 px-3 font-medium text-surface-600">Client</th>
-                      <th className="text-left py-2 px-3 font-medium text-surface-600">Match</th>
-                      <th className="text-right py-2 px-3 font-medium text-surface-600">Action</th>
+                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                      <th className="text-left py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Job</th>
+                      <th className="text-left py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Client</th>
+                      <th className="text-left py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Match</th>
+                      <th className="text-right py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-surface-100">
+                  <tbody>
                     {eligibleJobs.map(job => (
-                      <tr key={job.job_id} className="hover:bg-surface-50">
+                      <tr
+                        key={job.job_id}
+                        style={{ borderBottom: '1px solid var(--border-subtle)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                        onMouseLeave={e => e.currentTarget.style.background = ''}
+                      >
                         <td className="py-3 px-3">
-                          <p className="font-medium text-surface-900">{job.job_title}</p>
+                          <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{job.job_title}</p>
                           {job.job_code && (
-                            <p className="text-xs text-surface-400">{job.job_code}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{job.job_code}</p>
                           )}
                         </td>
-                        <td className="py-3 px-3 text-surface-600">{job.client_name || '—'}</td>
+                        <td className="py-3 px-3" style={{ color: 'var(--text-secondary)' }}>{job.client_name || '—'}</td>
                         <td className="py-3 px-3">
                           <span
                             className="px-2 py-0.5 rounded-full text-xs font-medium"
@@ -1024,7 +1032,7 @@ const Candidates = () => {
                         </td>
                         <td className="py-3 px-3 text-right">
                           {job.already_applied ? (
-                            <span className="text-xs text-surface-400 italic">Already applied</span>
+                            <span className="text-xs italic" style={{ color: 'var(--text-disabled)' }}>Already applied</span>
                           ) : (
                             <button
                               onClick={() => handleApplyToJob(job.job_id)}
@@ -1048,18 +1056,28 @@ const Candidates = () => {
       {/* Form Link Modal */}
       <ModalPortal isOpen={!!formLinkModal}>
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setFormLinkModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+          <div
+            className="rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-surface-900">Send Candidate Form Link</h3>
-              <button onClick={() => setFormLinkModal(false)} className="p-1.5 rounded-lg hover:bg-surface-100">
-                <X className="w-4 h-4 text-surface-500" />
+              <h3 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Send Candidate Form Link</h3>
+              <button
+                onClick={() => setFormLinkModal(false)}
+                className="p-1.5 rounded-lg transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                onMouseLeave={e => e.currentTarget.style.background = ''}
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-sm text-surface-500 mb-4">
+            <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
               Enter the candidate's email to send them a self-registration link, or leave blank to copy it to clipboard.
             </p>
-            <label className="block text-sm font-medium text-surface-700 mb-1">
-              Candidate Email <span className="text-surface-400 font-normal">(optional)</span>
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>
+              Candidate Email <span className="font-normal" style={{ color: 'var(--text-muted)' }}>(optional)</span>
             </label>
             <input
               type="email"
@@ -1067,16 +1085,16 @@ const Candidates = () => {
               onChange={e => setFormLinkEmail(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !generatingLink && handleGenerateFormLink()}
               placeholder="candidate@example.com"
-              className="w-full px-3 py-2 border border-surface-300 rounded-lg text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+              className="input w-full mb-4"
             />
             <div className="flex gap-2">
-              <button onClick={() => setFormLinkModal(false)} className="flex-1 px-4 py-2 text-sm border border-surface-200 rounded-lg hover:bg-surface-50">
+              <button onClick={() => setFormLinkModal(false)} className="flex-1 btn-secondary text-sm">
                 Cancel
               </button>
               <button
                 onClick={handleGenerateFormLink}
                 disabled={generatingLink}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg"
+                className="flex-1 btn-primary flex items-center justify-center gap-2 text-sm disabled:opacity-50"
               >
                 <Send className="w-4 h-4" />
                 {generatingLink ? 'Generating…' : (formLinkEmail.trim() ? 'Send Link' : 'Copy Link')}

@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Briefcase, Plus, Search, Filter, Eye, Edit, Trash2,
   Building2, MapPin, Users, Clock, AlertCircle, Download, Upload,
-  List, LayoutGrid
+  List, LayoutGrid, RefreshCw
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -11,7 +11,10 @@ import jobService from '../../services/jobService'
 import usePermissions from '../../hooks/usePermissions'
 import ExportModal from '../../components/common/ExportModal'
 import JobImportModal from '../../components/common/JobImportModal'
+import { SkeletonTableRows, SkeletonCards } from '../../components/common/SkeletonLoader'
 import { selectUserType } from '../../store/authSlice'
+
+const _dropdownCache = { statuses: null, jobTypes: null, workModes: null, priorities: null }
 
 const STATUS_COLORS = {
   draft:     { border: '#8B8FA8', badge: { background: 'rgba(139,143,168,0.15)', color: '#8B8FA8' } },
@@ -52,11 +55,28 @@ const Jobs = () => {
   const [exportOpen, setExportOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [viewMode, setViewMode] = useState('table')
+  const _debounceTimer = useRef(null)
+  const _prevKeyword = useRef(filters.keyword)
 
   useEffect(() => { loadDropdowns() }, [])
-  useEffect(() => { loadJobs() }, [pagination.page, filters])
+
+  useEffect(() => {
+    if (_debounceTimer.current) clearTimeout(_debounceTimer.current)
+    const keywordChanged = filters.keyword !== _prevKeyword.current
+    _prevKeyword.current = filters.keyword
+    const delay = keywordChanged ? 400 : 0
+    _debounceTimer.current = setTimeout(() => { loadJobs() }, delay)
+    return () => clearTimeout(_debounceTimer.current)
+  }, [pagination.page, filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadDropdowns = async () => {
+    if (_dropdownCache.statuses) {
+      setStatuses(_dropdownCache.statuses)
+      setJobTypes(_dropdownCache.jobTypes)
+      setWorkModes(_dropdownCache.workModes)
+      setPriorities(_dropdownCache.priorities)
+      return
+    }
     try {
       const [statusRes, typeRes, modeRes, priorityRes] = await Promise.all([
         jobService.getStatuses(),
@@ -64,10 +84,14 @@ const Jobs = () => {
         jobService.getWorkModes(),
         jobService.getPriorities()
       ])
-      setStatuses(statusRes.data || [])
-      setJobTypes(typeRes.data || [])
-      setWorkModes(modeRes.data || [])
-      setPriorities(priorityRes.data || [])
+      _dropdownCache.statuses   = statusRes.data || []
+      _dropdownCache.jobTypes   = typeRes.data || []
+      _dropdownCache.workModes  = modeRes.data || []
+      _dropdownCache.priorities = priorityRes.data || []
+      setStatuses(_dropdownCache.statuses)
+      setJobTypes(_dropdownCache.jobTypes)
+      setWorkModes(_dropdownCache.workModes)
+      setPriorities(_dropdownCache.priorities)
     } catch (error) {
       console.error('Error loading dropdowns:', error)
     }
@@ -88,7 +112,7 @@ const Jobs = () => {
         total: response.pagination?.total || 0,
         totalPages: response.pagination?.total_pages || 0
       }))
-    } catch (error) {
+    } catch {
       toast.error('Failed to load jobs')
     } finally {
       setLoading(false)
@@ -231,10 +255,7 @@ const Jobs = () => {
       {viewMode === 'table' && (
         <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
           {loading ? (
-            <div className="p-8 text-center">
-              <div className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
-              <p className="mt-2" style={{ color: 'var(--text-muted)' }}>Loading jobs...</p>
-            </div>
+            <SkeletonTableRows rows={8} cols={8} />
           ) : jobs.length === 0 ? (
             <div className="p-8 text-center">
               <Briefcase className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-disabled)' }} />
@@ -324,12 +345,8 @@ const Jobs = () => {
       {viewMode === 'card' && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
-          <div className="col-span-full p-8 text-center">
-            <div
-              className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto"
-              style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
-            />
-            <p className="mt-2" style={{ color: 'var(--text-muted)' }}>Loading jobs...</p>
+          <div className="col-span-full">
+            <SkeletonCards count={6} />
           </div>
         ) : jobs.length === 0 ? (
           <div
@@ -343,7 +360,7 @@ const Jobs = () => {
           jobs.map(job => (
             <div
               key={job.id}
-              className="p-4"
+              className="p-4 animate-stagger"
               style={getCardStyle(job.status)}
               onMouseEnter={e => {
                 e.currentTarget.style.transform = 'translateY(-2px)'

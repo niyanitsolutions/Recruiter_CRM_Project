@@ -8,6 +8,7 @@ import applicationService from '../../services/applicationService'
 import ExportModal from '../../components/common/ExportModal'
 import usePermissions from '../../hooks/usePermissions'
 import ModalPortal from '../../components/common/ModalPortal'
+import { SkeletonCards } from '../../components/common/SkeletonLoader'
 import { formatDate } from '../../utils/format'
 
 const FALLBACK_STATUSES = [
@@ -212,9 +213,7 @@ const Applications = () => {
       {viewMode === 'card' && (
         <div>
           {loading ? (
-            <div className="p-8 text-center">
-              <div className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
-            </div>
+            <SkeletonCards count={6} />
           ) : applications.length === 0 ? (
             <div className="p-8 text-center">
               <FileText className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-disabled)' }} />
@@ -225,8 +224,20 @@ const Applications = () => {
               {applications.map(app => (
                 <div
                   key={app.id}
-                  className="rounded-xl p-4 cursor-pointer transition-shadow hover:shadow-md"
-                  style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+                  className="rounded-xl p-4 cursor-pointer animate-stagger"
+                  style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-card)',
+                    transition: 'transform 0.18s ease, box-shadow 0.18s ease',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-2px)'
+                    e.currentTarget.style.boxShadow = 'var(--shadow-elevated)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = ''
+                    e.currentTarget.style.boxShadow = ''
+                  }}
                   onClick={() => navigate(`/applications/${app.id}`)}
                 >
                   <div className="flex items-start gap-3 mb-3">
