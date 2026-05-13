@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Building2, ArrowLeft, Save, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import clientService from '../../services/clientService'
+import { useFormValidation, validators } from '../../hooks/useFormValidation'
 
 const ClientForm = () => {
   const navigate = useNavigate()
@@ -13,6 +14,12 @@ const ClientForm = () => {
   const [saving, setSaving] = useState(false)
   const [statuses, setStatuses] = useState([])
   const [types, setTypes] = useState([])
+
+  const { errors, touched, touch, validate: fValidate, reset: resetValidation } = useFormValidation({
+    name:  validators.required('Client name'),
+    email: validators.compose(validators.email()),
+    phone: validators.compose(validators.mobile()),
+  })
 
   const [formData, setFormData] = useState({
     name: '',
@@ -106,27 +113,12 @@ const ClientForm = () => {
     }))
   }
 
-  const MOBILE_RE = /^[6-9]\d{9}$/
-
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (!formData.name.trim()) {
-      toast.error('Client name is required')
+    if (!fValidate(formData)) {
+      toast.error('Please fix the highlighted fields')
       return
-    }
-
-    if (formData.phone && !MOBILE_RE.test(formData.phone.replace(/\D/g, ''))) {
-      toast.error('Mobile number must start with 6–9 and be 10 digits.')
-      return
-    }
-
-    for (let i = 0; i < formData.contact_persons.length; i++) {
-      const cp = formData.contact_persons[i]
-      if (cp.mobile && !MOBILE_RE.test(cp.mobile.replace(/\D/g, ''))) {
-        toast.error(`Contact person ${i + 1}: Mobile number must start with 6–9 and be 10 digits.`)
-        return
-      }
     }
 
     try {
@@ -197,9 +189,10 @@ const ClientForm = () => {
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                className="input w-full"
-                required
+                onBlur={() => touch('name', formData.name, formData)}
+                className={`input w-full ${errors.name && touched.name ? 'border-red-400' : ''}`}
               />
+              {errors.name && touched.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
             </div>
 
             <div>
@@ -357,8 +350,10 @@ const ClientForm = () => {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                className="input w-full"
+                onBlur={() => touch('email', formData.email, formData)}
+                className={`input w-full ${errors.email && touched.email ? 'border-red-400' : ''}`}
               />
+              {errors.email && touched.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
             </div>
 
             <div>
@@ -370,8 +365,10 @@ const ClientForm = () => {
                 name="phone"
                 value={formData.phone}
                 onChange={handleChange}
-                className="input w-full"
+                onBlur={() => touch('phone', formData.phone, formData)}
+                className={`input w-full ${errors.phone && touched.phone ? 'border-red-400' : ''}`}
               />
+              {errors.phone && touched.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
             </div>
           </div>
         </div>

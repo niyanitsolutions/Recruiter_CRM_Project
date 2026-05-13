@@ -10,6 +10,7 @@ import usePermissions from '../../hooks/usePermissions'
 import ModalPortal from '../../components/common/ModalPortal'
 import { SkeletonCards } from '../../components/common/SkeletonLoader'
 import { formatDate } from '../../utils/format'
+import TableScroll from '../../components/common/TableScroll'
 
 const FALLBACK_STATUSES = [
   { value: 'applied', label: 'Applied' },
@@ -299,6 +300,7 @@ const Applications = () => {
             <p style={{ color: 'var(--text-muted)' }}>No applications found</p>
           </div>
         ) : (
+          <TableScroll>
           <table className="w-full">
             <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
               <tr>
@@ -428,6 +430,7 @@ const Applications = () => {
               ))}
             </tbody>
           </table>
+          </TableScroll>
         )}
 
         {/* Pagination */}

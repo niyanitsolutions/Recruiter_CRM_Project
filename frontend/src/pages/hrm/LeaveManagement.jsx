@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react'
 import { Plus, CheckCircle, XCircle, Calendar, Clock } from 'lucide-react'
 import hrmService from '../../services/hrmService'
 import ModalPortal from '../../components/common/ModalPortal'
+import TableScroll from '../../components/common/TableScroll'
 
-const STATUS_COLORS = {
-  pending:  'bg-yellow-100 text-yellow-700',
-  approved: 'bg-green-100 text-green-700',
-  rejected: 'bg-red-100 text-red-700',
-  cancelled:'bg-gray-100 text-gray-600',
+const STATUS_STYLE = {
+  pending:  { background: 'var(--bg-warning)', color: 'var(--text-warning)' },
+  approved: { background: 'var(--bg-success)', color: 'var(--text-success)' },
+  rejected: { background: 'var(--bg-danger)',  color: 'var(--text-danger)' },
+  cancelled:{ background: 'var(--bg-card-alt)', color: 'var(--text-muted)' },
 }
 
 export default function LeaveManagement() {
@@ -110,7 +111,8 @@ export default function LeaveManagement() {
         </div>
       </ModalPortal>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+        <TableScroll>
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
@@ -134,7 +136,10 @@ export default function LeaveManagement() {
                 <td className="px-4 py-3 text-gray-600">{fmt(lv.to_date)}</td>
                 <td className="px-4 py-3 text-gray-600">{lv.total_days}</td>
                 <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[lv.status] || ''}`}>{lv.status}</span>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={STATUS_STYLE[lv.status] ?? { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' }}>
+                    {lv.status}
+                  </span>
                 </td>
                 <td className="px-4 py-3">
                   {lv.status === 'pending' && (
@@ -148,6 +153,7 @@ export default function LeaveManagement() {
             ))}
           </tbody>
         </table>
+        </TableScroll>
       </div>
     </div>
   )

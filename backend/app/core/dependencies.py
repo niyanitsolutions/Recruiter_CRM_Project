@@ -125,8 +125,12 @@ async def get_company_db(
     return await get_company_db_by_id(company_id)
 
 
-def require_permissions(required_permissions: List[str]) -> Callable:
+def require_permissions(required_permissions) -> Callable:
     """Dependency factory to check if user has required permissions.
+
+    Accepts a single permission string OR a list of permission strings.
+    Passing a bare string is safe — it is normalised to a list here so the
+    iteration inside check_permissions never accidentally iterates characters.
 
     Permission check order:
     1. Super-admin / Owner → always allowed.
@@ -138,6 +142,12 @@ def require_permissions(required_permissions: List[str]) -> Callable:
     Returns current_user dict so it can be used as:
         current_user = Depends(require_permissions(...))
     """
+    # Normalise: bare string → single-element list
+    if isinstance(required_permissions, str):
+        required_permissions = [required_permissions]
+    elif not isinstance(required_permissions, (list, tuple, set)):
+        required_permissions = list(required_permissions)
+
     async def check_permissions(
         current_user: dict = Depends(get_current_user),
         db = Depends(get_company_db),

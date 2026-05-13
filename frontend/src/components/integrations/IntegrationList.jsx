@@ -177,51 +177,53 @@ const IntegrationList = () => {
         </div>
       )}
 
-      {/* Config slide-in panel */}
-      <ModalPortal isOpen={!!selected}>
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-end"
-          style={{ background: 'rgba(0,0,0,0.45)' }}
-          onClick={() => setSelected(null)}
-        >
+      {/* Config slide-in panel — only mount when selected is set to avoid null.def crash */}
+      {selected && (
+        <ModalPortal isOpen>
           <div
-            className="h-full w-full max-w-md p-6 overflow-y-auto shadow-2xl"
-            style={{ background: 'var(--bg-card)', borderLeft: '1px solid var(--border-card)' }}
-            onClick={e => e.stopPropagation()}
+            className="fixed inset-0 z-[9999] flex items-center justify-end"
+            style={{ background: 'rgba(0,0,0,0.45)' }}
+            onClick={() => setSelected(null)}
           >
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-lg font-semibold" style={{ color: 'var(--text-heading)' }}>
-                  {selected?.def?.label}
-                </h2>
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  {selected?.inst ? 'Update configuration' : 'Connect this service'}
-                </p>
+            <div
+              className="h-full w-full max-w-md p-6 overflow-y-auto shadow-2xl"
+              style={{ background: 'var(--bg-card)', borderLeft: '1px solid var(--border-card)' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-lg font-semibold" style={{ color: 'var(--text-heading)' }}>
+                    {selected.def.label}
+                  </h2>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    {selected.inst ? 'Update configuration' : 'Connect this service'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelected(null)}
+                  className="p-1.5 rounded-lg transition-colors"
+                  style={{ color: 'var(--text-muted)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                  onMouseLeave={e => e.currentTarget.style.background = ''}
+                >
+                  ✕
+                </button>
               </div>
-              <button
-                onClick={() => setSelected(null)}
-                className="p-1.5 rounded-lg transition-colors"
-                style={{ color: 'var(--text-muted)' }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                onMouseLeave={e => e.currentTarget.style.background = ''}
-              >
-                ✕
-              </button>
-            </div>
 
-            <DynamicIntegrationForm
-              provider={selected.def.provider}
-              definition={selected.def}
-              existingData={selected.inst}
-              onSaved={() => {
-                setSelected(null)
-                load()
-              }}
-              onCancel={() => setSelected(null)}
-            />
+              <DynamicIntegrationForm
+                provider={selected.def.provider}
+                definition={selected.def}
+                existingData={selected.inst}
+                onSaved={() => {
+                  setSelected(null)
+                  load()
+                }}
+                onCancel={() => setSelected(null)}
+              />
+            </div>
           </div>
-        </div>
-      </ModalPortal>
+        </ModalPortal>
+      )}
     </div>
   )
 }

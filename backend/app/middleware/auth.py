@@ -1,6 +1,12 @@
 """
-Authentication Middleware
-JWT validation and user context injection
+Authentication Middleware — DEPRECATED.
+
+All production routes use `app.core.dependencies` (returns plain dict).
+This module remains only because `app.api.v1.auth` imports `get_current_user`
+and `AuthContext` from here for legacy compatibility.
+
+DO NOT add new imports from this module. Migrate callers to:
+    from app.core.dependencies import get_current_user, require_permissions
 """
 
 from fastapi import Request, HTTPException, status, Depends

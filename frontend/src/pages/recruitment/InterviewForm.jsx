@@ -1,65 +1,137 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Calendar, ArrowLeft, AlertTriangle, ToggleLeft, ToggleRight, Layers } from 'lucide-react'
+import {
+  Calendar, ArrowLeft, AlertTriangle, ToggleLeft, ToggleRight,
+  Layers, CheckCircle, XCircle, ShieldAlert, Loader2
+} from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import interviewService from '../../services/interviewService'
 import applicationService from '../../services/applicationService'
 import jobService from '../../services/jobService'
 import pipelineService from '../../services/pipelineService'
 
+// ── Validation panel ──────────────────────────────────────────────────────────
+const ValidationPanel = ({ result, loading }) => {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm"
+        style={{ background: 'rgba(139,143,168,0.1)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+        <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+        Checking scheduling eligibility…
+      </div>
+    )
+  }
+
+  if (!result) return null
+
+  const { can_schedule, blocks = [], warnings = [], retry_count = 0 } = result
+
+  return (
+    <div className="space-y-2">
+      {blocks.map((block, i) => (
+        <div key={i} className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-sm"
+          style={{ background: 'rgba(255,71,87,0.1)', border: '1px solid rgba(255,71,87,0.25)', color: '#FF4757' }}>
+          <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span>{block.message}</span>
+        </div>
+      ))}
+      {warnings.map((warn, i) => (
+        <div key={i} className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-sm"
+          style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)', color: '#F59E0B' }}>
+          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+          <span>{warn.message}</span>
+        </div>
+      ))}
+      {can_schedule && blocks.length === 0 && (
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm"
+          style={{ background: 'rgba(67,233,123,0.1)', border: '1px solid rgba(67,233,123,0.25)', color: '#43E97B' }}>
+          <CheckCircle className="w-4 h-4 flex-shrink-0" />
+          Candidate is eligible for scheduling
+          {retry_count > 0 && ` — attempt ${retry_count + 1} of 3`}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main form ─────────────────────────────────────────────────────────────────
 const InterviewForm = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const prefillApplicationId = searchParams.get('application_id')
 
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [loading,          setLoading]          = useState(false)
+  const [saving,           setSaving]           = useState(false)
+  const [jobs,             setJobs]             = useState([])
+  const [pipelineInfo,     setPipelineInfo]     = useState(null)
+  const [manualMode,       setManualMode]       = useState(false)
+  const [activeApps,       setActiveApps]       = useState([])
+  const [allApps,          setAllApps]          = useState([])
+  const [loadingCandidates,setLoadingCandidates]= useState(false)
+  const [validating,       setValidating]       = useState(false)
+  const [validationResult, setValidationResult] = useState(null)
 
-  const [jobs, setJobs] = useState([])
-  const [pipelineInfo, setPipelineInfo] = useState(null)   // { stages: [], name: string|null }
-
-  // Candidate selection
-  const [manualMode, setManualMode] = useState(false)
-  const [activeApplications, setActiveApplications] = useState([])
-  const [allApplications, setAllApplications] = useState([])
-  const [eligibilityWarning, setEligibilityWarning] = useState('')
-  const [loadingCandidates, setLoadingCandidates] = useState(false)
+  const _validateTimer = useRef(null)
 
   const [formData, setFormData] = useState({
     application_id: prefillApplicationId || '',
-    job_id: '',
+    job_id:         '',
     scheduled_date: '',
     scheduled_time: '',
-    instructions: ''
+    instructions:   '',
   })
 
+  // Load jobs on mount
   useEffect(() => {
     jobService.getJobsDropdown('open,on_hold')
       .then(res => setJobs(res.data || []))
       .catch(() => {})
   }, [])
 
-  // When job changes — load pipeline info + candidates
+  // When job changes — reload pipeline + candidates
   useEffect(() => {
     if (formData.job_id) {
       loadPipelineForJob(formData.job_id)
       loadCandidatesForJob(formData.job_id)
       setFormData(prev => ({ ...prev, application_id: prefillApplicationId || '' }))
-      setEligibilityWarning('')
+      setValidationResult(null)
     } else {
       setPipelineInfo(null)
-      setActiveApplications([])
-      setAllApplications([])
+      setActiveApps([])
+      setAllApps([])
+      setValidationResult(null)
     }
   }, [formData.job_id])
 
-  // Pre-fill from application_id query param
+  // Pre-fill from URL param
   useEffect(() => {
     if (prefillApplicationId) {
       setManualMode(true)
       loadApplicationAndSetJob(prefillApplicationId)
     }
   }, [prefillApplicationId])
+
+  // Run pre-flight validation 400ms after candidate selection
+  useEffect(() => {
+    clearTimeout(_validateTimer.current)
+    if (formData.application_id) {
+      setValidating(true)
+      setValidationResult(null)
+      _validateTimer.current = setTimeout(async () => {
+        try {
+          const res = await interviewService.validateScheduling({ application_id: formData.application_id })
+          setValidationResult(res.data)
+        } catch {
+          setValidationResult(null)
+        } finally {
+          setValidating(false)
+        }
+      }, 400)
+    } else {
+      setValidationResult(null)
+    }
+    return () => clearTimeout(_validateTimer.current)
+  }, [formData.application_id])
 
   const loadApplicationAndSetJob = async (appId) => {
     try {
@@ -79,20 +151,19 @@ const InterviewForm = () => {
   const loadPipelineForJob = async (jobId) => {
     try {
       const res = await pipelineService.getStagesForJob(jobId)
-      const stages = res.data || []
-      setPipelineInfo({ stages, name: null })
+      setPipelineInfo({ stages: res.data || [] })
     } catch {
-      setPipelineInfo({ stages: [], name: null })
+      setPipelineInfo({ stages: [] })
     }
   }
 
   const loadCandidatesForJob = async (jobId) => {
     try {
       setLoadingCandidates(true)
-      const allRes = await applicationService.getApplications({ job_id: jobId, page_size: 100 })
-      const apps = allRes.data || []
-      setAllApplications(apps)
-      setActiveApplications(apps.filter(a => !['rejected', 'withdrawn'].includes(a.status)))
+      const res = await applicationService.getApplications({ job_id: jobId, page_size: 100 })
+      const apps = res.data || []
+      setAllApps(apps)
+      setActiveApps(apps.filter(a => !['rejected', 'withdrawn'].includes(a.status)))
     } catch {
       toast.error('Failed to load candidates for this job')
     } finally {
@@ -103,32 +174,28 @@ const InterviewForm = () => {
   const handleChange = (e) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
-
-    if (name === 'application_id' && manualMode) {
-      const selectedApp = allApplications.find(a => a.id === value)
-      setEligibilityWarning(
-        value && ['rejected', 'withdrawn'].includes(selectedApp?.status)
-          ? 'This candidate has been rejected or withdrawn from this job.'
-          : ''
-      )
-    }
   }
+
+  const isBlocked = validationResult && !validationResult.can_schedule
+  const canSubmit = !saving && !validating && !isBlocked
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-
-    if (!formData.job_id) { toast.error('Please select a job'); return }
-    if (!formData.application_id) { toast.error('Please select a candidate'); return }
-    if (!formData.scheduled_date) { toast.error('Please select Round 1 date'); return }
-    if (!formData.scheduled_time) { toast.error('Please select Round 1 time'); return }
-
+    if (!formData.job_id)          { toast.error('Please select a job');             return }
+    if (!formData.application_id)  { toast.error('Please select a candidate');       return }
+    if (!formData.scheduled_date)  { toast.error('Please select Round 1 date');     return }
+    if (!formData.scheduled_time)  { toast.error('Please select Round 1 time');     return }
+    if (isBlocked) {
+      toast.error(validationResult.blocks[0]?.message || 'Candidate is not eligible')
+      return
+    }
     try {
       setSaving(true)
       await interviewService.scheduleInterview({
         application_id: formData.application_id,
         scheduled_date: formData.scheduled_date,
         scheduled_time: formData.scheduled_time,
-        instructions: formData.instructions || undefined,
+        instructions:   formData.instructions || undefined,
       })
       toast.success('Interview scheduled successfully')
       navigate('/interviews')
@@ -146,37 +213,49 @@ const InterviewForm = () => {
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full" />
+        <div className="animate-spin w-8 h-8 border-2 rounded-full"
+          style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
       </div>
     )
   }
 
   const hasPipeline = pipelineInfo && pipelineInfo.stages.length > 0
-  const noPipeline = pipelineInfo && pipelineInfo.stages.length === 0
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
+    <div className="p-6 max-w-2xl mx-auto page-enter">
+      {/* Header */}
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => navigate('/interviews')} className="p-2 hover:bg-surface-100 rounded-lg transition-colors">
+        <button
+          onClick={() => navigate('/interviews')}
+          className="p-2 rounded-lg transition-colors"
+          style={{ color: 'var(--text-muted)' }}
+          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+          onMouseLeave={e => e.currentTarget.style.background = ''}
+        >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-surface-900">Schedule Interview</h1>
-          <p className="text-surface-500">Rounds auto-progress from the job's pipeline</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Schedule Interview</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Rounds auto-progress from the job's pipeline</p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
 
         {/* Job & Candidate */}
-        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
-          <h2 className="text-lg font-semibold text-surface-900 mb-4">Job &amp; Candidate</h2>
+        <div className="rounded-xl p-6"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-heading)' }}>
+            Job &amp; Candidate
+          </h2>
 
+          {/* Job select */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-surface-700 mb-1">
-              Job <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>
+              Job <span style={{ color: '#FF4757' }}>*</span>
             </label>
-            <select name="job_id" value={formData.job_id} onChange={handleChange} className="input w-full" required>
+            <select name="job_id" value={formData.job_id} onChange={handleChange}
+              className="input w-full" required>
               <option value="">Select Job</option>
               {jobs.map(j => (
                 <option key={j.value} value={j.value}>{j.title} — {j.client_name || ''}</option>
@@ -184,97 +263,110 @@ const InterviewForm = () => {
             </select>
           </div>
 
-          {/* Pipeline info */}
+          {/* Pipeline info badge */}
           {formData.job_id && pipelineInfo && (
-            <div className={`mb-4 flex items-start gap-2 p-3 rounded-lg border text-sm ${
-              hasPipeline
-                ? 'bg-green-50 border-green-200 text-green-800'
-                : 'bg-red-50 border-red-200 text-red-700'
-            }`}>
+            <div className="mb-4 flex items-start gap-2 p-3 rounded-lg text-sm"
+              style={hasPipeline
+                ? { background: 'rgba(67,233,123,0.08)', border: '1px solid rgba(67,233,123,0.25)', color: '#43E97B' }
+                : { background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: '#F59E0B' }
+              }>
               <Layers className="w-4 h-4 mt-0.5 flex-shrink-0" />
               {hasPipeline ? (
                 <div>
                   <p className="font-medium">{pipelineInfo.stages.length}-round pipeline detected</p>
-                  <p className="text-xs mt-0.5">
+                  <p className="text-xs mt-0.5" style={{ opacity: 0.85 }}>
                     {pipelineInfo.stages.map((s, i) => `${i + 1}. ${s.stage_name}`).join(' → ')}
                   </p>
                 </div>
               ) : (
                 <div>
                   <p className="font-medium">No pipeline configured for this job</p>
-                  <p className="text-xs mt-0.5">A single "Interview" round will be created. Configure a pipeline in <strong>Settings → Interview Settings</strong> for multi-round tracking.</p>
+                  <p className="text-xs mt-0.5" style={{ opacity: 0.85 }}>
+                    A single "Interview" round will be created.
+                  </p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Candidate dropdown */}
+          {/* Candidate select */}
           {formData.job_id && (
             <>
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-surface-700">
-                  Candidate <span className="text-red-500">*</span>
+                <label className="block text-sm font-medium" style={{ color: 'var(--text-label)' }}>
+                  Candidate <span style={{ color: '#FF4757' }}>*</span>
                 </label>
                 <button
                   type="button"
                   onClick={() => {
                     setManualMode(m => !m)
-                    setEligibilityWarning('')
+                    setValidationResult(null)
                     setFormData(prev => ({ ...prev, application_id: '' }))
                   }}
-                  className="flex items-center gap-1 text-xs text-surface-500 hover:text-primary-600"
+                  className="flex items-center gap-1 text-xs transition-colors"
+                  style={{ color: 'var(--text-muted)' }}
                 >
                   {manualMode
-                    ? <><ToggleRight className="w-4 h-4 text-primary-600" /> Showing all (incl. rejected)</>
-                    : <><ToggleLeft className="w-4 h-4" /> Active applicants only</>}
+                    ? <><ToggleRight className="w-4 h-4" style={{ color: 'var(--accent)' }} /> Showing all (incl. rejected)</>
+                    : <><ToggleLeft className="w-4 h-4" /> Active applicants only</>
+                  }
                 </button>
               </div>
 
               {loadingCandidates ? (
-                <div className="text-sm text-surface-400">Loading candidates…</div>
+                <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading candidates…</div>
               ) : manualMode ? (
-                <select name="application_id" value={formData.application_id} onChange={handleChange} className="input w-full" required>
-                  <option value="">Select any candidate ({allApplications.length})</option>
-                  {allApplications.map(a => (
+                <select name="application_id" value={formData.application_id} onChange={handleChange}
+                  className="input w-full" required>
+                  <option value="">Select any candidate ({allApps.length})</option>
+                  {allApps.map(a => (
                     <option key={a.id} value={a.id}>
-                      {a.candidate_name}{a.status === 'rejected' ? ' ⚠ rejected' : ''}
+                      {a.candidate_name}
+                      {a.status === 'rejected'  ? ' ⚠ rejected'  : ''}
+                      {a.status === 'withdrawn' ? ' ⚠ withdrawn' : ''}
                     </option>
                   ))}
                 </select>
               ) : (
-                <select name="application_id" value={formData.application_id} onChange={handleChange} className="input w-full" required>
-                  <option value="">Select candidate ({activeApplications.length})</option>
-                  {activeApplications.map(a => (
+                <select name="application_id" value={formData.application_id} onChange={handleChange}
+                  className="input w-full" required>
+                  <option value="">Select candidate ({activeApps.length})</option>
+                  {activeApps.map(a => (
                     <option key={a.id} value={a.id}>{a.candidate_name}</option>
                   ))}
                 </select>
               )}
 
-              {eligibilityWarning && (
-                <div className="flex items-center gap-2 mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                  {eligibilityWarning}
-                </div>
-              )}
-
-              {!manualMode && activeApplications.length === 0 && !loadingCandidates && (
-                <p className="text-sm text-amber-600 mt-2">
+              {!manualMode && activeApps.length === 0 && !loadingCandidates && (
+                <p className="text-sm mt-2" style={{ color: '#F59E0B' }}>
                   No active candidates for this job. Switch to manual mode to see all.
                 </p>
+              )}
+
+              {/* Smart validation panel */}
+              {formData.application_id && (
+                <div className="mt-4">
+                  <ValidationPanel result={validationResult} loading={validating} />
+                </div>
               )}
             </>
           )}
         </div>
 
         {/* Round 1 Schedule */}
-        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
-          <h2 className="text-lg font-semibold text-surface-900 mb-1">Round 1 Schedule</h2>
-          <p className="text-sm text-surface-500 mb-4">Set the date and time for the first round. Subsequent rounds are scheduled after each result.</p>
+        <div className="rounded-xl p-6"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <h2 className="text-lg font-semibold mb-1" style={{ color: 'var(--text-heading)' }}>
+            Round 1 Schedule
+          </h2>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+            Set the date and time for the first round. Subsequent rounds are scheduled after each result.
+          </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Date <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>
+                Date <span style={{ color: '#FF4757' }}>*</span>
               </label>
               <input
                 type="date"
@@ -287,8 +379,8 @@ const InterviewForm = () => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Time <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>
+                Time <span style={{ color: '#FF4757' }}>*</span>
               </label>
               <input
                 type="time"
@@ -302,33 +394,50 @@ const InterviewForm = () => {
           </div>
         </div>
 
-        {/* Instructions (optional) */}
-        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
-          <h2 className="text-lg font-semibold text-surface-900 mb-4">Instructions <span className="text-surface-400 font-normal text-sm">(optional)</span></h2>
+        {/* Instructions */}
+        <div className="rounded-xl p-6"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-heading)' }}>
+            Instructions
+            <span className="text-sm font-normal ml-2" style={{ color: 'var(--text-muted)' }}>(optional)</span>
+          </h2>
           <textarea
             name="instructions"
             value={formData.instructions}
             onChange={handleChange}
             className="input w-full"
             rows={3}
-            placeholder="Any instructions for the candidate..."
+            placeholder="Any instructions for the candidate…"
           />
         </div>
 
+        {/* Hard-block summary banner */}
+        {isBlocked && (
+          <div className="flex items-start gap-3 px-4 py-3 rounded-lg"
+            style={{ background: 'rgba(255,71,87,0.08)', border: '1px solid rgba(255,71,87,0.3)', color: '#FF4757' }}>
+            <ShieldAlert className="w-5 h-5 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Scheduling blocked</p>
+              <p className="text-xs mt-0.5" style={{ opacity: 0.85 }}>
+                Resolve the issues above before scheduling this interview.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-end gap-3">
-          <button type="button" onClick={() => navigate('/interviews')} className="btn-secondary">Cancel</button>
-          <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2">
-            {saving ? (
-              <>
-                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                Scheduling...
-              </>
-            ) : (
-              <>
-                <Calendar className="w-4 h-4" />
-                Schedule Interview
-              </>
-            )}
+          <button type="button" onClick={() => navigate('/interviews')} className="btn-secondary">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Scheduling…</>
+              : <><Calendar className="w-4 h-4" /> Schedule Interview</>
+            }
           </button>
         </div>
       </form>

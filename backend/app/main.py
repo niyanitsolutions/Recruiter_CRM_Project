@@ -8,6 +8,8 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from contextlib import asynccontextmanager
 import asyncio
 import logging
@@ -17,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 from app.core.config import settings
 from app.core.database import connect_to_mongo, close_mongo_connection, get_master_db
+from app.core.limiter import limiter
 from app.core.redis import init_redis, close_redis
 from app.services.plan_service import plan_service
 from app.services.subscription_reminder_service import reminder_background_loop
@@ -184,6 +187,9 @@ app = FastAPI(
     redoc_url="/redoc" if settings.DEBUG else None,
     lifespan=lifespan
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── Global exception handlers ─────────────────────────────────────────────────
 

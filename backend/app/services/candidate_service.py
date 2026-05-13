@@ -86,7 +86,7 @@ class CandidateService:
         # Check for duplicate mobile
         mobile_clean = re.sub(r'[^0-9]', '', candidate_data.mobile)
         existing_mobile = await collection.find_one({
-            "mobile": {"$regex": mobile_clean[-10:]},
+            "mobile": {"$regex": re.escape(mobile_clean[-10:])},
             "is_deleted": False
         })
         if existing_mobile:
@@ -486,7 +486,7 @@ class CandidateService:
         if "mobile" in update_dict:
             mobile_clean = re.sub(r'[^0-9]', '', update_dict["mobile"])
             existing_mobile = await collection.find_one({
-                "mobile": {"$regex": mobile_clean[-10:]},
+                "mobile": {"$regex": re.escape(mobile_clean[-10:])},
                 "_id": {"$ne": candidate_id},
                 "is_deleted": False
             })

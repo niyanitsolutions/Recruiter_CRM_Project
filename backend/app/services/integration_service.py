@@ -10,6 +10,21 @@ import base64
 import json
 import os
 
+from cryptography.fernet import Fernet, InvalidToken
+
+from app.core.config import settings
+
+
+def _get_fernet() -> Optional[Fernet]:
+    """Return a Fernet instance from the configured secret key, or None if unconfigured."""
+    key = getattr(settings, "FERNET_SECRET_KEY", None)
+    if not key:
+        return None
+    try:
+        return Fernet(key.encode() if isinstance(key, str) else key)
+    except Exception:
+        return None
+
 
 # Static provider definitions — extend as needed
 INTEGRATION_DEFINITIONS = [
@@ -75,11 +90,22 @@ INTEGRATION_DEFINITIONS = [
 
 
 def _simple_encrypt(value: str) -> str:
-    """Base64-encode sensitive values (swap for real encryption in prod)."""
+    """Encrypt with Fernet if key is configured, otherwise fall back to Base64."""
+    fernet = _get_fernet()
+    if fernet:
+        return fernet.encrypt(value.encode()).decode()
     return base64.b64encode(value.encode()).decode()
 
 
 def _simple_decrypt(value: str) -> str:
+    """Decrypt with Fernet, falling back to Base64 for legacy records."""
+    fernet = _get_fernet()
+    if fernet:
+        try:
+            return fernet.decrypt(value.encode()).decode()
+        except (InvalidToken, Exception):
+            pass
+    # Fallback: try Base64 for records encrypted before Fernet was added
     try:
         return base64.b64decode(value.encode()).decode()
     except Exception:
@@ -140,26 +166,31 @@ class IntegrationService:
             integrations.append(doc)
         return {"integrations": integrations}
 
-    async def upsert_integration(self, company_id: str, provider: str, config: dict, user_id: str) -> dict:
+    async def upsert_integration(self, company_id: str, provider: str, config: dict, user_id: str, name: str = None) -> dict:
         encrypted_config = _encrypt_config(config)
         now = datetime.now(timezone.utc)
 
         existing = await self.col.find_one({"company_id": company_id, "provider": provider})
+        update_fields = {
+            "config": encrypted_config,
+            "updated_at": now,
+            "updated_by": user_id,
+            "last_test_ok": None,
+            "last_tested_at": None,
+        }
+        if name is not None:
+            update_fields["name"] = name
+
         if existing:
             await self.col.update_one(
                 {"_id": existing["_id"]},
-                {"$set": {
-                    "config": encrypted_config,
-                    "updated_at": now,
-                    "updated_by": user_id,
-                    "last_test_ok": None,
-                    "last_tested_at": None,
-                }}
+                {"$set": update_fields}
             )
         else:
             await self.col.insert_one({
                 "company_id": company_id,
                 "provider": provider,
+                "name": name or provider,
                 "config": encrypted_config,
                 "is_active": False,
                 "last_test_ok": None,

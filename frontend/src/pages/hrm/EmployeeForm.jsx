@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import hrmService from '../../services/hrmService'
 import toast from 'react-hot-toast'
+import { useFormValidation, validators } from '../../hooks/useFormValidation'
 
 // ── Collapsible section wrapper ───────────────────────────────────────────────
 const Section = ({ icon: Icon, title, color = 'indigo', children, defaultOpen = true }) => {
@@ -99,6 +100,12 @@ export default function EmployeeForm() {
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState('')
   const [form, setForm]         = useState({ ...EMPTY_FORM })
+
+  const { errors: fErrors, touched: fTouched, touch, validate: fValidate } = useFormValidation({
+    full_name: validators.required('Full name'),
+    email:     validators.compose(validators.required('Email'), validators.email()),
+    phone:     validators.compose(validators.mobile()),
+  })
 
   // Dynamic lists
   const [emergencyContacts, setEmergencyContacts] = useState([{ name: '', relationship: '', phone: '', email: '' }])
@@ -207,8 +214,8 @@ export default function EmployeeForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.full_name.trim() || !form.email.trim()) {
-      setError('Full name and email are required.')
+    if (!fValidate(form)) {
+      setError('Please fix the highlighted fields.')
       return
     }
     setSaving(true); setError('')
@@ -286,14 +293,14 @@ export default function EmployeeForm() {
         {/* ── PERSONAL INFORMATION ─────────────────────────────────────────── */}
         <Section icon={User} title="Personal Information" color="indigo">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-            <Field label="Full Name" required>
-              <Input value={form.full_name} onChange={e => set('full_name', e.target.value)} required />
+            <Field label="Full Name" required error={fTouched.full_name ? fErrors.full_name : ''}>
+              <Input value={form.full_name} onChange={e => set('full_name', e.target.value)} onBlur={() => touch('full_name', form.full_name, form)} />
             </Field>
-            <Field label="Email" required>
-              <Input type="email" value={form.email} onChange={e => set('email', e.target.value)} required />
+            <Field label="Email" required error={fTouched.email ? fErrors.email : ''}>
+              <Input type="email" value={form.email} onChange={e => set('email', e.target.value)} onBlur={() => touch('email', form.email, form)} />
             </Field>
-            <Field label="Phone">
-              <Input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} />
+            <Field label="Phone" error={fTouched.phone ? fErrors.phone : ''}>
+              <Input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} onBlur={() => touch('phone', form.phone, form)} />
             </Field>
             <Field label="Date of Birth">
               <Input type="date" value={form.date_of_birth} onChange={e => set('date_of_birth', e.target.value)} />

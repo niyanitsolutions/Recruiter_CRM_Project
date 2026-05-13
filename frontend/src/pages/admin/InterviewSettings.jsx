@@ -6,6 +6,7 @@ import clientService from '../../services/clientService'
 import jobService from '../../services/jobService'
 import usePermissions from '../../hooks/usePermissions'
 import ModalPortal from '../../components/common/ModalPortal'
+import TableScroll from '../../components/common/TableScroll'
 
 const MODES = [
   { value: 'video', label: 'Video Call' },
@@ -297,7 +298,8 @@ const InterviewSettings = () => {
       </div>
 
       {/* Pipelines table */}
-      <div className="bg-white rounded-xl shadow-sm border border-surface-100 overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+        <TableScroll>
         <table className="w-full">
           <thead className="bg-surface-50 border-b border-surface-100">
             <tr>
@@ -369,6 +371,7 @@ const InterviewSettings = () => {
             )}
           </tbody>
         </table>
+        </TableScroll>
       </div>
 
       {/* ── Pipeline Form Panel (right slide-in) ──────────────────────────────── */}

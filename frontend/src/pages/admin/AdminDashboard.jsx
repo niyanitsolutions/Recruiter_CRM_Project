@@ -27,7 +27,7 @@ import { formatDateTime } from '../../utils/format'
 // ── Module-level dashboard cache — survives SPA navigation ───────────────────
 // TTL: 5 minutes. Matches backend cache so we never show data older than backend.
 const DASH_CACHE_TTL = 5 * 60 * 1000
-const _dashCache = { data: null, recruit: null, seat: null, ts: 0 }
+const _dashCache = { data: null, recruit: null, seat: null, ts: 0, company_id: null }
 
 // ── Animated counter (used in compact stat cards) ─────────────────────────────
 const useCounter = (target, duration = 800) => {
@@ -299,7 +299,7 @@ const AdminDashboard = () => {
   // ── Fetch main dashboard data ───────────────────────────────────────────────
   const fetchDashboardData = useCallback(async (force = false) => {
     // Serve from module-level cache if fresh (within TTL) and not forced
-    if (!force && _dashCache.ts && (Date.now() - _dashCache.ts) < DASH_CACHE_TTL) {
+    if (!force && _dashCache.ts && _dashCache.company_id === user?.company_id && (Date.now() - _dashCache.ts) < DASH_CACHE_TTL) {
       setDashboardData(_dashCache.data)
       setRecruitStats(_dashCache.recruit)
       setSeatStatus(_dashCache.seat)
@@ -317,10 +317,11 @@ const AdminDashboard = () => {
       const recruit = recruitRes.status === 'fulfilled' ? recruitRes.value.data : _dashCache.recruit
       const seat    = seatRes.status   === 'fulfilled' ? (seatRes.value.data?.data || null) : _dashCache.seat
       // Write-through to module cache
-      _dashCache.data    = data
-      _dashCache.recruit = recruit
-      _dashCache.seat    = seat
-      _dashCache.ts      = Date.now()
+      _dashCache.data       = data
+      _dashCache.recruit    = recruit
+      _dashCache.seat       = seat
+      _dashCache.ts         = Date.now()
+      _dashCache.company_id = user?.company_id
       setDashboardData(data)
       setRecruitStats(recruit)
       setSeatStatus(seat)

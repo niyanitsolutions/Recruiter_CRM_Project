@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSelector } from 'react-redux'
 import { Link } from 'react-router-dom'
 import {
   Users2, Briefcase, Building2, Calendar, ClipboardList,
@@ -20,8 +21,9 @@ import KpiCard from '../../components/dashboard/KpiCard'
 import { SkeletonKpiRow, SkeletonBox } from '../../components/common/SkeletonLoader'
 
 // ── Module-level cache (5 min TTL, survives SPA navigation) ─────────────────
+// company_id is stored so the cache is invalidated when a different tenant logs in.
 const CACHE_TTL = 5 * 60 * 1000
-const _cache = { data: null, ts: 0 }
+const _cache = { data: null, ts: 0, company_id: null }
 
 // ── Pipeline stage config ────────────────────────────────────────────────────
 const PIPELINE_STAGES = [
@@ -147,6 +149,8 @@ const QuickAction = ({ icon: Icon, title, subtitle, to, color = '#6366f1', value
 // ── Main Dashboard ───────────────────────────────────────────────────────────
 const RecruitmentDashboard = () => {
   const { has } = usePermissions()
+  const currentUser = useSelector(state => state.auth.user)
+  const companyId = currentUser?.company_id
 
   const canViewCandidates   = has('candidates:view')
   const canViewJobs         = has('jobs:view')
@@ -168,7 +172,7 @@ const RecruitmentDashboard = () => {
   const [mounted, setMounted]                 = useState(false)
 
   const loadData = useCallback(async (bypassCache = false) => {
-    if (!bypassCache && _cache.data && Date.now() - _cache.ts < CACHE_TTL) {
+    if (!bypassCache && _cache.data && _cache.company_id === companyId && Date.now() - _cache.ts < CACHE_TTL) {
       const c = _cache.data
       setCandidateStats(c.candidateStats)
       setJobStats(c.jobStats)
@@ -218,6 +222,7 @@ const RecruitmentDashboard = () => {
 
       _cache.data = { candidateStats: cs, jobStats: js, appStats: as, interviewStats: is, todayInterviews: ti, pendingFeedback: pf, pipelineData: pd }
       _cache.ts = Date.now()
+      _cache.company_id = companyId
     } catch (err) {
       console.error('Dashboard error:', err)
     } finally {

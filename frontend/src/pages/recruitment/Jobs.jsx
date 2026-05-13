@@ -13,6 +13,7 @@ import ExportModal from '../../components/common/ExportModal'
 import JobImportModal from '../../components/common/JobImportModal'
 import { SkeletonTableRows, SkeletonCards } from '../../components/common/SkeletonLoader'
 import { selectUserType } from '../../store/authSlice'
+import TableScroll from '../../components/common/TableScroll'
 
 const _dropdownCache = { statuses: null, jobTypes: null, workModes: null, priorities: null }
 
@@ -262,6 +263,7 @@ const Jobs = () => {
               <p style={{ color: 'var(--text-muted)' }}>No jobs found</p>
             </div>
           ) : (
+            <TableScroll>
             <table className="w-full">
               <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
                 <tr>
@@ -337,6 +339,7 @@ const Jobs = () => {
                 ))}
               </tbody>
             </table>
+            </TableScroll>
           )}
         </div>
       )}

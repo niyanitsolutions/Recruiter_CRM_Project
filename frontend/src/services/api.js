@@ -5,7 +5,7 @@ import { getToken, removeToken, removeUser } from '../utils/token'
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api/v1',
   headers: { 'Content-Type': 'application/json' },
-  timeout: 30000,
+  timeout: 15000,
 })
 
 // ── Request interceptor — attach auth token ───────────────────────────────────

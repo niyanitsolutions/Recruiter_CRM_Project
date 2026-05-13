@@ -1,4 +1,5 @@
 """HRM — Employee Service"""
+import re
 from datetime import datetime, timezone
 from typing import Optional, List
 from bson import ObjectId
@@ -67,7 +68,7 @@ class EmployeeService:
 
             # Find CRM user with same email (case-insensitive)
             matched_user = await self.db.users.find_one(
-                {"company_id": company_id, "email": {"$regex": f"^{employee_email}$", "$options": "i"},
+                {"company_id": company_id, "email": {"$regex": f"^{re.escape(employee_email)}$", "$options": "i"},
                  "is_deleted": False},
                 {"_id": 1},
             )
@@ -124,10 +125,11 @@ class EmployeeService:
         if department_id:
             query["department_id"] = department_id
         if search:
+            _s = re.escape(search)
             query["$or"] = [
-                {"full_name": {"$regex": search, "$options": "i"}},
-                {"email": {"$regex": search, "$options": "i"}},
-                {"employee_id": {"$regex": search, "$options": "i"}},
+                {"full_name": {"$regex": _s, "$options": "i"}},
+                {"email": {"$regex": _s, "$options": "i"}},
+                {"employee_id": {"$regex": _s, "$options": "i"}},
             ]
         total = await self.col.count_documents(query)
         skip = (page - 1) * page_size

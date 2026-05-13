@@ -33,6 +33,25 @@ from app.models.company.interview import (
     get_interview_result_display
 )
 
+# Cooldown duration by rejection reason (in days)
+COOLDOWN_DAYS: Dict[str, int] = {
+    "technical":     30,
+    "hr":             7,
+    "communication": 15,
+    "attendance":    60,
+}
+DEFAULT_COOLDOWN_DAYS = 3
+MAX_RETRY_LIMIT = 3
+
+# Statuses that mean an interview is still "alive" (not concluded)
+_ACTIVE_STATUSES = {
+    InterviewStatus.SCHEDULED.value,
+    InterviewStatus.CONFIRMED.value,
+    InterviewStatus.IN_PROGRESS.value,
+    InterviewStatus.RESCHEDULED.value,
+    InterviewStatus.ON_HOLD.value,
+}
+
 
 class InterviewService:
     """Service for interview management"""
@@ -127,6 +146,132 @@ class InterviewService:
             is_rescheduled=interview.get("is_rescheduled", False)
         )
 
+    # ── validate_scheduling ──────────────────────────────────────────────────
+
+    @staticmethod
+    async def validate_scheduling(
+        db: AsyncIOMotorDatabase,
+        candidate_id: str,
+        job_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Pre-flight validation before scheduling an interview.
+        Returns {can_schedule, blocks, warnings, cooldown_until, retry_count, existing_interview}.
+        Blocks = hard stops; warnings = advisory only.
+        """
+        now = datetime.now(timezone.utc)
+        blocks: List[Dict] = []
+        warnings: List[Dict] = []
+        cooldown_until = None
+        existing_interview = None
+
+        # 1. Blacklist check
+        cand_doc = await db["candidates"].find_one({"_id": candidate_id}, {"status": 1})
+        if cand_doc and cand_doc.get("status") == "blacklisted":
+            blocks.append({
+                "code": "blacklisted",
+                "message": "This candidate is blacklisted and cannot be scheduled for interviews.",
+            })
+            return {
+                "can_schedule": False,
+                "blocks": blocks,
+                "warnings": warnings,
+                "cooldown_until": None,
+                "retry_count": 0,
+                "existing_interview": None,
+            }
+
+        # 2. Load all non-deleted interviews for this candidate + job
+        all_ivs = await db["interviews"].find(
+            {"candidate_id": candidate_id, "job_id": job_id, "is_deleted": False}
+        ).to_list(length=100)
+
+        # 3. Already selected/hired for this position
+        if any(iv.get("overall_status") == "selected" for iv in all_ivs):
+            blocks.append({
+                "code": "already_selected",
+                "message": "This candidate has already been selected for this position.",
+            })
+
+        # 4. Duplicate active interview
+        active_ivs = [iv for iv in all_ivs if iv.get("status") in _ACTIVE_STATUSES]
+        if active_ivs:
+            iv = active_ivs[0]
+            sched = iv.get("scheduled_date")
+            date_str = sched.strftime("%d %b %Y") if hasattr(sched, "strftime") else str(sched or "")
+            existing_interview = {
+                "id": iv["_id"],
+                "status": iv.get("status"),
+                "overall_status": iv.get("overall_status"),
+                "scheduled_date": date_str,
+            }
+            blocks.append({
+                "code": "duplicate_active",
+                "message": (
+                    f"An active interview already exists for this candidate and job "
+                    f"(status: {iv.get('status', 'unknown')}"
+                    + (f", scheduled {date_str}" if date_str else "")
+                    + "). Cancel it before scheduling a new one."
+                ),
+            })
+
+        # 5. Cooldown period
+        for iv in sorted(all_ivs, key=lambda x: x.get("created_at", datetime.min), reverse=True):
+            cd = iv.get("cooldown_until")
+            if not cd:
+                continue
+            if cd.tzinfo is None:
+                cd = cd.replace(tzinfo=timezone.utc)
+            if cd > now:
+                cooldown_until = cd
+                days_left = max(1, (cd - now).days + 1)
+                rejection_reason = iv.get("rejection_reason") or "other"
+                blocks.append({
+                    "code": "cooldown_active",
+                    "message": (
+                        f"Candidate is in a cooldown period after a {rejection_reason} rejection. "
+                        f"Eligible again in {days_left} day{'s' if days_left != 1 else ''} "
+                        f"({cd.strftime('%d %b %Y')})."
+                    ),
+                    "cooldown_until": cd.isoformat(),
+                    "rejection_reason": rejection_reason,
+                })
+                break
+
+        # 6. Max retry limit
+        failed_count = sum(
+            1 for iv in all_ivs
+            if iv.get("overall_status") == "failed" or iv.get("status") == "failed"
+        )
+        if failed_count >= MAX_RETRY_LIMIT:
+            blocks.append({
+                "code": "max_retries",
+                "message": (
+                    f"This candidate has reached the maximum of {MAX_RETRY_LIMIT} failed attempts "
+                    "for this position."
+                ),
+            })
+
+        # 7. Advisory warnings (non-blocking)
+        if 0 < failed_count < MAX_RETRY_LIMIT:
+            warnings.append({
+                "code": "has_previous_failures",
+                "message": (
+                    f"This candidate has {failed_count} previous failed attempt"
+                    f"{'s' if failed_count != 1 else ''} for this position "
+                    f"({MAX_RETRY_LIMIT - failed_count} remaining)."
+                ),
+            })
+
+        return {
+            "can_schedule": len(blocks) == 0,
+            "blocks": blocks,
+            "warnings": warnings,
+            "cooldown_until": cooldown_until.isoformat() if cooldown_until else None,
+            "retry_count": failed_count,
+            "existing_interview": existing_interview,
+        }
+
     # ── schedule_interview ───────────────────────────────────────────────────
 
     @staticmethod
@@ -182,10 +327,12 @@ class InterviewService:
             client_id = job_doc.get("client_id")
             client_name = job_doc.get("client_name")
 
-        # Blacklist guard
-        cand_doc = await db["candidates"].find_one({"_id": candidate_id}, {"status": 1})
-        if cand_doc and cand_doc.get("status") == "blacklisted":
-            raise HTTPException(status_code=400, detail="Blacklisted candidates cannot be scheduled for interviews.")
+        # Blacklist guard + full pre-flight validation (server-side enforcement)
+        validation = await InterviewService.validate_scheduling(db, candidate_id, job_id)
+        if not validation["can_schedule"]:
+            first_block = validation["blocks"][0]
+            status_code = 409 if first_block["code"] == "duplicate_active" else 422
+            raise HTTPException(status_code=status_code, detail=first_block["message"])
 
         # ── Load pipeline stages ──────────────────────────────────────────────
         from app.services.pipeline_service import PipelineService
@@ -362,13 +509,11 @@ class InterviewService:
                 }
             )
 
-        # Update candidate status
+        # Increment interview counter only — candidate status (active/blacklisted) is person-level
+        # and must not be overwritten with pipeline-stage values like "interview"
         await db["candidates"].update_one(
             {"_id": candidate_id},
-            {
-                "$inc": {"total_interviews": 1},
-                "$set": {"status": "interview", "current_stage": stage_name},
-            }
+            {"$inc": {"total_interviews": 1}},
         )
 
         # Email notifications (best-effort)
@@ -538,7 +683,10 @@ class InterviewService:
             update_set["overall_status"] = "failed"
             update_set["status"] = InterviewStatus.FAILED.value
             update_set["result"] = InterviewResult.FAILED.value
-            update_set["cooldown_until"] = now + timedelta(days=3)
+            rejection_reason = result_data.rejection_reason or None
+            cooldown_days = COOLDOWN_DAYS.get(rejection_reason, DEFAULT_COOLDOWN_DAYS) if rejection_reason else DEFAULT_COOLDOWN_DAYS
+            update_set["cooldown_until"] = now + timedelta(days=cooldown_days)
+            update_set["rejection_reason"] = rejection_reason
             app_status_update = "rejected"
 
         elif result_data.result == "on_hold":

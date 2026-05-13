@@ -8,7 +8,7 @@ from datetime import date, timezone
 
 from app.models.company.interview import (
     InterviewCreate, InterviewUpdate, InterviewReschedule, InterviewFeedbackSubmit,
-    RoundResultSubmit,
+    RoundResultSubmit, InterviewValidateRequest,
     InterviewResponse, InterviewListResponse, InterviewStatus, InterviewMode, InterviewResult
 )
 from app.services.interview_service import InterviewService
@@ -135,6 +135,31 @@ async def get_selected_candidates(
     """Get candidates who passed all interview rounds (for Release Offer dropdown)"""
     candidates = await InterviewService.get_selected_candidates(db)
     return {"success": True, "data": candidates}
+
+
+@router.post("/validate")
+async def validate_scheduling(
+    body: InterviewValidateRequest,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db),
+    _: bool = Depends(require_permissions(["interviews:view"]))
+):
+    """Pre-flight eligibility check before scheduling. Returns blocks + warnings."""
+    candidate_id = body.candidate_id
+    job_id = body.job_id
+
+    if body.application_id and (not candidate_id or not job_id):
+        app_doc = await db["applications"].find_one({"_id": body.application_id})
+        if app_doc:
+            candidate_id = app_doc["candidate_id"]
+            job_id = app_doc["job_id"]
+
+    if not candidate_id or not job_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="candidate_id and job_id are required")
+
+    result = await InterviewService.validate_scheduling(db, candidate_id, job_id)
+    return {"success": True, "data": result}
 
 
 @router.post("/")

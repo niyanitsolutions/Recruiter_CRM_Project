@@ -10,6 +10,7 @@ import usePermissions from '../../hooks/usePermissions'
 import { formatDate } from '../../utils/format'
 import ExportModal from '../../components/common/ExportModal'
 import { SkeletonTableRows, SkeletonCards } from '../../components/common/SkeletonLoader'
+import TableScroll from '../../components/common/TableScroll'
 
 const STATUS_STYLES = {
   scheduled:   { background: 'rgba(79,172,254,0.15)',  color: '#4FACFE' },
@@ -287,6 +288,7 @@ const Interviews = () => {
             </p>
           </div>
         ) : (
+          <TableScroll>
           <table className="w-full">
             <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
               <tr>
@@ -410,6 +412,7 @@ const Interviews = () => {
               ))}
             </tbody>
           </table>
+          </TableScroll>
         )}
 
         {/* Pagination (only for All tab) */}

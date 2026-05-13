@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react'
 import { Clock, CheckCircle, XCircle, AlertCircle, RefreshCw } from 'lucide-react'
 import hrmService from '../../services/hrmService'
+import TableScroll from '../../components/common/TableScroll'
 
-const STATUS_COLORS = {
-  present:  'bg-green-100 text-green-700',
-  late:     'bg-yellow-100 text-yellow-700',
-  absent:   'bg-red-100 text-red-700',
-  on_leave: 'bg-blue-100 text-blue-700',
-  wfh:      'bg-purple-100 text-purple-700',
-  holiday:  'bg-gray-100 text-gray-600',
+const STATUS_STYLE = {
+  present:  { background: 'var(--bg-success)', color: 'var(--text-success)' },
+  late:     { background: 'var(--bg-warning)', color: 'var(--text-warning)' },
+  absent:   { background: 'var(--bg-danger)',  color: 'var(--text-danger)' },
+  on_leave: { background: 'var(--bg-info)',    color: 'var(--text-info)' },
+  wfh:      { background: 'var(--bg-info)',    color: 'var(--text-info)' },
+  holiday:  { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' },
 }
 
 export default function Attendance() {
@@ -70,7 +71,8 @@ export default function Attendance() {
         ))}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+        <TableScroll>
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
@@ -90,7 +92,8 @@ export default function Attendance() {
               <tr key={rec.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium text-gray-900">{rec.employee_name}</td>
                 <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[rec.status] || 'bg-gray-100 text-gray-600'}`}>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={STATUS_STYLE[rec.status] ?? { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' }}>
                     {rec.status}
                     {rec.is_late && rec.late_by_minutes > 0 && ` (+${rec.late_by_minutes}m)`}
                   </span>
@@ -118,6 +121,7 @@ export default function Attendance() {
             ))}
           </tbody>
         </table>
+        </TableScroll>
       </div>
     </div>
   )

@@ -140,6 +140,17 @@ async def ensure_global_indexes(master_db) -> None:
         [("success", 1), ("created_at", -1)],
         name="email_logs_success_date",
     )
+    # sessions — lookup by jti (single-session enforcement)
+    await master_db.sessions.create_index(
+        [("user_id", 1), ("is_active", 1)],
+        name="sessions_user_active",
+    )
+    # sessions — TTL: auto-expire documents 30 days after created_at
+    await master_db.sessions.create_index(
+        [("created_at", 1)],
+        expireAfterSeconds=60 * 60 * 24 * 30,
+        name="sessions_ttl_30d",
+    )
 
 
 async def upsert_global_user(

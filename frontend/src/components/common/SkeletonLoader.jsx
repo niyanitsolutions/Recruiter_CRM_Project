@@ -62,9 +62,20 @@ export const SkeletonCards = ({ count = 6 }) => (
   </div>
 )
 
+const KPI_GRID_COLS = {
+  1: 'lg:grid-cols-1',
+  2: 'lg:grid-cols-2',
+  3: 'lg:grid-cols-3',
+  4: 'lg:grid-cols-4',
+  5: 'lg:grid-cols-5',
+  6: 'lg:grid-cols-6',
+  7: 'lg:grid-cols-7',
+  8: 'lg:grid-cols-8',
+}
+
 /** KPI card row skeleton (4 cards) */
 export const SkeletonKpiRow = ({ count = 4 }) => (
-  <div className={`grid grid-cols-2 lg:grid-cols-${count} gap-4`}>
+  <div className={`grid grid-cols-2 ${KPI_GRID_COLS[count] ?? 'lg:grid-cols-4'} gap-4`}>
     {Array.from({ length: count }).map((_, i) => (
       <div key={i} className="rounded-2xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
         <div className="flex items-start justify-between mb-4">

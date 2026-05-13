@@ -15,6 +15,7 @@ router = APIRouter(prefix="/integrations", tags=["Integrations"])
 class UpsertIntegrationRequest(BaseModel):
     provider: str
     config: dict
+    name: Optional[str] = None
 
 
 class SetActiveRequest(BaseModel):
@@ -54,6 +55,7 @@ async def upsert_integration(
         company_id=current_user["company_id"],
         provider=body.provider,
         config=body.config,
+        name=body.name,
         user_id=current_user["id"],
     )
 

@@ -2,6 +2,7 @@
 Analytics Service - Phase 5
 Dashboard analytics, KPIs, and chart data generation
 """
+import asyncio
 from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List
 from bson import ObjectId
@@ -44,15 +45,26 @@ class AnalyticsService:
         if comparison:
             comp_start, comp_end = self._get_comparison_dates(start_date, end_date, comparison)
         
-        # Calculate KPIs
-        placements = await self._get_placements_kpi(company_id, start_date, end_date, comp_start, comp_end)
-        active_jobs = await self._get_active_jobs_kpi(company_id)
-        total_candidates = await self._get_candidates_kpi(company_id, start_date, end_date, comp_start, comp_end)
-        pending_interviews = await self._get_pending_interviews_kpi(company_id)
-        total_revenue = await self._get_revenue_kpi(company_id, start_date, end_date, comp_start, comp_end)
-        pending_payouts = await self._get_pending_payouts_kpi(company_id)
-        offer_acceptance = await self._get_offer_acceptance_kpi(company_id, start_date, end_date, comp_start, comp_end)
-        avg_time_to_hire = await self._get_time_to_hire_kpi(company_id, start_date, end_date)
+        # Calculate KPIs in parallel
+        (
+            placements,
+            active_jobs,
+            total_candidates,
+            pending_interviews,
+            total_revenue,
+            pending_payouts,
+            offer_acceptance,
+            avg_time_to_hire,
+        ) = await asyncio.gather(
+            self._get_placements_kpi(company_id, start_date, end_date, comp_start, comp_end),
+            self._get_active_jobs_kpi(company_id),
+            self._get_candidates_kpi(company_id, start_date, end_date, comp_start, comp_end),
+            self._get_pending_interviews_kpi(company_id),
+            self._get_revenue_kpi(company_id, start_date, end_date, comp_start, comp_end),
+            self._get_pending_payouts_kpi(company_id),
+            self._get_offer_acceptance_kpi(company_id, start_date, end_date, comp_start, comp_end),
+            self._get_time_to_hire_kpi(company_id, start_date, end_date),
+        )
         
         return DashboardKPIs(
             total_placements=placements,
@@ -312,7 +324,7 @@ class AnalyticsService:
             {"$lookup": {
                 "from": "applications",
                 "localField": "application_id",
-                "foreignField": "id",
+                "foreignField": "_id",
                 "as": "application"
             }},
             {"$unwind": "$application"},
@@ -830,7 +842,7 @@ class AnalyticsService:
             {"$lookup": {
                 "from": "applications",
                 "localField": "application_id",
-                "foreignField": "id",
+                "foreignField": "_id",
                 "as": "application"
             }},
             {"$unwind": "$application"},
@@ -845,7 +857,7 @@ class AnalyticsService:
         top_performers = []
         async for doc in self.db.onboards.aggregate(top_performers_pipeline):
             # Get user name
-            user = await self.db.users.find_one({"id": doc["_id"]})
+            user = await self.db.users.find_one({"_id": doc["_id"]})
             top_performers.append({
                 "user_id": doc["_id"],
                 "user_name": user.get("full_name", "Unknown") if user else "Unknown",

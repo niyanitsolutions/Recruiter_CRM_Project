@@ -12,6 +12,7 @@ import { formatDate } from '../../utils/format'
 import ExportModal from '../../components/common/ExportModal'
 import ClientImportModal from '../../components/common/ClientImportModal'
 import { SkeletonTableRows, SkeletonCards } from '../../components/common/SkeletonLoader'
+import TableScroll from '../../components/common/TableScroll'
 
 const _dropdownCache = { statuses: null, types: null }
 
@@ -358,6 +359,7 @@ const Clients = () => {
               <p style={{ color: 'var(--text-muted)' }}>No clients found</p>
             </div>
           ) : (
+            <TableScroll>
             <table className="w-full">
               <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
                 <tr>
@@ -487,6 +489,7 @@ const Clients = () => {
                 ))}
               </tbody>
             </table>
+            </TableScroll>
           )}
 
           {/* Pagination */}

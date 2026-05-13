@@ -16,6 +16,7 @@ import { SkeletonTableRows, SkeletonCards } from '../../components/common/Skelet
 import ModalPortal from '../../components/common/ModalPortal'
 import { selectUserType } from '../../store/authSlice'
 import { getToken } from '../../utils/token'
+import TableScroll from '../../components/common/TableScroll'
 
 // Module-level cache — survives navigation, resets only on hard reload.
 // Dropdown options (statuses, sources, notice periods) are static reference
@@ -731,6 +732,7 @@ const Candidates = () => {
       {/* Table View */}
       {!loading && viewMode === 'table' && candidates.length > 0 && (
         <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <TableScroll>
           <table className="w-full">
             <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
               <tr>
@@ -910,6 +912,7 @@ const Candidates = () => {
               ))}
             </tbody>
           </table>
+          </TableScroll>
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (

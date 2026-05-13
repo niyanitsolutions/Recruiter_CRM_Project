@@ -258,6 +258,14 @@ class RoundResultSubmit(BaseModel):
     feedback: str = ""
     next_round_date: Optional[str] = None   # "YYYY-MM-DD" — schedule next round on pass
     next_round_time: Optional[str] = None   # "HH:MM"
+    rejection_reason: Optional[str] = None  # technical | hr | communication | attendance | other
+
+
+class InterviewValidateRequest(BaseModel):
+    """Pre-flight scheduling validation request"""
+    candidate_id: Optional[str] = None
+    job_id: Optional[str] = None
+    application_id: Optional[str] = None
 
 
 class InterviewUpdate(BaseModel):

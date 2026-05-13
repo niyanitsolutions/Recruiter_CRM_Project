@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast'
 import departmentService from '../../services/departmentService'
 import usePermissions from '../../hooks/usePermissions'
 import ModalPortal from '../../components/common/ModalPortal'
+import TableScroll from '../../components/common/TableScroll'
 
 const Departments = () => {
   const { has } = usePermissions()
@@ -45,7 +46,8 @@ const Departments = () => {
         )}
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-surface-100 overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+        <TableScroll>
         <table className="w-full">
           <thead className="bg-surface-50 border-b">
             <tr>
@@ -94,6 +96,7 @@ const Departments = () => {
             )}
           </tbody>
         </table>
+        </TableScroll>
       </div>
 
       <ModalPortal isOpen={deleteDialog.open}>

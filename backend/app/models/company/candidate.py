@@ -178,6 +178,11 @@ class CandidateModel(BaseModel):
     documents: List[DocumentItem] = Field(default_factory=list)
     resume_url: Optional[str] = None
     photo_url: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
+
+    # ===== Academic =====
+    percentage: Optional[float] = None  # Overall academic percentage
     
     # ===== AI Parsed Data =====
     resume_parsed: bool = Field(default=False)
@@ -284,14 +289,19 @@ class CandidateCreate(BaseModel):
     # Documents
     resume_url: Optional[str] = None
     photo_url: Optional[str] = None
-    
+    linkedin_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
+
+    # Academic
+    percentage: Optional[float] = None
+
     # Custom fields
     custom_fields: List[CustomFieldValue] = Field(default_factory=list)
-    
+
     # Notes
     notes: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
-    
+
     # Preferences
     preferred_locations: List[str] = Field(default_factory=list)
     willing_to_relocate: bool = Field(default=False)
@@ -299,20 +309,22 @@ class CandidateCreate(BaseModel):
     @field_validator('mobile')
     @classmethod
     def validate_mobile(cls, v):
-        cleaned = re.sub(r'[^0-9]', '', v)
-        if not re.match(r'^[6-9]\d{9}$', cleaned):
-            raise ValueError('Mobile number must start with 6–9 and be 10 digits')
-        return cleaned
+        cleaned = re.sub(r'[^0-9+\-\s()]', '', v)
+        digits = re.sub(r'[^0-9]', '', cleaned)
+        if not (7 <= len(digits) <= 15):
+            raise ValueError('Mobile number must be 7–15 digits')
+        return cleaned.strip()
 
     @field_validator('alternate_mobile')
     @classmethod
     def validate_alternate_mobile(cls, v):
         if not v:
             return v
-        cleaned = re.sub(r'[^0-9]', '', v)
-        if not re.match(r'^[6-9]\d{9}$', cleaned):
-            raise ValueError('Alternate mobile must start with 6–9 and be 10 digits')
-        return cleaned
+        cleaned = re.sub(r'[^0-9+\-\s()]', '', v)
+        digits = re.sub(r'[^0-9]', '', cleaned)
+        if not (7 <= len(digits) <= 15):
+            raise ValueError('Alternate mobile must be 7–15 digits')
+        return cleaned.strip()
 
 
 class CandidateUpdate(BaseModel):
@@ -353,17 +365,20 @@ class CandidateUpdate(BaseModel):
     
     resume_url: Optional[str] = None
     photo_url: Optional[str] = None
-    
+    linkedin_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
+    percentage: Optional[float] = None
+
     source: Optional[str] = None
     source_details: Optional[str] = None
-    
+
     status: Optional[str] = None
     assigned_to: Optional[str] = None
-    
+
     custom_fields: Optional[List[CustomFieldValue]] = None
     notes: Optional[str] = None
     tags: Optional[List[str]] = None
-    
+
     preferred_locations: Optional[List[str]] = None
     willing_to_relocate: Optional[bool] = None
 
@@ -372,20 +387,22 @@ class CandidateUpdate(BaseModel):
     def validate_mobile(cls, v):
         if not v:
             return v
-        cleaned = re.sub(r'[^0-9]', '', v)
-        if not re.match(r'^[6-9]\d{9}$', cleaned):
-            raise ValueError('Mobile number must start with 6–9 and be 10 digits')
-        return cleaned
+        cleaned = re.sub(r'[^0-9+\-\s()]', '', v)
+        digits = re.sub(r'[^0-9]', '', cleaned)
+        if not (7 <= len(digits) <= 15):
+            raise ValueError('Mobile number must be 7–15 digits')
+        return cleaned.strip()
 
     @field_validator('alternate_mobile')
     @classmethod
     def validate_alternate_mobile(cls, v):
         if not v:
             return v
-        cleaned = re.sub(r'[^0-9]', '', v)
-        if not re.match(r'^[6-9]\d{9}$', cleaned):
-            raise ValueError('Alternate mobile must start with 6–9 and be 10 digits')
-        return cleaned
+        cleaned = re.sub(r'[^0-9+\-\s()]', '', v)
+        digits = re.sub(r'[^0-9]', '', cleaned)
+        if not (7 <= len(digits) <= 15):
+            raise ValueError('Alternate mobile must be 7–15 digits')
+        return cleaned.strip()
 
 
 class CandidateResponse(BaseModel):

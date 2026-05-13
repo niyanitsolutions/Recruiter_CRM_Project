@@ -110,6 +110,12 @@ const interviewService = {
     const response = await api.get('/interviews/selected-candidates')
     return response.data
   },
+
+  // Pre-flight scheduling validation
+  validateScheduling: async (params) => {
+    const response = await api.post('/interviews/validate', params)
+    return response.data
+  },
 }
 
 export default interviewService

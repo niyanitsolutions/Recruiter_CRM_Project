@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 import logging
 import re
 
+from app.core.limiter import limiter
+
 from app.schemas.auth import (
     LoginRequest,
     RefreshTokenRequest,
@@ -48,6 +50,7 @@ class RenewalVerifyRequest(BaseModel):
 
 
 @router.post("/login")   # response_model omitted: returns LoginResponse OR TenantSelectionResponse
+@limiter.limit("10/minute")
 async def login(data: LoginRequest, request: Request):
     """
     User login endpoint
@@ -275,7 +278,8 @@ async def register(request: CompleteRegistration):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(request: RefreshTokenRequest):
+@limiter.limit("20/minute")
+async def refresh_token(http_request: Request, request: RefreshTokenRequest):
     """
     Refresh access token using refresh token
     """
@@ -354,7 +358,8 @@ async def logout(auth: AuthContext = Depends(get_current_user)):
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
-async def forgot_password(request: ForgotPasswordRequest, background_tasks: BackgroundTasks):
+@limiter.limit("5/minute")
+async def forgot_password(http_request: Request, request: ForgotPasswordRequest, background_tasks: BackgroundTasks):
     """
     Initiate password reset process.
 

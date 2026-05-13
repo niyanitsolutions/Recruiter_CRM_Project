@@ -1,8 +1,8 @@
-import re
 """
 Onboard Service - Phase 4
 Handles onboarding workflow, day counter, and reminders
 """
+import re
 from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List, Dict
 from bson import ObjectId
@@ -34,13 +34,13 @@ class OnboardService:
     ) -> OnboardResponse:
         """Create new onboard record"""
         # Get candidate, job, client details for denormalization
-        candidate = await self.db.candidates.find_one({"id": data.candidate_id})
-        job = await self.db.jobs.find_one({"id": data.job_id})
-        client = await self.db.clients.find_one({"id": data.client_id})
+        candidate = await self.db.candidates.find_one({"_id": data.candidate_id})
+        job = await self.db.jobs.find_one({"_id": data.job_id})
+        client = await self.db.clients.find_one({"_id": data.client_id})
         partner = None
         if data.partner_id:
             # Get partner from users collection
-            partner = await self.db.users.find_one({"id": data.partner_id})
+            partner = await self.db.users.find_one({"_id": data.partner_id})
         
         # Create initial status history
         status_history = [StatusHistory(
@@ -82,7 +82,7 @@ class OnboardService:
         
         # Update application status to "offered"
         await self.db.applications.update_one(
-            {"id": data.application_id},
+            {"_id": data.application_id},
             {"$set": {"status": "offered", "updated_at": datetime.now(timezone.utc)}}
         )
         

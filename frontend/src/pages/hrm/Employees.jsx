@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Search, Edit2, Trash2, Eye, Users } from 'lucide-react'
 import hrmService from '../../services/hrmService'
+import TableScroll from '../../components/common/TableScroll'
 
-const STATUS_COLORS = {
-  active:     'bg-green-100 text-green-700',
-  inactive:   'bg-gray-100 text-gray-600',
-  terminated: 'bg-red-100 text-red-700',
-  on_leave:   'bg-yellow-100 text-yellow-700',
+const STATUS_STYLE = {
+  active:     { background: 'var(--bg-success)', color: 'var(--text-success)' },
+  inactive:   { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' },
+  terminated: { background: 'var(--bg-danger)',  color: 'var(--text-danger)' },
+  on_leave:   { background: 'var(--bg-warning)', color: 'var(--text-warning)' },
 }
 
 export default function Employees() {
@@ -45,8 +46,8 @@ export default function Employees() {
     <div className="p-6 space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Employees</h1>
-          <p className="text-sm text-gray-500">{total} total</p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Employees</h1>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{total} total</p>
         </div>
         <Link to="/hrm/employees/new" className="btn-primary flex items-center gap-2 text-sm">
           <Plus className="w-4 h-4" /> Add Employee
@@ -55,7 +56,7 @@ export default function Employees() {
 
       <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
           <input className="input pl-9 w-full" placeholder="Search by name, email, ID…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <select className="input w-36" value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}>
@@ -66,53 +67,60 @@ export default function Employees() {
         </select>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+        <TableScroll>
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border-card)' }}>
             <tr>
               {['Employee ID', 'Name', 'Designation', 'Department', 'Status', 'Actions'].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody style={{ borderColor: 'var(--border-subtle)' }}>
             {loading ? (
               [...Array(5)].map((_, i) => (
-                <tr key={i}><td colSpan={6} className="px-4 py-3"><div className="h-4 bg-gray-100 rounded animate-pulse" /></td></tr>
+                <tr key={i}><td colSpan={6} className="px-4 py-3">
+                  <div className="h-4 rounded animate-pulse" style={{ background: 'var(--bg-card-alt)' }} />
+                </td></tr>
               ))
             ) : employees.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400">
-                <Users className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+              <tr><td colSpan={6} className="px-4 py-10 text-center" style={{ color: 'var(--text-muted)' }}>
+                <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
                 No employees found
               </td></tr>
             ) : employees.map(emp => (
-              <tr key={emp.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-3 font-mono text-xs text-gray-500">{emp.employee_id}</td>
+              <tr key={emp.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{emp.employee_id}</td>
                 <td className="px-4 py-3">
-                  <div className="font-medium text-gray-900">{emp.full_name}</div>
-                  <div className="text-xs text-gray-400">{emp.email}</div>
+                  <div className="font-medium" style={{ color: 'var(--text-heading)' }}>{emp.full_name}</div>
+                  <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{emp.email}</div>
                 </td>
-                <td className="px-4 py-3 text-gray-600">{emp.designation_name || '—'}</td>
-                <td className="px-4 py-3 text-gray-600">{emp.department_name || '—'}</td>
+                <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{emp.designation_name || '—'}</td>
+                <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{emp.department_name || '—'}</td>
                 <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[emp.employment_status] || 'bg-gray-100 text-gray-600'}`}>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium"
+                        style={STATUS_STYLE[emp.employment_status] ?? { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' }}>
                     {emp.employment_status}
                   </span>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <button onClick={() => navigate(`/hrm/employees/${emp.id}`)} className="p-1.5 hover:bg-blue-50 rounded text-blue-500" title="View"><Eye className="w-4 h-4" /></button>
-                    <button onClick={() => navigate(`/hrm/employees/${emp.id}/edit`)} className="p-1.5 hover:bg-yellow-50 rounded text-yellow-500" title="Edit"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => handleDelete(emp.id, emp.full_name)} className="p-1.5 hover:bg-red-50 rounded text-red-500" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => navigate(`/hrm/employees/${emp.id}`)} className="p-1.5 rounded" style={{ color: 'var(--text-info)' }} title="View"><Eye className="w-4 h-4" /></button>
+                    <button onClick={() => navigate(`/hrm/employees/${emp.id}/edit`)} className="p-1.5 rounded" style={{ color: 'var(--text-warning)' }} title="Edit"><Edit2 className="w-4 h-4" /></button>
+                    <button onClick={() => handleDelete(emp.id, emp.full_name)} className="p-1.5 rounded" style={{ color: 'var(--text-danger)' }} title="Delete"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </TableScroll>
         {total > 20 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm">
-            <span className="text-gray-500">Page {page} of {Math.ceil(total / 20)}</span>
+          <div className="flex items-center justify-between px-4 py-3 text-sm" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+            <span style={{ color: 'var(--text-muted)' }}>Page {page} of {Math.ceil(total / 20)}</span>
             <div className="flex gap-2">
               <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="btn-secondary disabled:opacity-50">Previous</button>
               <button disabled={page >= Math.ceil(total / 20)} onClick={() => setPage(p => p + 1)} className="btn-secondary disabled:opacity-50">Next</button>

@@ -11,6 +11,13 @@ pymongo==4.6.1
 redis[asyncio]==5.0.1
 hiredis==2.3.2
 
+# Rate limiting
+slowapi==0.1.9
+limits==3.12.0
+
+# Secrets encryption
+cryptography==42.0.5
+
 # Authentication
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4

@@ -248,7 +248,7 @@ class UserService:
                     # Find HRM employee with same email (case-insensitive)
                     matched_emp = await self.db.hrm_employees.find_one(
                         {"company_id": company_id,
-                         "email": {"$regex": f"^{user_email}$", "$options": "i"},
+                         "email": {"$regex": f"^{re.escape(user_email)}$", "$options": "i"},
                          "is_deleted": False},
                         {"_id": 1},
                     )

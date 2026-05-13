@@ -140,11 +140,17 @@ class DatabaseManager:
                 {"keys": [("is_deleted", 1), ("candidate_id", 1)]},
                 {"keys": [("is_deleted", 1), ("job_id", 1)]},
                 {"keys": [("is_deleted", 1), ("created_at", -1)]},
+                # Compound for duplicate-application detection
+                {"keys": [("candidate_id", 1), ("job_id", 1), ("is_deleted", 1)]},
             ],
             "interviews": [
                 {"keys": [("is_deleted", 1)]},
                 {"keys": [("is_deleted", 1), ("status", 1)]},
                 {"keys": [("is_deleted", 1), ("candidate_id", 1)]},
+                {"keys": [("is_deleted", 1), ("job_id", 1)]},
+                {"keys": [("is_deleted", 1), ("application_id", 1)]},
+                {"keys": [("is_deleted", 1), ("interviewer_ids", 1)]},
+                {"keys": [("is_deleted", 1), ("scheduled_date", 1)]},
                 {"keys": [("is_deleted", 1), ("scheduled_at", -1)]},
             ],
             "clients": [

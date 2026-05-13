@@ -73,7 +73,7 @@ const DynamicIntegrationForm = ({ provider, definition, existingData, onSaved, o
     e.preventDefault()
     setSaving(true)
     try {
-      await integrationService.upsert({ provider, name, config_json: form })
+      await integrationService.upsert({ provider, name, config: form })
       toast.success('Integration saved successfully')
       onSaved?.()
     } catch (err) {
@@ -87,7 +87,7 @@ const DynamicIntegrationForm = ({ provider, definition, existingData, onSaved, o
     // Save first so the backend has the latest config to test
     setSaving(true)
     try {
-      await integrationService.upsert({ provider, name, config_json: form })
+      await integrationService.upsert({ provider, name, config: form })
     } catch {/* continue to test anyway */}
     setSaving(false)
 

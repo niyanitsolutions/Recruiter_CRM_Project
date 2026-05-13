@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Plus, Calendar, CheckCircle, XCircle } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
+import TableScroll from '../../../components/common/TableScroll'
 
 const RESULT_COLORS = {
   pending:    'bg-gray-100 text-gray-600',
@@ -129,7 +130,8 @@ export default function HRInterviews() {
         </div>
       </ModalPortal>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+        <TableScroll>
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
@@ -169,6 +171,7 @@ export default function HRInterviews() {
             ))}
           </tbody>
         </table>
+        </TableScroll>
       </div>
     </div>
   )
