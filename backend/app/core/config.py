@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     # Seller default commission margin percentage
     DEFAULT_SELLER_MARGIN: float = 20.0
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra='ignore')
 
     def is_production(self) -> bool:
         """True when running in a production environment."""
