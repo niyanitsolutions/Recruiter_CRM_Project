@@ -156,11 +156,8 @@ const UpgradePlan = () => {
       {/* Header */}
       <div className="bg-white border-b border-surface-200 px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center font-bold text-lg text-white">
-            C
-          </div>
+          <img src="/Hire_Flow_Logo.png" alt="HireFlow" style={{ height: '32px', width: 'auto' }} />
           <div>
-            <h1 className="font-bold text-lg text-surface-900">CRM Platform</h1>
             <p className="text-xs text-surface-500">Subscription Renewal</p>
           </div>
         </div>

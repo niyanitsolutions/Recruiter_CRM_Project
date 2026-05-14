@@ -93,7 +93,7 @@ const DEFAULTS = {
   security: { session_timeout_hours: 24, max_login_attempts: 5, lockout_duration_minutes: 30, require_2fa_super_admin: false, password_min_length: 8 },
   platform_controls: { allow_self_registration: true, trial_days: 14, max_tenants_per_seller: 50, maintenance_mode: false },
   billing: { currency: 'INR', tax_rate_percent: 18, invoice_prefix: 'INV', invoice_due_days: 15 },
-  email: { smtp_host: '', smtp_port: 587, smtp_user: '', smtp_use_tls: true, from_name: 'CRM Platform', from_email: 'noreply@crm.com' },
+  email: { smtp_host: '', smtp_port: 587, smtp_user: '', smtp_use_tls: true, from_name: 'HireFlow', from_email: 'noreply@hireflow.com' },
   storage: { max_resume_size_mb: 10, allowed_resume_types: 'pdf,doc,docx', max_storage_per_tenant_gb: 5 },
   maintenance: { maintenance_mode: false, maintenance_message: 'We are performing scheduled maintenance. Please try again later.', allow_super_admin_access: true },
 }
@@ -281,7 +281,7 @@ const SuperAdminSettings = () => {
           <Toggle checked={em.smtp_use_tls} onChange={sem('smtp_use_tls')} />
         </Field>
         <Field label="From Name" desc="Sender name displayed in emails">
-          <TextInput value={em.from_name} onChange={sem('from_name')} placeholder="CRM Platform" />
+          <TextInput value={em.from_name} onChange={sem('from_name')} placeholder="HireFlow" />
         </Field>
         <Field label="From Email" desc="Reply-to / from email address">
           <TextInput type="email" value={em.from_email} onChange={sem('from_email')} placeholder="noreply@crm.com" />

@@ -64,7 +64,7 @@ const AuthLayout = () => {
             letterSpacing: '0.12em',
             textTransform: 'uppercase',
           }}>
-            Powered by Niyan IT Solutions
+            HireFlow — All-in-One Hiring &amp; Operations
           </p>
         </div>
       </div>
@@ -112,23 +112,13 @@ const AuthLayout = () => {
           animation: 'authCardIn 0.45s cubic-bezier(0.16,1,0.3,1) both',
         }}>
 
-          {/* Single logo — always inside the card, no outside duplicate */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
-            <div style={{
-              width: '40px', height: '40px', borderRadius: '11px', flexShrink: 0,
-              background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 800, color: 'white', fontSize: '18px',
-              boxShadow: '0 0 20px rgba(99,102,241,0.4)',
-            }}>C</div>
-            <div>
-              <div style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '15px', lineHeight: 1.2 }}>
-                CRM Platform
-              </div>
-              <div style={{ color: '#3d4f6e', fontSize: '11px', letterSpacing: '0.04em', marginTop: '2px' }}>
-                Recruitment & Partner Management
-              </div>
-            </div>
+          {/* Logo */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '28px' }}>
+            <img
+              src="/Hire_Flow_Logo.png"
+              alt="HireFlow"
+              style={{ height: '52px', width: 'auto' }}
+            />
           </div>
 
           {/* Login / Register form */}

@@ -513,7 +513,7 @@ const Login = () => {
       {/* Divider */}
       <div className="flex items-center gap-3 my-6">
         <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.07)' }} />
-        <span style={{ color: '#334155', fontSize: '12px', whiteSpace: 'nowrap' }}>New to CRM Platform?</span>
+        <span style={{ color: '#334155', fontSize: '12px', whiteSpace: 'nowrap' }}>New to HireFlow?</span>
         <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.07)' }} />
       </div>
 

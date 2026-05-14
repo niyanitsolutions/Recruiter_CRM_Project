@@ -84,7 +84,7 @@ const Payments = () => {
   @media print{body{padding:20px}}
 </style></head><body>
 <div class="header">
-  <div><div class="brand">Niyan HireFlow</div><div class="brand-sub">Smart Recruitment &amp; Talent Platform</div></div>
+  <div><div class="brand">HireFlow</div><div class="brand-sub">All-in-One Hiring &amp; Operations Management</div></div>
   <div class="inv-title">
     <h2>INVOICE</h2>
     <div class="inv-no">${invoiceNo}</div>
@@ -103,7 +103,7 @@ const Payments = () => {
     <tr class="total-row"><td><strong>Total Amount</strong></td><td><strong>${amount}</strong></td></tr>
   </tbody>
 </table>
-<div class="footer">Thank you for your business · Niyan HireFlow · support@niyanhireflow.com</div>
+<div class="footer">Thank you for your business · HireFlow · support@hireflow.com</div>
 </body></html>`
 
       const printWin = window.open('', '_blank', 'width=900,height=700,menubar=no,toolbar=no')

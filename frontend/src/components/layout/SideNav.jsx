@@ -313,43 +313,17 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       {/* Logo */}
       <div className={clsx('h-16 flex items-center', isCollapsed ? 'justify-center px-2' : 'px-5')} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         {!isCollapsed ? (
-          <div className="flex items-center gap-3">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base flex-shrink-0 text-white"
-              style={{
-                background: themeMode === 'system'
-                  ? isDark
-                    ? 'linear-gradient(135deg, #0ea5e9, #6366f1)'
-                    : 'linear-gradient(135deg, #7c3aed, #6366f1)'
-                  : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-                boxShadow: themeMode === 'system'
-                  ? isDark
-                    ? '0 0 18px rgba(14,165,233,0.6)'
-                    : '0 0 22px rgba(99,102,241,0.75)'
-                  : '0 0 18px rgba(124,58,237,0.6)',
-              }}
-            >N</div>
-            <div>
-              <h1 className="font-bold text-sm leading-tight tracking-wide" style={{ color: 'var(--nav-text-active)' }}>Niyan HireFlow</h1>
-              <p className="text-[10px] tracking-wider uppercase" style={{ color: 'var(--nav-text)', opacity: 0.7 }}>Recruitment Platform</p>
-            </div>
-          </div>
+          <img
+            src="/Hire_Flow_Logo.png"
+            alt="HireFlow"
+            style={{ height: '30px', width: 'auto', maxWidth: '160px' }}
+          />
         ) : (
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base text-white"
-            style={{
-              background: themeMode === 'system'
-                ? isDark
-                  ? 'linear-gradient(135deg, #0ea5e9, #6366f1)'
-                  : 'linear-gradient(135deg, #7c3aed, #6366f1)'
-                : 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-              boxShadow: themeMode === 'system'
-                ? isDark
-                  ? '0 0 18px rgba(14,165,233,0.6)'
-                  : '0 0 22px rgba(99,102,241,0.75)'
-                : '0 0 18px rgba(124,58,237,0.6)',
-            }}
-          >N</div>
+          <img
+            src="/Hire_Flow_icon-removebg.png"
+            alt="HF"
+            style={{ width: '36px', height: '36px', borderRadius: '8px' }}
+          />
         )}
       </div>
 

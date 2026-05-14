@@ -210,9 +210,8 @@ const TrialSetupForm = () => {
         {/* Header */}
         <div className="bg-white border-b border-surface-200 px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center font-bold text-lg text-white">C</div>
+            <img src="/Hire_Flow_Logo.png" alt="HireFlow" style={{ height: '32px', width: 'auto' }} />
             <div>
-              <h1 className="font-bold text-lg text-surface-900">CRM Platform</h1>
               <p className="text-xs text-surface-500">Recruitment & Partner Management</p>
             </div>
           </div>
@@ -275,11 +274,7 @@ const TrialSetupForm = () => {
       {/* Header */}
       <div className="bg-white border-b border-surface-200 px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center font-bold text-lg text-white">C</div>
-          <div>
-            <h1 className="font-bold text-lg text-surface-900">CRM Platform</h1>
-            <p className="text-xs text-surface-500">Recruitment & Partner Management</p>
-          </div>
+          <img src="/Hire_Flow_Logo.png" alt="HireFlow" style={{ height: '32px', width: 'auto' }} />
         </div>
         <Link to="/login" className="text-sm text-accent-600 hover:text-accent-700 font-medium">
           Already have an account? Sign in
@@ -763,11 +758,7 @@ const SubscriptionRegister = () => {
       {/* Header */}
       <div className="bg-white border-b border-surface-200 px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center font-bold text-lg text-white">C</div>
-          <div>
-            <h1 className="font-bold text-lg text-surface-900">CRM Platform</h1>
-            <p className="text-xs text-surface-500">Recruitment & Partner Management</p>
-          </div>
+          <img src="/Hire_Flow_Logo.png" alt="HireFlow" style={{ height: '32px', width: 'auto' }} />
         </div>
         <Link to="/login" className="text-sm text-accent-600 hover:text-accent-700 font-medium">
           Already have an account? Sign in
@@ -777,7 +768,7 @@ const SubscriptionRegister = () => {
       <div className="flex justify-center py-10 px-4">
         <div className="w-full max-w-3xl bg-white rounded-2xl shadow-sm border border-surface-200 p-8 animate-fade-in">
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-surface-900">Subscribe to CRM Platform</h2>
+            <h2 className="text-2xl font-bold text-surface-900">Subscribe to HireFlow</h2>
             <p className="text-surface-500 text-sm mt-1">Set up your company and choose a plan</p>
           </div>
 
