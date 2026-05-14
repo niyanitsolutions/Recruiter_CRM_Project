@@ -321,19 +321,47 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
         }}
       >
         {!isCollapsed ? (
-          <img
-            src={themeMode !== 'light' ? '/Hire_Flow_Logo_1.png' : '/Hire_Flow_Logo.png'}
-            alt="HireFlow"
-            style={{
-              display: 'block',
+          themeMode !== 'light' ? (
+            /* Dark / System — frosted glass pill so transparent-bg logo is readable */
+            <div style={{
               width: '100%',
-              maxWidth: '210px',
-              height: 'auto',
-              maxHeight: '60px',
-              objectFit: 'contain',
-              objectPosition: 'center center',
-            }}
-          />
+              maxWidth: '216px',
+              background: 'rgba(255,255,255,0.92)',
+              borderRadius: '10px',
+              padding: '8px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <img
+                src="/Hire_Flow_Logo.png"
+                alt="HireFlow"
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  height: 'auto',
+                  maxHeight: '48px',
+                  objectFit: 'contain',
+                  objectPosition: 'center center',
+                }}
+              />
+            </div>
+          ) : (
+            /* Light — transparent bg logo sits directly on light sidebar */
+            <img
+              src="/Hire_Flow_Logo.png"
+              alt="HireFlow"
+              style={{
+                display: 'block',
+                width: '100%',
+                maxWidth: '210px',
+                height: 'auto',
+                maxHeight: '56px',
+                objectFit: 'contain',
+                objectPosition: 'center center',
+              }}
+            />
+          )
         ) : (
           <img
             src="/Hire_Flow_icon-removebg.png"
