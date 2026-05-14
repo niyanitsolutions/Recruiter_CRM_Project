@@ -375,11 +375,11 @@
 
     /* ── Text (main content on white cards) ── */
     --text-primary:      #1e1b4b;
-    --text-secondary:    #3730a3;
-    --text-muted:        #6366f1;
+    --text-secondary:    #374151;
+    --text-muted:        #64748b;
     --text-disabled:     #a5b4fc;
     --text-heading:      #0f0d2e;
-    --text-label:        #4338ca;
+    --text-label:        #475569;
     --text-link:         #6366f1;
     --text-danger:       #dc2626;
 
@@ -479,10 +479,10 @@
     /* ── Legacy gray overrides ── */
     --gray-900: #0f0d2e;
     --gray-800: #1e1b4b;
-    --gray-700: #3730a3;
-    --gray-600: #4f46e5;
-    --gray-500: #6366f1;
-    --gray-400: #818cf8;
+    --gray-700: #374151;
+    --gray-600: #4b5563;
+    --gray-500: #64748b;
+    --gray-400: #94a3b8;
     --border-gray-200: rgba(99, 102, 241, 0.28);
     --bg-gray-50:  rgba(255, 255, 255, 0.88);
     --bg-gray-100: rgba(224, 231, 255, 0.70);
