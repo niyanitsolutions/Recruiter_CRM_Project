@@ -311,18 +311,40 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
           : '2px 0 12px rgba(124,58,237,0.06)',
       }}>
       {/* Logo */}
-      <div className={clsx('h-16 flex items-center', isCollapsed ? 'justify-center px-2' : 'px-4')} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+      <div
+        className="flex-shrink-0 flex items-center"
+        style={{
+          height: '64px',
+          borderBottom: '1px solid var(--border-subtle)',
+          padding: isCollapsed ? '0' : '0 12px',
+          justifyContent: isCollapsed ? 'center' : 'flex-start',
+          overflow: 'hidden',
+        }}
+      >
         {!isCollapsed ? (
           <img
             src="/Hire_Flow_Logo.png"
             alt="HireFlow"
-            style={{ height: '38px', width: '100%', objectFit: 'contain', objectPosition: 'left center' }}
+            style={{
+              display: 'block',
+              width: '100%',
+              height: 'auto',
+              maxHeight: '48px',
+              objectFit: 'contain',
+              objectPosition: 'left center',
+            }}
           />
         ) : (
           <img
             src="/Hire_Flow_icon-removebg.png"
             alt="HF"
-            style={{ width: '40px', height: '40px', borderRadius: '8px' }}
+            style={{
+              display: 'block',
+              width: '52px',
+              height: '52px',
+              objectFit: 'contain',
+              borderRadius: '10px',
+            }}
           />
         )}
       </div>
