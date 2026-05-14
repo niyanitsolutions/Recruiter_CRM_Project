@@ -420,7 +420,7 @@ const Login = () => {
     <div style={{ animation: 'cardEntrance 0.5s cubic-bezier(0.16,1,0.3,1) both' }}>
 
       {/* Header */}
-      <div className="mb-7">
+      <div className="mb-7" style={{ textAlign: 'center' }}>
         <h2 style={{ color: '#f1f5f9', fontSize: '22px', fontWeight: '800', letterSpacing: '-0.02em', marginBottom: '6px' }}>
           Welcome back
         </h2>
