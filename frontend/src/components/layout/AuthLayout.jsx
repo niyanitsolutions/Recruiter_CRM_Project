@@ -130,11 +130,11 @@ const AuthLayout = () => {
                 alt="HireFlow"
                 style={{
                   display: 'block',
-                  width: '140%',
+                  width: '100%',
                   height: 'auto',
                   objectFit: 'contain',
                   objectPosition: 'center center',
-                  transform: 'scale(1.45)',
+                  transform: 'scale(1.15)',
                   transformOrigin: 'center center',
                 }}
               />
