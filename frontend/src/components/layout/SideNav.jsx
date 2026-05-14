@@ -312,13 +312,12 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       }}>
       {/* Logo */}
       <div
-        className="flex-shrink-0 flex items-center"
+        className="flex-shrink-0 flex items-center justify-center"
         style={{
-          height: '64px',
+          height: '72px',
           borderBottom: '1px solid var(--border-subtle)',
-          padding: isCollapsed ? '0' : '0 12px',
-          justifyContent: isCollapsed ? 'center' : 'flex-start',
-          overflow: 'hidden',
+          padding: isCollapsed ? '10px 12px' : '10px 16px',
+          background: 'var(--bg-sidebar)',
         }}
       >
         {!isCollapsed ? (
@@ -328,10 +327,11 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
             style={{
               display: 'block',
               width: '100%',
+              maxWidth: '200px',
               height: 'auto',
-              maxHeight: '48px',
+              maxHeight: '52px',
               objectFit: 'contain',
-              objectPosition: 'left center',
+              objectPosition: 'center center',
             }}
           />
         ) : (
@@ -340,10 +340,9 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
             alt="HF"
             style={{
               display: 'block',
-              width: '52px',
-              height: '52px',
+              width: '44px',
+              height: '44px',
               objectFit: 'contain',
-              borderRadius: '10px',
             }}
           />
         )}
