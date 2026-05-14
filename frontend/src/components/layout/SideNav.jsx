@@ -322,12 +322,13 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       >
         {!isCollapsed ? (
           themeMode !== 'light' ? (
-            /* Dark / System — white pill, full width, logo fills it */
+            /* Dark / System — white pill, zoom-in to fill, clip transparent canvas edges */
             <div style={{
               width: '100%',
               background: 'rgba(255,255,255,0.95)',
               borderRadius: '10px',
-              padding: '6px 10px',
+              overflow: 'hidden',
+              height: '64px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -337,28 +338,39 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
                 alt="HireFlow"
                 style={{
                   display: 'block',
-                  width: '100%',
+                  width: '140%',
                   height: 'auto',
-                  maxHeight: '58px',
                   objectFit: 'contain',
                   objectPosition: 'center center',
+                  transform: 'scale(1.45)',
+                  transformOrigin: 'center center',
                 }}
               />
             </div>
           ) : (
-            /* Light — transparent bg logo sits directly on light sidebar */
-            <img
-              src="/Hire_Flow_Logo.png"
-              alt="HireFlow"
-              style={{
-                display: 'block',
-                width: '100%',
-                height: 'auto',
-                maxHeight: '58px',
-                objectFit: 'contain',
-                objectPosition: 'center center',
-              }}
-            />
+            /* Light — same zoom treatment on light sidebar */
+            <div style={{
+              width: '100%',
+              overflow: 'hidden',
+              height: '64px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <img
+                src="/Hire_Flow_Logo.png"
+                alt="HireFlow"
+                style={{
+                  display: 'block',
+                  width: '140%',
+                  height: 'auto',
+                  objectFit: 'contain',
+                  objectPosition: 'center center',
+                  transform: 'scale(1.45)',
+                  transformOrigin: 'center center',
+                }}
+              />
+            </div>
           )
         ) : (
           <img
