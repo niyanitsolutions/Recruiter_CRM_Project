@@ -322,13 +322,12 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       >
         {!isCollapsed ? (
           themeMode !== 'light' ? (
-            /* Dark / System — frosted glass pill so transparent-bg logo is readable */
+            /* Dark / System — white pill, full width, logo fills it */
             <div style={{
               width: '100%',
-              maxWidth: '216px',
-              background: 'rgba(255,255,255,0.92)',
+              background: 'rgba(255,255,255,0.95)',
               borderRadius: '10px',
-              padding: '8px 16px',
+              padding: '6px 10px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -340,7 +339,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
                   display: 'block',
                   width: '100%',
                   height: 'auto',
-                  maxHeight: '48px',
+                  maxHeight: '58px',
                   objectFit: 'contain',
                   objectPosition: 'center center',
                 }}
@@ -354,9 +353,8 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
               style={{
                 display: 'block',
                 width: '100%',
-                maxWidth: '210px',
                 height: 'auto',
-                maxHeight: '56px',
+                maxHeight: '58px',
                 objectFit: 'contain',
                 objectPosition: 'center center',
               }}
