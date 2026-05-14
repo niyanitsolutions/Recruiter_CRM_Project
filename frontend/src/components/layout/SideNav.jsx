@@ -316,20 +316,20 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
         style={{
           height: '80px',
           borderBottom: '1px solid var(--border-subtle)',
-          padding: isCollapsed ? '12px 10px' : '12px 20px',
+          padding: isCollapsed ? '12px 10px' : '10px 16px',
           background: 'var(--bg-sidebar)',
         }}
       >
         {!isCollapsed ? (
           <img
-            src={isDark ? '/Hire_Flow_Logo_1.png' : '/Hire_Flow_Logo.png'}
+            src={themeMode !== 'light' ? '/Hire_Flow_Logo_1.png' : '/Hire_Flow_Logo.png'}
             alt="HireFlow"
             style={{
               display: 'block',
               width: '100%',
-              maxWidth: '220px',
+              maxWidth: '210px',
               height: 'auto',
-              maxHeight: '56px',
+              maxHeight: '60px',
               objectFit: 'contain',
               objectPosition: 'center center',
             }}

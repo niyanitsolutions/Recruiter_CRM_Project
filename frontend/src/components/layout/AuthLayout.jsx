@@ -115,14 +115,14 @@ const AuthLayout = () => {
           {/* Logo */}
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '32px' }}>
             <img
-              src="/Hire_Flow_Logo.png"
+              src="/Hire_Flow_Logo_1.png"
               alt="HireFlow"
               style={{
                 display: 'block',
                 width: '100%',
-                maxWidth: '260px',
+                maxWidth: '280px',
                 height: 'auto',
-                maxHeight: '72px',
+                maxHeight: '80px',
                 objectFit: 'contain',
                 objectPosition: 'center center',
               }}
