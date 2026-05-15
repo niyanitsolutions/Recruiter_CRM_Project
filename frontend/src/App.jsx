@@ -9,6 +9,7 @@ import {
   initAuth, setProfileCompleted, clearForcePasswordChange,
 } from './store/authSlice'
 import { useAutoLogout } from './hooks/useAutoLogout'
+import { useFavicon } from './hooks/useFavicon'
 import api from './services/api'
 
 // Layouts — kept eager so the app shell (sidebar + topbar) renders immediately
@@ -646,6 +647,7 @@ const RouteLoader = () => (
 // ─── App ──────────────────────────────────────────────────────────────────────
 function App() {
   useAutoLogout()   // idle timer + screen-lock detection + multi-tab sync
+  useFavicon()      // imperatively enforce favicon on every page/route
 
   return (
     <ErrorBoundary>

@@ -844,6 +844,52 @@ html[data-theme="system"] .card-hover:hover {
   html[data-theme="system"] main .card .border-primary-500,
   html[data-theme="system"] main .stat-card .border-primary-500,
   html[data-theme="system"] main .bg-white .border-primary-500 { border-color: #6366f1 !important; }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     SYSTEM LIGHT — PAGE HEADER + TAB TEXT (sit directly on purple --bg-app)
+     Elements inside .page-enter but OUTSIDE a card container are on the
+     vivid purple background → must be white / near-white.
+     CSS custom properties cascade: set white at .page-enter level, then
+     reset to dark inside card containers (identified by --bg-card in style).
+  ══════════════════════════════════════════════════════════════════════ */
+  html[data-theme="system"] .page-enter {
+    --text-heading:   #ffffff;
+    --text-primary:   rgba(255, 255, 255, 0.95);
+    --text-secondary: rgba(255, 255, 255, 0.88);
+    --text-muted:     rgba(255, 255, 255, 0.72);
+    --text-label:     rgba(255, 255, 255, 0.80);
+    --accent:         #c7d2fe;
+    --border:         rgba(255, 255, 255, 0.25);
+  }
+
+  /* Card containers re-establish dark text (they have a white/glass background) */
+  html[data-theme="system"] .page-enter [style*="--bg-card"],
+  html[data-theme="system"] .page-enter .card,
+  html[data-theme="system"] .page-enter .bg-white {
+    --text-heading:   #0f0d2e;
+    --text-primary:   #1e1b4b;
+    --text-secondary: #374151;
+    --text-muted:     #64748b;
+    --text-label:     #475569;
+    --accent:         #6366f1;
+    --border:         rgba(99, 102, 241, 0.25);
+  }
+
+  /* ── text-surface-* inside [style*="--bg-card"] containers → dark readable ── */
+  /* These fix tables / grids in pages that use rounded-xl+style bg-card but      */
+  /* no .card class (e.g. InterviewSettings, Departments, Designations, etc.)      */
+  html[data-theme="system"] main [style*="--bg-card"] .text-surface-900,
+  html[data-theme="system"] main [style*="--bg-card"] .text-surface-800 { color: #1e1b4b !important; }
+  html[data-theme="system"] main [style*="--bg-card"] .text-surface-700 { color: #312e81 !important; }
+  html[data-theme="system"] main [style*="--bg-card"] .text-surface-600 { color: #3730a3 !important; }
+  html[data-theme="system"] main [style*="--bg-card"] .text-surface-500 { color: #4f46e5 !important; }
+  html[data-theme="system"] main [style*="--bg-card"] .text-surface-400 { color: #6366f1 !important; }
+  html[data-theme="system"] main [style*="--bg-card"] .text-surface-300 { color: #818cf8 !important; }
+
+  /* bg-surface-50 inside cards → light indigo tint (not purple) */
+  html[data-theme="system"] main [style*="--bg-card"] .bg-surface-50,
+  html[data-theme="system"] main [style*="--bg-card"] thead.bg-surface-50 { background-color: rgba(238,242,255,0.80) !important; }
+  html[data-theme="system"] main [style*="--bg-card"] .hover\:bg-surface-50:hover { background-color: rgba(238,242,255,0.95) !important; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════

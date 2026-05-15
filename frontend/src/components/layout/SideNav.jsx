@@ -314,9 +314,9 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       <div
         className="flex-shrink-0 flex items-center justify-center"
         style={{
-          height: '80px',
+          height: '68px',
           borderBottom: '1px solid var(--border-subtle)',
-          padding: isCollapsed ? '12px 10px' : '10px 16px',
+          padding: isCollapsed ? '10px 10px' : '8px 14px',
           background: 'var(--bg-sidebar)',
         }}
       >
@@ -328,7 +328,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
               background: 'rgba(255,255,255,0.95)',
               borderRadius: '10px',
               overflow: 'hidden',
-              height: '64px',
+              height: '52px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -342,7 +342,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
                   height: 'auto',
                   objectFit: 'contain',
                   objectPosition: 'center center',
-                  transform: 'scale(1.15)',
+                  transform: 'scale(1.08)',
                   transformOrigin: 'center center',
                 }}
               />
@@ -352,7 +352,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
             <div style={{
               width: '100%',
               overflow: 'hidden',
-              height: '64px',
+              height: '52px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -366,7 +366,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
                   height: 'auto',
                   objectFit: 'contain',
                   objectPosition: 'center center',
-                  transform: 'scale(1.15)',
+                  transform: 'scale(1.08)',
                   transformOrigin: 'center center',
                 }}
               />
@@ -378,8 +378,8 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
             alt="HF"
             style={{
               display: 'block',
-              width: '48px',
-              height: '48px',
+              width: '42px',
+              height: '42px',
               objectFit: 'contain',
             }}
           />
