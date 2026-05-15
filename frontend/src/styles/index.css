@@ -466,14 +466,21 @@ html[data-theme="dark"] .card-hover:hover {
 .text-on-color-faint   { color: rgba(255, 255, 255, 0.50) !important; }
 
 /* ── 15c. Dark-mode table enhancements ──────────────────────────────────────── */
-[data-theme="dark"] .table th,
-[data-theme="system"] .table th {
+[data-theme="dark"] .table th {
   color: var(--text-secondary) !important;
   letter-spacing: 0.07em;
+}
+[data-theme="system"] .table th {
+  color: #E2E8F0 !important;              /* bright slate — enterprise table header */
+  letter-spacing: 0.07em;
+  background-color: #111827 !important;
 }
 [data-theme="dark"] .table td,
 [data-theme="system"] .table td {
   color: var(--text-primary) !important;
+}
+[data-theme="system"] .table tr:hover td {
+  background-color: #1E293B !important;
 }
 
 /* ── 15d. Stat label boost ───────────────────────────────────────────────────── */
@@ -482,10 +489,14 @@ html[data-theme="dark"] .card-hover:hover {
   color: var(--text-secondary) !important;
 }
 
-/* ── 15e. Active nav item font weight ───────────────────────────────────────── */
+/* ── 15e. Active nav item font weight + system gradient glow ────────────────── */
 [data-theme="dark"] .nav-item-active,
 [data-theme="system"] .nav-item-active {
   font-weight: 600;
+}
+[data-theme="system"] .nav-item-active {
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.22) 0%, rgba(79, 70, 229, 0.06) 100%) !important;
+  box-shadow: inset 0 0 20px rgba(139, 92, 246, 0.06) !important;
 }
 
 /* ── 15f. Tab button dark-mode boost ────────────────────────────────────────── */
@@ -511,20 +522,20 @@ html[data-theme="dark"] .card-hover:hover {
 [data-theme="dark"] .border-accent-500 { border-color: #a78bfa !important; }  /* 4.9:1 as active indicator */
 [data-theme="dark"] .border-accent-300 { border-color: #6d28d9 !important; }
 
-/* System dark: use cyan accent family */
-[data-theme="system"] .text-accent-600 { color: #38bdf8 !important; }  /* 7.5:1 on #0c1526 */
-[data-theme="system"] .text-accent-500 { color: #7dd3fc !important; }
-[data-theme="system"] .text-accent-700 { color: #38bdf8 !important; }  /* match 600 */
-[data-theme="system"] .text-accent-400 { color: #bae6fd !important; }
-[data-theme="system"] .border-accent-500 { border-color: #38bdf8 !important; }  /* visible cyan */
+/* System — Midnight Aurora: violet accent family */
+[data-theme="system"] .text-accent-600 { color: #A78BFA !important; }
+[data-theme="system"] .text-accent-500 { color: #C4B5FD !important; }
+[data-theme="system"] .text-accent-700 { color: #8B5CF6 !important; }
+[data-theme="system"] .text-accent-400 { color: #DDD6FE !important; }
+[data-theme="system"] .border-accent-500 { border-color: #8B5CF6 !important; }
 
-/* System light (Vivid Pro): vivid but dark indigo on white-glass backgrounds */
 @media (prefers-color-scheme: light) {
-  [data-theme="system"] .text-accent-600 { color: #4f46e5 !important; }
-  [data-theme="system"] .text-accent-500 { color: #6366f1 !important; }
-  [data-theme="system"] .text-accent-700 { color: #4338ca !important; }
-  [data-theme="system"] .text-accent-400 { color: #818cf8 !important; }
-  [data-theme="system"] .border-accent-500 { border-color: #6366f1 !important; }
+  /* Midnight Aurora stays dark on light OS — same violet accent */
+  [data-theme="system"] .text-accent-600 { color: #A78BFA !important; }
+  [data-theme="system"] .text-accent-500 { color: #C4B5FD !important; }
+  [data-theme="system"] .text-accent-700 { color: #8B5CF6 !important; }
+  [data-theme="system"] .text-accent-400 { color: #DDD6FE !important; }
+  [data-theme="system"] .border-accent-500 { border-color: #8B5CF6 !important; }
 }
 
 /* ── 15h. surface-400 contrast fix ──────────────────────────────────────────
@@ -533,15 +544,14 @@ html[data-theme="dark"] .card-hover:hover {
    ─────────────────────────────────────────────────────────────────────────── */
 [data-theme="light"] .text-surface-400 { color: #64748b !important; }
 
-@media (prefers-color-scheme: light) {
-  [data-theme="system"] .text-surface-400 { color: #475569 !important; }
-  [data-theme="system"] .text-surface-300 { color: #64748b !important; }
-}
+/* Midnight Aurora surface-400/300 — always dark readable grays */
+[data-theme="system"] .text-surface-400 { color: #6B7280 !important; }
+[data-theme="system"] .text-surface-300 { color: #4B5563 !important; }
 
-/* ── 16. System theme — solid backgrounds (dark default, OS-adaptive) ─────── */
+/* ── 16. System theme — Midnight Aurora (OS-independent dark) ─────────────── */
 html[data-theme="system"],
 html[data-theme="system"] body {
-  background-color: #050a14 !important;
+  background-color: #0B1020 !important;
   background-image: none !important;
 }
 
@@ -549,111 +559,112 @@ html[data-theme="system"] .card,
 html[data-theme="system"] .modal-content,
 html[data-theme="system"] .stat-card,
 html[data-theme="system"] .bg-white {
-  background-color: #0c1526 !important;
-  border-color: #0e2448 !important;
+  background-color: #111827 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 html[data-theme="system"] .card-hover:hover {
-  border-color: #163660 !important;
-  box-shadow: 0 4px 20px rgba(14, 165, 233, 0.15) !important;
+  border-color: rgba(139, 92, 246, 0.35) !important;
+  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.15), 0 1px 4px rgba(0, 0, 0, 0.40) !important;
+  transform: translateY(-1px) !important;
 }
 
-/* System theme — sidebar accent border */
 [data-theme="system"] aside {
-  border-right: 1px solid #0e2d5a !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* ── 16b. System — primary button: Midnight Aurora gradient ────────────────── */
+[data-theme="system"] .btn-primary {
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #2563EB 100%) !important;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.40) !important;
+}
+[data-theme="system"] .btn-primary:hover {
+  background: linear-gradient(135deg, #4338CA 0%, #6D28D9 50%, #1D4ED8 100%) !important;
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.55) !important;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   SYSTEM THEME LIGHT — "Vivid Pro"
-   Dramatic, unmistakable distinction from [data-theme="light"]:
-     • Vivid purple → indigo → blue gradient body background
-     • Dark indigo sidebar (instantly recognizable)
-     • Glass-white cards pop against the colorful background
-     • Vivid indigo gradient buttons
+   SYSTEM THEME LIGHT OS — Midnight Aurora stays dark
+   On light-OS preference, force all element backgrounds to stay dark so the
+   Midnight Aurora enterprise theme renders consistently on all OS preferences.
    ══════════════════════════════════════════════════════════════════════════════ */
 @media (prefers-color-scheme: light) {
 
-  /* ── 1. Vivid gradient background on html + body ── */
+  /* ── 1. Dark background on html + body — override OS light preference ── */
   html[data-theme="system"],
   html[data-theme="system"] body {
-    background-color: #4f46e5 !important;
-    background-image: linear-gradient(135deg, #4f46e5 0%, #6366f1 25%, #7c3aed 50%, #3b82f6 75%, #0ea5e9 100%) !important;
-    background-attachment: fixed !important;
-  }
-
-  /* ── 2. Outer layout wrapper: transparent so gradient shows through ── */
-  html[data-theme="system"] .min-h-screen {
-    background-color: transparent !important;
+    background-color: #0B1020 !important;
     background-image: none !important;
   }
 
-  /* ── 3. Dark sidebar — CSS variable overrides cascade to all child elements ── */
-  [data-theme="system"] aside {
-    background: linear-gradient(180deg, #0d0b2e 0%, #141260 55%, #1a1870 100%) !important;
-    border-right: 1px solid rgba(99, 102, 241, 0.30) !important;
-    box-shadow: 4px 0 32px rgba(0, 0, 0, 0.45), inset -1px 0 0 rgba(99, 102, 241, 0.20) !important;
-    /* Local CSS variable overrides — child elements inherit these */
-    --text-muted:    rgba(165, 180, 252, 0.70);
-    --text-primary:  #e0e7ff;
-    --text-secondary: #c7d2fe;
-    --text-heading:  #f5f3ff;
-    --text-label:    #a5b4fc;
-    --text-disabled: rgba(165, 180, 252, 0.35);
-    --border:        rgba(99, 102, 241, 0.18);
-    --border-subtle: rgba(99, 102, 241, 0.10);
-    --bg-hover:      rgba(255, 255, 255, 0.08);
-    --bg-active:     rgba(99, 102, 241, 0.28);
-    --skeleton-from: rgba(99, 102, 241, 0.18);
-    --skeleton-via:  rgba(99, 102, 241, 0.08);
-    --skeleton-to:   rgba(99, 102, 241, 0.18);
+  html[data-theme="system"] .min-h-screen {
+    background-color: #0B1020 !important;
+    background-image: none !important;
   }
 
-  /* ── 4. Glass-white cards on the gradient background ── */
+  /* ── 2. Sidebar — solid Midnight Aurora dark ── */
+  [data-theme="system"] aside {
+    background: #0B1020 !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
+    box-shadow: 1px 0 0 rgba(255, 255, 255, 0.04), 4px 0 24px rgba(0, 0, 0, 0.40) !important;
+    --text-primary:   #F9FAFB;
+    --text-secondary: #9CA3AF;
+    --text-muted:     #6B7280;
+    --text-heading:   #F9FAFB;
+    --text-label:     #9CA3AF;
+    --text-disabled:  #374151;
+    --nav-text:       #6B7280;
+    --nav-text-active: #F9FAFB;
+    --nav-hover-bg:   #1E293B;
+    --bg-hover:       #1E293B;
+    --bg-active:      rgba(139, 92, 246, 0.18);
+    --border:         rgba(255, 255, 255, 0.06);
+    --border-subtle:  rgba(255, 255, 255, 0.04);
+  }
+
+  /* ── 3. Cards — solid dark enterprise panels ── */
   html[data-theme="system"] .card,
   html[data-theme="system"] .modal-content,
-  html[data-theme="system"] .stat-card {
-    background-color: rgba(255, 255, 255, 0.93) !important;
-    border-color: rgba(99, 102, 241, 0.18) !important;
-    backdrop-filter: blur(14px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(14px) saturate(180%) !important;
-    box-shadow: 0 4px 20px rgba(79, 70, 229, 0.20), 0 1px 4px rgba(79, 70, 229, 0.12) !important;
-  }
-
+  html[data-theme="system"] .stat-card,
   html[data-theme="system"] .bg-white {
-    background-color: rgba(255, 255, 255, 0.93) !important;
+    background-color: #111827 !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
   }
 
   html[data-theme="system"] .card-hover:hover {
-    border-color: rgba(99, 102, 241, 0.38) !important;
-    box-shadow: 0 8px 36px rgba(79, 70, 229, 0.30), 0 2px 8px rgba(79, 70, 229, 0.15) !important;
-    transform: translateY(-2px) !important;
+    border-color: rgba(139, 92, 246, 0.35) !important;
+    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.15), 0 1px 4px rgba(0, 0, 0, 0.40) !important;
+    transform: translateY(-1px) !important;
   }
 
-  /* ── 5. Topbar: frosted glass ── */
+  /* ── 4. Topbar — dark enterprise bar ── */
   html[data-theme="system"] header {
-    background-color: rgba(255, 255, 255, 0.88) !important;
-    border-bottom-color: rgba(99, 102, 241, 0.20) !important;
-    backdrop-filter: blur(20px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    background-color: #0F172A !important;
+    border-bottom-color: rgba(255, 255, 255, 0.06) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
-  /* ── 6. Vivid indigo→blue gradient buttons ── */
+  /* ── 5. Primary button — Midnight Aurora gradient ── */
   html[data-theme="system"] .btn-primary {
-    background: linear-gradient(135deg, #7c3aed 0%, #6366f1 45%, #3b82f6 100%) !important;
-    box-shadow: 0 0 22px rgba(99, 102, 241, 0.50) !important;
+    background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #2563EB 100%) !important;
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.40) !important;
     border: none !important;
   }
   html[data-theme="system"] .btn-primary:hover {
-    background: linear-gradient(135deg, #6d28d9 0%, #4f46e5 45%, #2563eb 100%) !important;
-    box-shadow: 0 0 32px rgba(99, 102, 241, 0.70) !important;
+    background: linear-gradient(135deg, #4338CA 0%, #6D28D9 50%, #1D4ED8 100%) !important;
+    box-shadow: 0 0 30px rgba(139, 92, 246, 0.55) !important;
   }
 
-  /* ── 7. Main content area — subtle dark overlay; root Vivid Pro CSS vars handle card text ── */
+  /* ── 6. Main content area ── */
   html[data-theme="system"] main {
-    background-color: rgba(8, 6, 32, 0.28) !important;
+    background-color: transparent !important;
   }
 
-  /* ── 8. Table backgrounds: glass white ── */
+  /* ── 7. Tables — solid dark ── */
   html[data-theme="system"] table,
   html[data-theme="system"] thead,
   html[data-theme="system"] .overflow-auto,
@@ -662,36 +673,37 @@ html[data-theme="system"] .card-hover:hover {
   }
 
   html[data-theme="system"] thead th {
-    background-color: rgba(238, 242, 255, 0.90) !important;
-    color: #3730a3 !important;
+    background-color: #111827 !important;
+    color: #E2E8F0 !important;
   }
 
   html[data-theme="system"] tbody tr:hover {
-    background-color: rgba(99, 102, 241, 0.06) !important;
+    background-color: #1E293B !important;
   }
 
-  /* ── 9. Input fields: white glass ── */
+  /* ── 8. Input fields — dark enterprise ── */
   html[data-theme="system"] .input {
-    background-color: rgba(255, 255, 255, 0.88) !important;
-    backdrop-filter: blur(8px) !important;
-    -webkit-backdrop-filter: blur(8px) !important;
-    border-color: rgba(99, 102, 241, 0.28) !important;
-    color: #1e1b4b !important;
+    background-color: #111827 !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    color: #F9FAFB !important;
   }
   html[data-theme="system"] .input:focus {
-    border-color: #6366f1 !important;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18) !important;
+    border-color: #8B5CF6 !important;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25) !important;
   }
 
-  /* ── 10. Select / dropdown ── */
+  /* ── 9. Select / dropdown ── */
   html[data-theme="system"] select {
-    background-color: rgba(255, 255, 255, 0.90) !important;
+    background-color: #111827 !important;
+    color: #F9FAFB !important;
   }
 
-  /* ── 11. bg-surface elements (page section backgrounds) ── */
+  /* ── 10. Surface bg classes → dark ── */
   html[data-theme="system"] .bg-surface,
   html[data-theme="system"] [class*="bg-surface"] {
-    background-color: rgba(255, 255, 255, 0.88) !important;
+    background-color: #111827 !important;
   }
 }
 
@@ -744,152 +756,78 @@ html[data-theme="system"] .card-hover:hover {
 [data-theme="light"] .hover\:text-surface-700:hover { color: #334155 !important; }
 [data-theme="light"] .hover\:bg-surface-100:hover   { background-color: #f1f5f9 !important; }
 
-/* ── System light (Vivid Pro) — Tailwind surface class overrides ──────────────
-   Root CSS vars (--text-primary, --text-muted etc.) are already correct dark
-   indigo (theme.css Vivid Pro block) — they work for all var()-based card text.
-   Only Tailwind utility classes (text-surface-*, bg-surface-*, etc.) need
-   adjustment: white/light on the vivid gradient, dark indigo inside bg-white.
-   ─────────────────────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════════
+   18. SYSTEM THEME — Midnight Aurora surface class overrides
+   Tailwind `surface-*` scale is designed for dark mode. For system theme
+   (always dark), override to the Midnight Aurora palette consistently.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Text surface scale — Midnight Aurora dark ── */
+[data-theme="system"] .text-surface-900,
+[data-theme="system"] .text-surface-800 { color: #F9FAFB !important; }
+[data-theme="system"] .text-surface-700 { color: #E5E7EB !important; }
+[data-theme="system"] .text-surface-600 { color: #D1D5DB !important; }
+[data-theme="system"] .text-surface-500 { color: #9CA3AF !important; }
+[data-theme="system"] .text-surface-400 { color: #6B7280 !important; }
+[data-theme="system"] .text-surface-300 { color: #4B5563 !important; }
+
+[data-theme="system"] .hover\:text-surface-700:hover { color: #E5E7EB !important; }
+[data-theme="system"] .hover\:text-surface-900:hover { color: #F9FAFB !important; }
+
+/* ── Background surface scale — Midnight Aurora dark ── */
+[data-theme="system"] .bg-surface-50  { background-color: #111827 !important; }
+[data-theme="system"] .bg-surface-100 { background-color: #1E293B !important; }
+[data-theme="system"] .bg-surface-200 { background-color: #374151 !important; }
+[data-theme="system"] .hover\:bg-surface-50:hover  { background-color: #1E293B !important; }
+[data-theme="system"] .hover\:bg-surface-100:hover { background-color: #374151 !important; }
+
+/* ── Borders ── */
+[data-theme="system"] .border-surface-200 { border-color: rgba(255, 255, 255, 0.08) !important; }
+[data-theme="system"] .border-surface-300 { border-color: rgba(255, 255, 255, 0.12) !important; }
+
+/* ── primary/accent text in system theme ── */
+[data-theme="system"] .text-primary-600,
+[data-theme="system"] .text-primary-700 { color: #A78BFA !important; }
+[data-theme="system"] .border-primary-500 { border-color: #8B5CF6 !important; }
+
+/* ── Same dark overrides also apply when OS reports light preference ── */
 @media (prefers-color-scheme: light) {
-  /* ── Text on vivid gradient → white / light-indigo ── */
-  html[data-theme="system"] main .text-surface-900,
-  html[data-theme="system"] main .text-surface-800 { color: #ffffff !important; }
-  html[data-theme="system"] main .text-surface-700 { color: #e0e7ff !important; }
-  html[data-theme="system"] main .text-surface-600 { color: #c7d2fe !important; }
-  html[data-theme="system"] main .text-surface-500 { color: #a5b4fc !important; }
-  html[data-theme="system"] main .text-surface-400 { color: rgba(165,180,252,0.80) !important; }
-  html[data-theme="system"] main .text-surface-300 { color: rgba(165,180,252,0.65) !important; }
-  html[data-theme="system"] main .hover\:text-surface-700:hover { color: #ffffff !important; }
-  html[data-theme="system"] main .hover\:text-surface-900:hover { color: #ffffff !important; }
+  [data-theme="system"] .text-surface-900,
+  [data-theme="system"] .text-surface-800 { color: #F9FAFB !important; }
+  [data-theme="system"] .text-surface-700 { color: #E5E7EB !important; }
+  [data-theme="system"] .text-surface-600 { color: #D1D5DB !important; }
+  [data-theme="system"] .text-surface-500 { color: #9CA3AF !important; }
+  [data-theme="system"] .text-surface-400 { color: #6B7280 !important; }
+  [data-theme="system"] .text-surface-300 { color: #4B5563 !important; }
 
-  /* ── Text inside white-glass containers (bg-white / .card) → dark indigo ── */
-  html[data-theme="system"] main .card .text-surface-900,
-  html[data-theme="system"] main .card .text-surface-800,
-  html[data-theme="system"] main .stat-card .text-surface-900,
-  html[data-theme="system"] main .stat-card .text-surface-800,
-  html[data-theme="system"] main .bg-white .text-surface-900,
-  html[data-theme="system"] main .bg-white .text-surface-800 { color: #1e1b4b !important; }
+  [data-theme="system"] .hover\:text-surface-700:hover { color: #E5E7EB !important; }
+  [data-theme="system"] .hover\:text-surface-900:hover { color: #F9FAFB !important; }
 
-  html[data-theme="system"] main .card .text-surface-700,
-  html[data-theme="system"] main .stat-card .text-surface-700,
-  html[data-theme="system"] main .bg-white .text-surface-700 { color: #312e81 !important; }
+  [data-theme="system"] .bg-surface-50  { background-color: #111827 !important; }
+  [data-theme="system"] .bg-surface-100 { background-color: #1E293B !important; }
+  [data-theme="system"] .bg-surface-200 { background-color: #374151 !important; }
+  [data-theme="system"] .hover\:bg-surface-50:hover  { background-color: #1E293B !important; }
+  [data-theme="system"] .hover\:bg-surface-100:hover { background-color: #374151 !important; }
 
-  html[data-theme="system"] main .card .text-surface-600,
-  html[data-theme="system"] main .stat-card .text-surface-600,
-  html[data-theme="system"] main .bg-white .text-surface-600 { color: #3730a3 !important; }
+  [data-theme="system"] .border-surface-200 { border-color: rgba(255, 255, 255, 0.08) !important; }
+  [data-theme="system"] .border-surface-300 { border-color: rgba(255, 255, 255, 0.12) !important; }
 
-  html[data-theme="system"] main .card .text-surface-500,
-  html[data-theme="system"] main .stat-card .text-surface-500,
-  html[data-theme="system"] main .bg-white .text-surface-500 { color: #4f46e5 !important; }
+  [data-theme="system"] .text-primary-600,
+  [data-theme="system"] .text-primary-700 { color: #A78BFA !important; }
+  [data-theme="system"] .border-primary-500 { border-color: #8B5CF6 !important; }
 
-  /* surface-400: #4f46e5 = 5.2:1 on white (was #818cf8 at 2.84:1 — WCAG fail) */
-  html[data-theme="system"] main .card .text-surface-400,
-  html[data-theme="system"] main .stat-card .text-surface-400,
-  html[data-theme="system"] main .bg-white .text-surface-400 { color: #4f46e5 !important; }
+  /* thead inside bg-card style containers */
+  html[data-theme="system"] [style*="--bg-card"] .text-surface-900,
+  html[data-theme="system"] [style*="--bg-card"] .text-surface-800 { color: #F9FAFB !important; }
+  html[data-theme="system"] [style*="--bg-card"] .text-surface-700 { color: #E5E7EB !important; }
+  html[data-theme="system"] [style*="--bg-card"] .text-surface-600 { color: #D1D5DB !important; }
+  html[data-theme="system"] [style*="--bg-card"] .text-surface-500 { color: #9CA3AF !important; }
+  html[data-theme="system"] [style*="--bg-card"] .text-surface-400 { color: #6B7280 !important; }
+  html[data-theme="system"] [style*="--bg-card"] .text-surface-300 { color: #4B5563 !important; }
 
-  html[data-theme="system"] main .card .text-surface-300,
-  html[data-theme="system"] main .stat-card .text-surface-300,
-  html[data-theme="system"] main .bg-white .text-surface-300 { color: #6366f1 !important; }
-
-  html[data-theme="system"] main .card .hover\:text-surface-700:hover,
-  html[data-theme="system"] main .stat-card .hover\:text-surface-700:hover,
-  html[data-theme="system"] main .bg-white .hover\:text-surface-700:hover { color: #1e1b4b !important; }
-
-  html[data-theme="system"] main .card .hover\:text-surface-900:hover,
-  html[data-theme="system"] main .bg-white .hover\:text-surface-900:hover { color: #1e1b4b !important; }
-
-  /* ── Backgrounds on gradient → frosted white ── */
-  html[data-theme="system"] main .bg-surface-50  { background-color: rgba(255,255,255,0.10) !important; }
-  html[data-theme="system"] main .bg-surface-100 { background-color: rgba(255,255,255,0.15) !important; }
-  html[data-theme="system"] main .bg-surface-200 { background-color: rgba(255,255,255,0.22) !important; }
-  html[data-theme="system"] main .hover\:bg-surface-50:hover  { background-color: rgba(255,255,255,0.14) !important; }
-  html[data-theme="system"] main .hover\:bg-surface-100:hover { background-color: rgba(255,255,255,0.18) !important; }
-
-  /* ── Backgrounds inside white-glass containers → light indigo tints ── */
-  html[data-theme="system"] main .bg-white .bg-surface-50,
-  html[data-theme="system"] main .card .bg-surface-50   { background-color: rgba(238,242,255,0.70) !important; }
-  html[data-theme="system"] main .bg-white .bg-surface-100,
-  html[data-theme="system"] main .card .bg-surface-100,
-  html[data-theme="system"] main .stat-card .bg-surface-100 { background-color: #eef2ff !important; }
-  html[data-theme="system"] main .bg-white .bg-surface-200,
-  html[data-theme="system"] main .card .bg-surface-200,
-  html[data-theme="system"] main .stat-card .bg-surface-200 { background-color: #e0e7ff !important; }
-  html[data-theme="system"] main .bg-white .hover\:bg-surface-50:hover,
-  html[data-theme="system"] main .bg-white .hover\:bg-surface-100:hover,
-  html[data-theme="system"] main .card .hover\:bg-surface-100:hover { background-color: #eef2ff !important; }
-
-  /* ── Row dividers inside white-glass containers ── */
-  html[data-theme="system"] main .bg-white .divide-surface-100 > * + *,
-  html[data-theme="system"] main .bg-white .divide-surface-200 > * + *,
-  html[data-theme="system"] main .card .divide-surface-100 > * + * { border-color: rgba(99,102,241,0.10) !important; }
-
-  /* ── Borders ── */
-  html[data-theme="system"] main .border-surface-200 { border-color: rgba(255,255,255,0.25) !important; }
-  html[data-theme="system"] main .card .border-surface-200,
-  html[data-theme="system"] main .stat-card .border-surface-200,
-  html[data-theme="system"] main .bg-white .border-surface-200 { border-color: rgba(99,102,241,0.20) !important; }
-
-  /* ── text-primary-*: gradient → white; white-glass → indigo ── */
-  html[data-theme="system"] main .text-primary-600,
-  html[data-theme="system"] main .text-primary-700 { color: #ffffff !important; }
-  html[data-theme="system"] main .card .text-primary-600,
-  html[data-theme="system"] main .stat-card .text-primary-600,
-  html[data-theme="system"] main .bg-white .text-primary-600 { color: #4f46e5 !important; }
-  html[data-theme="system"] main .card .text-primary-700,
-  html[data-theme="system"] main .stat-card .text-primary-700,
-  html[data-theme="system"] main .bg-white .text-primary-700 { color: #4338ca !important; }
-
-  /* ── border-primary-500: gradient → white-ish; white-glass → indigo ── */
-  html[data-theme="system"] main .border-primary-500 { border-color: rgba(255,255,255,0.55) !important; }
-  html[data-theme="system"] main .card .border-primary-500,
-  html[data-theme="system"] main .stat-card .border-primary-500,
-  html[data-theme="system"] main .bg-white .border-primary-500 { border-color: #6366f1 !important; }
-
-  /* ══════════════════════════════════════════════════════════════════════
-     SYSTEM LIGHT — PAGE HEADER + TAB TEXT (sit directly on purple --bg-app)
-     Elements inside .page-enter but OUTSIDE a card container are on the
-     vivid purple background → must be white / near-white.
-     CSS custom properties cascade: set white at .page-enter level, then
-     reset to dark inside card containers (identified by --bg-card in style).
-  ══════════════════════════════════════════════════════════════════════ */
-  html[data-theme="system"] .page-enter {
-    --text-heading:   #ffffff;
-    --text-primary:   rgba(255, 255, 255, 0.95);
-    --text-secondary: rgba(255, 255, 255, 0.88);
-    --text-muted:     rgba(255, 255, 255, 0.72);
-    --text-label:     rgba(255, 255, 255, 0.80);
-    --accent:         #c7d2fe;
-    --border:         rgba(255, 255, 255, 0.25);
-  }
-
-  /* Card containers re-establish dark text (they have a white/glass background) */
-  html[data-theme="system"] .page-enter [style*="--bg-card"],
-  html[data-theme="system"] .page-enter .card,
-  html[data-theme="system"] .page-enter .bg-white {
-    --text-heading:   #0f0d2e;
-    --text-primary:   #1e1b4b;
-    --text-secondary: #374151;
-    --text-muted:     #64748b;
-    --text-label:     #475569;
-    --accent:         #6366f1;
-    --border:         rgba(99, 102, 241, 0.25);
-  }
-
-  /* ── text-surface-* inside [style*="--bg-card"] containers → dark readable ── */
-  /* These fix tables / grids in pages that use rounded-xl+style bg-card but      */
-  /* no .card class (e.g. InterviewSettings, Departments, Designations, etc.)      */
-  html[data-theme="system"] main [style*="--bg-card"] .text-surface-900,
-  html[data-theme="system"] main [style*="--bg-card"] .text-surface-800 { color: #1e1b4b !important; }
-  html[data-theme="system"] main [style*="--bg-card"] .text-surface-700 { color: #312e81 !important; }
-  html[data-theme="system"] main [style*="--bg-card"] .text-surface-600 { color: #3730a3 !important; }
-  html[data-theme="system"] main [style*="--bg-card"] .text-surface-500 { color: #4f46e5 !important; }
-  html[data-theme="system"] main [style*="--bg-card"] .text-surface-400 { color: #6366f1 !important; }
-  html[data-theme="system"] main [style*="--bg-card"] .text-surface-300 { color: #818cf8 !important; }
-
-  /* bg-surface-50 inside cards → light indigo tint (not purple) */
-  html[data-theme="system"] main [style*="--bg-card"] .bg-surface-50,
-  html[data-theme="system"] main [style*="--bg-card"] thead.bg-surface-50 { background-color: rgba(238,242,255,0.80) !important; }
-  html[data-theme="system"] main [style*="--bg-card"] .hover\:bg-surface-50:hover { background-color: rgba(238,242,255,0.95) !important; }
+  html[data-theme="system"] [style*="--bg-card"] .bg-surface-50,
+  html[data-theme="system"] [style*="--bg-card"] thead.bg-surface-50 { background-color: #1E293B !important; }
+  html[data-theme="system"] [style*="--bg-card"] .hover\:bg-surface-50:hover { background-color: #374151 !important; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -923,19 +861,28 @@ html[data-theme="system"] .card-hover:hover {
 [data-theme="dark"] .text-indigo-600    { color: #818cf8 !important; }
 [data-theme="dark"] .text-indigo-700    { color: #a5b4fc !important; }
 
-/* System dark — same but cyan-tinted */
+/* System — Midnight Aurora gradient card backgrounds */
 [data-theme="system"] .from-primary-50 {
-  --tw-gradient-from: #0a1628;
+  --tw-gradient-from: #1E293B;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, transparent);
 }
-[data-theme="system"] .to-indigo-50     { --tw-gradient-to: #0e2448; }
+[data-theme="system"] .to-indigo-50     { --tw-gradient-to: #1E1B4B; }
 [data-theme="system"] .from-indigo-50 {
-  --tw-gradient-from: #0c1d3a;
+  --tw-gradient-from: #1E1B4B;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, transparent);
 }
-[data-theme="system"] .border-primary-200 { border-color: #163660 !important; }
-[data-theme="system"] .text-primary-600   { color: #38bdf8 !important; }
-[data-theme="system"] .text-primary-700   { color: #7dd3fc !important; }
+[data-theme="system"] .to-purple-50    { --tw-gradient-to: #2D1B69; }
+[data-theme="system"] .from-blue-50 {
+  --tw-gradient-from: #0F172A;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, transparent);
+}
+[data-theme="system"] .to-blue-50      { --tw-gradient-to: #0F172A; }
+[data-theme="system"] .to-cyan-50      { --tw-gradient-to: #0F2A35; }
+[data-theme="system"] .border-primary-200 { border-color: rgba(139, 92, 246, 0.20) !important; }
+[data-theme="system"] .text-primary-600   { color: #A78BFA !important; }
+[data-theme="system"] .text-primary-700   { color: #C4B5FD !important; }
+[data-theme="system"] .text-indigo-600    { color: #A78BFA !important; }
+[data-theme="system"] .text-indigo-700    { color: #C4B5FD !important; }
 
 /* ══════════════════════════════════════════════════════════════════════════════
    20. COLORFUL TAGS & BADGES — DARK MODE
@@ -948,7 +895,7 @@ html[data-theme="system"] .card-hover:hover {
   background-color: rgba(59, 130, 246, 0.18) !important;
 }
 [data-theme="dark"] .text-blue-700, [data-theme="dark"] .text-blue-800 { color: #60a5fa !important; }
-[data-theme="system"] .text-blue-700, [data-theme="system"] .text-blue-800 { color: #38bdf8 !important; }
+[data-theme="system"] .text-blue-700, [data-theme="system"] .text-blue-800 { color: #60A5FA !important; }
 [data-theme="dark"] .border-blue-200, [data-theme="system"] .border-blue-200 {
   border-color: rgba(59, 130, 246, 0.30) !important;
 }
@@ -960,7 +907,7 @@ html[data-theme="system"] .card-hover:hover {
 [data-theme="dark"] .text-green-600, [data-theme="dark"] .text-green-700,
 [data-theme="dark"] .text-green-800 { color: #4ade80 !important; }
 [data-theme="system"] .text-green-600, [data-theme="system"] .text-green-700,
-[data-theme="system"] .text-green-800 { color: #34d399 !important; }
+[data-theme="system"] .text-green-800 { color: #22C55E !important; }
 [data-theme="dark"] .border-green-200, [data-theme="system"] .border-green-200 {
   border-color: rgba(34, 197, 94, 0.30) !important;
 }
@@ -972,7 +919,7 @@ html[data-theme="system"] .card-hover:hover {
 [data-theme="dark"] .text-amber-600, [data-theme="dark"] .text-amber-700,
 [data-theme="dark"] .text-amber-800 { color: #fbbf24 !important; }
 [data-theme="system"] .text-amber-600, [data-theme="system"] .text-amber-700,
-[data-theme="system"] .text-amber-800 { color: #fcd34d !important; }
+[data-theme="system"] .text-amber-800 { color: #F59E0B !important; }
 [data-theme="dark"] .border-amber-200, [data-theme="system"] .border-amber-200 {
   border-color: rgba(245, 158, 11, 0.30) !important;
 }
@@ -984,25 +931,26 @@ html[data-theme="system"] .card-hover:hover {
 [data-theme="dark"] .text-red-600, [data-theme="dark"] .text-red-700,
 [data-theme="dark"] .text-red-800 { color: #f87171 !important; }
 [data-theme="system"] .text-red-600, [data-theme="system"] .text-red-700,
-[data-theme="system"] .text-red-800 { color: #fca5a5 !important; }
+[data-theme="system"] .text-red-800 { color: #F87171 !important; }
 [data-theme="dark"] .border-red-200, [data-theme="system"] .border-red-200 {
   border-color: rgba(239, 68, 68, 0.30) !important;
 }
 
 /* Purple */
 [data-theme="dark"] .bg-purple-100, [data-theme="system"] .bg-purple-100 {
-  background-color: rgba(168, 85, 247, 0.18) !important;
+  background-color: rgba(139, 92, 246, 0.18) !important;
 }
 [data-theme="dark"] .text-purple-600, [data-theme="dark"] .text-purple-700,
 [data-theme="dark"] .text-purple-800 { color: #c084fc !important; }
-[data-theme="system"] .text-purple-700, [data-theme="system"] .text-purple-800 { color: #d8b4fe !important; }
+[data-theme="system"] .text-purple-600, [data-theme="system"] .text-purple-700,
+[data-theme="system"] .text-purple-800 { color: #C4B5FD !important; }
 
 /* Indigo */
 [data-theme="dark"] .bg-indigo-100, [data-theme="system"] .bg-indigo-100 {
   background-color: rgba(99, 102, 241, 0.18) !important;
 }
 [data-theme="dark"] .text-indigo-700, [data-theme="dark"] .text-indigo-800 { color: #818cf8 !important; }
-[data-theme="system"] .text-indigo-700, [data-theme="system"] .text-indigo-800 { color: #a5b4fc !important; }
+[data-theme="system"] .text-indigo-700, [data-theme="system"] .text-indigo-800 { color: #A78BFA !important; }
 
 /* Orange */
 [data-theme="dark"] .bg-orange-100, [data-theme="system"] .bg-orange-100 {
@@ -1010,7 +958,8 @@ html[data-theme="system"] .card-hover:hover {
 }
 [data-theme="dark"] .text-orange-600, [data-theme="dark"] .text-orange-700,
 [data-theme="dark"] .text-orange-800 { color: #fb923c !important; }
-[data-theme="system"] .text-orange-700, [data-theme="system"] .text-orange-800 { color: #fdba74 !important; }
+[data-theme="system"] .text-orange-600,
+[data-theme="system"] .text-orange-700, [data-theme="system"] .text-orange-800 { color: #FB923C !important; }
 
 /* Pink / Rose */
 [data-theme="dark"] .bg-pink-100, [data-theme="system"] .bg-pink-100 {
@@ -1018,7 +967,8 @@ html[data-theme="system"] .card-hover:hover {
 }
 [data-theme="dark"] .text-pink-600, [data-theme="dark"] .text-pink-700,
 [data-theme="dark"] .text-pink-800 { color: #f472b6 !important; }
-[data-theme="system"] .text-pink-700, [data-theme="system"] .text-pink-800 { color: #f9a8d4 !important; }
+[data-theme="system"] .text-pink-600,
+[data-theme="system"] .text-pink-700, [data-theme="system"] .text-pink-800 { color: #F472B6 !important; }
 
 /* Teal / Cyan */
 [data-theme="dark"] .bg-teal-100, [data-theme="system"] .bg-teal-100 {
@@ -1026,7 +976,8 @@ html[data-theme="system"] .card-hover:hover {
 }
 [data-theme="dark"] .text-teal-600, [data-theme="dark"] .text-teal-700,
 [data-theme="dark"] .text-teal-800 { color: #2dd4bf !important; }
-[data-theme="system"] .text-teal-700, [data-theme="system"] .text-teal-800 { color: #5eead4 !important; }
+[data-theme="system"] .text-teal-600,
+[data-theme="system"] .text-teal-700, [data-theme="system"] .text-teal-800 { color: #2DD4BF !important; }
 
 /* ══════════════════════════════════════════════════════════════════════════════
    21. COLORFUL TAGS — LIGHT MODE VIBRANCY BOOST
@@ -1077,16 +1028,6 @@ html[data-theme="system"] .card-hover:hover {
 [data-theme="light"] .text-teal-700  { color: #0f766e !important; }
 [data-theme="light"] .text-teal-800  { color: #115e59 !important; }
 
-/* System light — same vibrancy boost */
-@media (prefers-color-scheme: light) {
-  [data-theme="system"] .bg-blue-100  { background: linear-gradient(135deg, #e0f2fe, #bae6fd) !important; }
-  [data-theme="system"] .text-blue-700,
-  [data-theme="system"] .text-blue-800 { color: #0369a1 !important; }
-  [data-theme="system"] .bg-green-100  { background: linear-gradient(135deg, #dcfce7, #bbf7d0) !important; }
-  [data-theme="system"] .text-green-700,
-  [data-theme="system"] .text-green-800 { color: #15803d !important; }
-  [data-theme="system"] .bg-amber-100  { background: linear-gradient(135deg, #fef3c7, #fde68a) !important; }
-  [data-theme="system"] .text-amber-700,
-  [data-theme="system"] .text-amber-800 { color: #b45309 !important; }
-}
+/* System — Midnight Aurora badge/tag colors already handled by dark overrides above.
+   No light-OS badge override needed — system theme is always dark. */
 
