@@ -1,7 +1,7 @@
 {
   "name": "HireFlow",
   "short_name": "HireFlow",
-  "description": "Smart Recruitment & Talent Management Platform",
+  "description": "All-in-One Hiring & Operations Management Platform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
@@ -9,16 +9,16 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/favicon.png",
+      "src": "/Hire_Flow_icon-removebg.png?v=3",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/apple-touch-icon.png",
+      "src": "/Hire_Flow_icon-removebg.png?v=3",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ]
 }

@@ -2,21 +2,34 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/Hire_Flow_icon-removebg.png" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- ═══════════════════════════════════════════════════════════
+         FAVICON — single source of truth: Hire_Flow_icon-removebg.png
+         All sizes point to the same file; browser picks the best fit.
+         ?v=3 busts any stale cached globe icon from old deploys.
+    ═══════════════════════════════════════════════════════════ -->
+    <link rel="icon" type="image/png" sizes="16x16"  href="/Hire_Flow_icon-removebg.png?v=3" />
+    <link rel="icon" type="image/png" sizes="32x32"  href="/Hire_Flow_icon-removebg.png?v=3" />
+    <link rel="icon" type="image/png" sizes="48x48"  href="/Hire_Flow_icon-removebg.png?v=3" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/Hire_Flow_icon-removebg.png?v=3" />
+    <link rel="apple-touch-icon" sizes="180x180"     href="/Hire_Flow_icon-removebg.png?v=3" />
+    <link rel="shortcut icon"                        href="/Hire_Flow_icon-removebg.png?v=3" />
+
     <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#4f46e5" />
+
     <title>HireFlow</title>
     <meta name="description" content="HireFlow — All-in-One Hiring &amp; Operations Management Platform" />
     <meta name="application-name" content="HireFlow" />
+
     <!-- Open Graph -->
     <meta property="og:title" content="HireFlow" />
     <meta property="og:description" content="All-in-One Hiring &amp; Operations Management Platform" />
     <meta property="og:type" content="website" />
-    
-    <!-- Google Fonts - Plus Jakarta Sans -->
+    <meta property="og:image" content="/Hire_Flow_Logo.png" />
+
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
