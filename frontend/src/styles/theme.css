@@ -220,257 +220,256 @@
   --bg-gray-200: #e8e5ff;
 }
 
-/* ── SYSTEM THEME — "Midnight Aurora" — premium enterprise dark ──────────────────
-   Always renders as a rich dark enterprise dashboard regardless of OS preference.
-   Deep navy/slate backgrounds, violet accent spectrum, Power BI–inspired hierarchy.
+/* ── SYSTEM THEME — "Option C — Blue Tint" — light enterprise + dark navy sidebar
+   Light blue-tinted page with pure white cards, dark #1E2A4A sidebar (intentional),
+   orange (#FF6B35) as primary CTA accent, navy (#004E89) as secondary accent.
    ─────────────────────────────────────────────────────────────────────────────── */
 [data-theme="system"] {
-  /* ── Backgrounds — layered dark depth ── */
-  --bg-app:            #0B1020;           /* primary page background */
-  --bg-base-solid:     #0B1020;
-  --bg-surface:        #0F172A;           /* sidebar / topbar layer */
-  --bg-sidebar:        #0B1020;           /* sidebar — deepest dark */
-  --bg-card:           #111827;           /* stat cards / panels */
-  --bg-card-alt:       #1E293B;           /* alternate card / inner panels */
-  --bg-topbar:         #0F172A;
-  --bg-hover:          #1E293B;           /* solid hover — no opacity flicker */
-  --bg-active:         rgba(139, 92, 246, 0.18);
-  --bg-overlay:        rgba(0, 0, 0, 0.82);
+  /* ── Backgrounds ── */
+  --bg-app:            #E8EEF7;           /* light blue-tinted page background */
+  --bg-base-solid:     #E8EEF7;
+  --bg-surface:        #FFFFFF;           /* topbar / surface layer */
+  --bg-sidebar:        #1E2A4A;           /* dark navy sidebar — intentional contrast */
+  --bg-card:           #FFFFFF;           /* pure white cards */
+  --bg-card-alt:       #F0F4FB;           /* soft blue-tinted alt panels */
+  --bg-topbar:         #FFFFFF;
+  --bg-hover:          #F0F4FB;           /* light hover on content areas */
+  --bg-active:         rgba(255, 107, 53, 0.10);
+  --bg-overlay:        rgba(30, 42, 74, 0.60);
 
-  /* ── Text — high-contrast enterprise hierarchy ── */
-  --text-primary:      #F9FAFB;           /* near-white — primary content */
-  --text-secondary:    #9CA3AF;           /* cool gray — secondary content */
-  --text-muted:        #6B7280;           /* muted gray — labels, hints */
-  --text-disabled:     #374151;
-  --text-heading:      #F9FAFB;           /* bold headings — pure near-white */
-  --text-label:        #9CA3AF;
-  --text-link:         #A78BFA;           /* violet links */
-  --text-danger:       #F87171;
+  /* ── Text — dark-on-light hierarchy ── */
+  --text-primary:      #1E293B;           /* dark slate — high contrast on white */
+  --text-secondary:    #475569;           /* medium slate */
+  --text-muted:        #64748B;           /* muted gray — labels, hints */
+  --text-disabled:     #94A3B8;
+  --text-heading:      #1E293B;
+  --text-label:        #64748B;
+  --text-link:         #FF6B35;           /* orange links */
+  --text-danger:       #DC2626;
 
-  /* ── Borders — subtle white opacity ── */
-  --border:            rgba(255, 255, 255, 0.08);
-  --border-strong:     rgba(255, 255, 255, 0.14);
-  --border-subtle:     rgba(255, 255, 255, 0.05);
-  --border-card:       rgba(255, 255, 255, 0.08);
+  /* ── Borders ── */
+  --border:            #CDD6E8;
+  --border-strong:     #A8B8D0;
+  --border-subtle:     #E4EBF5;
+  --border-card:       #CDD6E8;
 
   /* ── Inputs ── */
-  --input-bg:           #111827;
-  --input-text:         #F9FAFB;
-  --input-placeholder:  #6B7280;
-  --input-border:       rgba(255, 255, 255, 0.12);
-  --input-focus-border: #8B5CF6;
-  --input-focus-shadow: rgba(139, 92, 246, 0.25);
-  --input-autofill:     #1E293B;
-  --input-autofill-text: #F9FAFB;
-  --input-disabled-bg:  #0F172A;
-  --input-disabled-text: #374151;
-  --select-option-bg:   #111827;
-  --select-option-text: #F9FAFB;
-  --label-color:        #9CA3AF;
+  --input-bg:           #FFFFFF;
+  --input-text:         #1E293B;
+  --input-placeholder:  #94A3B8;
+  --input-border:       #CDD6E8;
+  --input-focus-border: #FF6B35;
+  --input-focus-shadow: rgba(255, 107, 53, 0.18);
+  --input-autofill:     #FFF8F5;
+  --input-autofill-text: #1E293B;
+  --input-disabled-bg:  #F0F4FB;
+  --input-disabled-text: #94A3B8;
+  --select-option-bg:   #FFFFFF;
+  --select-option-text: #1E293B;
+  --label-color:        #64748B;
 
   /* ── Status Backgrounds ── */
-  --bg-success: rgba(34,  197, 94,  0.15);
-  --bg-warning: rgba(245, 158, 11,  0.15);
-  --bg-danger:  rgba(239, 68,  68,  0.15);
-  --bg-info:    rgba(59,  130, 246, 0.15);
+  --bg-success: rgba(5,   150, 105, 0.10);
+  --bg-warning: rgba(217, 119,   6, 0.10);
+  --bg-danger:  rgba(220,  38,  38, 0.10);
+  --bg-info:    rgba(61,  107, 255, 0.10);
 
   /* ── Status Text ── */
-  --text-success: #22C55E;
-  --text-warning: #F59E0B;
-  --text-danger:  #EF4444;
-  --text-info:    #3B82F6;
+  --text-success: #059669;
+  --text-warning: #D97706;
+  --text-danger:  #DC2626;
+  --text-info:    #2563EB;
 
-  /* ── Navigation — premium sidebar ── */
-  --nav-text:          #6B7280;           /* inactive items — muted */
-  --nav-text-active:   #F9FAFB;           /* active — near-white */
-  --nav-bg-active:     rgba(139, 92, 246, 0.18);
-  --nav-border-active: #8B5CF6;           /* violet left-border accent */
-  --nav-hover-bg:      #1E293B;           /* solid slate hover */
-  --nav-glow-active:   rgba(139, 92, 246, 0.40);
+  /* ── Navigation — dark sidebar with orange active accent ── */
+  --nav-text:          #94A8CC;           /* blue-gray on dark sidebar */
+  --nav-text-active:   #FFFFFF;           /* white on orange active item */
+  --nav-bg-active:     #FF6B35;           /* solid orange — strong CTA active */
+  --nav-border-active: #FF6B35;
+  --nav-hover-bg:      rgba(255, 255, 255, 0.08);
+  --nav-glow-active:   rgba(255, 107, 53, 0.35);
 
   /* ── UI elements ── */
-  --scrollbar-track:        #0B1020;
-  --scrollbar-thumb:        #1E293B;
-  --scrollbar-thumb-hover:  #374151;
-  --selection-bg:           rgba(139, 92, 246, 0.30);
-  --selection-text:         #F9FAFB;
-  --dropdown-bg:            #111827;
-  --dropdown-border:        rgba(255, 255, 255, 0.08);
-  --dropdown-hover:         #1E293B;
-  --skeleton-from:          #111827;
-  --skeleton-via:           #1E293B;
-  --skeleton-to:            #111827;
+  --scrollbar-track:        #E4EBF5;
+  --scrollbar-thumb:        #A8B8D0;
+  --scrollbar-thumb-hover:  #7A90B0;
+  --selection-bg:           rgba(255, 107, 53, 0.18);
+  --selection-text:         #1E293B;
+  --dropdown-bg:            #FFFFFF;
+  --dropdown-border:        #CDD6E8;
+  --dropdown-hover:         #F0F4FB;
+  --skeleton-from:          #E4EBF5;
+  --skeleton-via:           #F0F4FB;
+  --skeleton-to:            #E4EBF5;
 
   /* ── Shadows ── */
-  --shadow-card:     0 1px 3px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.04);
-  --shadow-soft:     0 4px 20px rgba(0, 0, 0, 0.60);
-  --shadow-elevated: 0 16px 50px rgba(0, 0, 0, 0.80);
+  --shadow-card:     0 1px 3px rgba(30, 41, 59, 0.08), 0 1px 2px rgba(30, 41, 59, 0.04);
+  --shadow-soft:     0 4px 16px rgba(30, 41, 59, 0.10);
+  --shadow-elevated: 0 16px 40px rgba(30, 41, 59, 0.15);
 
-  /* ── Stat card left-border accent colors ── */
-  --stat-border-green:  #22C55E;
+  /* ── Stat card border accents (per spec) ── */
+  --stat-border-green:  #00C9A7;          /* Jobs */
   --stat-border-red:    #EF4444;
-  --stat-border-teal:   #06B6D4;
-  --stat-border-orange: #F97316;
-  --stat-border-purple: #8B5CF6;
-  --stat-border-blue:   #3B82F6;
+  --stat-border-teal:   #00C9A7;
+  --stat-border-orange: #FF6B35;          /* Placements */
+  --stat-border-purple: #7C55E8;          /* Interviews */
+  --stat-border-blue:   #3D6BFF;          /* Candidates */
   --stat-border-pink:   #EC4899;
   --stat-border-yellow: #F59E0B;
 
-  /* ── Accent — violet ── */
-  --accent:       #8B5CF6;
-  --accent-hover: #7C3AED;
-  --accent-light: rgba(139, 92, 246, 0.15);
-  --accent-2:     #A78BFA;
+  /* ── Accent — orange primary, navy secondary ── */
+  --accent:       #FF6B35;
+  --accent-hover: #E55A25;
+  --accent-light: rgba(255, 107, 53, 0.12);
+  --accent-2:     #004E89;
 
-  /* ── Gradients — Midnight Aurora spectrum ── */
-  --gradient-1: linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #2563EB 100%);
-  --gradient-2: linear-gradient(135deg, #22C55E 0%, #06B6D4 100%);
-  --gradient-3: linear-gradient(135deg, #F97316 0%, #EC4899 100%);
-  --gradient-4: linear-gradient(135deg, #8B5CF6 0%, #4F46E5 100%);
+  /* ── Gradients — Blue Tint enterprise ── */
+  --gradient-1: linear-gradient(135deg, #004E89 0%, #1E2A4A 100%);  /* welcome banner */
+  --gradient-2: linear-gradient(135deg, #00C9A7 0%, #3D6BFF 100%);
+  --gradient-3: linear-gradient(135deg, #FF6B35 0%, #FF8C5A 100%);
+  --gradient-4: linear-gradient(135deg, #7C55E8 0%, #3D6BFF 100%);
   --gradient-5: linear-gradient(135deg, #EF4444 0%, #F97316 100%);
-  --gradient-6: linear-gradient(135deg, #06B6D4 0%, #4F46E5 100%);
+  --gradient-6: linear-gradient(135deg, #3D6BFF 0%, #7C55E8 100%);
 
   /* ── Stat icon gradients ── */
-  --stat-purple:  linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
-  --stat-green:   linear-gradient(135deg, #22C55E 0%, #06B6D4 100%);
-  --stat-orange:  linear-gradient(135deg, #F97316 0%, #EC4899 100%);
-  --stat-blue:    linear-gradient(135deg, #3B82F6 0%, #4F46E5 100%);
+  --stat-purple:  linear-gradient(135deg, #7C55E8 0%, #3D6BFF 100%);
+  --stat-green:   linear-gradient(135deg, #00C9A7 0%, #3D6BFF 100%);
+  --stat-orange:  linear-gradient(135deg, #FF6B35 0%, #FF8C5A 100%);
+  --stat-blue:    linear-gradient(135deg, #3D6BFF 0%, #004E89 100%);
   --stat-red:     linear-gradient(135deg, #EF4444 0%, #F97316 100%);
-  --stat-pink:    linear-gradient(135deg, #EC4899 0%, #8B5CF6 100%);
-  --stat-teal:    linear-gradient(135deg, #06B6D4 0%, #22C55E 100%);
-  --stat-yellow:  linear-gradient(135deg, #F59E0B 0%, #F97316 100%);
+  --stat-pink:    linear-gradient(135deg, #EC4899 0%, #7C55E8 100%);
+  --stat-teal:    linear-gradient(135deg, #00C9A7 0%, #059669 100%);
+  --stat-yellow:  linear-gradient(135deg, #F59E0B 0%, #FF6B35 100%);
 
-  /* ── Legacy gray overrides — Midnight Aurora (dark) ── */
-  --gray-900: #F9FAFB;
-  --gray-800: #F3F4F6;
-  --gray-700: #E5E7EB;
-  --gray-600: #D1D5DB;
-  --gray-500: #9CA3AF;
-  --gray-400: #6B7280;
-  --border-gray-200: rgba(255, 255, 255, 0.08);
-  --bg-gray-50:  #111827;
-  --bg-gray-100: #1E293B;
-  --bg-gray-200: #374151;
+  /* ── Legacy gray overrides — light mode mapping ── */
+  --gray-900: #0F172A;
+  --gray-800: #1E293B;
+  --gray-700: #334155;
+  --gray-600: #475569;
+  --gray-500: #64748B;
+  --gray-400: #94A3B8;
+  --border-gray-200: #CDD6E8;
+  --bg-gray-50:  #F8FAFC;
+  --bg-gray-100: #F0F4FB;
+  --bg-gray-200: #E4EBF5;
 }
 
-/* ── SYSTEM THEME — light OS override — Midnight Aurora stays dark ───────────── */
-/* Explicitly repeat dark tokens so OS light-preference cannot adapt the theme.   */
-/* Midnight Aurora is ALWAYS dark. The system setting = enterprise dark mode.     */
+/* ── SYSTEM THEME — light OS override — repeat Blue Tint tokens ──────────────── */
+/* Blue Tint renders identically on both dark-OS and light-OS preferences.        */
 /* ─────────────────────────────────────────────────────────────────────────────── */
 @media (prefers-color-scheme: light) {
   [data-theme="system"] {
-    --bg-app:            #0B1020;
-    --bg-base-solid:     #0B1020;
-    --bg-surface:        #0F172A;
-    --bg-sidebar:        #0B1020;
-    --bg-card:           #111827;
-    --bg-card-alt:       #1E293B;
-    --bg-topbar:         #0F172A;
-    --bg-hover:          #1E293B;
-    --bg-active:         rgba(139, 92, 246, 0.18);
-    --bg-overlay:        rgba(0, 0, 0, 0.82);
+    --bg-app:            #E8EEF7;
+    --bg-base-solid:     #E8EEF7;
+    --bg-surface:        #FFFFFF;
+    --bg-sidebar:        #1E2A4A;
+    --bg-card:           #FFFFFF;
+    --bg-card-alt:       #F0F4FB;
+    --bg-topbar:         #FFFFFF;
+    --bg-hover:          #F0F4FB;
+    --bg-active:         rgba(255, 107, 53, 0.10);
+    --bg-overlay:        rgba(30, 42, 74, 0.60);
 
-    --text-primary:      #F9FAFB;
-    --text-secondary:    #9CA3AF;
-    --text-muted:        #6B7280;
-    --text-disabled:     #374151;
-    --text-heading:      #F9FAFB;
-    --text-label:        #9CA3AF;
-    --text-link:         #A78BFA;
-    --text-danger:       #F87171;
+    --text-primary:      #1E293B;
+    --text-secondary:    #475569;
+    --text-muted:        #64748B;
+    --text-disabled:     #94A3B8;
+    --text-heading:      #1E293B;
+    --text-label:        #64748B;
+    --text-link:         #FF6B35;
+    --text-danger:       #DC2626;
 
-    --border:            rgba(255, 255, 255, 0.08);
-    --border-strong:     rgba(255, 255, 255, 0.14);
-    --border-subtle:     rgba(255, 255, 255, 0.05);
-    --border-card:       rgba(255, 255, 255, 0.08);
+    --border:            #CDD6E8;
+    --border-strong:     #A8B8D0;
+    --border-subtle:     #E4EBF5;
+    --border-card:       #CDD6E8;
 
-    --input-bg:           #111827;
-    --input-text:         #F9FAFB;
-    --input-placeholder:  #6B7280;
-    --input-border:       rgba(255, 255, 255, 0.12);
-    --input-focus-border: #8B5CF6;
-    --input-focus-shadow: rgba(139, 92, 246, 0.25);
-    --input-autofill:     #1E293B;
-    --input-autofill-text: #F9FAFB;
-    --input-disabled-bg:  #0F172A;
-    --input-disabled-text: #374151;
-    --select-option-bg:   #111827;
-    --select-option-text: #F9FAFB;
-    --label-color:        #9CA3AF;
+    --input-bg:           #FFFFFF;
+    --input-text:         #1E293B;
+    --input-placeholder:  #94A3B8;
+    --input-border:       #CDD6E8;
+    --input-focus-border: #FF6B35;
+    --input-focus-shadow: rgba(255, 107, 53, 0.18);
+    --input-autofill:     #FFF8F5;
+    --input-autofill-text: #1E293B;
+    --input-disabled-bg:  #F0F4FB;
+    --input-disabled-text: #94A3B8;
+    --select-option-bg:   #FFFFFF;
+    --select-option-text: #1E293B;
+    --label-color:        #64748B;
 
-    --bg-success: rgba(34,  197, 94,  0.15);
-    --bg-warning: rgba(245, 158, 11,  0.15);
-    --bg-danger:  rgba(239, 68,  68,  0.15);
-    --bg-info:    rgba(59,  130, 246, 0.15);
+    --bg-success: rgba(5,   150, 105, 0.10);
+    --bg-warning: rgba(217, 119,   6, 0.10);
+    --bg-danger:  rgba(220,  38,  38, 0.10);
+    --bg-info:    rgba(61,  107, 255, 0.10);
 
-    --text-success: #22C55E;
-    --text-warning: #F59E0B;
-    --text-danger:  #EF4444;
-    --text-info:    #3B82F6;
+    --text-success: #059669;
+    --text-warning: #D97706;
+    --text-danger:  #DC2626;
+    --text-info:    #2563EB;
 
-    --nav-text:          #6B7280;
-    --nav-text-active:   #F9FAFB;
-    --nav-bg-active:     rgba(139, 92, 246, 0.18);
-    --nav-border-active: #8B5CF6;
-    --nav-hover-bg:      #1E293B;
-    --nav-glow-active:   rgba(139, 92, 246, 0.40);
+    --nav-text:          #94A8CC;
+    --nav-text-active:   #FFFFFF;
+    --nav-bg-active:     #FF6B35;
+    --nav-border-active: #FF6B35;
+    --nav-hover-bg:      rgba(255, 255, 255, 0.08);
+    --nav-glow-active:   rgba(255, 107, 53, 0.35);
 
-    --scrollbar-track:        #0B1020;
-    --scrollbar-thumb:        #1E293B;
-    --scrollbar-thumb-hover:  #374151;
-    --selection-bg:           rgba(139, 92, 246, 0.30);
-    --selection-text:         #F9FAFB;
-    --dropdown-bg:            #111827;
-    --dropdown-border:        rgba(255, 255, 255, 0.08);
-    --dropdown-hover:         #1E293B;
-    --skeleton-from:          #111827;
-    --skeleton-via:           #1E293B;
-    --skeleton-to:            #111827;
+    --scrollbar-track:        #E4EBF5;
+    --scrollbar-thumb:        #A8B8D0;
+    --scrollbar-thumb-hover:  #7A90B0;
+    --selection-bg:           rgba(255, 107, 53, 0.18);
+    --selection-text:         #1E293B;
+    --dropdown-bg:            #FFFFFF;
+    --dropdown-border:        #CDD6E8;
+    --dropdown-hover:         #F0F4FB;
+    --skeleton-from:          #E4EBF5;
+    --skeleton-via:           #F0F4FB;
+    --skeleton-to:            #E4EBF5;
 
-    --shadow-card:     0 1px 3px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.04);
-    --shadow-soft:     0 4px 20px rgba(0, 0, 0, 0.60);
-    --shadow-elevated: 0 16px 50px rgba(0, 0, 0, 0.80);
+    --shadow-card:     0 1px 3px rgba(30, 41, 59, 0.08), 0 1px 2px rgba(30, 41, 59, 0.04);
+    --shadow-soft:     0 4px 16px rgba(30, 41, 59, 0.10);
+    --shadow-elevated: 0 16px 40px rgba(30, 41, 59, 0.15);
 
-    --stat-border-green:  #22C55E;
+    --stat-border-green:  #00C9A7;
     --stat-border-red:    #EF4444;
-    --stat-border-teal:   #06B6D4;
-    --stat-border-orange: #F97316;
-    --stat-border-purple: #8B5CF6;
-    --stat-border-blue:   #3B82F6;
+    --stat-border-teal:   #00C9A7;
+    --stat-border-orange: #FF6B35;
+    --stat-border-purple: #7C55E8;
+    --stat-border-blue:   #3D6BFF;
     --stat-border-pink:   #EC4899;
     --stat-border-yellow: #F59E0B;
 
-    --accent:       #8B5CF6;
-    --accent-hover: #7C3AED;
-    --accent-light: rgba(139, 92, 246, 0.15);
-    --accent-2:     #A78BFA;
+    --accent:       #FF6B35;
+    --accent-hover: #E55A25;
+    --accent-light: rgba(255, 107, 53, 0.12);
+    --accent-2:     #004E89;
 
-    --gradient-1: linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #2563EB 100%);
-    --gradient-2: linear-gradient(135deg, #22C55E 0%, #06B6D4 100%);
-    --gradient-3: linear-gradient(135deg, #F97316 0%, #EC4899 100%);
-    --gradient-4: linear-gradient(135deg, #8B5CF6 0%, #4F46E5 100%);
+    --gradient-1: linear-gradient(135deg, #004E89 0%, #1E2A4A 100%);
+    --gradient-2: linear-gradient(135deg, #00C9A7 0%, #3D6BFF 100%);
+    --gradient-3: linear-gradient(135deg, #FF6B35 0%, #FF8C5A 100%);
+    --gradient-4: linear-gradient(135deg, #7C55E8 0%, #3D6BFF 100%);
     --gradient-5: linear-gradient(135deg, #EF4444 0%, #F97316 100%);
-    --gradient-6: linear-gradient(135deg, #06B6D4 0%, #4F46E5 100%);
+    --gradient-6: linear-gradient(135deg, #3D6BFF 0%, #7C55E8 100%);
 
-    --stat-purple:  linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
-    --stat-green:   linear-gradient(135deg, #22C55E 0%, #06B6D4 100%);
-    --stat-orange:  linear-gradient(135deg, #F97316 0%, #EC4899 100%);
-    --stat-blue:    linear-gradient(135deg, #3B82F6 0%, #4F46E5 100%);
+    --stat-purple:  linear-gradient(135deg, #7C55E8 0%, #3D6BFF 100%);
+    --stat-green:   linear-gradient(135deg, #00C9A7 0%, #3D6BFF 100%);
+    --stat-orange:  linear-gradient(135deg, #FF6B35 0%, #FF8C5A 100%);
+    --stat-blue:    linear-gradient(135deg, #3D6BFF 0%, #004E89 100%);
     --stat-red:     linear-gradient(135deg, #EF4444 0%, #F97316 100%);
-    --stat-pink:    linear-gradient(135deg, #EC4899 0%, #8B5CF6 100%);
-    --stat-teal:    linear-gradient(135deg, #06B6D4 0%, #22C55E 100%);
-    --stat-yellow:  linear-gradient(135deg, #F59E0B 0%, #F97316 100%);
+    --stat-pink:    linear-gradient(135deg, #EC4899 0%, #7C55E8 100%);
+    --stat-teal:    linear-gradient(135deg, #00C9A7 0%, #059669 100%);
+    --stat-yellow:  linear-gradient(135deg, #F59E0B 0%, #FF6B35 100%);
 
-    --gray-900: #F9FAFB;
-    --gray-800: #F3F4F6;
-    --gray-700: #E5E7EB;
-    --gray-600: #D1D5DB;
-    --gray-500: #9CA3AF;
-    --gray-400: #6B7280;
-    --border-gray-200: rgba(255, 255, 255, 0.08);
-    --bg-gray-50:  #111827;
-    --bg-gray-100: #1E293B;
-    --bg-gray-200: #374151;
+    --gray-900: #0F172A;
+    --gray-800: #1E293B;
+    --gray-700: #334155;
+    --gray-600: #475569;
+    --gray-500: #64748B;
+    --gray-400: #94A3B8;
+    --border-gray-200: #CDD6E8;
+    --bg-gray-50:  #F8FAFC;
+    --bg-gray-100: #F0F4FB;
+    --bg-gray-200: #E4EBF5;
   }
 }
 
