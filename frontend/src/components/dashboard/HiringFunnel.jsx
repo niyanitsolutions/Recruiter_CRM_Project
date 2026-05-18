@@ -9,7 +9,7 @@ const STAGE_COLORS = [
   { a: '#FA8231', b: '#F64F59', glow: 'rgba(250,130,49,0.18)'  },
 ]
 
-const HiringFunnel = ({ data }) => {
+const HiringFunnel = ({ data, rejectedCount }) => {
   const [hovered, setHovered] = useState(null)
 
   if (!data || data.length === 0) {
@@ -89,6 +89,35 @@ const HiringFunnel = ({ data }) => {
           </div>
         )
       })}
+
+      {/* Rejected branch — shown below the main funnel as a dropped-off metric */}
+      {rejectedCount > 0 && (
+        <div className="flex flex-col items-center mt-1">
+          <div className="flex items-center gap-1.5 my-0.5">
+            <div className="w-px h-3 rounded" style={{ background: 'var(--border)' }} />
+            <span
+              className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(255,71,87,0.10)', color: '#FF4757' }}
+            >
+              ↳ dropped / rejected
+            </span>
+            <div className="w-px h-3 rounded" style={{ background: 'var(--border)' }} />
+          </div>
+          <div
+            className="flex items-center justify-between px-4 py-2.5 rounded-xl"
+            style={{
+              width: '52%', minWidth: '52%',
+              background: 'rgba(255,71,87,0.06)',
+              border: '1px solid rgba(255,71,87,0.22)',
+            }}
+          >
+            <span className="text-sm font-semibold" style={{ color: '#FF4757' }}>Rejected</span>
+            <span className="text-base font-bold" style={{ color: 'var(--text-heading)' }}>
+              {rejectedCount.toLocaleString('en-IN')}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

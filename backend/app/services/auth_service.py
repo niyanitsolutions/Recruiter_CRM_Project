@@ -428,7 +428,24 @@ class AuthService:
         # set, another device currently holds an active session for this user.
         # force_login=True skips this check and takes over the session.
         if not force_login and user.get("active_session_token"):
-            return None, "ACTIVE_SESSION|This account is already active on another device."
+            # Fetch the existing session record so the frontend can show device
+            # context (browser / OS / IP / login time) in the conflict modal.
+            import json as _json
+            _master_db = get_master_db()
+            _session_doc = await _master_db.sessions.find_one(
+                {"_id": user["active_session_token"], "is_active": True}
+            )
+            _session_info: dict = {}
+            if _session_doc:
+                _session_info = {
+                    "device_info": _session_doc.get("device_info", ""),
+                    "ip_address":  _session_doc.get("ip_address",  ""),
+                    "login_time":  _session_doc["created_at"].isoformat() if _session_doc.get("created_at") else None,
+                    "last_active": _session_doc.get("last_active_at", _session_doc.get("created_at", None)),
+                }
+                if _session_info["last_active"] and hasattr(_session_info["last_active"], "isoformat"):
+                    _session_info["last_active"] = _session_info["last_active"].isoformat()
+            return None, f"ACTIVE_SESSION|{_json.dumps(_session_info)}"
 
         # ── Subscription expiry ───────────────────────────────────────────────
         plan_expiry = tenant.get("plan_expiry")

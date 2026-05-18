@@ -72,9 +72,19 @@ async def login(data: LoginRequest, request: Request):
 
     if error:
         if "ACTIVE_SESSION" in error:
+            import json as _json
+            _raw = error.split("|", 1)[1] if "|" in error else "{}"
+            try:
+                _session_info = _json.loads(_raw)
+            except Exception:
+                _session_info = {}
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"active_session": True, "message": error.split("|", 1)[1]},
+                detail={
+                    "active_session": True,
+                    "message": "This account is currently active on another device.",
+                    "session_info": _session_info,
+                },
             )
         if "EMAIL_NOT_VERIFIED" in error:
             # Format: "EMAIL_NOT_VERIFIED|{email}|{message}"
@@ -162,9 +172,19 @@ async def login_with_tenant(data: TenantLoginRequest, request: Request):
 
     if error:
         if "ACTIVE_SESSION" in error:
+            import json as _json
+            _raw = error.split("|", 1)[1] if "|" in error else "{}"
+            try:
+                _session_info = _json.loads(_raw)
+            except Exception:
+                _session_info = {}
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"active_session": True, "message": error.split("|", 1)[1]},
+                detail={
+                    "active_session": True,
+                    "message": "This account is currently active on another device.",
+                    "session_info": _session_info,
+                },
             )
         if "SUBSCRIPTION_EXPIRED" in error:
             is_owner = error.startswith("SUBSCRIPTION_EXPIRED_OWNER")

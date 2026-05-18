@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, Suspense, lazy } from 'react'
+import React, { useCallback, useEffect, useRef, useState, Suspense, lazy } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { useForm } from 'react-hook-form'
@@ -6,11 +6,15 @@ import toast from 'react-hot-toast'
 import {
   selectIsAuthenticated, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType, selectUser,
   selectIsInitializing, selectProfileCompleted, selectForcePasswordChange,
-  initAuth, setProfileCompleted, clearForcePasswordChange,
+  initAuth, setProfileCompleted, clearForcePasswordChange, refreshToken, logoutUser,
 } from './store/authSlice'
 import { useAutoLogout } from './hooks/useAutoLogout'
+import { useSessionWebSocket } from './hooks/useSessionWebSocket'
 import { useFavicon } from './hooks/useFavicon'
 import api from './services/api'
+import SessionExpiryModal    from './components/auth/SessionExpiryModal'
+import SessionWarningModal   from './components/auth/SessionWarningModal'
+import LoginRequestModal     from './components/auth/LoginRequestModal'
 
 // Layouts — kept eager so the app shell (sidebar + topbar) renders immediately
 import { Layout, AuthLayout } from './components/layout'
@@ -120,6 +124,7 @@ const CustomFieldsPage        = lazy(() => import('./pages/settings').then(m => 
 const BrandingPage            = lazy(() => import('./pages/settings').then(m => ({ default: m.BrandingPage })))
 const SLAConfigPage           = lazy(() => import('./pages/settings').then(m => ({ default: m.SLAConfigPage })))
 const LoginActivityPage       = lazy(() => import('./pages/settings').then(m => ({ default: m.LoginActivityPage })))
+const ActiveSessionsPage      = lazy(() => import('./pages/settings').then(m => ({ default: m.ActiveSessionsPage })))
 
 // HRM
 const HRMDashboard    = lazy(() => import('./pages/hrm/HRMDashboard'))
@@ -644,14 +649,140 @@ const RouteLoader = () => (
   </div>
 )
 
+// ─── Session Manager ──────────────────────────────────────────────────────────
+/**
+ * Listens for session lifecycle CustomEvents fired by useAutoLogout and api.js,
+ * then shows the appropriate premium modal:
+ *
+ *  session:warning          → SessionWarningModal (2-min countdown)
+ *  session:warning:dismiss  → hide warning without logging out
+ *  session:expired          → SessionExpiryModal (idle / remote / token)
+ *
+ * "Stay Logged In":  dispatch refreshToken() → emit session:extend so the idle
+ *                    timer in useAutoLogout resets without a page reload.
+ * "Login Again":     navigate to /login (tokens already wiped by api.js / logoutUser).
+ * "Logout Now":      dispatch logoutUser() then navigate.
+ */
+const SessionManager = () => {
+  const dispatch  = useDispatch()
+  const navigate  = useNavigate()
+
+  const [warnOpen,      setWarnOpen]      = useState(false)
+  const [expiryOpen,    setExpiryOpen]    = useState(false)
+  const [expiryReason,  setExpiryReason]  = useState('idle')
+
+  // Login-request modal (Device A — someone on Device B wants access)
+  const [loginReqOpen, setLoginReqOpen]   = useState(false)
+  const [loginReqData, setLoginReqData]   = useState(null)
+  // Track seen request IDs so a repeated heartbeat poll doesn't re-show the modal
+  const seenRequestIds = useRef(new Set())
+
+  const handleSessionWarning = useCallback(() => setWarnOpen(true),  [])
+  const handleWarnDismiss    = useCallback(() => setWarnOpen(false), [])
+  const handleSessionExpired = useCallback((e) => {
+    setWarnOpen(false)
+    setLoginReqOpen(false)
+    setExpiryReason(e?.detail?.reason || 'idle')
+    setExpiryOpen(true)
+  }, [])
+
+  const handleLoginRequest = useCallback((e) => {
+    const data = e?.detail || {}
+    if (!data.requestId) return
+    // Deduplicate: don't re-show if we've already seen this request_id
+    if (seenRequestIds.current.has(data.requestId)) return
+    seenRequestIds.current.add(data.requestId)
+    // Clean up old IDs to prevent unbounded growth
+    if (seenRequestIds.current.size > 20) {
+      const first = seenRequestIds.current.values().next().value
+      seenRequestIds.current.delete(first)
+    }
+    setLoginReqData(data)
+    setLoginReqOpen(true)
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener('session:warning',         handleSessionWarning)
+    window.addEventListener('session:warning:dismiss', handleWarnDismiss)
+    window.addEventListener('session:expired',         handleSessionExpired)
+    window.addEventListener('session:login_request',   handleLoginRequest)
+    return () => {
+      window.removeEventListener('session:warning',         handleSessionWarning)
+      window.removeEventListener('session:warning:dismiss', handleWarnDismiss)
+      window.removeEventListener('session:expired',         handleSessionExpired)
+      window.removeEventListener('session:login_request',   handleLoginRequest)
+    }
+  }, [handleSessionWarning, handleWarnDismiss, handleSessionExpired, handleLoginRequest])
+
+  const handleStayLoggedIn = useCallback(async () => {
+    try {
+      const result = await dispatch(refreshToken())
+      if (refreshToken.fulfilled.match(result)) {
+        window.dispatchEvent(new CustomEvent('session:extend'))
+        setWarnOpen(false)
+        toast.success('Session extended successfully.', { duration: 2500 })
+      } else {
+        // Refresh failed — treat as expired
+        setWarnOpen(false)
+        setExpiryReason('token')
+        setExpiryOpen(true)
+      }
+    } catch {
+      setWarnOpen(false)
+      setExpiryReason('token')
+      setExpiryOpen(true)
+    }
+  }, [dispatch])
+
+  const handleLogoutNow = useCallback(async () => {
+    setWarnOpen(false)
+    setExpiryOpen(false)
+    await dispatch(logoutUser())
+    navigate('/login', { replace: true })
+  }, [dispatch, navigate])
+
+  const handleLoginAgain = useCallback(() => {
+    setExpiryOpen(false)
+    navigate('/login', { replace: true })
+  }, [navigate])
+
+  const handleExpiryCancel = useCallback(() => {
+    setExpiryOpen(false)
+    // Session is expired — next API call will get 401 → api.js will re-fire this event
+  }, [])
+
+  return (
+    <>
+      <SessionWarningModal
+        isOpen={warnOpen}
+        onStayLoggedIn={handleStayLoggedIn}
+        onLogout={handleLogoutNow}
+      />
+      <SessionExpiryModal
+        isOpen={expiryOpen}
+        reason={expiryReason}
+        onLoginAgain={handleLoginAgain}
+        onCancel={handleExpiryCancel}
+      />
+      <LoginRequestModal
+        isOpen={loginReqOpen}
+        requestData={loginReqData}
+        onClose={() => setLoginReqOpen(false)}
+      />
+    </>
+  )
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 function App() {
-  useAutoLogout()   // idle timer + screen-lock detection + multi-tab sync
-  useFavicon()      // imperatively enforce favicon on every page/route
+  useAutoLogout()          // idle timer + screen-lock detection + multi-tab sync
+  useSessionWebSocket()    // real-time session events via WebSocket + heartbeat
+  useFavicon()             // imperatively enforce favicon on every page/route
 
   return (
     <ErrorBoundary>
     <AuthInitializer>
+    <SessionManager />
     <ForcePasswordModal />
     <ProfileCompleteModal />
     <Suspense fallback={<RouteLoader />}>
@@ -732,6 +863,7 @@ function App() {
         <Route path="/settings/branding"             element={<PermissionRoute permission="crm_settings:view"><BrandingPage /></PermissionRoute>} />
         <Route path="/settings/sla-config"           element={<PermissionRoute permission="crm_settings:view"><SLAConfigPage /></PermissionRoute>} />
         <Route path="/settings/login-activity"       element={<PermissionRoute permission="crm_settings:view"><LoginActivityPage /></PermissionRoute>} />
+        <Route path="/settings/active-sessions"      element={<PermissionRoute permission="crm_settings:view"><ActiveSessionsPage /></PermissionRoute>} />
       </Route>
 
       {/* PARTNER ONLY */}
@@ -924,9 +1056,10 @@ function App() {
           element={<PermissionRoute permission="crm_settings:view"><IntegrationList /></PermissionRoute>} />
 
         {/* ── Always-accessible utility pages ── */}
-        <Route path="/notifications" element={<Notifications />} />
-        <Route path="/my-profile"    element={<Profile />} />
-        <Route path="/profile"       element={<Profile />} />
+        <Route path="/notifications"      element={<Notifications />} />
+        <Route path="/my-profile"         element={<Profile />} />
+        <Route path="/profile"            element={<Profile />} />
+        <Route path="/my-sessions"        element={<ActiveSessionsPage />} />
 
         {/* ── HRM Module ── */}
         <Route path="/hrm"                element={<PermissionRoute permission="hrm:dashboard:view"><HRMDashboard /></PermissionRoute>} />

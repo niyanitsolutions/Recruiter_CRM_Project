@@ -146,8 +146,9 @@ export const login = createAsyncThunk(
         const detail = error.response.data?.detail || {}
         if (detail.active_session) {
           return rejectWithValue({
-            type: 'ACTIVE_SESSION',
-            message: detail.message || 'This account is already active on another device.',
+            type:         'ACTIVE_SESSION',
+            message:      detail.message || 'This account is already active on another device.',
+            session_info: detail.session_info || {},
           })
         }
       }
@@ -582,6 +583,7 @@ export default authSlice.reducer
 
 // ── Selectors ─────────────────────────────────────────────────────────────────
 export const selectAuth               = (state) => state.auth
+export const selectToken              = (state) => state.auth.token
 export const selectUser               = (state) => state.auth.user
 export const selectIsAuthenticated    = (state) => state.auth.isAuthenticated
 export const selectIsInitializing     = (state) => state.auth.isInitializing

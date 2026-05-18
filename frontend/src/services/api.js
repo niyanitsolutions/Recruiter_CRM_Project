@@ -1,7 +1,6 @@
 import axios from 'axios'
 import { getToken, removeToken, removeUser } from '../utils/token'
 
-// Create axios instance
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api/v1',
   headers: { 'Content-Type': 'application/json' },
@@ -19,11 +18,8 @@ api.interceptors.request.use(
 )
 
 // ── Refresh-token deduplication state ─────────────────────────────────────────
-// When multiple requests fail with 401 simultaneously, only ONE refresh call is
-// made. All other failing requests queue up and are retried once the refresh
-// resolves (or they all fail together if the refresh itself fails).
 let _isRefreshing = false
-let _pendingQueue = []   // [{ resolve, reject }]
+let _pendingQueue = []
 
 const _processQueue = (error, token = null) => {
   _pendingQueue.forEach(({ resolve, reject }) => {
@@ -33,38 +29,52 @@ const _processQueue = (error, token = null) => {
   _pendingQueue = []
 }
 
-const _logout = () => {
+/**
+ * Hard logout: wipe local storage and fire a `session:expired` CustomEvent so
+ * App.jsx can show the "Session Expired" modal instead of a silent redirect.
+ * The modal's "Login Again" button handles the actual navigation to /login.
+ * reason: 'token' | 'remote' | 'idle' | 'lock'
+ */
+const _emitExpiredAndLogout = (reason, message) => {
   removeToken()
   removeUser()
   localStorage.removeItem('refresh_token')
-  window.location.href = '/login'
+  localStorage.removeItem('last_activity')
+
+  window.dispatchEvent(new CustomEvent('session:expired', {
+    detail: { reason, message }
+  }))
+
+  // Delayed hard redirect as a safety net — if the modal is dismissed or the
+  // React tree is unmounted, ensure the user eventually reaches /login.
+  setTimeout(() => {
+    if (!localStorage.getItem('access_token')) {
+      window.location.href = '/login'
+    }
+  }, 8000)
 }
 
-// ── Response interceptor — handle errors ─────────────────────────────────────
+// ── Response interceptor ──────────────────────────────────────────────────────
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
 
-    // ── 401: Session ended by another device ─────────────────────────────────
-    // Must be checked before the retry/refresh logic below so it is never
-    // confused with a normal token-expiry 401 and never triggers a refresh attempt.
+    // ── 401: Session terminated by another device ─────────────────────────────
     if (error.response?.status === 401) {
       const _detail = error.response.data?.detail
       if (_detail && typeof _detail === 'object' && _detail.sessionExpired === true) {
-        sessionStorage.setItem(
-          'login_error',
+        _emitExpiredAndLogout(
+          'remote',
           _detail.message || 'Your session was ended because this account logged in on another device.'
         )
-        _logout()
         return Promise.reject(error)
       }
     }
 
-    // ── 401 Unauthorized ──────────────────────────────────────────────────────
+    // ── 401 Unauthorized — attempt token refresh ──────────────────────────────
     if (error.response?.status === 401 && !originalRequest._retry) {
-      // A 401 on the login endpoint itself just means wrong credentials —
-      // do NOT treat it as an expired session or call _logout().
+      // Wrong credentials on auth endpoints — don't treat as session expiry
       const isAuthEndpoint = originalRequest.url?.includes('/auth/login') ||
                              originalRequest.url?.includes('/auth/register')
       if (isAuthEndpoint) {
@@ -73,9 +83,8 @@ api.interceptors.response.use(
 
       const storedRefresh = localStorage.getItem('refresh_token')
 
-      // No refresh token — logout immediately
       if (!storedRefresh) {
-        _logout()
+        _emitExpiredAndLogout('token', 'Your session has expired. Please login again.')
         return Promise.reject(error)
       }
 
@@ -91,7 +100,7 @@ api.interceptors.response.use(
           .catch((err) => Promise.reject(err))
       }
 
-      // This is the first failing request — start the refresh
+      // First failing request — start the refresh
       originalRequest._retry = true
       _isRefreshing = true
 
@@ -114,28 +123,29 @@ api.interceptors.response.use(
       } catch (refreshError) {
         _processQueue(refreshError, null)
         _isRefreshing = false
+
         const errDetail = refreshError.response?.data?.detail || ''
         if (errDetail.startsWith('SUBSCRIPTION_EXPIRED:')) {
           removeToken()
           removeUser()
           localStorage.removeItem('refresh_token')
           sessionStorage.setItem('login_error', errDetail.replace('SUBSCRIPTION_EXPIRED:', ''))
-          window.location.href = '/login'
+          _emitExpiredAndLogout('token', 'Your session has expired. Please login again.')
         } else {
-          _logout()
+          _emitExpiredAndLogout('token', 'Your session has expired. Please login again.')
         }
         return Promise.reject(refreshError)
       }
     }
 
-    // ── 402 Payment Required ─────────────────────────────────────────────────
+    // ── 402 Payment Required ──────────────────────────────────────────────────
     if (error.response?.status === 402) {
-      console.error('Plan expired:', error.response.data?.detail)
+      console.error('[API] Plan expired:', error.response.data?.detail)
     }
 
-    // ── 403 Forbidden ────────────────────────────────────────────────────────
+    // ── 403 Forbidden ─────────────────────────────────────────────────────────
     if (error.response?.status === 403) {
-      console.error('Access denied:', error.response.data?.detail)
+      console.error('[API] Access denied:', error.response.data?.detail)
     }
 
     return Promise.reject(error)
