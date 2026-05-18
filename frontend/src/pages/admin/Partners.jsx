@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import usePermissions from '../../hooks/usePermissions'
 import {
   Plus,
   Search,
-  Filter,
   MoreVertical,
   Edit,
   Trash2,
@@ -19,6 +18,9 @@ import {
 import partnerService from '../../services/partnerService'
 import ModalPortal from '../../components/common/ModalPortal'
 import { formatDateTime } from '../../utils/format'
+
+const PartnerPayoutsPage = lazy(() => import('../phase4').then(m => ({ default: m.PartnerPayouts })))
+const InvoicesPage        = lazy(() => import('../phase4').then(m => ({ default: m.Invoices })))
 
 // Status Badge Component
 const StatusBadge = ({ status }) => {
@@ -233,41 +235,42 @@ const Partners = () => {
   const [loading, setLoading] = useState(true)
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 })
 
-  // Filters
-  const [search, setSearch]           = useState(searchParams.get('search') || '')
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
-  const [showFilters, setShowFilters]  = useState(false)
+  // Active tab from URL: active | blocked | billing | payouts
+  const activeTab = searchParams.get('tab') || 'active'
 
-  // Dropdown data
-  const [statuses, setStatuses] = useState([])
+  // Permission-gated tab list
+  const tabs = [
+    has('partners:view')      && { key: 'active',   label: 'Active Partners' },
+    has('partners:view')      && { key: 'blocked',  label: 'Blocked Partners' },
+    has('accounts:invoices')  && { key: 'billing',  label: 'Partner Billing' },
+    has('accounts:payouts')   && { key: 'payouts',  label: 'Partner Payouts' },
+  ].filter(Boolean)
+
+  // Filters (used by Active/Blocked tabs)
+  const [search, setSearch]       = useState(searchParams.get('search') || '')
+  const [showFilters, setShowFilters] = useState(false)
 
   // Dialogs
   const [deleteDialog,        setDeleteDialog]        = useState({ open: false, partner: null })
   const [statusDialog,        setStatusDialog]        = useState({ open: false, partner: null, status: '' })
   const [resetPasswordDialog, setResetPasswordDialog] = useState({ open: false, partner: null })
 
-  // Fetch dropdown data
-  useEffect(() => {
-    const fetchDropdownData = async () => {
-      try {
-        const res = await partnerService.getAvailableStatuses()
-        setStatuses(res.data || [])
-      } catch (err) {
-        console.error('Failed to fetch statuses:', err)
-      }
-    }
-    fetchDropdownData()
-  }, [])
+  const handleTabChange = (tab) => {
+    setSearch('')
+    setShowFilters(false)
+    setSearchParams(new URLSearchParams([['tab', tab]]))
+  }
 
-  // Fetch partners
+  // Fetch partners (only for Active/Blocked tabs)
   const fetchPartners = useCallback(async () => {
+    if (activeTab !== 'active' && activeTab !== 'blocked') return
     try {
       setLoading(true)
       const params = {
         page:      parseInt(searchParams.get('page') || '1'),
         page_size: 10,
         search:    searchParams.get('search') || undefined,
-        status:    searchParams.get('status') || undefined,
+        status:    activeTab === 'blocked' ? 'inactive' : 'active',
       }
       const response = await partnerService.getPartners(params)
       setPartners(response.data || [])
@@ -277,7 +280,7 @@ const Partners = () => {
     } finally {
       setLoading(false)
     }
-  }, [searchParams])
+  }, [searchParams, activeTab])
 
   useEffect(() => {
     fetchPartners()
@@ -286,8 +289,8 @@ const Partners = () => {
   // Apply filters
   const applyFilters = () => {
     const params = new URLSearchParams()
+    params.set('tab', activeTab)
     if (search) params.set('search', search)
-    if (statusFilter) params.set('status', statusFilter)
     params.set('page', '1')
     setSearchParams(params)
   }
@@ -295,8 +298,7 @@ const Partners = () => {
   // Clear filters
   const clearFilters = () => {
     setSearch('')
-    setStatusFilter('')
-    setSearchParams(new URLSearchParams())
+    setSearchParams(new URLSearchParams([['tab', activeTab]]))
   }
 
   // Handle page change
@@ -338,17 +340,17 @@ const Partners = () => {
     }
   }
 
-  const hasFilters = search || statusFilter
+  const hasFilters = !!search
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-surface-900">Partners</h1>
-          <p className="text-surface-500 mt-1">Manage your organization's partners</p>
+          <h1 className="text-2xl font-bold text-surface-900">Sourcing Partners</h1>
+          <p className="text-surface-500 mt-1">Manage your sourcing partners, billing, and payouts</p>
         </div>
-        {has('partners:create') && (
+        {has('partners:create') && (activeTab === 'active' || activeTab === 'blocked') && (
           <Link
             to="/partners/new"
             className="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white rounded-lg transition-colors"
@@ -358,6 +360,41 @@ const Partners = () => {
           </Link>
         )}
       </div>
+
+      {/* Tabs */}
+      {tabs.length > 1 && (
+        <div className="flex gap-1 bg-surface-100 p-1 rounded-xl w-fit">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => handleTabChange(tab.key)}
+              className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors
+                ${activeTab === tab.key
+                  ? 'bg-white text-accent-600 shadow-sm'
+                  : 'text-surface-500 hover:text-surface-800'}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Billing tab */}
+      {activeTab === 'billing' && (
+        <Suspense fallback={<div className="p-8 text-center text-surface-500">Loading…</div>}>
+          <InvoicesPage />
+        </Suspense>
+      )}
+
+      {/* Payouts tab */}
+      {activeTab === 'payouts' && (
+        <Suspense fallback={<div className="p-8 text-center text-surface-500">Loading…</div>}>
+          <PartnerPayoutsPage />
+        </Suspense>
+      )}
+
+      {/* Partner list (Active / Blocked tabs) */}
+      {(activeTab === 'active' || activeTab === 'blocked') && (<>
 
       {/* Search & Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-4">
@@ -375,56 +412,22 @@ const Partners = () => {
             />
           </div>
 
-          {/* Filter Toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
-              hasFilters ? 'border-accent-500 text-accent-600 bg-accent-50' : 'border-surface-300 text-surface-700 hover:bg-surface-50'
-            }`}
-          >
-            <Filter className="w-4 h-4" />
-            Filters
-            {statusFilter && (
-              <span className="w-5 h-5 bg-accent-600 text-white text-xs rounded-full flex items-center justify-center">1</span>
-            )}
-          </button>
-
           <button
             onClick={applyFilters}
             className="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white rounded-lg transition-colors"
           >
             Search
           </button>
-        </div>
 
-        {/* Filter Dropdowns */}
-        {showFilters && (
-          <div className="mt-4 pt-4 border-t border-surface-200 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
-              >
-                <option value="">All Statuses</option>
-                {statuses.map(s => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
-            </div>
-            {hasFilters && (
-              <div className="md:col-span-2 flex items-end">
-                <button
-                  onClick={clearFilters}
-                  className="flex items-center gap-1 text-sm text-surface-600 hover:text-surface-900"
-                >
-                  <X className="w-4 h-4" /> Clear all filters
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+          {hasFilters && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-2 px-4 py-2 border border-surface-300 text-surface-700 rounded-lg hover:bg-surface-50"
+            >
+              <X className="w-4 h-4" /> Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Partners Table */}
@@ -547,6 +550,7 @@ const Partners = () => {
         onConfirm={handleResetPassword}
         onCancel={() => setResetPasswordDialog({ open: false, partner: null })}
       />
+      </>)}
     </div>
   )
 }

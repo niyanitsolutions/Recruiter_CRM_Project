@@ -6,7 +6,7 @@ import toast from 'react-hot-toast'
 import {
   Mail, Lock, ArrowRight, AlertCircle, Calendar, XCircle,
   RefreshCw, CheckCircle, UserX, Building2, Monitor, Globe,
-  Clock, Shield, LogIn, Smartphone,
+  Clock, Shield, Smartphone,
 } from 'lucide-react'
 import {
   login, loginWithTenant, forceLogoutAndLogin, clearError, clearTenantSelection,
@@ -88,7 +88,6 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
   const { identifier, password, sessionInfo = {} } = data || {}
 
   const [phase,       setPhase]       = useState('confirm')
-  const [loading,     setLoading]     = useState(false)
   const [requestId,   setRequestId]   = useState(null)
   const [countdown,   setCountdown]   = useState(300)   // 5-min TTL display
 
@@ -104,27 +103,6 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
     clearInterval(pollRef.current)
     clearInterval(countRef.current)
   }, [])
-
-  // ── Force takeover (immediate path) ───────────────────────────────────────
-  const handleForceLogin = async () => {
-    setLoading(true)
-    clearInterval(pollRef.current)
-    clearInterval(countRef.current)
-    try {
-      await dispatch(forceLogoutAndLogin({ identifier, password, remember_me: rememberMe })).unwrap()
-      if (rememberMe) { setSavedEmail(identifier); setSavedPassword(password) }
-      else             { removeSavedEmail();        removeSavedPassword() }
-      toast.success('Login successful!')
-      onLoginSuccess?.()
-      onClose()
-    } catch (err) {
-      const msg = typeof err === 'string' ? err : 'Login failed. Please try again.'
-      toast.error(msg)
-      onClose()
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // ── Request access (polite path) ──────────────────────────────────────────
   const handleRequestAccess = async () => {
@@ -337,29 +315,14 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
             <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', marginBottom: 16 }} />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Primary: request polite approval from the active device */}
               <button
                 onClick={handleRequestAccess}
-                disabled={loading}
-                style={btnStyle('primary', loading)}
+                style={btnStyle('primary')}
               >
                 <Shield size={14} /> Request Access from Active Device
               </button>
 
-              {/* Secondary: force takeover immediately */}
-              <button
-                onClick={handleForceLogin}
-                disabled={loading}
-                style={{
-                  ...btnStyle('ghost'),
-                  borderColor: 'rgba(239,68,68,0.25)',
-                  color: '#f87171',
-                }}
-              >
-                {loading ? <><Spinner /> Logging in…</> : <><LogIn size={14} /> Force Login (log out other device)</>}
-              </button>
-
-              <button onClick={onClose} disabled={loading} style={btnStyle('ghost')}>
+              <button onClick={onClose} style={btnStyle('ghost')}>
                 Cancel
               </button>
             </div>

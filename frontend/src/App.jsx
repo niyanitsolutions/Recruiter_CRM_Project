@@ -677,12 +677,20 @@ const SessionManager = () => {
   // Track seen request IDs so a repeated heartbeat poll doesn't re-show the modal
   const seenRequestIds = useRef(new Set())
 
+  // First-reason-wins: once the expiry modal opens, don't let a subsequent
+  // session:expired (e.g. from api.js retrying after idle-logout) override
+  // the original reason (idle → would incorrectly show "remote" message).
+  const expiryReasonLockedRef = useRef(false)
+
   const handleSessionWarning = useCallback(() => setWarnOpen(true),  [])
   const handleWarnDismiss    = useCallback(() => setWarnOpen(false), [])
   const handleSessionExpired = useCallback((e) => {
     setWarnOpen(false)
     setLoginReqOpen(false)
-    setExpiryReason(e?.detail?.reason || 'idle')
+    if (!expiryReasonLockedRef.current) {
+      expiryReasonLockedRef.current = true
+      setExpiryReason(e?.detail?.reason || 'idle')
+    }
     setExpiryOpen(true)
   }, [])
 
@@ -743,11 +751,13 @@ const SessionManager = () => {
 
   const handleLoginAgain = useCallback(() => {
     setExpiryOpen(false)
+    expiryReasonLockedRef.current = false
     navigate('/login', { replace: true })
   }, [navigate])
 
   const handleExpiryCancel = useCallback(() => {
     setExpiryOpen(false)
+    expiryReasonLockedRef.current = false
     // Session is expired — next API call will get 401 → api.js will re-fire this event
   }, [])
 

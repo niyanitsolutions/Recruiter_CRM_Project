@@ -102,11 +102,33 @@ export default function LoginRequestModal({ isOpen, requestData, onClose }) {
     try {
       await api.post('/sessions/approve-request', { request_id: requestData.requestId })
       setPhase('approved')
-      // Device A's session was revoked by the backend — auto-close so the
-      // session-expired modal can take over gracefully.
-      setTimeout(() => onClose?.(), 2500)
+      // Backend revoked Device A's session — auto-close so session:expired modal takes over.
+      setTimeout(() => onClose?.(), 2000)
     } catch (e) {
-      setErrMsg(e?.response?.data?.detail || 'Failed to approve. Please try again.')
+      const status = e?.response?.status
+
+      // Auth errors (401/403) mean Device A's session was already ended by the
+      // backend as part of approval processing, OR by a concurrent session event.
+      // Either way the approval succeeded from Device B's perspective.
+      // Close gracefully — the session:expired modal will take over.
+      if (!status || status === 401 || status === 403) {
+        setTimeout(() => onClose?.(), 300)
+        return
+      }
+
+      // 400 "already approved" — same successful outcome, close cleanly.
+      if (status === 400) {
+        setPhase('approved')
+        setTimeout(() => onClose?.(), 1500)
+        return
+      }
+
+      // Genuine failure (404 request not found, 5xx server error, etc.)
+      const detail = e?.response?.data?.detail
+      setErrMsg(
+        typeof detail === 'string' ? detail
+          : detail?.message || 'Failed to approve. Please try again.'
+      )
       setPhase('error')
     }
   }

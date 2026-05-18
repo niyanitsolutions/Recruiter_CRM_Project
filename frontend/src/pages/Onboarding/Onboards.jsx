@@ -41,8 +41,15 @@ const STAT_CARDS = [
   { key: 'payout_eligible',   label: 'Payout Eligible',    color: 'var(--stat-orange)' },
 ]
 
+const TABS = [
+  { key: 'selected',      label: 'Selected',      statuses: ['offer_released', 'offer_accepted'] },
+  { key: 'offer_released', label: 'Offer Released', statuses: ['offer_declined', 'doj_confirmed', 'doj_extended'] },
+  { key: 'onboarded',     label: 'Onboarded',      statuses: ['joined', 'no_show', 'absconded', 'terminated', 'completed'] },
+]
+
 const Onboards = () => {
   const { has } = usePermissions()
+  const [activeTab, setActiveTab] = useState('selected')
   const [onboards, setOnboards] = useState([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState(null)
@@ -57,12 +64,19 @@ const Onboards = () => {
   useEffect(() => {
     fetchOnboards()
     fetchStats()
-  }, [filters])
+  }, [filters, activeTab])
 
   const fetchOnboards = async () => {
     try {
       setLoading(true)
-      const response = await onboardService.getAll(filters)
+      const tabDef = TABS.find(t => t.key === activeTab)
+      const effectiveStatuses = filters.status
+        ? [filters.status]
+        : (tabDef?.statuses || [])
+      const response = await onboardService.getAll({
+        ...filters,
+        status: effectiveStatuses.join(',') || undefined,
+      })
       setOnboards(response.items || [])
       setPagination({ total: response.total, pages: response.pages })
     } catch (error) {
@@ -85,6 +99,11 @@ const Onboards = () => {
     setFilters(prev => ({ ...prev, [key]: value, page: 1 }))
   }
 
+  const handleTabChange = (tab) => {
+    setActiveTab(tab)
+    setFilters(prev => ({ ...prev, status: '', search: '', page: 1 }))
+  }
+
   return (
     <div className="p-6 space-y-6 page-enter">
       {/* Header */}
@@ -99,6 +118,30 @@ const Onboards = () => {
             Release Offer
           </Link>
         )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-surface-100 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-card-alt)' }}>
+        {TABS.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => handleTabChange(tab.key)}
+            style={{
+              padding: '8px 20px',
+              borderRadius: 8,
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 14,
+              fontWeight: 500,
+              transition: 'all 0.15s',
+              background: activeTab === tab.key ? 'var(--bg-card)' : 'transparent',
+              color: activeTab === tab.key ? 'var(--accent)' : 'var(--text-muted)',
+              boxShadow: activeTab === tab.key ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Stats Cards */}
@@ -145,9 +188,9 @@ const Onboards = () => {
             onChange={(e) => handleFilterChange('status', e.target.value)}
             className="input"
           >
-            <option value="">All Status</option>
-            {Object.entries(STATUS_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
+            <option value="">All in Tab</option>
+            {(TABS.find(t => t.key === activeTab)?.statuses || []).map(s => (
+              <option key={s} value={s}>{STATUS_LABELS[s]}</option>
             ))}
           </select>
         </div>

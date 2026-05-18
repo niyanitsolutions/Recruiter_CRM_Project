@@ -10,12 +10,14 @@
 
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { LogIn, Monitor, Clock, ShieldAlert } from 'lucide-react'
+import { LogIn, Monitor, Clock, ShieldAlert, CheckCircle, Lock } from 'lucide-react'
 
 const REASONS = {
-  idle:       { icon: Clock,        color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.25)',  title: 'Session Expired',            subtitle: 'Your session has expired due to inactivity.\nPlease login again to continue.' },
-  remote:     { icon: Monitor,      color: '#ef4444', bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.25)',   title: 'Session Ended',              subtitle: 'Your session was ended because this account\nlogged in on another device.' },
-  token:      { icon: ShieldAlert,  color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.25)', title: 'Session Expired',            subtitle: 'Your session has expired.\nPlease login again to continue.' },
+  idle:     { icon: Clock,         color: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  border: 'rgba(245,158,11,0.25)',  title: 'Session Expired',  subtitle: 'Your session has expired due to inactivity.\nPlease login again to continue.' },
+  remote:   { icon: Monitor,       color: '#ef4444', bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.25)',   title: 'Session Ended',    subtitle: 'Your session was ended because this account\nlogged in on another device.' },
+  token:    { icon: ShieldAlert,   color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.25)', title: 'Session Expired',  subtitle: 'Your session has expired.\nPlease login again to continue.' },
+  approved: { icon: CheckCircle,   color: '#22c55e', bg: 'rgba(34,197,94,0.12)',  border: 'rgba(34,197,94,0.25)',  title: 'Session Ended',    subtitle: 'You approved access for another device.\nYour current session has ended.' },
+  lock:     { icon: Lock,          color: '#64748b', bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.25)', title: 'Session Locked',  subtitle: 'Your session ended after the device was idle for too long.\nPlease login again to continue.' },
 }
 
 export default function SessionExpiryModal({ isOpen, reason = 'idle', onLoginAgain, onCancel }) {

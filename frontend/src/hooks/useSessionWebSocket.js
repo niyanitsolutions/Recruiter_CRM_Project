@@ -8,7 +8,7 @@
  *  session_revoked      → 'session:expired'       (reason='remote')
  *  all_sessions_revoked → 'session:expired'       (reason='remote', only if THIS session was revoked)
  *  login_request        → 'session:login_request' (Device A shows approval modal)
- *  login_approved       → 'session:login_approved' (Device B can now force-login)
+ *  login_approved       → 'session:expired' reason='approved' (Device A cleanly ends session)
  *  login_denied         → 'session:login_denied'   (Device B shows denial message)
  *  ping                 → silently ignored
  *
@@ -108,8 +108,11 @@ export function useSessionWebSocket() {
               break
 
             case 'login_approved':
-              window.dispatchEvent(new CustomEvent('session:login_approved', {
-                detail: { requestId: msg.request_id },
+              // This device (Device A) approved access for another device.
+              // The backend already revoked this session — signal a clean end.
+              // SessionExpiryModal will show "You approved access for another device."
+              window.dispatchEvent(new CustomEvent('session:expired', {
+                detail: { reason: 'approved', message: 'You approved access for another device.' },
               }))
               break
 

@@ -265,16 +265,17 @@ const Users = () => {
   const [seatModalOpen,    setSeatModalOpen]    = useState(false)
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
 
+  // Active / Inactive tab
+  const activeTab = searchParams.get('tab') || 'active'
+
   // Filters
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [roleFilter, setRoleFilter] = useState(searchParams.get('role') || '')
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '')
   const [departmentFilter, setDepartmentFilter] = useState(searchParams.get('department_id') || '')
   const [showFilters, setShowFilters] = useState(false)
 
   // Dropdown data
   const [roles, setRoles] = useState([])
-  const [statuses, setStatuses] = useState([])
   const [departments, setDepartments] = useState([])
 
   // Dialogs
@@ -294,13 +295,11 @@ const Users = () => {
   useEffect(() => {
     const fetchDropdownData = async () => {
       try {
-        const [rolesRes, statusesRes, deptsRes] = await Promise.all([
+        const [rolesRes, deptsRes] = await Promise.all([
           userService.getAvailableRoles(),
-          userService.getAvailableStatuses(),
           departmentService.getDepartments()
         ])
         setRoles(rolesRes.data || [])
-        setStatuses(statusesRes.data || [])
         setDepartments(deptsRes.data || [])
       } catch (err) {
         console.error('Failed to fetch dropdown data:', err)
@@ -327,7 +326,7 @@ const Users = () => {
         page_size: 10,
         search: searchParams.get('search') || undefined,
         role: searchParams.get('role') || undefined,
-        status: searchParams.get('status') || undefined,
+        status: activeTab === 'inactive' ? 'inactive' : 'active',
         department_id: searchParams.get('department_id') || undefined,
       }
       
@@ -348,9 +347,9 @@ const Users = () => {
   // Apply filters
   const applyFilters = () => {
     const params = new URLSearchParams()
+    params.set('tab', activeTab)
     if (search) params.set('search', search)
     if (roleFilter) params.set('role', roleFilter)
-    if (statusFilter) params.set('status', statusFilter)
     if (departmentFilter) params.set('department_id', departmentFilter)
     params.set('page', '1')
     setSearchParams(params)
@@ -360,9 +359,16 @@ const Users = () => {
   const clearFilters = () => {
     setSearch('')
     setRoleFilter('')
-    setStatusFilter('')
     setDepartmentFilter('')
-    setSearchParams(new URLSearchParams())
+    setSearchParams(new URLSearchParams([['tab', activeTab]]))
+  }
+
+  // Switch tabs (resets filters)
+  const handleTabChange = (tab) => {
+    setSearch('')
+    setRoleFilter('')
+    setDepartmentFilter('')
+    setSearchParams(new URLSearchParams([['tab', tab]]))
   }
 
   // Handle page change
@@ -404,7 +410,7 @@ const Users = () => {
     }
   }
 
-  const hasFilters = search || roleFilter || statusFilter || departmentFilter
+  const hasFilters = search || roleFilter || departmentFilter
 
   return (
     <div className="p-6 space-y-6">
@@ -464,6 +470,25 @@ const Users = () => {
         </div>
       </div>
 
+      {/* Active / Inactive Tabs */}
+      <div className="flex gap-1 bg-surface-100 p-1 rounded-xl w-fit">
+        {[
+          { key: 'active',   label: 'Active Users' },
+          { key: 'inactive', label: 'Inactive Users' },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => handleTabChange(tab.key)}
+            className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors
+              ${activeTab === tab.key
+                ? 'bg-white text-accent-600 shadow-sm'
+                : 'text-surface-500 hover:text-surface-800'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {/* Search & Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-4">
         <div className="flex flex-col md:flex-row gap-4">
@@ -491,7 +516,7 @@ const Users = () => {
             Filters
             {hasFilters && (
               <span className="w-5 h-5 bg-accent-600 text-white text-xs rounded-full flex items-center justify-center">
-                {[roleFilter, statusFilter, departmentFilter].filter(Boolean).length}
+                {[roleFilter, departmentFilter].filter(Boolean).length}
               </span>
             )}
           </button>
@@ -506,7 +531,7 @@ const Users = () => {
 
         {/* Filter Dropdowns */}
         {showFilters && (
-          <div className="mt-4 pt-4 border-t border-surface-200 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mt-4 pt-4 border-t border-surface-200 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">Role</label>
               <select
@@ -517,19 +542,6 @@ const Users = () => {
                 <option value="">All Roles</option>
                 {roles.map(role => (
                   <option key={role.value} value={role.value}>{role.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">Status</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
-              >
-                <option value="">All Statuses</option>
-                {statuses.map(status => (
-                  <option key={status.value} value={status.value}>{status.label}</option>
                 ))}
               </select>
             </div>
@@ -547,7 +559,7 @@ const Users = () => {
               </select>
             </div>
             {hasFilters && (
-              <div className="md:col-span-3">
+              <div className="md:col-span-2">
                 <button
                   onClick={clearFilters}
                   className="flex items-center gap-1 text-sm text-surface-600 hover:text-surface-900"
