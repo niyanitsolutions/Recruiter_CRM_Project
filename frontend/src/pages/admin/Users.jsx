@@ -2,49 +2,39 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import usePermissions from '../../hooks/usePermissions'
 import {
-  Plus,
-  Search,
-  Filter,
-  MoreVertical,
-  Edit,
-  Trash2,
-  Eye,
-  EyeOff,
-  UserCheck,
-  UserX,
-  Key,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  Download,
+  Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, EyeOff,
+  UserCheck, UserX, Key, ChevronLeft, ChevronRight, X, Download,
+  Building, Award, Save, Loader2, Users as UsersIcon,
 } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import userService from '../../services/userService'
 import departmentService from '../../services/departmentService'
+import designationService from '../../services/designationService'
 import subscriptionService from '../../services/subscriptionService'
 import SeatLimitModal from '../../components/subscription/SeatLimitModal'
 import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 import SubscriptionBanner from '../../components/subscription/SubscriptionBanner'
 import ExportModal from '../../components/common/ExportModal'
 import ModalPortal from '../../components/common/ModalPortal'
+import TableScroll from '../../components/common/TableScroll'
 import { formatDateTime } from '../../utils/format'
 
-// Status Badge Component
+// ─── Shared sub-components ───────────────────────────────────────────────────
+
 const StatusBadge = ({ status }) => {
-  const statusClasses = {
+  const cls = {
     active: 'bg-green-100 text-green-700',
     inactive: 'bg-surface-100 text-surface-600',
     suspended: 'bg-red-100 text-red-700',
     pending: 'bg-yellow-100 text-yellow-700',
   }
-
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusClasses[status] || statusClasses.inactive}`}>
+    <span className={`px-2 py-1 rounded-full text-xs font-medium ${cls[status] || cls.inactive}`}>
       {status}
     </span>
   )
 }
 
-// User Actions Dropdown
 const UserActions = ({ user, onEdit, onDelete, onStatusChange, onResetPassword }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
@@ -76,14 +66,9 @@ const UserActions = ({ user, onEdit, onDelete, onStatusChange, onResetPassword }
 
   return (
     <div>
-      <button
-        ref={buttonRef}
-        onClick={handleOpen}
-        className="p-2 hover:bg-surface-100 rounded-lg transition-colors"
-      >
+      <button ref={buttonRef} onClick={handleOpen} className="p-2 hover:bg-surface-100 rounded-lg transition-colors">
         <MoreVertical className="w-4 h-4 text-surface-500" />
       </button>
-
       {isOpen && (
         <>
           <div className="fixed inset-0 z-[9998]" onClick={() => setIsOpen(false)} />
@@ -100,7 +85,7 @@ const UserActions = ({ user, onEdit, onDelete, onStatusChange, onResetPassword }
             </Link>
             {canEdit && (
               <button
-                onClick={() => { onEdit(user); setIsOpen(false); }}
+                onClick={() => { onEdit(user); setIsOpen(false) }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-surface-700 hover:bg-surface-50"
               >
                 <Edit className="w-4 h-4" /> Edit User
@@ -108,7 +93,7 @@ const UserActions = ({ user, onEdit, onDelete, onStatusChange, onResetPassword }
             )}
             {canEdit && (
               <button
-                onClick={() => { onResetPassword(user); setIsOpen(false); }}
+                onClick={() => { onResetPassword(user); setIsOpen(false) }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-surface-700 hover:bg-surface-50"
               >
                 <Key className="w-4 h-4" /> Reset Password
@@ -119,14 +104,14 @@ const UserActions = ({ user, onEdit, onDelete, onStatusChange, onResetPassword }
                 <hr className="my-1" />
                 {user.status === 'active' ? (
                   <button
-                    onClick={() => { onStatusChange(user, 'inactive'); setIsOpen(false); }}
+                    onClick={() => { onStatusChange(user, 'inactive'); setIsOpen(false) }}
                     className="w-full flex items-center gap-2 px-4 py-2 text-sm text-yellow-600 hover:bg-yellow-50"
                   >
                     <UserX className="w-4 h-4" /> Deactivate
                   </button>
                 ) : (
                   <button
-                    onClick={() => { onStatusChange(user, 'active'); setIsOpen(false); }}
+                    onClick={() => { onStatusChange(user, 'active'); setIsOpen(false) }}
                     className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-600 hover:bg-green-50"
                   >
                     <UserCheck className="w-4 h-4" /> Activate
@@ -136,7 +121,7 @@ const UserActions = ({ user, onEdit, onDelete, onStatusChange, onResetPassword }
             )}
             {canDelete && !user.is_owner && (
               <button
-                onClick={() => { onDelete(user); setIsOpen(false); }}
+                onClick={() => { onDelete(user); setIsOpen(false) }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
               >
                 <Trash2 className="w-4 h-4" /> Delete User
@@ -149,10 +134,8 @@ const UserActions = ({ user, onEdit, onDelete, onStatusChange, onResetPassword }
   )
 }
 
-// Confirm Dialog
 const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Confirm', danger = false }) => {
   if (!isOpen) return null
-
   return (
     <ModalPortal isOpen={isOpen}>
       <div className="fixed inset-0 z-[9999] flex items-center justify-center">
@@ -161,17 +144,12 @@ const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel, confirmTex
           <h3 className="text-lg font-semibold text-surface-900">{title}</h3>
           <p className="mt-2 text-surface-600">{message}</p>
           <div className="mt-6 flex gap-3 justify-end">
-            <button
-              onClick={onCancel}
-              className="px-4 py-2 text-surface-700 hover:bg-surface-100 rounded-lg transition-colors"
-            >
+            <button onClick={onCancel} className="px-4 py-2 text-surface-700 hover:bg-surface-100 rounded-lg transition-colors">
               Cancel
             </button>
             <button
               onClick={onConfirm}
-              className={`px-4 py-2 rounded-lg text-white transition-colors ${
-                danger ? 'bg-red-600 hover:bg-red-700' : 'bg-accent-600 hover:bg-accent-700'
-              }`}
+              className={`px-4 py-2 rounded-lg text-white transition-colors ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-accent-600 hover:bg-accent-700'}`}
             >
               {confirmText}
             </button>
@@ -182,14 +160,11 @@ const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel, confirmTex
   )
 }
 
-// Reset Password Dialog
 const ResetPasswordDialog = ({ isOpen, user, onConfirm, onCancel }) => {
   const [password, setPassword] = useState('')
   const [mustChange, setMustChange] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
-
   if (!isOpen) return null
-
   return (
     <ModalPortal isOpen={isOpen}>
       <div className="fixed inset-0 z-[9999] flex items-center justify-center">
@@ -197,18 +172,15 @@ const ResetPasswordDialog = ({ isOpen, user, onConfirm, onCancel }) => {
         <div className="relative bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
           <h3 className="text-lg font-semibold text-surface-900">Reset Password</h3>
           <p className="mt-2 text-surface-600">Reset password for {user?.full_name}</p>
-
           <div className="mt-4 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                New Password
-              </label>
+              <label className="block text-sm font-medium text-surface-700 mb-1">New Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3 py-2 pr-10 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                  className="w-full px-3 py-2 pr-10 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500"
                   placeholder="Enter new password"
                 />
                 <button
@@ -225,17 +197,13 @@ const ResetPasswordDialog = ({ isOpen, user, onConfirm, onCancel }) => {
                 type="checkbox"
                 checked={mustChange}
                 onChange={(e) => setMustChange(e.target.checked)}
-                className="rounded border-surface-300 text-accent-600 focus:ring-accent-500"
+                className="rounded border-surface-300 text-accent-600"
               />
               <span className="text-sm text-surface-700">Require password change on next login</span>
             </label>
           </div>
-
           <div className="mt-6 flex gap-3 justify-end">
-            <button
-              onClick={onCancel}
-              className="px-4 py-2 text-surface-700 hover:bg-surface-100 rounded-lg transition-colors"
-            >
+            <button onClick={onCancel} className="px-4 py-2 text-surface-700 hover:bg-surface-100 rounded-lg transition-colors">
               Cancel
             </button>
             <button
@@ -252,73 +220,351 @@ const ResetPasswordDialog = ({ isOpen, user, onConfirm, onCancel }) => {
   )
 }
 
+// ─── Department inline modal ─────────────────────────────────────────────────
+
+const DepartmentModal = ({ dept, onClose, onSaved }) => {
+  const [form, setForm] = useState({
+    name: dept?.name || '',
+    description: dept?.description || '',
+    head_user_id: dept?.head_user_id || '',
+    is_active: dept?.is_active ?? true,
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [headUsers, setHeadUsers] = useState([])
+
+  useEffect(() => {
+    userService.getUsers({ page_size: 200, status: 'active' })
+      .then(r => setHeadUsers(r.data || []))
+      .catch(() => {})
+  }, [])
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target
+    setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.name.trim()) { setError('Department name is required'); return }
+    try {
+      setSaving(true)
+      const data = { ...form }
+      Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
+      if (dept?.id) {
+        await departmentService.updateDepartment(dept.id, data)
+        toast.success('Department updated')
+      } else {
+        await departmentService.createDepartment(data)
+        toast.success('Department created')
+      }
+      onSaved()
+    } catch (err) {
+      const detail = err.response?.data?.detail || err.response?.data?.message
+      setError(typeof detail === 'string' ? detail : 'Failed to save department')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <ModalPortal isOpen>
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+          <h3 className="text-lg font-semibold text-surface-900 mb-4">
+            {dept?.id ? 'Edit Department' : 'Add Department'}
+          </h3>
+          {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">
+                Department Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                placeholder="e.g. Human Resources"
+                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">Description</label>
+              <textarea
+                name="description"
+                value={form.description}
+                onChange={handleChange}
+                rows={2}
+                placeholder="Brief description of this department"
+                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">Department Head</label>
+              <select
+                name="head_user_id"
+                value={form.head_user_id}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500"
+              >
+                <option value="">— Select Head —</option>
+                {headUsers.map(u => (
+                  <option key={u.id} value={u.id}>{u.full_name}</option>
+                ))}
+              </select>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                name="is_active"
+                checked={form.is_active}
+                onChange={handleChange}
+                className="rounded border-surface-300 text-accent-600"
+              />
+              <span className="text-sm text-surface-700">Active</span>
+            </label>
+            <div className="flex justify-end gap-3 pt-4 border-t border-surface-100">
+              <button type="button" onClick={onClose} className="px-4 py-2 border border-surface-300 rounded-lg text-surface-700 hover:bg-surface-50">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex items-center gap-2 px-4 py-2 bg-accent-600 text-white rounded-lg hover:bg-accent-700 disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </ModalPortal>
+  )
+}
+
+// ─── Designation inline modal ─────────────────────────────────────────────────
+
+const DesignationModal = ({ desig, deptList, onClose, onSaved }) => {
+  const [form, setForm] = useState({
+    name: desig?.name || '',
+    description: desig?.description || '',
+    department_id: desig?.department_id || '',
+    is_active: desig?.is_active ?? true,
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target
+    setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.name.trim()) { setError('Designation name is required'); return }
+    try {
+      setSaving(true)
+      const data = { ...form }
+      Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
+      if (desig?.id) {
+        await designationService.updateDesignation(desig.id, data)
+        toast.success('Designation updated')
+      } else {
+        await designationService.createDesignation(data)
+        toast.success('Designation created')
+      }
+      onSaved()
+    } catch (err) {
+      const detail = err.response?.data?.detail || err.response?.data?.message
+      setError(typeof detail === 'string' ? detail : 'Failed to save designation')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <ModalPortal isOpen>
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+        <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
+          <h3 className="text-lg font-semibold text-surface-900 mb-4">
+            {desig?.id ? 'Edit Designation' : 'Add Designation'}
+          </h3>
+          {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">
+                Designation Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                placeholder="e.g. Software Engineer"
+                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">Description</label>
+              <textarea
+                name="description"
+                value={form.description}
+                onChange={handleChange}
+                rows={2}
+                placeholder="Brief description of this designation"
+                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">Department</label>
+              <select
+                name="department_id"
+                value={form.department_id}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500"
+              >
+                <option value="">— All Departments —</option>
+                {deptList.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                name="is_active"
+                checked={form.is_active}
+                onChange={handleChange}
+                className="rounded border-surface-300 text-accent-600"
+              />
+              <span className="text-sm text-surface-700">Active</span>
+            </label>
+            <div className="flex justify-end gap-3 pt-4 border-t border-surface-100">
+              <button type="button" onClick={onClose} className="px-4 py-2 border border-surface-300 rounded-lg text-surface-700 hover:bg-surface-50">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex items-center gap-2 px-4 py-2 bg-accent-600 text-white rounded-lg hover:bg-accent-700 disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </ModalPortal>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 const Users = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { has } = usePermissions()
+
+  // ── User list state ──
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 })
 
-  // Seat / subscription state
+  // ── Seat / subscription ──
   const [seatStatus,       setSeatStatus]       = useState(null)
   const [seatModalOpen,    setSeatModalOpen]    = useState(false)
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
 
-  // Active / Inactive tab
+  // ── Active tab ──
   const activeTab = searchParams.get('tab') || 'active'
+  const isUserTab = activeTab === 'active' || activeTab === 'inactive'
 
-  // Filters
+  // ── User filters ──
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [roleFilter, setRoleFilter] = useState(searchParams.get('role') || '')
   const [departmentFilter, setDepartmentFilter] = useState(searchParams.get('department_id') || '')
   const [showFilters, setShowFilters] = useState(false)
 
-  // Dropdown data
+  // ── Dropdown data for filters ──
   const [roles, setRoles] = useState([])
-  const [departments, setDepartments] = useState([])
+  const [deptList, setDeptList] = useState([])
 
-  // Dialogs
-  const [deleteDialog, setDeleteDialog] = useState({ open: false, user: null })
-  const [statusDialog, setStatusDialog] = useState({ open: false, user: null, status: '' })
+  // ── User dialogs ──
+  const [deleteDialog,        setDeleteDialog]        = useState({ open: false, user: null })
+  const [statusDialog,        setStatusDialog]        = useState({ open: false, user: null, status: '' })
   const [resetPasswordDialog, setResetPasswordDialog] = useState({ open: false, user: null })
-  const [exportOpen, setExportOpen] = useState(false)
+  const [exportOpen,          setExportOpen]          = useState(false)
 
-  // Fetch seat status once on mount
+  // ── Department tab state ──
+  const [deptLoading,    setDeptLoading]    = useState(false)
+  const [deptModal,      setDeptModal]      = useState({ open: false, item: null })
+  const [deptDeleteDialog, setDeptDeleteDialog] = useState({ open: false, item: null })
+
+  // ── Designation tab state ──
+  const [desigList,    setDesigList]    = useState([])
+  const [desigLoading, setDesigLoading] = useState(false)
+  const [desigModal,   setDesigModal]   = useState({ open: false, item: null })
+  const [desigDeleteDialog, setDesigDeleteDialog] = useState({ open: false, item: null })
+
+  // ── Seat status on mount ──
   useEffect(() => {
     subscriptionService.getTenantSeatStatus()
       .then(res => setSeatStatus(res.data?.data || null))
       .catch(() => {})
   }, [])
 
-  // Fetch dropdown data
+  // ── Roles + departments for filter dropdowns (once) ──
   useEffect(() => {
-    const fetchDropdownData = async () => {
-      try {
-        const [rolesRes, deptsRes] = await Promise.all([
-          userService.getAvailableRoles(),
-          departmentService.getDepartments()
-        ])
-        setRoles(rolesRes.data || [])
-        setDepartments(deptsRes.data || [])
-      } catch (err) {
-        console.error('Failed to fetch dropdown data:', err)
-      }
-    }
-    fetchDropdownData()
+    Promise.all([
+      userService.getAvailableRoles(),
+      departmentService.getDepartments(),
+    ]).then(([rolesRes, deptsRes]) => {
+      setRoles(rolesRes.data || [])
+      setDeptList(deptsRes.data || [])
+    }).catch(() => {})
   }, [])
 
-  // Guard: check seat limit before navigating to Add User form
-  const handleAddUserClick = () => {
-    if (seatStatus?.seat_limit_reached) {
-      setSeatModalOpen(true)
-    } else {
-      navigate('/users/new')
+  // ── Fetch departments when tab is active ──
+  const fetchDeptList = useCallback(async () => {
+    try {
+      setDeptLoading(true)
+      const res = await departmentService.getDepartments()
+      setDeptList(res.data || [])
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setDeptLoading(false)
     }
-  }
+  }, [])
 
-  // Fetch users
+  // ── Fetch designations when tab is active ──
+  const fetchDesigList = useCallback(async () => {
+    try {
+      setDesigLoading(true)
+      const res = await designationService.getDesignations()
+      setDesigList(res.data || [])
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setDesigLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'departments') fetchDeptList()
+    if (activeTab === 'designations') fetchDesigList()
+  }, [activeTab, fetchDeptList, fetchDesigList])
+
+  // ── Fetch users (only for active/inactive tabs) ──
   const fetchUsers = useCallback(async () => {
+    if (!isUserTab) return
     try {
       setLoading(true)
       const params = {
@@ -329,7 +575,6 @@ const Users = () => {
         status: activeTab === 'inactive' ? 'inactive' : 'active',
         department_id: searchParams.get('department_id') || undefined,
       }
-      
       const response = await userService.getUsers(params)
       setUsers(response.data || [])
       setPagination(response.pagination || { page: 1, total: 0, totalPages: 0 })
@@ -338,13 +583,13 @@ const Users = () => {
     } finally {
       setLoading(false)
     }
-  }, [searchParams])
+  }, [searchParams, isUserTab, activeTab])
 
   useEffect(() => {
     fetchUsers()
   }, [fetchUsers])
 
-  // Apply filters
+  // ── Filters ──
   const applyFilters = () => {
     const params = new URLSearchParams()
     params.set('tab', activeTab)
@@ -355,7 +600,6 @@ const Users = () => {
     setSearchParams(params)
   }
 
-  // Clear filters
   const clearFilters = () => {
     setSearch('')
     setRoleFilter('')
@@ -363,7 +607,6 @@ const Users = () => {
     setSearchParams(new URLSearchParams([['tab', activeTab]]))
   }
 
-  // Switch tabs (resets filters)
   const handleTabChange = (tab) => {
     setSearch('')
     setRoleFilter('')
@@ -371,15 +614,20 @@ const Users = () => {
     setSearchParams(new URLSearchParams([['tab', tab]]))
   }
 
-  // Handle page change
   const handlePageChange = (newPage) => {
     const params = new URLSearchParams(searchParams)
     params.set('page', newPage.toString())
     setSearchParams(params)
   }
 
-  // Handle delete
-  const handleDelete = async () => {
+  // ── Guard: seat limit before Add User ──
+  const handleAddUserClick = () => {
+    if (seatStatus?.seat_limit_reached) setSeatModalOpen(true)
+    else navigate('/users/new')
+  }
+
+  // ── User actions ──
+  const handleDeleteUser = async () => {
     try {
       await userService.deleteUser(deleteDialog.user.id)
       setDeleteDialog({ open: false, user: null })
@@ -389,7 +637,6 @@ const Users = () => {
     }
   }
 
-  // Handle status change
   const handleStatusChange = async () => {
     try {
       await userService.updateUserStatus(statusDialog.user.id, statusDialog.status)
@@ -400,7 +647,6 @@ const Users = () => {
     }
   }
 
-  // Handle reset password
   const handleResetPassword = async (passwordData) => {
     try {
       await userService.resetUserPassword(resetPasswordDialog.user.id, passwordData)
@@ -410,45 +656,40 @@ const Users = () => {
     }
   }
 
+  // ── Dept actions ──
+  const handleDeleteDept = async () => {
+    try {
+      await departmentService.deleteDepartment(deptDeleteDialog.item.id)
+      setDeptDeleteDialog({ open: false, item: null })
+      fetchDeptList()
+      toast.success('Department deleted')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.response?.data?.message || 'Failed to delete')
+    }
+  }
+
+  // ── Desig actions ──
+  const handleDeleteDesig = async () => {
+    try {
+      await designationService.deleteDesignation(desigDeleteDialog.item.id)
+      setDesigDeleteDialog({ open: false, item: null })
+      fetchDesigList()
+      toast.success('Designation deleted')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.response?.data?.message || 'Failed to delete')
+    }
+  }
+
   const hasFilters = search || roleFilter || departmentFilter
 
-  return (
-    <div className="p-6 space-y-6">
-      {/* Subscription banner (expiry warning + seat summary) */}
-      <SubscriptionBanner
-        seatStatus={seatStatus}
-        onUpgrade={() => setUpgradeModalOpen(true)}
-      />
-
-      {/* Seat limit modal */}
-      <SeatLimitModal
-        isOpen={seatModalOpen}
-        onClose={() => setSeatModalOpen(false)}
-        onUpgrade={() => { setSeatModalOpen(false); setUpgradeModalOpen(true) }}
-        seatStatus={seatStatus}
-      />
-
-      {/* Upgrade seats modal */}
-      <UpgradeSeatsModal
-        isOpen={upgradeModalOpen}
-        onClose={() => setUpgradeModalOpen(false)}
-        seatStatus={seatStatus}
-      />
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-surface-900">Users</h1>
-          <p className="text-surface-500 mt-1">Manage your organization's users</p>
-        </div>
+  // ─── Header CTA ───────────────────────────────────────────────────────────
+  const renderHeaderCTA = () => {
+    if (activeTab === 'active' || activeTab === 'inactive') {
+      return (
         <div className="flex items-center gap-2">
           {has('exports:create') && (
-            <button
-              onClick={() => setExportOpen(true)}
-              className="btn-secondary flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Export
+            <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
+              <Download className="w-4 h-4" /> Export
             </button>
           )}
           {has('users:create') && (
@@ -468,13 +709,241 @@ const Users = () => {
             </button>
           )}
         </div>
+      )
+    }
+    if (activeTab === 'departments') {
+      return has('departments:create') ? (
+        <button
+          onClick={() => setDeptModal({ open: true, item: null })}
+          className="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white rounded-lg transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Add Department
+        </button>
+      ) : null
+    }
+    if (activeTab === 'designations') {
+      return has('designations:create') ? (
+        <button
+          onClick={() => setDesigModal({ open: true, item: null })}
+          className="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white rounded-lg transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Add Designation
+        </button>
+      ) : null
+    }
+    return null
+  }
+
+  // ─── Departments tab content ───────────────────────────────────────────────
+  const renderDepartmentsTab = () => (
+    <div className="bg-white rounded-xl shadow-sm border border-surface-100 overflow-hidden">
+      <TableScroll>
+        <table className="w-full">
+          <thead className="bg-surface-50 border-b border-surface-200">
+            <tr>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Department</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Code</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Head</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Users</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Status</th>
+              <th className="text-right px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-surface-100">
+            {deptLoading ? (
+              <tr><td colSpan={6} className="px-6 py-8 text-center text-surface-500">Loading…</td></tr>
+            ) : deptList.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-16 text-center">
+                  <Building className="w-10 h-10 text-surface-300 mx-auto mb-3" />
+                  <p className="text-surface-500 font-medium">No departments yet</p>
+                  {has('departments:create') && (
+                    <button
+                      onClick={() => setDeptModal({ open: true, item: null })}
+                      className="mt-3 inline-flex items-center gap-1.5 text-sm text-accent hover:underline"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Create your first department
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ) : (
+              deptList.map(dept => (
+                <tr key={dept.id} className="hover:bg-surface-50">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <Building className="w-5 h-5 text-surface-400 flex-shrink-0" />
+                      <span className="font-medium text-surface-900">{dept.name}</span>
+                    </div>
+                    {dept.description && <p className="text-xs text-surface-400 mt-0.5 ml-8 line-clamp-1">{dept.description}</p>}
+                  </td>
+                  <td className="px-6 py-4 text-surface-600 text-sm">{dept.code || '-'}</td>
+                  <td className="px-6 py-4 text-surface-600 text-sm">{dept.head_user_name || '-'}</td>
+                  <td className="px-6 py-4">
+                    <span className="flex items-center gap-1 text-surface-600 text-sm">
+                      <UsersIcon className="w-4 h-4" /> {dept.user_count || 0}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${dept.is_active ? 'bg-green-100 text-green-700' : 'bg-surface-100 text-surface-600'}`}>
+                      {dept.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {has('departments:edit') && (
+                        <button
+                          onClick={() => setDeptModal({ open: true, item: dept })}
+                          className="p-1.5 hover:bg-surface-100 rounded-lg transition-colors text-surface-500 hover:text-accent"
+                          title="Edit"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      )}
+                      {has('departments:delete') && (
+                        <button
+                          onClick={() => setDeptDeleteDialog({ open: true, item: dept })}
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-surface-500 hover:text-red-600"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </TableScroll>
+    </div>
+  )
+
+  // ─── Designations tab content ─────────────────────────────────────────────
+  const renderDesignationsTab = () => (
+    <div className="bg-white rounded-xl shadow-sm border border-surface-100 overflow-hidden">
+      <TableScroll>
+        <table className="w-full">
+          <thead className="bg-surface-50 border-b border-surface-200">
+            <tr>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Designation</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Level</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Department</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Users</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Status</th>
+              <th className="text-right px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-surface-100">
+            {desigLoading ? (
+              <tr><td colSpan={6} className="px-6 py-8 text-center text-surface-500">Loading…</td></tr>
+            ) : desigList.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-16 text-center">
+                  <Award className="w-10 h-10 text-surface-300 mx-auto mb-3" />
+                  <p className="text-surface-500 font-medium">No designations yet</p>
+                  {has('designations:create') && (
+                    <button
+                      onClick={() => setDesigModal({ open: true, item: null })}
+                      className="mt-3 inline-flex items-center gap-1.5 text-sm text-accent hover:underline"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Create your first designation
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ) : (
+              desigList.map(desig => (
+                <tr key={desig.id} className="hover:bg-surface-50">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <Award className="w-5 h-5 text-surface-400 flex-shrink-0" />
+                      <span className="font-medium text-surface-900">{desig.name}</span>
+                    </div>
+                    {desig.description && <p className="text-xs text-surface-400 mt-0.5 ml-8 line-clamp-1">{desig.description}</p>}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="px-2 py-1 bg-surface-100 text-surface-700 rounded text-sm">
+                      {desig.level_name || (desig.level ? `Level ${desig.level}` : '-')}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-surface-600 text-sm">{desig.department_name || '-'}</td>
+                  <td className="px-6 py-4">
+                    <span className="flex items-center gap-1 text-surface-600 text-sm">
+                      <UsersIcon className="w-4 h-4" /> {desig.user_count || 0}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${desig.is_active ? 'bg-green-100 text-green-700' : 'bg-surface-100 text-surface-600'}`}>
+                      {desig.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {has('designations:edit') && (
+                        <button
+                          onClick={() => setDesigModal({ open: true, item: desig })}
+                          className="p-1.5 hover:bg-surface-100 rounded-lg transition-colors text-surface-500 hover:text-accent"
+                          title="Edit"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      )}
+                      {has('designations:delete') && (
+                        <button
+                          onClick={() => setDesigDeleteDialog({ open: true, item: desig })}
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-surface-500 hover:text-red-600"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </TableScroll>
+    </div>
+  )
+
+  // ─── JSX ──────────────────────────────────────────────────────────────────
+  return (
+    <div className="p-6 space-y-6">
+      <SubscriptionBanner seatStatus={seatStatus} onUpgrade={() => setUpgradeModalOpen(true)} />
+
+      <SeatLimitModal
+        isOpen={seatModalOpen}
+        onClose={() => setSeatModalOpen(false)}
+        onUpgrade={() => { setSeatModalOpen(false); setUpgradeModalOpen(true) }}
+        seatStatus={seatStatus}
+      />
+
+      <UpgradeSeatsModal
+        isOpen={upgradeModalOpen}
+        onClose={() => setUpgradeModalOpen(false)}
+        seatStatus={seatStatus}
+      />
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-surface-900">Users</h1>
+          <p className="text-surface-500 mt-1">Manage your organization's users, departments, and designations</p>
+        </div>
+        {renderHeaderCTA()}
       </div>
 
-      {/* Active / Inactive Tabs */}
+      {/* Tabs */}
       <div className="flex gap-1 bg-surface-100 p-1 rounded-xl w-fit">
         {[
-          { key: 'active',   label: 'Active Users' },
-          { key: 'inactive', label: 'Inactive Users' },
+          { key: 'active',       label: 'Active Users' },
+          { key: 'inactive',     label: 'Inactive Users' },
+          { key: 'departments',  label: 'Departments' },
+          { key: 'designations', label: 'Designations' },
         ].map(tab => (
           <button
             key={tab.key}
@@ -489,204 +958,189 @@ const Users = () => {
         ))}
       </div>
 
-      {/* Search & Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-4">
-        <div className="flex flex-col md:flex-row gap-4">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
-              placeholder="Search by name, email, username..."
-              className="w-full pl-10 pr-4 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
-            />
-          </div>
-
-          {/* Filter Toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
-              hasFilters ? 'border-accent-500 text-accent-600 bg-accent-50' : 'border-surface-300 text-surface-700 hover:bg-surface-50'
-            }`}
-          >
-            <Filter className="w-4 h-4" />
-            Filters
-            {hasFilters && (
-              <span className="w-5 h-5 bg-accent-600 text-white text-xs rounded-full flex items-center justify-center">
-                {[roleFilter, departmentFilter].filter(Boolean).length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={applyFilters}
-            className="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white rounded-lg transition-colors"
-          >
-            Search
-          </button>
-        </div>
-
-        {/* Filter Dropdowns */}
-        {showFilters && (
-          <div className="mt-4 pt-4 border-t border-surface-200 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">Role</label>
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+      {/* ── User tabs content ── */}
+      {isUserTab && (
+        <>
+          {/* Search & Filters */}
+          <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+                  placeholder="Search by name, email, username..."
+                  className="w-full pl-10 pr-4 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
+                />
+              </div>
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+                  hasFilters ? 'border-accent-500 text-accent-600 bg-accent-50' : 'border-surface-300 text-surface-700 hover:bg-surface-50'
+                }`}
               >
-                <option value="">All Roles</option>
-                {roles.map(role => (
-                  <option key={role.value} value={role.value}>{role.label}</option>
-                ))}
-              </select>
+                <Filter className="w-4 h-4" />
+                Filters
+                {hasFilters && (
+                  <span className="w-5 h-5 bg-accent-600 text-white text-xs rounded-full flex items-center justify-center">
+                    {[roleFilter, departmentFilter].filter(Boolean).length}
+                  </span>
+                )}
+              </button>
+              <button onClick={applyFilters} className="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white rounded-lg transition-colors">
+                Search
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">Department</label>
-              <select
-                value={departmentFilter}
-                onChange={(e) => setDepartmentFilter(e.target.value)}
-                className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500 focus:border-accent-500"
-              >
-                <option value="">All Departments</option>
-                {departments.map(dept => (
-                  <option key={dept.id} value={dept.id}>{dept.name}</option>
-                ))}
-              </select>
-            </div>
-            {hasFilters && (
-              <div className="md:col-span-2">
-                <button
-                  onClick={clearFilters}
-                  className="flex items-center gap-1 text-sm text-surface-600 hover:text-surface-900"
-                >
-                  <X className="w-4 h-4" /> Clear all filters
-                </button>
+
+            {showFilters && (
+              <div className="mt-4 pt-4 border-t border-surface-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 mb-1">Role</label>
+                  <select
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500"
+                  >
+                    <option value="">All Roles</option>
+                    {roles.map(role => (
+                      <option key={role.value} value={role.value}>{role.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 mb-1">Department</label>
+                  <select
+                    value={departmentFilter}
+                    onChange={(e) => setDepartmentFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-accent-500"
+                  >
+                    <option value="">All Departments</option>
+                    {deptList.map(dept => (
+                      <option key={dept.id} value={dept.id}>{dept.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {hasFilters && (
+                  <div className="md:col-span-2">
+                    <button onClick={clearFilters} className="flex items-center gap-1 text-sm text-surface-600 hover:text-surface-900">
+                      <X className="w-4 h-4" /> Clear all filters
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Users Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-surface-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-surface-50 border-b border-surface-200">
-              <tr>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">User</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Designation</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Department</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Status</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Last Login</th>
-                <th className="text-right px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-surface-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-surface-500">
-                    Loading...
-                  </td>
-                </tr>
-              ) : users.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-surface-500">
-                    No users found
-                  </td>
-                </tr>
-              ) : (
-                users.map(user => (
-                  <tr key={user.id} className="hover:bg-surface-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-accent-100 flex items-center justify-center text-accent-700 font-semibold">
-                          {user.full_name?.charAt(0) || 'U'}
-                        </div>
-                        <div>
-                          <p className="font-medium text-surface-900">
-                            {user.full_name}
-                            {(user.is_owner || user.role === 'owner') && (
-                              <span className="ml-2 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded">Owner</span>
-                            )}
-                          </p>
-                          <p className="text-sm text-surface-500">{user.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {user.designation === 'Owner' || user.is_owner || user.role === 'owner' ? (
-                        <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">Owner</span>
-                      ) : user.designation === 'Admin' ? (
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">Admin</span>
-                      ) : (
-                        <span className="text-surface-600 text-sm">{user.designation || '-'}</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-surface-600">
-                      {user.department || '-'}
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={user.status} />
-                    </td>
-                    <td className="px-6 py-4 text-sm text-surface-500">
-                      {user.last_login ? formatDateTime(user.last_login) : 'Never'}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <UserActions
-                        user={user}
-                        onEdit={(u) => navigate(`/users/${u.id}/edit`)}
-                        onDelete={(u) => setDeleteDialog({ open: true, user: u })}
-                        onStatusChange={(u, status) => setStatusDialog({ open: true, user: u, status })}
-                        onResetPassword={(u) => setResetPasswordDialog({ open: true, user: u })}
-                      />
-                    </td>
+          {/* Users Table */}
+          <div className="bg-white rounded-xl shadow-sm border border-surface-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-surface-50 border-b border-surface-200">
+                  <tr>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">User</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Designation</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Department</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Status</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Last Login</th>
+                    <th className="text-right px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Actions</th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {pagination.totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-surface-200 flex items-center justify-between">
-            <p className="text-sm text-surface-600">
-              Showing {((pagination.page - 1) * 10) + 1} to {Math.min(pagination.page * 10, pagination.total)} of {pagination.total} users
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handlePageChange(pagination.page - 1)}
-                disabled={pagination.page === 1}
-                className="p-2 border border-surface-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-50"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="px-4 py-2 text-sm">
-                Page {pagination.page} of {pagination.totalPages}
-              </span>
-              <button
-                onClick={() => handlePageChange(pagination.page + 1)}
-                disabled={pagination.page === pagination.totalPages}
-                className="p-2 border border-surface-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-50"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+                </thead>
+                <tbody className="divide-y divide-surface-100">
+                  {loading ? (
+                    <tr><td colSpan={6} className="px-6 py-8 text-center text-surface-500">Loading...</td></tr>
+                  ) : users.length === 0 ? (
+                    <tr><td colSpan={6} className="px-6 py-8 text-center text-surface-500">No users found</td></tr>
+                  ) : (
+                    users.map(user => (
+                      <tr key={user.id} className="hover:bg-surface-50">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-accent-100 flex items-center justify-center text-accent-700 font-semibold">
+                              {user.full_name?.charAt(0) || 'U'}
+                            </div>
+                            <div>
+                              <p className="font-medium text-surface-900">
+                                {user.full_name}
+                                {(user.is_owner || user.role === 'owner') && (
+                                  <span className="ml-2 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded">Owner</span>
+                                )}
+                              </p>
+                              <p className="text-sm text-surface-500">{user.email}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {user.designation === 'Owner' || user.is_owner || user.role === 'owner' ? (
+                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">Owner</span>
+                          ) : user.designation === 'Admin' ? (
+                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">Admin</span>
+                          ) : (
+                            <span className="text-surface-600 text-sm">{user.designation || '-'}</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-surface-600 text-sm">{user.department || '-'}</td>
+                        <td className="px-6 py-4"><StatusBadge status={user.status} /></td>
+                        <td className="px-6 py-4 text-sm text-surface-500">
+                          {user.last_login ? formatDateTime(user.last_login) : 'Never'}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <UserActions
+                            user={user}
+                            onEdit={(u) => navigate(`/users/${u.id}/edit`)}
+                            onDelete={(u) => setDeleteDialog({ open: true, user: u })}
+                            onStatusChange={(u, status) => setStatusDialog({ open: true, user: u, status })}
+                            onResetPassword={(u) => setResetPasswordDialog({ open: true, user: u })}
+                          />
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
-          </div>
-        )}
-      </div>
 
-      {/* Dialogs */}
+            {pagination.totalPages > 1 && (
+              <div className="px-6 py-4 border-t border-surface-200 flex items-center justify-between">
+                <p className="text-sm text-surface-600">
+                  Showing {((pagination.page - 1) * 10) + 1} to {Math.min(pagination.page * 10, pagination.total)} of {pagination.total} users
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handlePageChange(pagination.page - 1)}
+                    disabled={pagination.page === 1}
+                    className="p-2 border border-surface-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-50"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="px-4 py-2 text-sm">Page {pagination.page} of {pagination.totalPages}</span>
+                  <button
+                    onClick={() => handlePageChange(pagination.page + 1)}
+                    disabled={pagination.page === pagination.totalPages}
+                    className="p-2 border border-surface-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-surface-50"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── Departments tab content ── */}
+      {activeTab === 'departments' && renderDepartmentsTab()}
+
+      {/* ── Designations tab content ── */}
+      {activeTab === 'designations' && renderDesignationsTab()}
+
+      {/* ── User dialogs ── */}
       <ConfirmDialog
         isOpen={deleteDialog.open}
         title="Delete User"
         message={`Are you sure you want to delete ${deleteDialog.user?.full_name}? This action cannot be undone.`}
-        onConfirm={handleDelete}
+        onConfirm={handleDeleteUser}
         onCancel={() => setDeleteDialog({ open: false, user: null })}
         confirmText="Delete"
         danger
@@ -719,9 +1173,7 @@ const Users = () => {
               <label className="block text-sm font-medium text-surface-700 mb-1">Role</label>
               <select value={extra.role || ''} onChange={e => setExtraField('role', e.target.value)} className="input w-full">
                 <option value="">All Roles</option>
-                {roles.map(r => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
+                {roles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
               </select>
             </div>
             <div>
@@ -737,14 +1189,59 @@ const Users = () => {
               <label className="block text-sm font-medium text-surface-700 mb-1">Department</label>
               <select value={extra.department || ''} onChange={e => setExtraField('department', e.target.value)} className="input w-full">
                 <option value="">All Departments</option>
-                {departments.map(d => (
-                  <option key={d.id} value={d.name}>{d.name}</option>
-                ))}
+                {deptList.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
               </select>
             </div>
           </div>
         )}
       />
+
+      {/* ── Dept confirm delete ── */}
+      <ConfirmDialog
+        isOpen={deptDeleteDialog.open}
+        title="Delete Department"
+        message={`Are you sure you want to delete "${deptDeleteDialog.item?.name}"? This cannot be undone.`}
+        onConfirm={handleDeleteDept}
+        onCancel={() => setDeptDeleteDialog({ open: false, item: null })}
+        confirmText="Delete"
+        danger
+      />
+
+      {/* ── Desig confirm delete ── */}
+      <ConfirmDialog
+        isOpen={desigDeleteDialog.open}
+        title="Delete Designation"
+        message={`Are you sure you want to delete "${desigDeleteDialog.item?.name}"? This cannot be undone.`}
+        onConfirm={handleDeleteDesig}
+        onCancel={() => setDesigDeleteDialog({ open: false, item: null })}
+        confirmText="Delete"
+        danger
+      />
+
+      {/* ── Department modal ── */}
+      {deptModal.open && (
+        <DepartmentModal
+          dept={deptModal.item}
+          onClose={() => setDeptModal({ open: false, item: null })}
+          onSaved={() => {
+            setDeptModal({ open: false, item: null })
+            fetchDeptList()
+          }}
+        />
+      )}
+
+      {/* ── Designation modal ── */}
+      {desigModal.open && (
+        <DesignationModal
+          desig={desigModal.item}
+          deptList={deptList}
+          onClose={() => setDesigModal({ open: false, item: null })}
+          onSaved={() => {
+            setDesigModal({ open: false, item: null })
+            fetchDesigList()
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -16,7 +16,6 @@ import {
   Briefcase,
   History,
   UserCircle,
-  Building,
   Award,
   Calendar,
   Receipt,
@@ -73,10 +72,6 @@ const PERMISSION_NAV_MAP = [
   // Admin Management
   { permissions: ['users:view'],
     path: '/users',        icon: Users,           label: 'Users',             section: 'Admin Management' },
-  { permissions: ['departments:view'],
-    path: '/departments',  icon: Building,        label: 'Departments',       section: 'Admin Management' },
-  { permissions: ['designations:view'],
-    path: '/designations', icon: Award,           label: 'Designations',      section: 'Admin Management' },
   { permissions: ['partners:view', 'accounts:payouts', 'accounts:invoices'],
     path: '/partners',     icon: Link2,           label: 'Sourcing Partners', section: 'Admin Management' },
   // Operations

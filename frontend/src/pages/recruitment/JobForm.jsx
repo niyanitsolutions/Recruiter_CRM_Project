@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Briefcase, ArrowLeft, Save, Plus, Trash2 } from 'lucide-react'
+import { Briefcase, ArrowLeft, Save, Plus, Trash2, ChevronDown, GitBranch, CheckCircle2, X } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import jobService from '../../services/jobService'
 import clientService from '../../services/clientService'
 import pipelineService from '../../services/pipelineService'
+import CreatePipelineModal from '../../components/pipeline/CreatePipelineModal'
 
 const JobForm = () => {
   const navigate = useNavigate()
@@ -56,6 +57,7 @@ const JobForm = () => {
 
   const [newMandatorySkill, setNewMandatorySkill] = useState('')
   const [newOptionalSkill, setNewOptionalSkill] = useState('')
+  const [showPipelineModal, setShowPipelineModal] = useState(false)
 
   useEffect(() => {
     loadDropdowns()
@@ -643,24 +645,72 @@ const JobForm = () => {
               }
             </div>
 
-            <div>
+            <div id="field-pipeline_id">
               <label className="block text-sm font-medium text-surface-700 mb-1">
                 Interview Pipeline <span className="text-red-500">*</span>
               </label>
-              <select
-                id="field-pipeline_id"
-                name="pipeline_id"
-                value={formData.pipeline_id}
-                onChange={handleChange}
-                className={`input w-full ${errors.pipeline_id ? 'border-red-400' : ''}`}
-              >
-                <option value="">Select a pipeline</option>
-                {pipelines.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.stage_count} stages){p.is_default ? ' — Default' : ''}
-                  </option>
-                ))}
-              </select>
+              {pipelines.length === 0 ? (
+                <div className={`flex items-center justify-between px-3 py-2.5 rounded-lg border ${errors.pipeline_id ? 'border-red-400' : 'border-surface-200'} bg-surface-50`}>
+                  <span className="text-sm text-surface-400">No pipelines yet</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPipelineModal(true)}
+                    className="flex items-center gap-1.5 text-sm font-medium text-accent hover:text-accent/80 transition-colors"
+                  >
+                    <GitBranch className="w-3.5 h-3.5" />
+                    Create Pipeline
+                  </button>
+                </div>
+              ) : (
+                <div className={`relative rounded-lg border ${errors.pipeline_id ? 'border-red-400' : 'border-surface-200'} bg-[var(--bg-card)] overflow-hidden`}>
+                  {/* Selected pipeline display / dropdown trigger */}
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-surface-100">
+                    <select
+                      name="pipeline_id"
+                      value={formData.pipeline_id}
+                      onChange={handleChange}
+                      className="flex-1 bg-transparent text-sm text-surface-700 outline-none cursor-pointer appearance-none"
+                    >
+                      <option value="">Select a pipeline…</option>
+                      {pipelines.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}{p.is_default ? ' (Default)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-surface-400 pointer-events-none flex-shrink-0" />
+                  </div>
+                  {/* Selected pipeline info row */}
+                  {formData.pipeline_id && (() => {
+                    const sel = pipelines.find(p => p.id === formData.pipeline_id)
+                    return sel ? (
+                      <div className="flex items-center justify-between px-3 py-1.5 bg-accent/5">
+                        <div className="flex items-center gap-2 text-xs text-surface-500">
+                          <GitBranch className="w-3.5 h-3.5 text-accent" />
+                          <span>{sel.stage_count ?? 0} stages</span>
+                          {sel.is_default && <span className="px-1.5 py-0.5 rounded-full bg-accent/10 text-accent font-medium">Default</span>}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFormData(f => ({ ...f, pipeline_id: '' }))}
+                          className="text-surface-400 hover:text-red-500 transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : null
+                  })()}
+                  {/* Create new option */}
+                  <button
+                    type="button"
+                    onClick={() => setShowPipelineModal(true)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-accent hover:bg-accent/5 transition-colors border-t border-surface-100"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Create New Pipeline
+                  </button>
+                </div>
+              )}
               {errors.pipeline_id && <p className="text-red-500 text-xs mt-1">{errors.pipeline_id}</p>}
             </div>
 
@@ -882,6 +932,17 @@ const JobForm = () => {
           </button>
         </div>
       </form>
+
+      {showPipelineModal && (
+        <CreatePipelineModal
+          onClose={() => setShowPipelineModal(false)}
+          onCreated={(newPipeline) => {
+            setPipelines(prev => [...prev, newPipeline])
+            setFormData(f => ({ ...f, pipeline_id: newPipeline.id || newPipeline._id || '' }))
+            setShowPipelineModal(false)
+          }}
+        />
+      )}
     </div>
   )
 }
