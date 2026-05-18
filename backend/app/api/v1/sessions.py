@@ -5,7 +5,7 @@ Endpoints for active-session listing, revoking individual sessions,
 revoking all other sessions, a heartbeat (keep-alive + pending-request
 polling), and a WebSocket channel for real-time session events.
 
-All endpoints (except WS) require a valid access token.
+All endpoints (except WS and request-status) require a valid access token.
 """
 
 import asyncio
@@ -25,16 +25,27 @@ from app.middleware.auth import get_current_user, AuthContext
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# A session is treated as TRULY ACTIVE only if a heartbeat arrived within this window.
+# Must match SESSION_TRULY_ACTIVE_THRESHOLD_SECONDS in auth_service.py.
+_TRULY_ACTIVE_THRESHOLD_SECONDS = 120
+
+# Cleanup sweep: how often to run + how long without heartbeat = idle
+_CLEANUP_INTERVAL_SECONDS = 300       # sweep every 5 minutes
+_IDLE_MARK_THRESHOLD_SECONDS = 300    # no heartbeat for 5 min → mark IDLE (not terminated)
+
+
 # ── Pydantic models ────────────────────────────────────────────────────────────
 
 class SessionOut(BaseModel):
-    session_id:   str
-    device_info:  str
-    ip_address:   str
-    login_time:   Optional[str]
-    last_active:  Optional[str]
-    is_current:   bool
-    expires_at:   Optional[str]
+    session_id:     str
+    device_info:    str
+    ip_address:     str
+    login_time:     Optional[str]
+    last_active:    Optional[str]
+    is_current:     bool
+    expires_at:     Optional[str]
+    session_status: str
+    ws_connected:   bool
 
 
 class RevokeRequest(BaseModel):
@@ -71,14 +82,17 @@ async def list_sessions(auth: AuthContext = Depends(get_current_user)):
 
     sessions = []
     for doc in docs:
+        last_act = doc.get("last_activity_at") or doc.get("last_active_at") or doc.get("created_at")
         sessions.append(SessionOut(
-            session_id  = str(doc["_id"]),
-            device_info = doc.get("device_info",  "Unknown device"),
-            ip_address  = doc.get("ip_address",   "Unknown"),
-            login_time  = _fmt(doc.get("created_at")),
-            last_active = _fmt(doc.get("last_active_at") or doc.get("created_at")),
-            is_current  = str(doc["_id"]) == auth.jti,
-            expires_at  = _fmt(doc.get("expires_at")),
+            session_id     = str(doc["_id"]),
+            device_info    = doc.get("device_info",  "Unknown device"),
+            ip_address     = doc.get("ip_address",   "Unknown"),
+            login_time     = _fmt(doc.get("created_at")),
+            last_active    = _fmt(last_act),
+            is_current     = str(doc["_id"]) == auth.jti,
+            expires_at     = _fmt(doc.get("expires_at")),
+            session_status = doc.get("session_status", "active"),
+            ws_connected   = ws_manager.is_connected(auth.user_id),
         ))
 
     return {"sessions": [s.model_dump() for s in sessions]}
@@ -97,18 +111,22 @@ async def revoke_session(session_id: str, auth: AuthContext = Depends(get_curren
     if not doc or doc.get("user_id") != auth.user_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found.")
 
+    now = datetime.now(timezone.utc)
     await master_db.sessions.update_one(
         {"_id": session_id},
-        {"$set": {"is_active": False, "revoked_at": datetime.now(timezone.utc)}}
+        {"$set": {
+            "is_active":      False,
+            "session_status": "terminated",
+            "ended_at":       now,
+            "revoked_at":     now,
+        }}
     )
 
-    # Notify the affected connection via WebSocket so the device gets the
-    # "Session ended by another device" modal immediately.
     if session_id != auth.jti:
         await ws_manager.send_to_user(auth.user_id, {
-            "type":    "session_revoked",
+            "type":       "session_revoked",
             "session_id": session_id,
-            "message": "Your session on another device has been terminated.",
+            "message":    "Your session on another device has been terminated.",
         })
 
     return {"success": True, "message": "Session revoked."}
@@ -127,14 +145,18 @@ async def revoke_all_sessions(auth: AuthContext = Depends(get_current_user)):
 
     result = await master_db.sessions.update_many(
         {
-            "user_id":  auth.user_id,
+            "user_id":   auth.user_id,
             "is_active": True,
-            "_id":      {"$ne": auth.jti},
+            "_id":       {"$ne": auth.jti},
         },
-        {"$set": {"is_active": False, "revoked_at": now}}
+        {"$set": {
+            "is_active":      False,
+            "session_status": "terminated",
+            "ended_at":       now,
+            "revoked_at":     now,
+        }}
     )
 
-    # Notify connected other devices
     await ws_manager.send_to_user(auth.user_id, {
         "type":    "all_sessions_revoked",
         "except":  auth.jti,
@@ -142,35 +164,41 @@ async def revoke_all_sessions(auth: AuthContext = Depends(get_current_user)):
     })
 
     return {
-        "success": True,
+        "success":       True,
         "revoked_count": result.modified_count,
-        "message": f"Revoked {result.modified_count} other session(s).",
+        "message":       f"Revoked {result.modified_count} other session(s).",
     }
 
 
 # ── POST /sessions/heartbeat — keep-alive + pending notification poll ─────────
 
+class HeartbeatBody(BaseModel):
+    ws_connected: bool = False
+
+
 @router.post("/sessions/heartbeat")
-async def session_heartbeat(auth: AuthContext = Depends(get_current_user)):
+async def session_heartbeat(
+    body: HeartbeatBody = HeartbeatBody(),
+    auth: AuthContext = Depends(get_current_user),
+):
     """
-    Called periodically by the frontend (~every 5 min).
-    Extends the current session's expires_at by 24 h from now and updates
-    last_active_at.  Returns any pending login requests so the frontend can
-    show the approval modal even without WebSocket.
+    Called every 30 seconds by the frontend.
+    Updates last_activity_at and session_status.
+    Does NOT blindly extend expires_at — the 24-hour window from login is absolute.
+    Returns any pending login requests so the frontend can show the approval modal
+    even without a live WebSocket.
     """
     master_db = get_master_db()
     now       = datetime.now(timezone.utc)
 
-    # Extend session
     await master_db.sessions.update_one(
         {"_id": auth.jti, "is_active": True},
         {"$set": {
-            "last_active_at": now,
-            "expires_at":     now + timedelta(hours=24),
+            "last_activity_at": now,
+            "session_status":   "active",
         }}
     )
 
-    # Check for pending login requests targeting this user
     pending = await master_db.login_requests.find_one({
         "target_user_id": auth.user_id,
         "status":         "pending",
@@ -178,11 +206,11 @@ async def session_heartbeat(auth: AuthContext = Depends(get_current_user)):
     })
 
     return {
-        "ok":      True,
+        "ok": True,
         "pending_request": {
-            "request_id":  str(pending["_id"]),
-            "device_info": pending.get("requester_device", ""),
-            "ip_address":  pending.get("requester_ip",     ""),
+            "request_id":   str(pending["_id"]),
+            "device_info":  pending.get("requester_device", ""),
+            "ip_address":   pending.get("requester_ip",     ""),
             "requested_at": _fmt(pending.get("created_at")),
         } if pending else None,
     }
@@ -191,93 +219,116 @@ async def session_heartbeat(auth: AuthContext = Depends(get_current_user)):
 # ── POST /sessions/request-access — Device B asks Device A for permission ─────
 
 class AccessRequestBody(BaseModel):
-    identifier: str
-    password:   str
+    identifier:   str
+    password:     str
     company_code: Optional[str] = None
 
 
 @router.post("/sessions/request-access")
-async def request_access(
-    body: AccessRequestBody,
-    request_obj = None,
-):
+async def request_access(body: AccessRequestBody):
     """
-    Device B received a 409 (active session).  Instead of force-logging-in,
-    it submits credentials here to create a "pending" login_request document
+    Device B received a 409 (active session). Instead of force-logging-in,
+    it submits credentials here to create a pending login_request document
     and immediately pushes a real-time notification to Device A via WebSocket.
 
+    Credentials are validated directly against the DB — no fragile error-string
+    parsing of auth_service.login().
+
     Returns a request_id so Device B can poll / listen for the result.
+    Raises 400 with detail "NO_ACTIVE_SESSION" if the session is already gone
+    (race condition: by the time Device B calls this, the session may have died),
+    allowing Device B to retry a direct login.
     """
-    from app.services.auth_service import auth_service
-    from app.core.tenant_resolver import tenant_resolver
     from app.core.security import verify_password
-    from app.core.database import get_master_db as _master
+    from app.core.database import get_master_db as _master, get_company_db as _company_db
 
     master_db = _master()
+    now = datetime.now(timezone.utc)
+    identifier_lower = body.identifier.lower().strip()
 
-    # Lightweight credential check — we need the user_id without creating a session
-    result, error = await auth_service.login(
-        body.identifier, body.password,
-        company_code=body.company_code,
-        force_login=False,
-    )
-
-    # Either success (shouldn't happen if the session is still active) or ACTIVE_SESSION
-    if error and "ACTIVE_SESSION" not in error:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials.")
-
-    # Resolve user_id from the ACTIVE_SESSION error (or from a fresh result dict)
-    import json as _json
-    import re as _re
-
-    user_id = None
-    session_info = {}
-    if error and "ACTIVE_SESSION" in error:
-        _raw = error.split("|", 1)[1] if "|" in error else "{}"
-        try:
-            session_info = _json.loads(_raw)
-        except Exception:
-            pass
-
-        # Fetch user_id from master_db.sessions based on device_info/ip
-        # Simpler: find the user via the global_users or tenants lookup
-        identifier_lower = body.identifier.lower().strip()
-        gu = await master_db.global_users.find_one({"$or": [{"email": identifier_lower}, {"mobile": body.identifier}]})
-        if gu:
-            # find the active session to get user_id
-            active_sess = await master_db.sessions.find_one({
-                "is_active":  True,
-                "expires_at": {"$gt": datetime.now(timezone.utc)},
-            }, sort=[("created_at", -1)])
-            # We can't easily get user_id without re-resolving, so just use the login result user_id
-            # For now, look up via global user map
-            mapping = await master_db.user_company_map.find_one({"global_user_id": gu["_id"], "status": "active"})
-            if mapping:
-                user_id = str(mapping["local_user_id"])
-    elif result:
-        user_id = result.get("user_id")
-
-    if not user_id:
-        raise HTTPException(status_code=400, detail="Could not identify active session owner.")
-
-    # Create login_requests document with 5-minute TTL
-    now        = datetime.now(timezone.utc)
-    request_id = str(uuid.uuid4())
-    ip_address = ""
-    device_info = ""
-
-    await master_db.login_requests.insert_one({
-        "_id":             request_id,
-        "target_user_id":  user_id,
-        "requester_device": device_info,
-        "requester_ip":    ip_address,
-        "status":          "pending",
-        "created_at":      now,
-        "expires_at":      now + timedelta(minutes=5),
-        "identifier":      body.identifier,
+    # ── Step 1: Find the local user via global_users + user_company_map ─────
+    gu = await master_db.global_users.find_one({
+        "$or": [
+            {"email":    identifier_lower},
+            {"mobile":   body.identifier},
+            {"username": identifier_lower},
+        ]
     })
 
-    # Push real-time notification to Device A
+    user_id       = None
+    password_hash = None
+
+    if gu and body.company_code:
+        tenant = await master_db.tenants.find_one({"company_id": body.company_code})
+        if tenant:
+            cdb = _company_db(body.company_code)
+            local_user = await cdb.users.find_one({
+                "$or": [{"email": identifier_lower}, {"username": identifier_lower}],
+                "is_deleted": False,
+            })
+            if local_user:
+                user_id       = str(local_user["_id"])
+                password_hash = local_user.get("password_hash", "")
+            elif str(tenant.get("owner", {}).get("_id", "")) == str(gu.get("_id", "")):
+                user_id       = str(gu["_id"])
+                password_hash = tenant.get("owner", {}).get("password_hash", "")
+
+    if not user_id and gu:
+        mapping = await master_db.user_company_map.find_one(
+            {"global_user_id": gu["_id"], "status": "active"}
+        )
+        if mapping:
+            cid = str(mapping.get("company_id", ""))
+            cdb2 = _company_db(cid)
+            lu2  = await cdb2.users.find_one({"_id": str(mapping["local_user_id"])})
+            if lu2:
+                user_id       = str(lu2["_id"])
+                password_hash = lu2.get("password_hash", "")
+
+    if not password_hash or not verify_password(body.password, password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials.")
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="Could not identify account.")
+
+    # ── Step 2: Verify there is still a truly active session ────────────────
+    active_session = await master_db.sessions.find_one({
+        "user_id":    user_id,
+        "is_active":  True,
+        "expires_at": {"$gt": now},
+    })
+    if not active_session:
+        # Session died between the login attempt and now — let frontend retry login
+        raise HTTPException(status_code=400, detail="NO_ACTIVE_SESSION")
+
+    last_act = active_session.get("last_activity_at") or active_session.get("created_at")
+    if last_act and last_act.tzinfo is None:
+        last_act = last_act.replace(tzinfo=timezone.utc)
+    heartbeat_alive = bool(
+        last_act and (now - last_act).total_seconds() < _TRULY_ACTIVE_THRESHOLD_SECONDS
+    )
+    ws_alive = ws_manager.is_connected(user_id)
+
+    if not heartbeat_alive and not ws_alive:
+        # Session is stale — backend will auto-clear it on next login attempt
+        raise HTTPException(status_code=400, detail="NO_ACTIVE_SESSION")
+
+    # ── Step 3: Create login_request document ────────────────────────────────
+    request_id  = str(uuid.uuid4())
+    device_info = ""
+    ip_address  = ""
+
+    await master_db.login_requests.insert_one({
+        "_id":              request_id,
+        "target_user_id":   user_id,
+        "requester_device": device_info,
+        "requester_ip":     ip_address,
+        "status":           "pending",
+        "created_at":       now,
+        "expires_at":       now + timedelta(minutes=5),
+        "identifier":       body.identifier,
+    })
+
     notified = await ws_manager.send_to_user(user_id, {
         "type":        "login_request",
         "request_id":  request_id,
@@ -288,11 +339,11 @@ async def request_access(
     })
 
     return {
-        "request_id":   request_id,
-        "status":       "pending",
-        "notified_ws":  notified,
-        "expires_in":   300,  # seconds
-        "message":      "Login request sent. Waiting for approval from the active device.",
+        "request_id":  request_id,
+        "status":      "pending",
+        "notified_ws": notified,
+        "expires_in":  300,
+        "message":     "Login request sent. Waiting for approval from the active device.",
     }
 
 
@@ -307,8 +358,8 @@ async def approve_request(body: ApproveBody, auth: AuthContext = Depends(get_cur
     """
     Device A approves Device B's login request.
     - Marks the request as approved
-    - Notifies Device B via WebSocket
-    - Device A's session will be revoked on the next heartbeat/auth call
+    - Sets Device A's own session status to REPLACED
+    - Notifies Device B via WebSocket so it can proceed to login
     """
     master_db = get_master_db()
     req = await master_db.login_requests.find_one({"_id": body.request_id})
@@ -325,13 +376,19 @@ async def approve_request(body: ApproveBody, auth: AuthContext = Depends(get_cur
         {"$set": {"status": "approved", "responded_at": now}}
     )
 
-    # Revoke Device A's own session so the forced login on Device B proceeds
+    # Mark Device A's session as REPLACED so its next request gets a clear
+    # "session ended" message rather than a generic 401.
     await master_db.sessions.update_one(
         {"_id": auth.jti},
-        {"$set": {"is_active": False, "revoked_at": now}}
+        {"$set": {
+            "is_active":      False,
+            "session_status": "replaced",
+            "ended_at":       now,
+        }}
     )
 
-    # Notify Device B (the requester) — it will now call /auth/force-logout-and-login
+    # Notify Device B — it will now call a normal login which will succeed
+    # because active_session_token will be cleared when the new session starts.
     await ws_manager.send_to_user(auth.user_id, {
         "type":       "login_approved",
         "request_id": body.request_id,
@@ -370,14 +427,12 @@ async def deny_request(body: ApproveBody, auth: AuthContext = Depends(get_curren
 
 
 # ── GET /sessions/request-status/{request_id} — Device B polls for result ────
-# Public endpoint — no auth token required. Device B has no session yet while
-# it waits for approval, so it cannot use the authenticated heartbeat endpoint.
 
 @router.get("/sessions/request-status/{request_id}")
 async def get_request_status(request_id: str):
     """
     Return the current status of a login_request document.
-    Called by Device B while polling for Device A's approval or denial.
+    Public endpoint — Device B has no session while waiting for approval.
 
     Returns { status: 'pending' | 'approved' | 'denied' | 'expired' }
     """
@@ -388,7 +443,6 @@ async def get_request_status(request_id: str):
     if not req:
         raise HTTPException(status_code=404, detail="Request not found.")
 
-    # Check if TTL has passed even if DB still says 'pending'
     if req.get("status") == "pending" and req.get("expires_at"):
         expires_at = req["expires_at"]
         if expires_at.tzinfo is None:
@@ -409,8 +463,11 @@ async def session_websocket(
     """
     Persistent WebSocket connection for real-time session events.
 
-    Authentication: pass `?token=<access_token>` as a query parameter.
+    Authentication: pass ?token=<access_token> as a query parameter.
     The connection is rejected (close 4001) if the token is invalid.
+
+    On disconnect the session is marked 'disconnected' (not terminated) so the
+    next heartbeat or login can distinguish a normal tab close from a real logout.
 
     Events pushed to the client:
       session_revoked      — admin or user revoked this session
@@ -426,17 +483,24 @@ async def session_websocket(
         return
 
     user_id = payload.get("sub")
+    jti     = payload.get("jti")
     if not user_id:
         await websocket.close(code=4001, reason="Invalid token payload")
         return
 
     await ws_manager.connect(user_id, websocket)
-    logger.info("WS session opened | user=%s", user_id)
+    logger.info("WS session opened | user=%s jti=%s", user_id, jti)
+
+    # Mark session as active + ws_connected when WS connects
+    if jti:
+        _mdb = get_master_db()
+        await _mdb.sessions.update_one(
+            {"_id": jti, "is_active": True},
+            {"$set": {"session_status": "active", "last_activity_at": datetime.now(timezone.utc)}}
+        )
 
     try:
         while True:
-            # Send a keepalive ping every 30 seconds.
-            # The client should ignore unknown messages gracefully.
             await asyncio.sleep(30)
             try:
                 await websocket.send_json({"type": "ping"})
@@ -448,4 +512,64 @@ async def session_websocket(
         pass
     finally:
         ws_manager.disconnect(user_id, websocket)
-        logger.info("WS session closed | user=%s", user_id)
+        # Mark session as disconnected only if no other WS connection remains for this user
+        if jti and not ws_manager.is_connected(user_id):
+            try:
+                _mdb = get_master_db()
+                await _mdb.sessions.update_one(
+                    {"_id": jti, "is_active": True},
+                    {"$set": {
+                        "session_status":  "disconnected",
+                        "disconnected_at": datetime.now(timezone.utc),
+                    }}
+                )
+            except Exception as _e:
+                logger.warning("WS disconnect session update failed: %s", _e)
+        logger.info("WS session closed | user=%s jti=%s", user_id, jti)
+
+
+# ── Background cleanup loop ───────────────────────────────────────────────────
+
+async def session_cleanup_loop() -> None:
+    """
+    Periodic background task that sweeps stale sessions.
+
+    Every _CLEANUP_INTERVAL_SECONDS:
+    - Marks EXPIRED any session where expires_at < now
+    - Marks IDLE any active session with no heartbeat for > _IDLE_MARK_THRESHOLD_SECONDS
+      (idle sessions still allow authenticated requests but will not block new logins)
+
+    Imported and started in main.py lifespan.
+    """
+    while True:
+        try:
+            await asyncio.sleep(_CLEANUP_INTERVAL_SECONDS)
+            master_db = get_master_db()
+            now        = datetime.now(timezone.utc)
+            idle_cutoff = now - timedelta(seconds=_IDLE_MARK_THRESHOLD_SECONDS)
+
+            # Hard-expire sessions whose token window has closed
+            expired = await master_db.sessions.update_many(
+                {"is_active": True, "expires_at": {"$lt": now}},
+                {"$set": {"is_active": False, "session_status": "expired", "ended_at": now}}
+            )
+
+            # Soft-mark sessions that haven't heartbeated recently as idle
+            idle = await master_db.sessions.update_many(
+                {
+                    "is_active":        True,
+                    "session_status":   {"$in": ["active", "disconnected"]},
+                    "last_activity_at": {"$lt": idle_cutoff},
+                },
+                {"$set": {"session_status": "idle"}}
+            )
+
+            if expired.modified_count or idle.modified_count:
+                logger.info(
+                    "[session_cleanup] expired=%d  idle=%d",
+                    expired.modified_count, idle.modified_count
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error("[session_cleanup] sweep error: %s", e)

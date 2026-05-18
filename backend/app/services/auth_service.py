@@ -24,6 +24,10 @@ from app.models.company.role import SystemRole, ROLE_DEFAULT_PERMISSIONS
 
 logger = logging.getLogger(__name__)
 
+# A session is "truly active" only if a heartbeat was received within this window.
+# Frontend heartbeat interval is 30 s; allow 4 missed beats (120 s) as grace.
+SESSION_TRULY_ACTIVE_THRESHOLD_SECONDS = 120
+
 async def _resolve_effective_permissions(user: dict, role_doc: Optional[dict], db=None) -> list:
     """
     Single source of truth for computing effective permissions.
@@ -424,28 +428,65 @@ class AuthService:
             return None, "Your account is inactive. Please contact your administrator."
 
         # ── Concurrent session check ──────────────────────────────────────────
-        # Check active_session_token directly on the user document. If it is
-        # set, another device currently holds an active session for this user.
-        # force_login=True skips this check and takes over the session.
+        # Only block login when the existing session is TRULY ACTIVE:
+        #   - session document exists + is_active=True
+        #   - token has not yet expired
+        #   - a heartbeat was received recently (< SESSION_TRULY_ACTIVE_THRESHOLD_SECONDS)
+        #     OR the WebSocket connection is still live
+        # Dead / idle / expired sessions are auto-invalidated so the user
+        # can log in again without manual intervention.
         if not force_login and user.get("active_session_token"):
-            # Fetch the existing session record so the frontend can show device
-            # context (browser / OS / IP / login time) in the conflict modal.
             import json as _json
+            from app.core.ws_manager import ws_manager as _ws
             _master_db = get_master_db()
+            _active_jti = user["active_session_token"]
             _session_doc = await _master_db.sessions.find_one(
-                {"_id": user["active_session_token"], "is_active": True}
+                {"_id": _active_jti, "is_active": True}
             )
-            _session_info: dict = {}
             if _session_doc:
-                _session_info = {
-                    "device_info": _session_doc.get("device_info", ""),
-                    "ip_address":  _session_doc.get("ip_address",  ""),
-                    "login_time":  _session_doc["created_at"].isoformat() if _session_doc.get("created_at") else None,
-                    "last_active": _session_doc.get("last_active_at", _session_doc.get("created_at", None)),
-                }
-                if _session_info["last_active"] and hasattr(_session_info["last_active"], "isoformat"):
-                    _session_info["last_active"] = _session_info["last_active"].isoformat()
-            return None, f"ACTIVE_SESSION|{_json.dumps(_session_info)}"
+                _now = datetime.now(timezone.utc)
+
+                # Token validity
+                _expires = _session_doc.get("expires_at")
+                if _expires and _expires.tzinfo is None:
+                    _expires = _expires.replace(tzinfo=timezone.utc)
+                _token_valid = bool(_expires and _expires > _now)
+
+                # Heartbeat recency
+                _last_act = _session_doc.get("last_activity_at") or _session_doc.get("created_at")
+                if _last_act and _last_act.tzinfo is None:
+                    _last_act = _last_act.replace(tzinfo=timezone.utc)
+                _heartbeat_alive = bool(
+                    _last_act and
+                    (_now - _last_act).total_seconds() < SESSION_TRULY_ACTIVE_THRESHOLD_SECONDS
+                )
+
+                # WebSocket liveness
+                _uid_str = str(user.get("_id") or user.get("id", ""))
+                _ws_connected = _ws.is_connected(_uid_str)
+
+                if _token_valid and (_heartbeat_alive or _ws_connected):
+                    # Session is genuinely live — require approval before replacing it
+                    _session_info = {
+                        "device_info":    _session_doc.get("device_info", ""),
+                        "ip_address":     _session_doc.get("ip_address",  ""),
+                        "login_time":     _session_doc["created_at"].isoformat() if _session_doc.get("created_at") else None,
+                        "last_active":    _last_act.isoformat() if _last_act else None,
+                        "session_status": _session_doc.get("session_status", "active"),
+                        "ws_connected":   _ws_connected,
+                    }
+                    return None, f"ACTIVE_SESSION|{_json.dumps(_session_info)}"
+                else:
+                    # Session is stale/dead — auto-invalidate and allow login
+                    await _master_db.sessions.update_one(
+                        {"_id": _active_jti},
+                        {"$set": {
+                            "is_active":      False,
+                            "session_status": "expired",
+                            "ended_at":       _now,
+                        }}
+                    )
+            # active_session_token is stale or no session doc found — proceed
 
         # ── Subscription expiry ───────────────────────────────────────────────
         plan_expiry = tenant.get("plan_expiry")
@@ -786,8 +827,10 @@ class AuthService:
             "ip_address": ip_address,
             "device_info": device_info,
             "created_at": now,
+            "last_activity_at": now,
             "expires_at": now + timedelta(hours=24),
             "is_active": True,
+            "session_status": "active",
         })
         return session_id
 

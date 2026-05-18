@@ -172,6 +172,24 @@ async def get_current_user(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+    # ── STEP 3: touch last_activity_at so every authenticated request counts ──
+    # Fire-and-forget — never block the response path on a DB write.
+    if jti and not _is_super_admin and not _is_seller:
+        async def _touch() -> None:
+            try:
+                _m = get_master_db()
+                await _m.sessions.update_one(
+                    {"_id": jti, "is_active": True},
+                    {"$set": {
+                        "last_activity_at": datetime.now(timezone.utc),
+                        "session_status":   "active",
+                    }},
+                )
+            except Exception:
+                pass
+        import asyncio as _asyncio
+        _asyncio.ensure_future(_touch())
+
     # Extract user context
     return AuthContext(
         user_id=payload.get("sub"),

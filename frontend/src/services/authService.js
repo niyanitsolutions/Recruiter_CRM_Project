@@ -15,21 +15,6 @@ const authService = {
   },
 
   /**
-   * Force-login: revoke existing session and log in on this device
-   */
-  forceLogin: (credentials) => {
-    return api.post('/auth/login', { ...credentials, force_login: true })
-  },
-
-  /**
-   * Force-logout any existing session on another device, then log in here.
-   * Called when the user confirms the concurrent-session conflict modal.
-   */
-  forceLogoutAndLogin: (credentials) => {
-    return api.post('/auth/force-logout-and-login', credentials)
-  },
-
-  /**
    * Register a new company (subscription flow).
    * Uses 60 s timeout — creating a company DB + collections + seed roles
    * can exceed the default 15 s limit, especially on cold MongoDB instances.

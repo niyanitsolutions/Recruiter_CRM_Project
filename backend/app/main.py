@@ -71,6 +71,7 @@ from app.api.v1 import email_test
 
 # ============== Session Management + WebSocket ==============
 from app.api.v1 import sessions as sessions_router
+from app.api.v1.sessions import session_cleanup_loop
 
 
 # ─── Default super admin auto-seed ────────────────────────────────────────────
@@ -174,8 +175,23 @@ async def lifespan(app: FastAPI):
     # Start subscription reminder background task (runs every 24 hours)
     reminder_task = asyncio.create_task(reminder_background_loop())
     print(" Subscription reminder scheduler started")
+    cleanup_task = asyncio.create_task(session_cleanup_loop())
+    print(" Session cleanup scheduler started")
+
+    # Ensure sessions TTL index exists (idempotent)
+    try:
+        _master_db2 = get_master_db()
+        await _master_db2.sessions.create_index("expires_at", expireAfterSeconds=0, background=True)
+        await _master_db2.sessions.create_index(
+            [("user_id", 1), ("is_active", 1), ("last_activity_at", -1)],
+            background=True,
+        )
+    except Exception as _idx_err2:
+        logger.warning("Session index creation skipped: %s", _idx_err2)
+
     yield
     # Shutdown
+    cleanup_task.cancel()
     reminder_task.cancel()
     await close_redis()
     await close_mongo_connection()

@@ -9,7 +9,7 @@ import {
   Clock, Shield, Smartphone,
 } from 'lucide-react'
 import {
-  login, loginWithTenant, forceLogoutAndLogin, clearError, clearTenantSelection,
+  login, loginWithTenant, clearError, clearTenantSelection,
   selectAuth, selectSubscriptionExpired, selectTenantSelection,
 } from '../../store/authSlice'
 import { Button, Input } from '../../components/common'
@@ -74,12 +74,10 @@ function timeSince(isoStr) {
  * Shown on Device B when the login attempt returns 409 (active session on Device A).
  *
  * Phases:
- *   confirm   — shows active-session info; two choices:
- *                 a) "Request Access" — politely ask Device A to approve
- *                 b) "Force Login"    — immediately take over
+ *   confirm    — shows active-session info; user can request access from Device A
  *   requesting — calling POST /sessions/request-access
  *   waiting    — polling GET /sessions/request-status every 2 s
- *   approved   — auto force-login (Device A's session is already revoked)
+ *   approved   — Device A approved; Device B retries normal login (session slot is free)
  *   denied     — Device A blocked the request
  *   expired    — 5-minute TTL ran out with no response
  */
@@ -116,8 +114,15 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
       startPolling(rid)
       startCountdown()
     } catch (err) {
-      const msg = err?.response?.data?.detail || 'Failed to send request. Please try again.'
-      toast.error(msg)
+      const detail = err?.response?.data?.detail
+      if (detail === 'NO_ACTIVE_SESSION') {
+        // Session died between the 409 and now — just retry normal login
+        toast.success('The other session has ended. Logging you in…')
+        onClose()
+        onLoginSuccess?.()
+        return
+      }
+      toast.error(detail || 'Failed to send request. Please try again.')
       setPhase('confirm')
     }
   }
@@ -132,10 +137,11 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
           clearInterval(pollRef.current)
           clearInterval(countRef.current)
           setPhase('approved')
-          // Device A revoked their own session → proceed with force login
+          // Device A's session is now REPLACED (is_active=False) — a normal
+          // login will succeed because the stale session no longer blocks it.
           setTimeout(async () => {
             try {
-              await dispatch(forceLogoutAndLogin({ identifier, password, remember_me: rememberMe })).unwrap()
+              await dispatch(login({ identifier, password, remember_me: rememberMe })).unwrap()
               if (rememberMe) { setSavedEmail(identifier); setSavedPassword(password) }
               else             { removeSavedEmail();        removeSavedPassword() }
               toast.success('Login successful!')
@@ -298,9 +304,9 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
               <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
                 <Shield size={24} color="#f59e0b" />
               </div>
-              <h3 style={{ color: '#f1f5f9', fontSize: '17px', fontWeight: 700, margin: 0 }}>Account Already Active</h3>
+              <h3 style={{ color: '#f1f5f9', fontSize: '17px', fontWeight: 700, margin: 0 }}>Active Session Detected</h3>
               <p style={{ color: '#94a3b8', fontSize: '12.5px', marginTop: 6 }}>
-                This account is currently active on another device.
+                This account has an active session on another device.
               </p>
             </div>
 
@@ -308,23 +314,24 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <InfoRow icon={<DeviceIcon ua={sessionInfo.device_info} />} label="Device" value={deviceLabel} />
                 <InfoRow icon={<Globe size={14} />}  label="IP Address" value={ipLabel} />
-                {sinceLabel && <InfoRow icon={<Clock size={14} />} label="Active Since" value={sinceLabel} />}
+                {sinceLabel && <InfoRow icon={<Clock size={14} />} label="Last Active" value={timeSince(sessionInfo.last_active) || sinceLabel} />}
+                {sessionInfo.ws_connected && (
+                  <InfoRow
+                    icon={<span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
+                    label="Status"
+                    value="Connected"
+                  />
+                )}
               </div>
             </div>
 
             <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', marginBottom: 16 }} />
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button
-                onClick={handleRequestAccess}
-                style={btnStyle('primary')}
-              >
+              <button onClick={handleRequestAccess} style={btnStyle('primary')}>
                 <Shield size={14} /> Request Access from Active Device
               </button>
-
-              <button onClick={onClose} style={btnStyle('ghost')}>
-                Cancel
-              </button>
+              <button onClick={onClose} style={btnStyle('ghost')}>Cancel</button>
             </div>
           </>
         )}

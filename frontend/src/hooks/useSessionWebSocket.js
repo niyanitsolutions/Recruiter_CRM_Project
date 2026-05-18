@@ -15,9 +15,10 @@
  * Reconnection: exponential backoff starting at 1 s, capped at 30 s.
  *               4001 (invalid/expired token) is a permanent error — no retry.
  *
- * Heartbeat: POST /sessions/heartbeat every 5 minutes to keep the session
- *            alive in the DB and to poll for pending login requests as a
- *            fallback when the WS missed the push notification.
+ * Heartbeat: POST /sessions/heartbeat every 30 seconds to keep last_activity_at
+ *            fresh in the DB (used by login to detect truly active sessions)
+ *            and to poll for pending login requests as a fallback when WS missed
+ *            the push notification.
  */
 
 import { useEffect, useRef } from 'react'
@@ -26,7 +27,7 @@ import { selectIsAuthenticated, selectToken } from '../store/authSlice'
 import { parseToken } from '../utils/token'
 import api from '../services/api'
 
-const HEARTBEAT_MS   = 5 * 60 * 1000   // 5 minutes
+const HEARTBEAT_MS   = 30 * 1000        // 30 seconds — matches backend activity threshold
 const RECONNECT_BASE = 1_000            // initial backoff
 const RECONNECT_MAX  = 30_000           // cap backoff at 30 s
 
@@ -160,7 +161,8 @@ export function useSessionWebSocket() {
     const runHeartbeat = async () => {
       if (unmounted.current) return
       try {
-        const res     = await api.post('/sessions/heartbeat')
+        const wsAlive = !!(wsRef.current && wsRef.current.readyState === WebSocket.OPEN)
+        const res     = await api.post('/sessions/heartbeat', { ws_connected: wsAlive })
         const pending = res.data?.pending_request
         if (pending) {
           // Device A has a pending approval that arrived through DB polling
