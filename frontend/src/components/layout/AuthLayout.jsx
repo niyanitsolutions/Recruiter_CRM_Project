@@ -119,8 +119,8 @@ export default function AuthLayout() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                height: '70px',
-                maxWidth: '270px',
+                height: '84px',
+                maxWidth: '290px',
                 width: '100%',
                 boxShadow: '0 4px 24px rgba(0,0,0,0.28)',
               }}>
@@ -130,7 +130,7 @@ export default function AuthLayout() {
                   loading="eager"
                   style={{
                     display: 'block',
-                    height: '52px',
+                    height: '66px',
                     width: '100%',
                     objectFit: 'contain',
                     objectPosition: 'center',
@@ -316,6 +316,36 @@ export default function AuthLayout() {
         .glass-alert-red   { background: rgba(239,68,68,0.09);  border: 1.5px solid rgba(239,68,68,0.24);  }
         .glass-alert-amber { background: rgba(245,158,11,0.09); border: 1.5px solid rgba(245,158,11,0.24); }
         .glass-alert-green { background: rgba(34,197,94,0.09);  border: 1.5px solid rgba(34,197,94,0.24);  }
+
+        /* ── Light-mode adaptation ──────────────────────────── */
+        @media (prefers-color-scheme: light) {
+          .glass-input {
+            background: rgba(0,0,0,0.06);
+            border-color: rgba(0,0,0,0.14);
+            color: #0f172a;
+          }
+          .glass-input::placeholder { color: rgba(0,0,0,0.35); }
+          .glass-input:focus {
+            border-color: rgba(99,102,241,0.70);
+            background: rgba(0,0,0,0.04);
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.15), 0 0 24px rgba(99,102,241,0.10);
+          }
+          .glass-input:hover:not(:focus) {
+            border-color: rgba(0,0,0,0.22);
+            background: rgba(0,0,0,0.08);
+          }
+          .glass-input:-webkit-autofill,
+          .glass-input:-webkit-autofill:hover,
+          .glass-input:-webkit-autofill:focus,
+          .glass-input:-webkit-autofill:active {
+            -webkit-box-shadow: 0 0 0 1000px rgba(238,236,255,0.98) inset !important;
+            -webkit-text-fill-color: #0f172a !important;
+            caret-color: #0f172a;
+          }
+          .glass-input-icon { color: rgba(67,56,202,0.82) !important; }
+          .glass-input-eye  { color: rgba(67,56,202,0.82) !important; }
+          .glass-input-eye:hover { color: rgba(67,56,202,1) !important; }
+        }
 
         /* ── Keyframes ───────────────────────────────────────── */
         @keyframes cardIn {
