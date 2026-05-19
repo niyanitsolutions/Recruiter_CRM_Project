@@ -114,8 +114,8 @@ const authService = {
    * Second-step login after tenant selection.
    * Called when /auth/login returns tenant_selection_required=true.
    */
-  loginWithTenant: (identifier, password, company_id) => {
-    return api.post('/auth/login-with-tenant', { identifier, password, company_id })
+  loginWithTenant: (identifier, password, company_id, extra = {}) => {
+    return api.post('/auth/login-with-tenant', { identifier, password, company_id, ...extra })
   },
 
   /**

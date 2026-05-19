@@ -33,6 +33,10 @@ class LoginRequest(BaseModel):
         False,
         description="If True, revoke any existing session and log in on this device"
     )
+    device_fingerprint: Optional[str] = Field(
+        None,
+        description="Stable browser fingerprint used to detect same-device re-authentication"
+    )
 
 
 class SuperAdminLoginRequest(BaseModel):
@@ -149,6 +153,7 @@ class TenantLoginRequest(BaseModel):
     password: str   = Field(..., min_length=1)
     company_id: str = Field(..., description="The company_id the user selected")
     force_login: bool = Field(False, description="If True, revoke any existing session")
+    device_fingerprint: Optional[str] = None
 
 
 class TenantSelectionResponse(BaseModel):

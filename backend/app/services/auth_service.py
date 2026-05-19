@@ -124,7 +124,7 @@ class AuthService:
     """
 
     @staticmethod
-    async def login(identifier: str, password: str, request=None, company_code: Optional[str] = None, force_login: bool = False) -> Tuple[Optional[dict], str]:
+    async def login(identifier: str, password: str, request=None, company_code: Optional[str] = None, force_login: bool = False, device_fingerprint: str = "") -> Tuple[Optional[dict], str]:
         """
         Authenticate user and return tokens.
 
@@ -193,7 +193,7 @@ class AuthService:
                 logger.warning("Login failed (wrong password) | company=%s | identifier=%s", company_code, identifier)
                 return None, "Invalid credentials"
 
-            return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login)
+            return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint)
 
         # GLOBAL PATH (no company_code)
         # ── Fast path: global_users index (O(1), no per-tenant scanning) ─────
@@ -280,7 +280,7 @@ class AuthService:
                     }, ""
 
                 tenant, user = valid_matches[0]
-                return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login)
+                return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint)
 
         # ── Legacy fallback: O(N) scan for users not yet in global_users ─────
         # Covers tenants registered before the global_users migration was run.
@@ -369,7 +369,7 @@ class AuthService:
             }, ""
 
         tenant, user = valid_matches[0]
-        return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login)
+        return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint)
 
     @staticmethod
     async def login_with_tenant(
@@ -378,6 +378,7 @@ class AuthService:
         company_id: str,
         request=None,
         force_login: bool = False,
+        device_fingerprint: str = "",
     ) -> Tuple[Optional[dict], str]:
         """
         Scoped login after the user has selected a tenant from the picker.
@@ -387,7 +388,8 @@ class AuthService:
         duplication.
         """
         return await AuthService.login(
-            identifier, password, request=request, company_code=company_id, force_login=force_login
+            identifier, password, request=request, company_code=company_id,
+            force_login=force_login, device_fingerprint=device_fingerprint,
         )
 
     @staticmethod
@@ -409,6 +411,7 @@ class AuthService:
         ip_address: str = "",
         device_info: str = "",
         force_login: bool = False,
+        device_fingerprint: str = "",
     ) -> Tuple[Optional[dict], str]:
         """
         Shared finalization for every company-user login path.
@@ -446,46 +449,61 @@ class AuthService:
             if _session_doc:
                 _now = datetime.now(timezone.utc)
 
-                # Token validity
-                _expires = _session_doc.get("expires_at")
-                if _expires and _expires.tzinfo is None:
-                    _expires = _expires.replace(tzinfo=timezone.utc)
-                _token_valid = bool(_expires and _expires > _now)
-
-                # Heartbeat recency
-                _last_act = _session_doc.get("last_activity_at") or _session_doc.get("created_at")
-                if _last_act and _last_act.tzinfo is None:
-                    _last_act = _last_act.replace(tzinfo=timezone.utc)
-                _heartbeat_alive = bool(
-                    _last_act and
-                    (_now - _last_act).total_seconds() < SESSION_TRULY_ACTIVE_THRESHOLD_SECONDS
+                # Same-device recovery: if the incoming fingerprint matches the stored
+                # session's fingerprint this is the same browser re-authenticating after
+                # an idle/lock timeout — skip the liveness check and fall through to
+                # normal session creation.  _revoke_sessions() below will cleanly end
+                # the old session.
+                _stored_fp   = _session_doc.get("device_fingerprint", "")
+                _same_device = bool(
+                    device_fingerprint and _stored_fp and device_fingerprint == _stored_fp
                 )
 
-                # WebSocket liveness
-                _uid_str = str(user.get("_id") or user.get("id", ""))
-                _ws_connected = _ws.is_connected(_uid_str)
-
-                if _token_valid and (_heartbeat_alive or _ws_connected):
-                    # Session is genuinely live — require approval before replacing it
-                    _session_info = {
-                        "device_info":    _session_doc.get("device_info", ""),
-                        "ip_address":     _session_doc.get("ip_address",  ""),
-                        "login_time":     _session_doc["created_at"].isoformat() if _session_doc.get("created_at") else None,
-                        "last_active":    _last_act.isoformat() if _last_act else None,
-                        "session_status": _session_doc.get("session_status", "active"),
-                        "ws_connected":   _ws_connected,
-                    }
-                    return None, f"ACTIVE_SESSION|{_json.dumps(_session_info)}"
-                else:
-                    # Session is stale/dead — auto-invalidate and allow login
-                    await _master_db.sessions.update_one(
-                        {"_id": _active_jti},
-                        {"$set": {
-                            "is_active":      False,
-                            "session_status": "expired",
-                            "ended_at":       _now,
-                        }}
+                if _same_device:
+                    logger.info(
+                        "[SESSION] Same-device recovery | user=%s | fp=%.8s",
+                        str(user.get("_id") or user.get("id", "")), device_fingerprint,
                     )
+                    # Fall through — _revoke_sessions() below replaces the old session
+                else:
+                    # Different device (or fingerprint unavailable) — full liveness check
+                    _expires = _session_doc.get("expires_at")
+                    if _expires and _expires.tzinfo is None:
+                        _expires = _expires.replace(tzinfo=timezone.utc)
+                    _token_valid = bool(_expires and _expires > _now)
+
+                    _last_act = _session_doc.get("last_activity_at") or _session_doc.get("created_at")
+                    if _last_act and _last_act.tzinfo is None:
+                        _last_act = _last_act.replace(tzinfo=timezone.utc)
+                    _heartbeat_alive = bool(
+                        _last_act and
+                        (_now - _last_act).total_seconds() < SESSION_TRULY_ACTIVE_THRESHOLD_SECONDS
+                    )
+
+                    _uid_str = str(user.get("_id") or user.get("id", ""))
+                    _ws_connected = _ws.is_connected(_uid_str)
+
+                    if _token_valid and (_heartbeat_alive or _ws_connected):
+                        # Session is genuinely live on a different device — require approval
+                        _session_info = {
+                            "device_info":    _session_doc.get("device_info", ""),
+                            "ip_address":     _session_doc.get("ip_address",  ""),
+                            "login_time":     _session_doc["created_at"].isoformat() if _session_doc.get("created_at") else None,
+                            "last_active":    _last_act.isoformat() if _last_act else None,
+                            "session_status": _session_doc.get("session_status", "active"),
+                            "ws_connected":   _ws_connected,
+                        }
+                        return None, f"ACTIVE_SESSION|{_json.dumps(_session_info)}"
+                    else:
+                        # Session is stale/dead — auto-invalidate and allow login
+                        await _master_db.sessions.update_one(
+                            {"_id": _active_jti},
+                            {"$set": {
+                                "is_active":      False,
+                                "session_status": "expired",
+                                "ended_at":       _now,
+                            }}
+                        )
             # active_session_token is stale or no session doc found — proceed
 
         # ── Subscription expiry ───────────────────────────────────────────────
@@ -533,6 +551,7 @@ class AuthService:
         session_id = await AuthService._create_session(
             user_id, "company_user", company_id,
             ip_address=ip_address, device_info=device_info,
+            device_fingerprint=device_fingerprint,
         )
         # Persist active session token on user document for concurrent login detection.
         # Cleared on logout so a fresh login is always allowed after logout.
@@ -813,6 +832,7 @@ class AuthService:
         company_id: Optional[str] = None,
         ip_address: str = "",
         device_info: str = "",
+        device_fingerprint: str = "",
     ) -> str:
         """Insert a new active session record and return its session_id (used as jti)."""
         master_db = get_master_db()
@@ -826,6 +846,7 @@ class AuthService:
             "company_id": company_id,
             "ip_address": ip_address,
             "device_info": device_info,
+            "device_fingerprint": device_fingerprint,
             "created_at": now,
             "last_activity_at": now,
             "expires_at": now + timedelta(hours=24),

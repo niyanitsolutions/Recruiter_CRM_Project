@@ -67,7 +67,7 @@ async def login(data: LoginRequest, request: Request):
     """
     result, error = await auth_service.login(
         data.identifier, data.password, request=request, company_code=data.company_code,
-        force_login=data.force_login,
+        force_login=data.force_login, device_fingerprint=data.device_fingerprint or "",
     )
 
     if error:
@@ -168,6 +168,7 @@ async def login_with_tenant(data: TenantLoginRequest, request: Request):
         company_id=data.company_id,
         request=request,
         force_login=data.force_login,
+        device_fingerprint=data.device_fingerprint or "",
     )
 
     if error:

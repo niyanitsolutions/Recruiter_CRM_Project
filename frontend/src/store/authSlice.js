@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import axios from 'axios'
 import authService from '../services/authService'
+import { getDeviceFingerprint } from '../utils/fingerprint'
 import {
   getToken, setToken, removeToken,
   getUser, setUser, removeUser,
@@ -95,7 +96,9 @@ export const loginWithTenant = createAsyncThunk(
   async (credentials, { rejectWithValue }) => {
     try {
       const { identifier, password, company_id, remember_me } = credentials
-      const response = await authService.loginWithTenant(identifier, password, company_id)
+      const response = await authService.loginWithTenant(identifier, password, company_id, {
+        device_fingerprint: getDeviceFingerprint(),
+      })
       return { ...response.data, remember_me: remember_me !== false }
     } catch (error) {
       if (error.response?.status === 402) {
@@ -121,7 +124,10 @@ export const login = createAsyncThunk(
   async (credentials, { rejectWithValue }) => {
     try {
       const { remember_me, ...loginData } = credentials
-      const response = await authService.login(loginData)
+      const response = await authService.login({
+        ...loginData,
+        device_fingerprint: getDeviceFingerprint(),
+      })
       // Backend may return tenant_selection_required instead of tokens
       if (response.data?.tenant_selection_required) {
         return {
