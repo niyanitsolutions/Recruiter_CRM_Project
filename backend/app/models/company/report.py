@@ -21,7 +21,12 @@ class ReportType(str, Enum):
     JOB_AGING = "job_aging"
     CANDIDATE_PIPELINE = "candidate_pipeline"
     INTERVIEW_CONVERSION = "interview_conversion"
-    
+    RECRUITER_PERFORMANCE = "recruiter_performance"
+
+    # Client Reports
+    CLIENT_SUMMARY = "client_summary"
+    CLIENT_HIRING_TREND = "client_hiring_trend"
+
     # Financial Reports
     PAYOUT_SUMMARY = "payout_summary"
     INVOICE_AGING = "invoice_aging"
@@ -29,26 +34,32 @@ class ReportType(str, Enum):
     COMMISSION_TRENDS = "commission_trends"
     PAYMENT_HISTORY = "payment_history"
     TAX_SUMMARY = "tax_summary"
-    
+
     # Onboarding Reports
     OFFER_ACCEPTANCE = "offer_acceptance"
     NO_SHOW_ANALYSIS = "no_show_analysis"
     DOJ_EXTENSIONS = "doj_extensions"
     DOCUMENT_COMPLIANCE = "document_compliance"
     PAYOUT_ELIGIBILITY = "payout_eligibility"
-    
+
     # Team Reports
     COORDINATOR_ACTIVITY = "coordinator_activity"
     USER_PRODUCTIVITY = "user_productivity"
     RESPONSE_TIME = "response_time"
 
+    # Audit Reports
+    LOGIN_ACTIVITY = "login_activity"
+    USER_ACTIONS = "user_actions"
+
 
 class ReportCategory(str, Enum):
     """Report categories"""
     RECRUITMENT = "recruitment"
+    CLIENT = "client"
     FINANCIAL = "financial"
     ONBOARDING = "onboarding"
     TEAM = "team"
+    AUDIT = "audit"
     CUSTOM = "custom"
 
 
@@ -78,6 +89,8 @@ class DateRangePreset(str, Enum):
     LAST_MONTH = "last_month"
     THIS_QUARTER = "this_quarter"
     LAST_QUARTER = "last_quarter"
+    LAST_6_MONTHS = "last_6_months"
+    LAST_12_MONTHS = "last_12_months"
     THIS_YEAR = "this_year"
     LAST_YEAR = "last_year"
     CUSTOM = "custom"
@@ -93,6 +106,9 @@ REPORT_TYPE_DISPLAY = {
     ReportType.JOB_AGING: "Job Aging Report",
     ReportType.CANDIDATE_PIPELINE: "Candidate Pipeline",
     ReportType.INTERVIEW_CONVERSION: "Interview Conversion",
+    ReportType.RECRUITER_PERFORMANCE: "Recruiter Performance",
+    ReportType.CLIENT_SUMMARY: "Client Summary",
+    ReportType.CLIENT_HIRING_TREND: "Client Hiring Trend",
     ReportType.PAYOUT_SUMMARY: "Payout Summary",
     ReportType.INVOICE_AGING: "Invoice Aging",
     ReportType.REVENUE_BY_CLIENT: "Revenue by Client",
@@ -107,14 +123,47 @@ REPORT_TYPE_DISPLAY = {
     ReportType.COORDINATOR_ACTIVITY: "Coordinator Activity",
     ReportType.USER_PRODUCTIVITY: "User Productivity",
     ReportType.RESPONSE_TIME: "Response Time Metrics",
+    ReportType.LOGIN_ACTIVITY: "Login Activity Report",
+    ReportType.USER_ACTIONS: "User Actions Report",
 }
 
 REPORT_CATEGORY_DISPLAY = {
     ReportCategory.RECRUITMENT: "Recruitment",
+    ReportCategory.CLIENT: "Client",
     ReportCategory.FINANCIAL: "Financial",
     ReportCategory.ONBOARDING: "Onboarding",
     ReportCategory.TEAM: "Team Performance",
+    ReportCategory.AUDIT: "Audit & Security",
     ReportCategory.CUSTOM: "Custom",
+}
+
+REPORT_TYPE_DESCRIPTIONS = {
+    ReportType.PLACEMENTS_SUMMARY: "Overview of all placements grouped by client and partner with CTC breakdown",
+    ReportType.APPLICATION_FUNNEL: "Track candidate progression through every stage of the hiring funnel",
+    ReportType.TIME_TO_HIRE: "Average, minimum and maximum days from application to joining per client",
+    ReportType.SOURCE_EFFECTIVENESS: "Compare candidate sources by application volume, conversion and joining rates",
+    ReportType.JOB_AGING: "Open job postings segmented by age bucket — identify stale positions",
+    ReportType.CANDIDATE_PIPELINE: "Live view of all candidates by their current pipeline stage",
+    ReportType.INTERVIEW_CONVERSION: "Interview-to-offer-to-join conversion rates with drop-off analysis",
+    ReportType.RECRUITER_PERFORMANCE: "Recruiter leaderboard with placements, revenue and activity metrics",
+    ReportType.CLIENT_SUMMARY: "Client-level overview of open positions, placements, revenue and SLA",
+    ReportType.CLIENT_HIRING_TREND: "Month-over-month hiring volume and closure rate per client",
+    ReportType.PAYOUT_SUMMARY: "Partner payout breakdown by status — pending, eligible and paid",
+    ReportType.INVOICE_AGING: "Outstanding partner invoices segmented by age — 0-30, 30-60, 60-90, 90+ days",
+    ReportType.REVENUE_BY_CLIENT: "Gross revenue, GST and net revenue breakdown per client company",
+    ReportType.COMMISSION_TRENDS: "Monthly commission earned per partner with trend analysis",
+    ReportType.PAYMENT_HISTORY: "Complete log of all processed payments with dates and amounts",
+    ReportType.TAX_SUMMARY: "GST and TDS summary for all transactions in the selected period",
+    ReportType.OFFER_ACCEPTANCE: "Offer acceptance and join rates broken down by client",
+    ReportType.NO_SHOW_ANALYSIS: "Candidates who accepted offers but did not join on the DOJ",
+    ReportType.DOJ_EXTENSIONS: "Onboards with extended date of joining — frequency and duration",
+    ReportType.DOCUMENT_COMPLIANCE: "Candidates missing required onboarding documents",
+    ReportType.PAYOUT_ELIGIBILITY: "Candidates who have joined but whose partner payout is not yet processed",
+    ReportType.COORDINATOR_ACTIVITY: "Per-user action counts from audit logs — creates, updates, deletes",
+    ReportType.USER_PRODUCTIVITY: "Detailed productivity: applications owned, interviews scheduled, offers released",
+    ReportType.RESPONSE_TIME: "Average time for coordinators to move candidates through pipeline stages",
+    ReportType.LOGIN_ACTIVITY: "User login history with device, location and session duration",
+    ReportType.USER_ACTIONS: "Detailed audit trail of all user actions within the selected period",
 }
 
 

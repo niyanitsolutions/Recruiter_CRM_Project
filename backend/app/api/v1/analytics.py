@@ -20,6 +20,7 @@ from app.models.company.analytics import (
     WidgetConfig
 )
 from app.services.analytics_service import AnalyticsService
+from app.core.date_utils import resolve_date_preset
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
@@ -28,6 +29,7 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 @router.get("/dashboard", response_model=DashboardResponse)
 async def get_dashboard(
+    date_range: Optional[str] = None,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     comparison: Optional[ComparisonPeriod] = None,
@@ -36,41 +38,44 @@ async def get_dashboard(
 ):
     """Get complete dashboard with KPIs and analytics"""
     service = AnalyticsService(db)
-    
+
+    # Resolve preset string → concrete dates (preset wins over explicit dates)
+    if date_range and date_range != "custom":
+        start_date, end_date = resolve_date_preset(date_range)
+
     request = AnalyticsRequest(
         start_date=start_date,
         end_date=end_date,
         comparison=comparison
     )
-    
-    # Get all analytics
+
     kpis = await service.get_dashboard_kpis(
         company_id=current_user["company_id"],
         start_date=start_date,
         end_date=end_date,
         comparison=comparison
     )
-    
+
     recruitment = await service.get_recruitment_analytics(
         company_id=current_user["company_id"],
         request=request
     )
-    
+
     financial = await service.get_financial_analytics(
         company_id=current_user["company_id"],
         request=request
     )
-    
+
     onboarding = await service.get_onboarding_analytics(
         company_id=current_user["company_id"],
         request=request
     )
-    
+
     team = await service.get_team_analytics(
         company_id=current_user["company_id"],
         request=request
     )
-    
+
     return DashboardResponse(
         kpis=kpis,
         recruitment=recruitment,

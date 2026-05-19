@@ -88,7 +88,10 @@ const reportService = {
     { value: 'last_month', label: 'Last Month' },
     { value: 'this_quarter', label: 'This Quarter' },
     { value: 'last_quarter', label: 'Last Quarter' },
+    { value: 'last_6_months', label: 'Last 6 Months' },
+    { value: 'last_12_months', label: 'Last 12 Months' },
     { value: 'this_year', label: 'This Year' },
+    { value: 'last_year', label: 'Last Year' },
     { value: 'custom', label: 'Custom Range' }
   ],
 

@@ -18,7 +18,7 @@ from app.models.company.report import (
     DateRange, ReportFilter,
     GenerateReportRequest, SaveReportRequest, UpdateSavedReportRequest,
     ReportResponse, SavedReportResponse, SavedReportListResponse,
-    REPORT_TYPE_DISPLAY, REPORT_CATEGORY_DISPLAY
+    REPORT_TYPE_DISPLAY, REPORT_CATEGORY_DISPLAY, REPORT_TYPE_DESCRIPTIONS
 )
 from app.services.report_service import ReportService
 from app.services.export_service import ExportService
@@ -35,36 +35,19 @@ async def get_report_types(
 ):
     """Get available report types"""
     report_types = []
-    
+
     for rt in ReportType:
-        # Filter by category if specified
-        if category:
-            if category == ReportCategory.RECRUITMENT and rt.value not in [
-                "placements_summary", "application_funnel", "time_to_hire",
-                "source_effectiveness", "job_aging", "candidate_pipeline", "interview_conversion"
-            ]:
-                continue
-            elif category == ReportCategory.FINANCIAL and rt.value not in [
-                "payout_summary", "invoice_aging", "revenue_by_client",
-                "commission_trends", "payment_history", "tax_summary"
-            ]:
-                continue
-            elif category == ReportCategory.ONBOARDING and rt.value not in [
-                "offer_acceptance", "no_show_analysis", "doj_extensions",
-                "document_compliance", "payout_eligibility"
-            ]:
-                continue
-            elif category == ReportCategory.TEAM and rt.value not in [
-                "coordinator_activity", "user_productivity", "response_time"
-            ]:
-                continue
-        
+        rt_category = get_category_for_type(rt)
+        if category and rt_category != category:
+            continue
+
         report_types.append({
             "type": rt.value,
             "name": REPORT_TYPE_DISPLAY.get(rt, rt.value),
-            "category": get_category_for_type(rt).value
+            "category": rt_category.value,
+            "description": REPORT_TYPE_DESCRIPTIONS.get(rt, "")
         })
-    
+
     return {"report_types": report_types}
 
 
@@ -334,28 +317,44 @@ async def run_saved_report(
 
 def get_category_for_type(report_type: ReportType) -> ReportCategory:
     """Get category for a report type"""
-    recruitment_types = [
+    recruitment_types = {
         ReportType.PLACEMENTS_SUMMARY, ReportType.APPLICATION_FUNNEL,
         ReportType.TIME_TO_HIRE, ReportType.SOURCE_EFFECTIVENESS,
         ReportType.JOB_AGING, ReportType.CANDIDATE_PIPELINE,
-        ReportType.INTERVIEW_CONVERSION
-    ]
-    financial_types = [
+        ReportType.INTERVIEW_CONVERSION, ReportType.RECRUITER_PERFORMANCE,
+    }
+    client_types = {
+        ReportType.CLIENT_SUMMARY, ReportType.CLIENT_HIRING_TREND,
+    }
+    financial_types = {
         ReportType.PAYOUT_SUMMARY, ReportType.INVOICE_AGING,
         ReportType.REVENUE_BY_CLIENT, ReportType.COMMISSION_TRENDS,
-        ReportType.PAYMENT_HISTORY, ReportType.TAX_SUMMARY
-    ]
-    onboarding_types = [
+        ReportType.PAYMENT_HISTORY, ReportType.TAX_SUMMARY,
+    }
+    onboarding_types = {
         ReportType.OFFER_ACCEPTANCE, ReportType.NO_SHOW_ANALYSIS,
         ReportType.DOJ_EXTENSIONS, ReportType.DOCUMENT_COMPLIANCE,
-        ReportType.PAYOUT_ELIGIBILITY
-    ]
-    
+        ReportType.PAYOUT_ELIGIBILITY,
+    }
+    team_types = {
+        ReportType.COORDINATOR_ACTIVITY, ReportType.USER_PRODUCTIVITY,
+        ReportType.RESPONSE_TIME,
+    }
+    audit_types = {
+        ReportType.LOGIN_ACTIVITY, ReportType.USER_ACTIONS,
+    }
+
     if report_type in recruitment_types:
         return ReportCategory.RECRUITMENT
+    elif report_type in client_types:
+        return ReportCategory.CLIENT
     elif report_type in financial_types:
         return ReportCategory.FINANCIAL
     elif report_type in onboarding_types:
         return ReportCategory.ONBOARDING
-    else:
+    elif report_type in team_types:
         return ReportCategory.TEAM
+    elif report_type in audit_types:
+        return ReportCategory.AUDIT
+    else:
+        return ReportCategory.CUSTOM

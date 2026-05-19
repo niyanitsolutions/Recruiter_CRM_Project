@@ -854,15 +854,25 @@ class AnalyticsService:
             {"$limit": 10}
         ]
         
-        top_performers = []
+        raw_performers = []
         async for doc in self.db.onboards.aggregate(top_performers_pipeline):
-            # Get user name
-            user = await self.db.users.find_one({"_id": doc["_id"]})
-            top_performers.append({
-                "user_id": doc["_id"],
-                "user_name": user.get("full_name", "Unknown") if user else "Unknown",
-                "placements": doc["placements"]
-            })
+            raw_performers.append(doc)
+
+        # Batch load user names to avoid N+1 queries
+        performer_ids = [d["_id"] for d in raw_performers if d["_id"]]
+        user_map = {}
+        if performer_ids:
+            async for u in self.db.users.find({"id": {"$in": performer_ids}}, {"id": 1, "full_name": 1}):
+                user_map[u["id"]] = u.get("full_name", "Unknown")
+
+        top_performers = [
+            {
+                "user_id": d["_id"],
+                "user_name": user_map.get(d["_id"], "Unknown"),
+                "placements": d["placements"]
+            }
+            for d in raw_performers
+        ]
         
         return TeamAnalytics(
             total_users=total_users,
