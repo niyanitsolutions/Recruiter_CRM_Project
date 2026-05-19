@@ -63,6 +63,11 @@ class AuthContext:
         self.full_name = full_name
         self.session_id = session_id
     
+    @property
+    def jti(self) -> Optional[str]:
+        """Alias for session_id — the JWT JTI used as the session document key."""
+        return self.session_id
+
     def has_permission(self, permission: str) -> bool:
         """Check if user has a specific permission"""
         return permission in self.permissions

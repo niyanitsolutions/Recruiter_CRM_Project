@@ -664,8 +664,9 @@ const RouteLoader = () => (
  * "Logout Now":      dispatch logoutUser() then navigate.
  */
 const SessionManager = () => {
-  const dispatch  = useDispatch()
-  const navigate  = useNavigate()
+  const dispatch        = useDispatch()
+  const navigate        = useNavigate()
+  const isAuthenticated = useSelector(selectIsAuthenticated)
 
   const [warnOpen,      setWarnOpen]      = useState(false)
   const [expiryOpen,    setExpiryOpen]    = useState(false)
@@ -682,9 +683,36 @@ const SessionManager = () => {
   // the original reason (idle → would incorrectly show "remote" message).
   const expiryReasonLockedRef = useRef(false)
 
+  // Suppresses all session:expired events while the user is navigating back to
+  // the login page after clicking "Login Again". Cleared only when a fresh
+  // authentication succeeds (isAuthenticated transitions false → true).
+  // This prevents the "wrong second popup" bug where a stale heartbeat or WS
+  // event fires after idle-logout + re-login and shows "logged in on another
+  // device" even though the user just freshly authenticated themselves.
+  const suppressExpiryRef = useRef(false)
+  const prevAuthRef       = useRef(isAuthenticated)
+
+  // When the user successfully re-authenticates, reset all session state so
+  // the next expiry event is handled fresh.
+  useEffect(() => {
+    if (!prevAuthRef.current && isAuthenticated) {
+      suppressExpiryRef.current    = false
+      expiryReasonLockedRef.current = false
+      seenRequestIds.current.clear()
+      setExpiryOpen(false)
+      setWarnOpen(false)
+    }
+    prevAuthRef.current = isAuthenticated
+  }, [isAuthenticated])
+
   const handleSessionWarning = useCallback(() => setWarnOpen(true),  [])
   const handleWarnDismiss    = useCallback(() => setWarnOpen(false), [])
   const handleSessionExpired = useCallback((e) => {
+    // While the user is in the process of re-logging-in after an expiry, any
+    // stale events (old heartbeat 401s, leftover WS messages, api.js retries)
+    // must be suppressed — otherwise they show a second, incorrect popup.
+    if (suppressExpiryRef.current) return
+
     setWarnOpen(false)
     setLoginReqOpen(false)
     if (!expiryReasonLockedRef.current) {
@@ -751,7 +779,14 @@ const SessionManager = () => {
 
   const handleLoginAgain = useCallback(() => {
     setExpiryOpen(false)
-    expiryReasonLockedRef.current = false
+    // Engage the suppression gate so stale 401s / WS events that fire after
+    // the user navigates back to /login don't open a second expiry modal.
+    // The gate is cleared automatically when a successful new login sets
+    // isAuthenticated back to true (see the useEffect above).
+    suppressExpiryRef.current = true
+    // Intentionally do NOT reset expiryReasonLockedRef here — it stays locked
+    // until the new login clears it, preventing any event from reopening the
+    // modal with a different (wrong) reason during the re-login transition.
     navigate('/login', { replace: true })
   }, [navigate])
 

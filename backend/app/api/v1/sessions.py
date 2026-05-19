@@ -371,13 +371,13 @@ async def approve_request(body: ApproveBody, auth: AuthContext = Depends(get_cur
         raise HTTPException(status_code=400, detail=f"Request is already {req['status']}.")
 
     now = datetime.now(timezone.utc)
-    await master_db.login_requests.update_one(
-        {"_id": body.request_id},
-        {"$set": {"status": "approved", "responded_at": now}}
-    )
 
-    # Mark Device A's session as REPLACED so its next request gets a clear
-    # "session ended" message rather than a generic 401.
+    # ── Step 1: Mark Device A's session REPLACED before touching the request ──
+    # This order is critical: Device B polls request-status and retries login
+    # as soon as status == 'approved'. If we update status first, Device B may
+    # attempt login before the session is marked inactive → hits a live session
+    # → gets 409 ACTIVE_SESSION again. Marking the session first closes that
+    # race window entirely.
     await master_db.sessions.update_one(
         {"_id": auth.jti},
         {"$set": {
@@ -387,8 +387,29 @@ async def approve_request(body: ApproveBody, auth: AuthContext = Depends(get_cur
         }}
     )
 
-    # Notify Device B — it will now call a normal login which will succeed
-    # because active_session_token will be cleared when the new session starts.
+    # ── Step 2: Clear active_session_token on the user document ───────────────
+    # Belt-and-suspenders: even if Device B polls just after step 1, the login
+    # liveness check `if user.get("active_session_token"):` returns falsy and is
+    # skipped entirely — no session lookup needed. Handles both company_db users
+    # and owner docs stored only in master_db.tenants.
+    if auth.company_id:
+        try:
+            cdb = get_company_db(auth.company_id)
+            await cdb.users.update_one(
+                {"_id": auth.user_id},
+                {"$set": {"active_session_token": None}}
+            )
+        except Exception as _e:
+            logger.warning("[approve_request] active_session_token clear failed: %s", _e)
+
+    # ── Step 3: Mark the login request approved ────────────────────────────────
+    # Session is already cleared — Device B can now login successfully.
+    await master_db.login_requests.update_one(
+        {"_id": body.request_id},
+        {"$set": {"status": "approved", "responded_at": now}}
+    )
+
+    # ── Step 4: Notify Device B via WebSocket ─────────────────────────────────
     await ws_manager.send_to_user(auth.user_id, {
         "type":       "login_approved",
         "request_id": body.request_id,

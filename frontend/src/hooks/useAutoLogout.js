@@ -74,7 +74,15 @@ export function useAutoLogout() {
       // Emit event so App.jsx can show the proper modal before navigating
       window.dispatchEvent(new CustomEvent('session:expired', { detail: { reason } }))
 
+      // Sync-clear Redux auth state immediately so useSessionWebSocket's
+      // heartbeat timer and WS connection are torn down on the next render
+      // cycle — before they can fire a stale authenticated request that would
+      // trigger a spurious "session:expired" (reason='remote') event.
+      dispatch(logout())
+
+      // Backend cleanup + localStorage token wipe (async, fires in background)
       dispatch(logoutUser())
+
       navigate('/login', { replace: true })
     }
 
