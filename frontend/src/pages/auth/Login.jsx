@@ -334,15 +334,13 @@ function GlassField({ label, htmlFor, icon, error, children }) {
     <div>
       <label htmlFor={htmlFor} style={{
         display: 'block', marginBottom: 6,
-        color: 'rgba(255,255,255,0.60)', fontSize: '13px', fontWeight: '500',
+        color: 'rgba(255,255,255,0.72)', fontSize: '13px', fontWeight: '500',
+        letterSpacing: '0.01em',
       }}>
         {label}
       </label>
-      <div style={{ position: 'relative' }}>
-        <span style={{
-          position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-          color: 'rgba(255,255,255,0.34)', display: 'flex', pointerEvents: 'none', zIndex: 1,
-        }}>
+      <div className="glass-input-wrap">
+        <span className="glass-input-icon">
           {icon}
         </span>
         {children}
@@ -747,15 +745,9 @@ const Login = () => {
             type="button"
             aria-label={showPassword ? 'Hide password' : 'Show password'}
             onClick={() => setShowPassword(v => !v)}
-            style={{
-              position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)',
-              background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-              color: 'rgba(255,255,255,0.36)', display: 'flex', transition: 'color 0.15s',
-            }}
-            onMouseOver={e => e.currentTarget.style.color = 'rgba(255,255,255,0.72)'}
-            onMouseOut={e  => e.currentTarget.style.color = 'rgba(255,255,255,0.36)'}
+            className="glass-input-eye"
           >
-            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
           </button>
         </GlassField>
 

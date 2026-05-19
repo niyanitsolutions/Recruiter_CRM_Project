@@ -8,22 +8,22 @@ export default function AuthLayout() {
         position: 'fixed', inset: 0, zIndex: 0,
         background: 'linear-gradient(135deg, #080c1a 0%, #0d1535 28%, #0f1245 55%, #0a0c24 80%, #060a17 100%)',
       }}>
-        {/* Recruitment bg image — place your image at /auth-bg.jpg to activate */}
+        {/* Recruitment team office background image */}
         <div style={{
           position: 'absolute', inset: 0,
-          backgroundImage: "url('/auth-bg.jpg')",
+          backgroundImage: "url('/auth-bg-3.jpg')",
           backgroundSize: 'cover',
-          backgroundPosition: 'center',
+          backgroundPosition: 'center top',
           backgroundRepeat: 'no-repeat',
         }} />
 
         {/* Dark readability overlay */}
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.42)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.52)' }} />
 
         {/* Brand colour wash */}
         <div style={{
           position: 'absolute', inset: 0,
-          background: 'linear-gradient(135deg, rgba(79,70,229,0.24) 0%, rgba(124,58,237,0.14) 52%, rgba(15,23,42,0.32) 100%)',
+          background: 'linear-gradient(135deg, rgba(59,48,220,0.32) 0%, rgba(109,40,217,0.20) 50%, rgba(15,23,42,0.38) 100%)',
         }} />
 
         {/* Dot-grid mesh */}
@@ -82,50 +82,66 @@ export default function AuthLayout() {
           style={{
             width: '100%',
             maxWidth: '510px',
-            background: 'rgba(255,255,255,0.07)',
-            backdropFilter: 'blur(32px) saturate(180%)',
-            WebkitBackdropFilter: 'blur(32px) saturate(180%)',
-            border: '1px solid rgba(255,255,255,0.14)',
+            background: 'rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(40px) saturate(220%) brightness(1.05)',
+            WebkitBackdropFilter: 'blur(40px) saturate(220%) brightness(1.05)',
+            border: '1px solid rgba(255,255,255,0.25)',
             borderRadius: '28px',
             boxShadow: [
-              '0 32px 80px rgba(0,0,0,0.60)',
-              '0 0 0 1px rgba(255,255,255,0.04)',
-              'inset 0 1px 0 rgba(255,255,255,0.11)',
+              '0 32px 80px rgba(0,0,0,0.55)',
+              '0 8px 32px rgba(0,0,0,0.30)',
+              '0 0 0 1px rgba(255,255,255,0.06)',
+              'inset 0 1px 0 rgba(255,255,255,0.28)',
+              'inset 0 -1px 0 rgba(255,255,255,0.06)',
             ].join(', '),
+            position: 'relative',
+            overflow: 'hidden',
             animation: 'cardIn 0.55s cubic-bezier(0.16,1,0.3,1) both',
           }}
         >
-          {/* Logo */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
-            <div style={{
-              background: 'rgba(255,255,255,0.97)',
-              borderRadius: '14px',
-              padding: '8px 24px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '70px',
-              maxWidth: '270px',
-              width: '100%',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.32)',
-            }}>
-              <img
-                src="/Hire_Flow_Logo.png"
-                alt="HireFlow"
-                loading="eager"
-                style={{
-                  display: 'block',
-                  height: '52px',
-                  width: '100%',
-                  objectFit: 'contain',
-                  objectPosition: 'center',
-                }}
-              />
-            </div>
-          </div>
+          {/* Liquid-glass shine overlay — top-left diagonal streak */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.13) 0%, rgba(255,255,255,0.04) 35%, transparent 55%)',
+            pointerEvents: 'none',
+            borderRadius: 'inherit',
+            zIndex: 0,
+          }} />
 
-          {/* Route content */}
-          <Outlet />
+          {/* Inner content wrapper keeps above the shine */}
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            {/* Logo */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
+              <div style={{
+                background: 'rgba(255,255,255,0.97)',
+                borderRadius: '14px',
+                padding: '8px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '70px',
+                maxWidth: '270px',
+                width: '100%',
+                boxShadow: '0 4px 24px rgba(0,0,0,0.28)',
+              }}>
+                <img
+                  src="/Hire_Flow_Logo.png"
+                  alt="HireFlow"
+                  loading="eager"
+                  style={{
+                    display: 'block',
+                    height: '52px',
+                    width: '100%',
+                    objectFit: 'contain',
+                    objectPosition: 'center',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Route content */}
+            <Outlet />
+          </div>
         </div>
       </div>
 
@@ -155,32 +171,58 @@ export default function AuthLayout() {
         /* ── Glass inputs ───────────────────────────────────── */
         .glass-input {
           width: 100%; height: 52px;
-          background: rgba(255,255,255,0.07);
-          border: 1.5px solid rgba(255,255,255,0.12);
+          background: rgba(255,255,255,0.10);
+          border: 1.5px solid rgba(255,255,255,0.20);
           border-radius: 12px;
           color: #fff; font-size: 14px; font-family: inherit;
           padding: 0 16px 0 46px;
           outline: none;
           transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
           -webkit-appearance: none;
+          position: relative;
+          z-index: 1;
         }
-        .glass-input::placeholder { color: rgba(255,255,255,0.28); }
+        .glass-input::placeholder { color: rgba(255,255,255,0.38); }
         .glass-input:focus {
-          border-color: rgba(99,102,241,0.62);
-          background: rgba(255,255,255,0.10);
-          box-shadow: 0 0 0 3px rgba(99,102,241,0.16), 0 0 22px rgba(99,102,241,0.10);
+          border-color: rgba(99,102,241,0.75);
+          background: rgba(255,255,255,0.14);
+          box-shadow: 0 0 0 3px rgba(99,102,241,0.20), 0 0 24px rgba(99,102,241,0.14);
         }
         .glass-input:hover:not(:focus) {
-          border-color: rgba(255,255,255,0.22);
-          background: rgba(255,255,255,0.09);
+          border-color: rgba(255,255,255,0.32);
+          background: rgba(255,255,255,0.13);
         }
         .glass-input-pr { padding-right: 48px; }
+        /* Force dark fill on autofill so icons stay visible against dark bg */
         .glass-input:-webkit-autofill,
-        .glass-input:-webkit-autofill:focus {
-          -webkit-box-shadow: 0 0 0 1000px rgba(18,24,50,0.92) inset !important;
+        .glass-input:-webkit-autofill:hover,
+        .glass-input:-webkit-autofill:focus,
+        .glass-input:-webkit-autofill:active {
+          -webkit-box-shadow: 0 0 0 1000px rgba(14,18,48,0.95) inset !important;
           -webkit-text-fill-color: #fff !important;
-          transition: background-color 5000s;
+          caret-color: #fff;
+          transition: background-color 5000s ease-in-out 0s;
         }
+        /* Input icon wrapper — always above the input element */
+        .glass-input-wrap { position: relative; }
+        .glass-input-icon {
+          position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+          color: rgba(255,255,255,0.70);
+          display: flex; align-items: center; justify-content: center;
+          pointer-events: none;
+          z-index: 3;
+          line-height: 0;
+        }
+        .glass-input-eye {
+          position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+          background: none; border: none; cursor: pointer; padding: 0;
+          color: rgba(255,255,255,0.70);
+          display: flex; align-items: center; justify-content: center;
+          transition: color 0.15s;
+          z-index: 3;
+          line-height: 0;
+        }
+        .glass-input-eye:hover { color: rgba(255,255,255,0.96) !important; }
 
         /* ── Buttons ────────────────────────────────────────── */
         .glass-btn-primary {
