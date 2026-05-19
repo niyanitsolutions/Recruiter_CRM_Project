@@ -13,7 +13,7 @@ from app.models.company.report import (
     ReportResponse,
     SaveReportRequest, UpdateSavedReportRequest,
     SavedReportResponse, SavedReportListResponse,
-    REPORT_TYPE_DISPLAY, REPORT_CATEGORY_DISPLAY, REPORT_TYPE_DESCRIPTIONS
+    REPORT_TYPE_DISPLAY, REPORT_CATEGORY_DISPLAY
 )
 
 
@@ -275,7 +275,12 @@ class ReportService:
         return result.modified_count > 0
     
     # ============== Report Generation Methods ==============
-    
+
+    async def _get_company_job_ids(self, company_id: str) -> list:
+        """Return all job _id values for the company — used to scope application queries
+        (applications collection stores no company_id; jobs do)."""
+        return await self.db.jobs.distinct("_id", {"company_id": company_id, "is_deleted": False})
+
     async def _generate_placements_summary(
         self,
         company_id: str,
@@ -346,51 +351,55 @@ class ReportService:
     ) -> tuple:
         """Generate application funnel report"""
         start_date, end_date = date_range
-        
-        query = {"company_id": company_id, "is_deleted": False}
-        
+
+        job_ids = await self._get_company_job_ids(company_id)
+        query = {"job_id": {"$in": job_ids}, "is_deleted": False}
+
         if start_date and end_date:
             query["created_at"] = {
                 "$gte": datetime.combine(start_date, datetime.min.time()),
                 "$lte": datetime.combine(end_date, datetime.max.time())
             }
-        
+
+        if filters:
+            if filters.client_ids:
+                query["client_id"] = {"$in": filters.client_ids}
+            if filters.coordinator_ids:
+                query["created_by"] = {"$in": filters.coordinator_ids}
+
         pipeline = [
             {"$match": query},
-            {"$group": {
-                "_id": "$status",
-                "count": {"$sum": 1}
-            }}
+            {"$group": {"_id": "$status", "count": {"$sum": 1}}}
         ]
-        
+
         status_counts = {}
         async for doc in self.db.applications.aggregate(pipeline):
             status_counts[doc["_id"]] = doc["count"]
-        
-        # Define funnel stages
+
+        # Correct ApplicationStatus funnel stages (applied → joined)
         funnel_stages = [
-            "applied", "screening", "shortlisted", 
-            "interview_scheduled", "interviewed", 
-            "offered", "joined"
+            "applied", "eligible", "screening", "shortlisted",
+            "interview", "next_round", "selected", "offered",
+            "offer_accepted", "joined"
         ]
-        
+
         data = []
-        total = sum(status_counts.values())
-        
+        total = sum(status_counts.values()) or 1
+
         for stage in funnel_stages:
             count = status_counts.get(stage, 0)
             data.append({
                 "stage": stage.replace("_", " ").title(),
                 "count": count,
-                "percentage": round((count / total * 100) if total > 0 else 0, 1)
+                "percentage": round(count / total * 100, 1)
             })
-        
+
         columns = [
             ReportColumn(key="stage", label="Stage", data_type="string"),
             ReportColumn(key="count", label="Count", data_type="number"),
             ReportColumn(key="percentage", label="Percentage", data_type="percentage"),
         ]
-        
+
         return data, columns
     
     async def _generate_time_to_hire(
@@ -419,7 +428,7 @@ class ReportService:
             {"$lookup": {
                 "from": "applications",
                 "localField": "application_id",
-                "foreignField": "id",
+                "foreignField": "_id",
                 "as": "application"
             }},
             {"$unwind": "$application"},
@@ -472,28 +481,41 @@ class ReportService:
         date_range: tuple,
         filters: Optional[ReportFilter]
     ) -> tuple:
-        """Generate source effectiveness report"""
+        """Generate source effectiveness report — join candidates (source) with applications (status)"""
         start_date, end_date = date_range
-        
-        query = {"company_id": company_id, "is_deleted": False}
-        
+
+        cand_query = {"company_id": company_id, "is_deleted": False}
         if start_date and end_date:
-            query["created_at"] = {
+            cand_query["created_at"] = {
                 "$gte": datetime.combine(start_date, datetime.min.time()),
                 "$lte": datetime.combine(end_date, datetime.max.time())
             }
-        
+
+        # Join candidates with their applications to get source → application status distribution
         pipeline = [
-            {"$match": query},
+            {"$match": cand_query},
+            {"$lookup": {
+                "from": "applications",
+                "localField": "_id",
+                "foreignField": "candidate_id",
+                "as": "apps"
+            }},
+            {"$unwind": {"path": "$apps", "preserveNullAndEmptyArrays": True}},
             {"$group": {
                 "_id": "$source",
                 "total": {"$sum": 1},
-                "shortlisted": {"$sum": {"$cond": [{"$eq": ["$status", "shortlisted"]}, 1, 0]}},
-                "joined": {"$sum": {"$cond": [{"$eq": ["$status", "joined"]}, 1, 0]}}
+                "shortlisted": {"$sum": {"$cond": [
+                    {"$in": ["$apps.status", [
+                        "shortlisted", "interview", "next_round",
+                        "selected", "offered", "offer_accepted", "joined"
+                    ]]},
+                    1, 0
+                ]}},
+                "joined": {"$sum": {"$cond": [{"$eq": ["$apps.status", "joined"]}, 1, 0]}}
             }},
             {"$sort": {"total": -1}}
         ]
-        
+
         data = []
         async for doc in self.db.candidates.aggregate(pipeline):
             total = doc["total"]
@@ -502,9 +524,9 @@ class ReportService:
                 "total_candidates": total,
                 "shortlisted": doc["shortlisted"],
                 "joined": doc["joined"],
-                "conversion_rate": round((doc["joined"] / total * 100) if total > 0 else 0, 1)
+                "conversion_rate": round(doc["joined"] / total * 100, 1) if total > 0 else 0
             })
-        
+
         columns = [
             ReportColumn(key="source", label="Source", data_type="string"),
             ReportColumn(key="total_candidates", label="Total Candidates", data_type="number"),
@@ -512,7 +534,7 @@ class ReportService:
             ReportColumn(key="joined", label="Joined", data_type="number"),
             ReportColumn(key="conversion_rate", label="Conversion %", data_type="percentage"),
         ]
-        
+
         return data, columns
     
     async def _generate_job_aging(
@@ -806,9 +828,9 @@ class ReportService:
         start_date, end_date = date_range
         
         query = {"company_id": company_id}
-        
+
         if start_date and end_date:
-            query["timestamp"] = {
+            query["created_at"] = {
                 "$gte": datetime.combine(start_date, datetime.min.time()),
                 "$lte": datetime.combine(end_date, datetime.max.time())
             }
@@ -853,16 +875,20 @@ class ReportService:
     async def _generate_candidate_pipeline(
         self, company_id: str, date_range: tuple, filters: Optional[ReportFilter]
     ) -> tuple:
-        """Candidate pipeline report — current stage distribution across all active candidates"""
+        """Candidate pipeline report — stage distribution across applications (pipeline stages live on applications)"""
         start_date, end_date = date_range
-        query = {"company_id": company_id, "is_deleted": False}
+
+        job_ids = await self._get_company_job_ids(company_id)
+        query = {"job_id": {"$in": job_ids}, "is_deleted": False}
         if start_date and end_date:
             query["created_at"] = {
                 "$gte": datetime.combine(start_date, datetime.min.time()),
                 "$lte": datetime.combine(end_date, datetime.max.time())
             }
         if filters and filters.coordinator_ids:
-            query["assigned_to"] = {"$in": filters.coordinator_ids}
+            query["created_by"] = {"$in": filters.coordinator_ids}
+        if filters and filters.client_ids:
+            query["client_id"] = {"$in": filters.client_ids}
 
         pipeline = [
             {"$match": query},
@@ -870,16 +896,20 @@ class ReportService:
             {"$sort": {"count": -1}}
         ]
         status_counts = {}
-        async for doc in self.db.candidates.aggregate(pipeline):
+        async for doc in self.db.applications.aggregate(pipeline):
             status_counts[doc["_id"] or "unknown"] = doc["count"]
 
-        stages = ["active", "screening", "shortlisted", "interview_scheduled",
-                  "interviewed", "offered", "joined", "rejected", "on_hold"]
+        # Correct ApplicationStatus values
+        stages = [
+            "applied", "eligible", "screening", "shortlisted", "interview",
+            "next_round", "selected", "offered", "offer_accepted", "offer_declined",
+            "joined", "rejected", "on_hold", "withdrawn"
+        ]
         total = sum(status_counts.values()) or 1
         data = []
         for stage in stages:
             count = status_counts.get(stage, 0)
-            if count > 0 or stage in ["active", "shortlisted", "joined"]:
+            if count > 0 or stage in ["applied", "shortlisted", "joined"]:
                 data.append({
                     "stage": stage.replace("_", " ").title(),
                     "count": count,
@@ -888,7 +918,7 @@ class ReportService:
 
         columns = [
             ReportColumn(key="stage", label="Pipeline Stage", data_type="string"),
-            ReportColumn(key="count", label="Candidates", data_type="number"),
+            ReportColumn(key="count", label="Applications", data_type="number"),
             ReportColumn(key="percentage", label="Share %", data_type="percentage"),
         ]
         return data, columns
@@ -949,19 +979,25 @@ class ReportService:
         """Recruiter performance leaderboard"""
         start_date, end_date = date_range
 
+        job_ids = await self._get_company_job_ids(company_id)
+        dt_filter = {
+            "$gte": datetime.combine(start_date, datetime.min.time()),
+            "$lte": datetime.combine(end_date, datetime.max.time())
+        }
+
         # Applications created per user
         app_pipeline = [
             {"$match": {
-                "company_id": company_id, "is_deleted": False,
-                "created_at": {
-                    "$gte": datetime.combine(start_date, datetime.min.time()),
-                    "$lte": datetime.combine(end_date, datetime.max.time())
-                }
+                "job_id": {"$in": job_ids}, "is_deleted": False,
+                "created_at": dt_filter
             }},
             {"$group": {
                 "_id": "$created_by",
                 "applications": {"$sum": 1},
-                "shortlisted": {"$sum": {"$cond": [{"$in": ["$status", ["shortlisted", "interview_scheduled", "interviewed", "offered", "joined"]]}, 1, 0]}},
+                "shortlisted": {"$sum": {"$cond": [
+                    {"$in": ["$status", ["shortlisted", "interview", "next_round", "selected", "offered", "offer_accepted", "joined"]]},
+                    1, 0
+                ]}},
             }}
         ]
         recruiter_apps = {}
@@ -973,10 +1009,7 @@ class ReportService:
         intv_pipeline = [
             {"$match": {
                 "company_id": company_id, "is_deleted": False,
-                "created_at": {
-                    "$gte": datetime.combine(start_date, datetime.min.time()),
-                    "$lte": datetime.combine(end_date, datetime.max.time())
-                }
+                "created_at": dt_filter
             }},
             {"$group": {"_id": "$created_by", "interviews": {"$sum": 1}}}
         ]
@@ -991,7 +1024,7 @@ class ReportService:
                 "company_id": company_id, "status": "joined", "is_deleted": False,
                 "actual_doj": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}
             }},
-            {"$lookup": {"from": "applications", "localField": "application_id", "foreignField": "id", "as": "app"}},
+            {"$lookup": {"from": "applications", "localField": "application_id", "foreignField": "_id", "as": "app"}},
             {"$unwind": {"path": "$app", "preserveNullAndEmptyArrays": True}},
             {"$group": {
                 "_id": "$app.created_by",
@@ -1285,7 +1318,7 @@ class ReportService:
                 "client_name": doc.get("client_name", ""),
                 "job_title": doc.get("job_title", ""),
                 "offer_released_date": doc.get("offer_released_date", ""),
-                "confirmed_doj": doc.get("confirmed_doj", ""),
+                "expected_doj": doc.get("expected_doj", ""),
                 "partner_name": doc.get("partner_name", "Direct"),
                 "offer_ctc": doc.get("offer_ctc", 0),
             })
@@ -1295,7 +1328,7 @@ class ReportService:
             ReportColumn(key="client_name", label="Client", data_type="string"),
             ReportColumn(key="job_title", label="Job Title", data_type="string"),
             ReportColumn(key="offer_released_date", label="Offer Date", data_type="date"),
-            ReportColumn(key="confirmed_doj", label="Confirmed DOJ", data_type="date"),
+            ReportColumn(key="expected_doj", label="Expected DOJ", data_type="date"),
             ReportColumn(key="partner_name", label="Partner", data_type="string"),
             ReportColumn(key="offer_ctc", label="Offer CTC", data_type="currency"),
         ]
@@ -1315,16 +1348,13 @@ class ReportService:
         cursor = self.db.onboards.find(query).sort("offer_released_date", -1)
         data = []
         async for doc in cursor:
-            original = doc.get("original_doj", doc.get("confirmed_doj", ""))
-            current = doc.get("confirmed_doj", "")
-            ext_count = doc.get("extension_count", 0)
             data.append({
                 "candidate_name": doc.get("candidate_name", ""),
                 "client_name": doc.get("client_name", ""),
                 "job_title": doc.get("job_title", ""),
-                "original_doj": original,
-                "current_doj": current,
-                "extension_count": ext_count,
+                "original_doj": doc.get("expected_doj", ""),
+                "current_doj": doc.get("actual_doj", ""),
+                "extension_count": doc.get("doj_extension_count", 0),
                 "status": doc.get("status", ""),
             })
 
@@ -1342,36 +1372,43 @@ class ReportService:
     async def _generate_document_compliance(
         self, company_id: str, filters: Optional[ReportFilter]
     ) -> tuple:
-        """Document compliance report — onboards missing required docs"""
+        """Document compliance report — onboards with pending/missing documents"""
         query = {
             "company_id": company_id,
             "status": {"$in": ["doj_confirmed", "joined"]},
             "is_deleted": False
         }
-        cursor = self.db.onboards.find(query).sort("confirmed_doj", 1)
+        cursor = self.db.onboards.find(query).sort("actual_doj", 1)
         data = []
         async for doc in cursor:
-            docs_received = doc.get("documents_received", [])
-            docs_required = doc.get("documents_required", ["resume", "id_proof", "address_proof"])
-            missing = [d for d in docs_required if d not in docs_received]
-            if missing:
+            # OnboardModel stores documents as List[OnboardDocument] with status per doc
+            docs_list = doc.get("documents", [])
+            docs_required = len(docs_list)
+            received_statuses = {"received", "approved", "verified"}
+            docs_received = sum(1 for d in docs_list if d.get("status") in received_statuses)
+            pending_docs = [
+                d.get("document_type", d.get("name", "Unknown"))
+                for d in docs_list if d.get("status") not in received_statuses
+            ]
+
+            if pending_docs or (docs_required == 0):
                 data.append({
                     "candidate_name": doc.get("candidate_name", ""),
                     "client_name": doc.get("client_name", ""),
-                    "confirmed_doj": doc.get("confirmed_doj", ""),
-                    "documents_required": len(docs_required),
-                    "documents_received": len(docs_received),
-                    "missing_documents": ", ".join(missing),
-                    "compliance_pct": round(len(docs_received) / len(docs_required) * 100, 0) if docs_required else 100,
+                    "actual_doj": doc.get("actual_doj", doc.get("expected_doj", "")),
+                    "documents_required": docs_required,
+                    "documents_received": docs_received,
+                    "missing_documents": ", ".join(pending_docs) if pending_docs else "No documents uploaded",
+                    "compliance_pct": round(docs_received / docs_required * 100, 0) if docs_required > 0 else 0,
                 })
 
         columns = [
             ReportColumn(key="candidate_name", label="Candidate", data_type="string"),
             ReportColumn(key="client_name", label="Client", data_type="string"),
-            ReportColumn(key="confirmed_doj", label="DOJ", data_type="date"),
+            ReportColumn(key="actual_doj", label="DOJ", data_type="date"),
             ReportColumn(key="documents_required", label="Required", data_type="number"),
             ReportColumn(key="documents_received", label="Received", data_type="number"),
-            ReportColumn(key="missing_documents", label="Missing Documents", data_type="string"),
+            ReportColumn(key="missing_documents", label="Pending Documents", data_type="string"),
             ReportColumn(key="compliance_pct", label="Compliance %", data_type="percentage"),
         ]
         return data, columns
@@ -1439,9 +1476,11 @@ class ReportService:
             "$lte": datetime.combine(end_date, datetime.max.time())
         }
 
+        job_ids = await self._get_company_job_ids(company_id)
+
         # Applications created per user
         app_pipeline = [
-            {"$match": {"company_id": company_id, "is_deleted": False, "created_at": dt_match}},
+            {"$match": {"job_id": {"$in": job_ids}, "is_deleted": False, "created_at": dt_match}},
             {"$group": {"_id": "$created_by", "applications": {"$sum": 1}}}
         ]
         user_apps = {}
@@ -1501,17 +1540,26 @@ class ReportService:
     async def _generate_response_time(
         self, company_id: str, date_range: tuple, filters: Optional[ReportFilter]
     ) -> tuple:
-        """Response time — avg days to first action per application per coordinator"""
+        """Response time — avg hours from application creation to first status change per user"""
         start_date, end_date = date_range
+
+        job_ids = await self._get_company_job_ids(company_id)
         pipeline = [
             {"$match": {
-                "company_id": company_id, "is_deleted": False,
+                "job_id": {"$in": job_ids}, "is_deleted": False,
                 "created_at": {
                     "$gte": datetime.combine(start_date, datetime.min.time()),
                     "$lte": datetime.combine(end_date, datetime.max.time())
                 },
-                "first_action_at": {"$exists": True, "$ne": None}
+                "stage_history.1": {"$exists": True}
             }},
+            # Derive first_action_at from second stage_history entry (index 1)
+            {"$project": {
+                "created_by": 1,
+                "created_at": 1,
+                "first_action_at": {"$arrayElemAt": ["$stage_history.changed_at", 1]}
+            }},
+            {"$match": {"first_action_at": {"$ne": None}}},
             {"$project": {
                 "created_by": 1,
                 "response_hours": {
@@ -1521,6 +1569,7 @@ class ReportService:
                     ]
                 }
             }},
+            {"$match": {"response_hours": {"$gte": 0}}},
             {"$group": {
                 "_id": "$created_by",
                 "avg_response_hours": {"$avg": "$response_hours"},
@@ -1602,7 +1651,7 @@ class ReportService:
         start_date, end_date = date_range
         query = {
             "company_id": company_id,
-            "timestamp": {
+            "created_at": {
                 "$gte": datetime.combine(start_date, datetime.min.time()),
                 "$lte": datetime.combine(end_date, datetime.max.time())
             }
@@ -1610,10 +1659,10 @@ class ReportService:
         if filters and filters.coordinator_ids:
             query["user_id"] = {"$in": filters.coordinator_ids}
 
-        cursor = self.db.audit_logs.find(query).sort("timestamp", -1).limit(2000)
+        cursor = self.db.audit_logs.find(query).sort("created_at", -1).limit(2000)
         data = []
         async for doc in cursor:
-            ts = doc.get("timestamp")
+            ts = doc.get("created_at")
             data.append({
                 "user_name": doc.get("user_name", "") or doc.get("username", ""),
                 "action": doc.get("action", ""),

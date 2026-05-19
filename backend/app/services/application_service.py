@@ -139,6 +139,7 @@ class ApplicationService:
             "job_code": job.get("job_code"),
             "client_id": job.get("client_id"),
             "client_name": job.get("client_name"),
+            "company_id": job.get("company_id", ""),
             "applied_by": created_by,
             "applied_by_name": applied_by_name,
             "source": application_data.source or ("partner" if partner_id else "direct"),
