@@ -6,7 +6,7 @@ import {
   UserPlus, History, TrendingUp, Activity, ArrowRight,
   RefreshCw, Users2, DollarSign, Target, Bot,
   BarChart2, Clock, CheckCircle2,
-  AlertTriangle, Trophy, Zap, ChevronRight, Bell, Plus,
+  AlertTriangle, Trophy, Zap, ChevronRight, Bell, Plus, ChevronDown,
 } from 'lucide-react'
 import {
   Tooltip as RechartTooltip, ResponsiveContainer,
@@ -23,6 +23,7 @@ import hrmService from '../../services/hrmService'
 import subscriptionService from '../../services/subscriptionService'
 import SubscriptionBanner from '../../components/subscription/SubscriptionBanner'
 import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
+import KpiCard from '../../components/dashboard/KpiCard'
 import HiringTrend from '../../components/dashboard/HiringTrend'
 import { formatDateTime } from '../../utils/format'
 
@@ -41,95 +42,6 @@ const getGreeting = () => {
   if (h < 12) return 'Good morning'
   if (h < 17) return 'Good afternoon'
   return 'Good evening'
-}
-
-// ── Animated counter ──────────────────────────────────────────────────────────
-const useCounter = (target, duration = 800) => {
-  const [value, setValue] = useState(0)
-  useEffect(() => {
-    if (target == null || isNaN(target)) return
-    let raf
-    const start = Date.now()
-    const tick = () => {
-      const elapsed  = Date.now() - start
-      const progress = Math.min(elapsed / duration, 1)
-      const eased    = 1 - Math.pow(1 - progress, 3)
-      setValue(Math.round(eased * target))
-      if (progress < 1) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [target, duration])
-  return value
-}
-
-// ── Icon color configs ────────────────────────────────────────────────────────
-const ICON_CFG = {
-  purple: { bg: 'rgba(124,58,237,0.10)', color: '#7c3aed' },
-  blue:   { bg: 'rgba(79,172,254,0.10)', color: '#4FACFE' },
-  green:  { bg: 'rgba(34,197,94,0.10)',  color: '#22c55e' },
-  orange: { bg: 'rgba(250,130,49,0.10)', color: '#FA8231' },
-  teal:   { bg: 'rgba(56,249,215,0.10)', color: '#38F9D7' },
-  yellow: { bg: 'rgba(246,165,53,0.10)', color: '#F6A535' },
-  red:    { bg: 'rgba(255,71,87,0.10)',  color: '#FF4757' },
-  pink:   { bg: 'rgba(255,107,157,0.10)','color': '#FF6B9D' },
-  indigo: { bg: 'rgba(99,102,241,0.10)', color: '#6366f1' },
-}
-
-// ── Compact stat card for the 9-card row ─────────────────────────────────────
-const StatKpi = ({ title, value, icon: Icon, color = 'purple', trend, trendDir, subtitle, linkTo }) => {
-  const count = useCounter(typeof value === 'number' ? value : null)
-  const [hov, setHov] = useState(false)
-  const cfg = ICON_CFG[color] || ICON_CFG.purple
-  const isUp   = trendDir === 'up'
-  const isDown = trendDir === 'down'
-
-  const card = (
-    <div
-      className="rounded-2xl p-4 relative overflow-hidden cursor-default"
-      style={{
-        backgroundColor: 'var(--bg-card)',
-        border: '1px solid var(--border-card)',
-        boxShadow: hov
-          ? `0 8px 24px rgba(0,0,0,0.10), var(--shadow-card)`
-          : 'var(--shadow-card)',
-        transform: hov ? 'translateY(-2px)' : 'translateY(0)',
-        transition: 'box-shadow 0.25s ease, transform 0.25s ease',
-      }}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: cfg.bg }}
-        >
-          <Icon className="w-4 h-4" style={{ color: cfg.color }} />
-        </div>
-        {trend && (
-          <span
-            className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 flex-shrink-0"
-            style={{
-              background: isUp ? 'rgba(34,197,94,0.10)' : isDown ? 'rgba(255,71,87,0.10)' : 'var(--bg-hover)',
-              color: isUp ? '#22c55e' : isDown ? '#ef4444' : 'var(--text-muted)',
-            }}
-          >
-            {isUp ? '▲' : isDown ? '▼' : '→'} {trend}
-          </span>
-        )}
-      </div>
-      <p className="text-2xl font-bold leading-none mb-1" style={{ color: 'var(--text-heading)' }}>
-        {value == null
-          ? <span style={{ color: 'var(--text-disabled)' }}>—</span>
-          : typeof value === 'string' ? value : count.toLocaleString('en-IN')}
-      </p>
-      <p className="text-xs font-medium truncate" style={{ color: 'var(--text-secondary)' }}>{title}</p>
-      {subtitle && (
-        <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{subtitle}</p>
-      )}
-    </div>
-  )
-  return linkTo ? <Link to={linkTo} className="block">{card}</Link> : card
 }
 
 // ── Card wrapper ──────────────────────────────────────────────────────────────
@@ -513,38 +425,103 @@ const AdminDashboard = () => {
         <SubscriptionBanner seatStatus={seatStatus} onUpgrade={() => setShowUpgradeModal(true)} />
       )}
 
-      {/* ── Header ──────────────────────────────────────────────────────────────── */}
-      <Card style={{ padding: '20px 24px' }}>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold" style={{ color: 'var(--text-heading)' }}>
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* HEADER — Greeting | Subscription (center) | Date + Actions            */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <Card style={{ padding: '16px 20px' }}>
+        <div className="flex items-center gap-4 min-w-0">
+
+          {/* Left — Greeting */}
+          <div className="flex-shrink-0 min-w-0" style={{ maxWidth: '240px' }}>
+            <h1 className="text-lg font-bold truncate" style={{ color: 'var(--text-heading)' }}>
               {getGreeting()}, {user?.fullName || 'User'}! 👋
             </h1>
-            <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
               Here's what's happening with your recruitment today.
             </p>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-xs hidden lg:block" style={{ color: 'var(--text-muted)' }}>{dateStr}</span>
+
+          {/* Center — Subscription info (admin/owner, lg+ screens only) */}
+          {isAdminOrOwner && seatStatus && (
+            <div className="hidden lg:flex flex-1 items-center justify-center">
+              <div
+                className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
+                style={{ border: '1.5px dashed rgba(124,58,237,0.30)', background: 'rgba(124,58,237,0.03)' }}
+              >
+                <div className="pr-3 flex-shrink-0" style={{ borderRight: '1px solid var(--border)' }}>
+                  <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#7c3aed' }}>Subscription</p>
+                  <p className="text-sm font-bold mt-0.5 leading-tight" style={{ color: 'var(--text-heading)' }}>
+                    {seatStatus.plan_display_name || seatStatus.plan_name}
+                    {seatStatus.is_trial && (
+                      <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full font-bold align-middle" style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>Trial</span>
+                    )}
+                  </p>
+                </div>
+                {[
+                  { label: 'Seats',     val: seatStatus.total_user_seats,    clr: 'var(--text-heading)' },
+                  { label: 'Active',    val: seatStatus.current_active_users, clr: 'var(--text-info)'   },
+                  { label: 'Remaining', val: seatStatus.remaining_seats,
+                    clr: seatStatus.remaining_seats === 0 ? 'var(--text-danger)' : 'var(--text-success)' },
+                  { label: 'Expiry',    val: seatStatus.plan_expiry
+                      ? new Date(seatStatus.plan_expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
+                      : '—', clr: 'var(--text-heading)' },
+                ].map(({ label, val, clr }) => (
+                  <div key={label} className="text-center flex-shrink-0">
+                    <p className="text-base font-bold leading-tight" style={{ color: clr }}>{val}</p>
+                    <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>{label}</p>
+                  </div>
+                ))}
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="flex-shrink-0 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg transition-all whitespace-nowrap"
+                  style={{ color: '#7c3aed', border: '1px solid rgba(124,58,237,0.40)', background: 'transparent' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  Upgrade / Add Seats
+                </button>
+              </div>
+            </div>
+          )}
+          {/* Spacer when no subscription box */}
+          {!(isAdminOrOwner && seatStatus) && <div className="flex-1" />}
+
+          {/* Right — Date + Period + Quick Action */}
+          <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+            <span className="text-xs hidden xl:block" style={{ color: 'var(--text-muted)' }}>{dateStr}</span>
             <button
-              onClick={() => fetchDashboardData(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all"
+              onClick={() => setPeriod(p => {
+                const idx = PERIODS.findIndex(x => x.key === p.key)
+                return PERIODS[(idx + 1) % PERIODS.length]
+              })}
+              className="hidden sm:flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
               style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-active)'}
               onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-hover)'}
             >
-              <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              {period.key === 'week' ? 'This Week' : period.key === 'month' ? 'This Month' : period.key === 'quarter' ? 'This Quarter' : 'This Year'}
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => fetchDashboardData(true)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+              style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-active)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
             </button>
             {(has('candidates:create') || has('jobs:create')) && (
               <div className="relative" onClick={e => e.stopPropagation()}>
                 <button
                   onClick={() => setShowQuickAction(v => !v)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition-all"
                   style={{ background: '#7c3aed' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#6d28d9'}
                   onMouseLeave={e => e.currentTarget.style.background = '#7c3aed'}
                 >
-                  <Plus className="w-4 h-4" /> Quick Action
+                  <Plus className="w-3.5 h-3.5" /> Quick Action
+                  <ChevronDown className="w-3 h-3 opacity-80" />
                 </button>
                 {showQuickAction && (
                   <div
@@ -583,150 +560,137 @@ const AdminDashboard = () => {
         </div>
       </Card>
 
-      {/* ── Subscription info (admin/owner) ─────────────────────────────────────── */}
-      {isAdminOrOwner && seatStatus && (
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Subscription</p>
-              <p className="text-base font-bold mt-0.5" style={{ color: 'var(--text-heading)' }}>
-                {seatStatus.plan_display_name || seatStatus.plan_name}
-                {seatStatus.is_trial && (
-                  <span className="ml-2 text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>Trial</span>
-                )}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-6">
-              {[
-                { label: 'Seats',     value: seatStatus.total_user_seats,     color: 'var(--text-heading)'  },
-                { label: 'Active',    value: seatStatus.current_active_users,  color: 'var(--text-info)'    },
-                { label: 'Remaining', value: seatStatus.remaining_seats,
-                  color: seatStatus.remaining_seats === 0 ? 'var(--text-danger)' : 'var(--text-success)' },
-                { label: 'Expiry',    value: seatStatus.plan_expiry
-                    ? new Date(seatStatus.plan_expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
-                    : '—', color: 'var(--text-heading)' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="text-center">
-                  <p className="text-xl font-bold" style={{ color }}>{value}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{label}</p>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => setShowUpgradeModal(true)}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
-              style={{ color: '#7c3aed', border: '1px solid #7c3aed', background: 'transparent' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.08)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              Upgrade / Add Seats
-            </button>
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* 9 STAT KPI CARDS — with sparklines                                     */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {(() => {
+        // Sparkline data: use activity trend values (real live data from API)
+        const sparkVals = trendData.length > 1 ? trendData.map(d => d.value) : null
+        return (
+          <div className="grid grid-cols-3 xl:grid-cols-9 gap-3">
+            {has('candidates:view') && (
+              <KpiCard
+                title="Total Candidates"
+                value={totalCandidates}
+                icon={Users2}
+                color="purple"
+                trend={recruitStats?.recent_week > 0
+                  ? { value: `+${recruitStats.recent_week} this week`, dir: 'up' }
+                  : undefined}
+                subtitle="In pipeline"
+                sparkline={sparkVals}
+                linkTo="/candidates"
+                delay={0}
+              />
+            )}
+            {has('jobs:view') && (
+              <KpiCard
+                title="Active Jobs"
+                value={activeJobs}
+                icon={Briefcase}
+                color="blue"
+                trend={jobStats?.filled > 0
+                  ? { value: `${jobStats.filled} filled`, dir: 'up' }
+                  : undefined}
+                subtitle="Open positions"
+                sparkline={sparkVals}
+                linkTo="/jobs"
+                delay={50}
+              />
+            )}
+            {has('candidates:view') && (
+              <KpiCard
+                title="Applications"
+                value={appsInProgress}
+                icon={Activity}
+                color="orange"
+                subtitle="In Progress"
+                sparkline={sparkVals}
+                linkTo="/applications"
+                delay={100}
+              />
+            )}
+            {has('interviews:view') && (
+              <KpiCard
+                title="Interviews Today"
+                value={interviewsToday}
+                icon={Calendar}
+                color="teal"
+                trend={ivStats?.this_week > 0
+                  ? { value: `${ivStats.this_week} this week`, dir: 'up' }
+                  : undefined}
+                subtitle="Scheduled"
+                sparkline={sparkVals}
+                linkTo="/interviews"
+                delay={150}
+              />
+            )}
+            {has('candidates:view') && (
+              <KpiCard
+                title="Offers Pending"
+                value={offersPending}
+                icon={Award}
+                color="yellow"
+                trend={offerRate !== null
+                  ? { value: `${offerRate}% offer rate`, dir: offerRate >= 20 ? 'up' : 'down' }
+                  : undefined}
+                subtitle="Awaiting response"
+                sparkline={sparkVals}
+                linkTo="/applications"
+                delay={200}
+              />
+            )}
+            {isAdminOrOwner && (
+              <KpiCard
+                title="Revenue"
+                value={null}
+                icon={DollarSign}
+                color="pink"
+                subtitle="This month"
+                sparkline={sparkVals}
+                delay={250}
+              />
+            )}
+            {has('users:view') && (
+              <KpiCard
+                title="Total Users"
+                value={totalUsers}
+                icon={Users}
+                color="indigo"
+                subtitle={loggedInToday != null ? `${loggedInToday} Active` : 'System users'}
+                compact={true}
+                linkTo="/users"
+                delay={300}
+              />
+            )}
+            {has('users:view') && (
+              <KpiCard
+                title="Logged In Today"
+                value={loggedInToday}
+                icon={UserCheck}
+                color="blue"
+                subtitle={`${loggedInToday ?? 0} Online Now`}
+                compact={true}
+                delay={350}
+              />
+            )}
+            {has('candidates:view') && (
+              <KpiCard
+                title="Placements"
+                value={placementsMonth}
+                icon={TrendingUp}
+                color="green"
+                trend={joinRate !== null
+                  ? { value: `${joinRate}% join rate`, dir: joinRate >= 50 ? 'up' : 'down' }
+                  : undefined}
+                subtitle="This Month"
+                sparkline={sparkVals}
+                delay={400}
+              />
+            )}
           </div>
-        </Card>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* 9 STAT CARDS                                                            */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-3 xl:grid-cols-9 gap-3">
-        {has('candidates:view') && (
-          <StatKpi
-            title="Total Candidates"
-            value={totalCandidates}
-            icon={Users2}
-            color="purple"
-            trend={recruitStats?.recent_week > 0 ? `+${recruitStats.recent_week}` : undefined}
-            trendDir={recruitStats?.recent_week > 0 ? 'up' : undefined}
-            subtitle="In pipeline"
-            linkTo="/candidates"
-          />
-        )}
-        {has('jobs:view') && (
-          <StatKpi
-            title="Active Jobs"
-            value={activeJobs}
-            icon={Briefcase}
-            color="blue"
-            trend={jobStats?.filled > 0 ? `${jobStats.filled} filled` : undefined}
-            trendDir={jobStats?.filled > 0 ? 'up' : undefined}
-            subtitle="Open positions"
-            linkTo="/jobs"
-          />
-        )}
-        {has('candidates:view') && (
-          <StatKpi
-            title="In Progress"
-            value={appsInProgress}
-            icon={Activity}
-            color="orange"
-            subtitle="Being evaluated"
-            linkTo="/applications"
-          />
-        )}
-        {has('interviews:view') && (
-          <StatKpi
-            title="Interviews Today"
-            value={interviewsToday}
-            icon={Calendar}
-            color="teal"
-            trend={ivStats?.this_week > 0 ? `${ivStats.this_week} this wk` : undefined}
-            trendDir={ivStats?.this_week > 0 ? 'up' : undefined}
-            subtitle="Scheduled"
-            linkTo="/interviews"
-          />
-        )}
-        {has('candidates:view') && (
-          <StatKpi
-            title="Offers Pending"
-            value={offersPending}
-            icon={Award}
-            color="yellow"
-            trend={offerRate !== null ? `${offerRate}% rate` : undefined}
-            trendDir={offerRate !== null ? (offerRate >= 20 ? 'up' : 'down') : undefined}
-            subtitle="Awaiting response"
-            linkTo="/applications"
-          />
-        )}
-        {isAdminOrOwner && (
-          <StatKpi
-            title="Revenue"
-            value={null}
-            icon={DollarSign}
-            color="green"
-            subtitle="This month"
-          />
-        )}
-        {has('users:view') && (
-          <StatKpi
-            title="Total Users"
-            value={totalUsers}
-            icon={Users}
-            color="indigo"
-            subtitle={loggedInToday != null ? `${loggedInToday} active today` : 'System users'}
-            linkTo="/users"
-          />
-        )}
-        {has('users:view') && (
-          <StatKpi
-            title="Logged In Today"
-            value={loggedInToday}
-            icon={UserCheck}
-            color="blue"
-            subtitle="Online now"
-          />
-        )}
-        {has('candidates:view') && (
-          <StatKpi
-            title="Placements"
-            value={placementsMonth}
-            icon={TrendingUp}
-            color="green"
-            trend={joinRate !== null ? `${joinRate}% join rate` : undefined}
-            trendDir={joinRate !== null ? (joinRate >= 50 ? 'up' : 'down') : undefined}
-            subtitle="Successfully joined"
-          />
-        )}
-      </div>
+        )
+      })()}
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* MIDDLE ROW — Pipeline | Interviews | AI Assistant | Pending Approvals  */}
