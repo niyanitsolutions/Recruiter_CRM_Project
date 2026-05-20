@@ -1544,17 +1544,20 @@ class ReportService:
         pipeline = [
             {"$match": {
                 "job_id": {"$in": job_ids}, "is_deleted": False,
+                "status": {"$ne": "applied"},  # must have been acted upon by a coordinator
                 "created_at": {
                     "$gte": datetime.combine(start_date, datetime.min.time()),
                     "$lte": datetime.combine(end_date, datetime.max.time())
-                },
-                "stage_history.1": {"$exists": True}
+                }
             }},
-            # Derive first_action_at from second stage_history entry (index 1)
-            {"$project": {
-                "created_by": 1,
-                "created_at": 1,
-                "first_action_at": {"$arrayElemAt": ["$stage_history.changed_at", 1]}
+            # Derive first_action_at: prefer stage_history[1], fall back to last stage_history entry
+            {"$addFields": {
+                "first_action_at": {
+                    "$ifNull": [
+                        {"$arrayElemAt": ["$stage_history.changed_at", 1]},
+                        {"$arrayElemAt": ["$stage_history.changed_at", -1]}
+                    ]
+                }
             }},
             {"$match": {"first_action_at": {"$ne": None}}},
             {"$project": {

@@ -79,27 +79,46 @@ const ReportViewer = ({ data, reportType }) => {
 
   const formatValue = (value, column) => {
     if (value === null || value === undefined) return '-';
-    
-    if (column?.type === 'currency' || column?.includes?.('amount') || column?.includes?.('revenue')) {
+
+    // column may be a full ReportColumn object (with data_type) OR a plain string key
+    if (column && typeof column === 'object' && column.data_type) {
+      switch (column.data_type) {
+        case 'currency':
+          return new Intl.NumberFormat('en-IN', {
+            style: 'currency',
+            currency: 'INR',
+            maximumFractionDigits: 0
+          }).format(value);
+        case 'percentage':
+          return `${Number(value).toFixed(1)}%`;
+        case 'date':
+          return value ? new Date(value).toLocaleDateString('en-IN') : '-';
+        case 'number':
+          return Number(value).toLocaleString();
+        default:
+          return value;
+      }
+    }
+
+    // Fallback: column is a plain string key — use safe exact-suffix heuristics
+    // IMPORTANT: never use substring "date" — it matches "updates", "candidates_added", etc.
+    const key = typeof column === 'string' ? column : '';
+    if (key.endsWith('_amount') || key.endsWith('_ctc') || key.endsWith('_revenue') || key === 'revenue') {
       return new Intl.NumberFormat('en-IN', {
         style: 'currency',
         currency: 'INR',
         maximumFractionDigits: 0
       }).format(value);
     }
-    
-    if (column?.type === 'percentage' || column?.includes?.('rate') || column?.includes?.('percentage')) {
+    if (key.endsWith('_rate') || key.endsWith('_pct') || key.endsWith('_percentage')) {
       return `${Number(value).toFixed(1)}%`;
     }
-    
-    if (column?.type === 'date' || column?.includes?.('date')) {
-      return new Date(value).toLocaleDateString();
+    if (key.endsWith('_date') || key.endsWith('_at') || key === 'date') {
+      return value ? new Date(value).toLocaleDateString('en-IN') : '-';
     }
-    
     if (typeof value === 'number') {
       return value.toLocaleString();
     }
-    
     return value;
   };
 
@@ -242,7 +261,7 @@ const ReportViewer = ({ data, reportType }) => {
                     {columns?.length > 0
                       ? columns.map(col => (
                           <td key={col.key || col} className="px-4 py-3 text-sm text-gray-700">
-                            {formatValue(row[col.key || col], col.key || col)}
+                            {formatValue(row[col.key || col], col)}
                           </td>
                         ))
                       : Object.entries(row).map(([key, value]) => (
