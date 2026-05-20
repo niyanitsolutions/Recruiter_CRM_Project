@@ -278,9 +278,10 @@ class ReportService:
     # ============== Report Generation Methods ==============
 
     async def _get_company_job_ids(self, company_id: str) -> list:
-        """Return all job _id values for the company — used to scope application queries
-        (applications collection stores no company_id; jobs do)."""
-        return await self.db.jobs.distinct("_id", {"company_id": company_id, "is_deleted": False})
+        """Return all job _id values for this company DB — used to scope application queries.
+        No company_id filter needed: the DB itself provides tenant isolation (same pattern as
+        interviews and audit_logs which also have no company_id filter)."""
+        return await self.db.jobs.distinct("_id", {"is_deleted": False})
 
     async def _generate_placements_summary(
         self,
@@ -439,7 +440,7 @@ class ReportService:
                 "days_to_hire": {
                     "$divide": [
                         {"$subtract": [
-                            {"$dateFromString": {"dateString": "$actual_doj"}},
+                            {"$toDate": "$actual_doj"},
                             "$application.created_at"
                         ]},
                         86400000  # milliseconds in a day
@@ -545,12 +546,9 @@ class ReportService:
     ) -> tuple:
         """Generate job aging report"""
         today = date.today()
-        
-        query = {
-            "company_id": company_id,
-            "status": "open",
-            "is_deleted": False
-        }
+
+        # jobs are DB-scoped; no company_id filter needed
+        query = {"status": "open", "is_deleted": False}
         
         cursor = self.db.jobs.find(query).sort("created_at", 1)
         
@@ -565,11 +563,11 @@ class ReportService:
             data.append({
                 "job_title": job.get("title", "Unknown"),
                 "client_name": job.get("client_name", "Unknown"),
-                "positions": job.get("positions", 1),
-                "filled": job.get("positions_filled", 0),
-                "remaining": job.get("positions", 1) - job.get("positions_filled", 0),
+                "positions": job.get("total_positions", 1),
+                "filled": job.get("filled_positions", 0),
+                "remaining": job.get("total_positions", 1) - job.get("filled_positions", 0),
                 "days_open": days_open,
-                "applications": job.get("application_count", 0)
+                "applications": job.get("total_applications", 0)
             })
         
         columns = [
@@ -938,9 +936,9 @@ class ReportService:
             }
         }
 
-        scheduled = await self.db.interviews.count_documents({**base_query, "status": {"$in": ["scheduled", "completed", "passed", "failed"]}})
-        attended = await self.db.interviews.count_documents({**base_query, "status": {"$in": ["completed", "passed", "failed"]}})
-        passed = await self.db.interviews.count_documents({**base_query, "status": "passed"})
+        scheduled = await self.db.interviews.count_documents({**base_query, "status": {"$in": ["scheduled", "confirmed", "in_progress", "completed", "selected", "failed", "no_show"]}})
+        attended = await self.db.interviews.count_documents({**base_query, "status": {"$in": ["completed", "selected", "failed"]}})
+        passed = await self.db.interviews.count_documents({**base_query, "status": "selected"})
 
         onboard_query = {
             "company_id": company_id, "is_deleted": False,
@@ -1027,7 +1025,7 @@ class ReportService:
             {"$group": {
                 "_id": "$app.created_by",
                 "placements": {"$sum": 1},
-                "revenue": {"$sum": "$calculation.gross_amount"}
+                "revenue": {"$sum": "$offer_ctc"}
             }}
         ]
         recruiter_place = {}
@@ -1035,11 +1033,12 @@ class ReportService:
             if doc["_id"]:
                 recruiter_place[doc["_id"]] = {"placements": doc["placements"], "revenue": doc.get("revenue", 0)}
 
-        # Gather all recruiter IDs and batch load user names
+        # Gather all recruiter IDs and batch load user names (users stored with _id key)
         all_ids = list(set(list(recruiter_apps.keys()) + list(recruiter_intv.keys()) + list(recruiter_place.keys())))
         user_map = {}
-        async for user in self.db.users.find({"id": {"$in": all_ids}, "company_id": company_id}):
-            user_map[user["id"]] = user.get("full_name") or user.get("name") or user.get("username", "Unknown")
+        async for user in self.db.users.find({"_id": {"$in": all_ids}}):
+            uid = user.get("_id", "")
+            user_map[uid] = user.get("full_name") or user.get("name") or user.get("username", "Unknown")
 
         data = []
         for uid in all_ids:
@@ -1076,10 +1075,10 @@ class ReportService:
         """Client summary report — open jobs, placements, revenue per client"""
         start_date, end_date = date_range
 
-        # Open jobs per client
+        # Open jobs per client (jobs are DB-scoped, no company_id needed)
         job_pipeline = [
-            {"$match": {"company_id": company_id, "status": "open", "is_deleted": False}},
-            {"$group": {"_id": "$client_name", "open_jobs": {"$sum": 1}, "total_positions": {"$sum": "$positions"}, "filled": {"$sum": "$positions_filled"}}}
+            {"$match": {"status": "open", "is_deleted": False}},
+            {"$group": {"_id": "$client_name", "open_jobs": {"$sum": 1}, "total_positions": {"$sum": "$total_positions"}, "filled": {"$sum": "$filled_positions"}}}
         ]
         client_jobs = {}
         async for doc in self.db.jobs.aggregate(job_pipeline):
@@ -1144,7 +1143,7 @@ class ReportService:
                 "company_id": company_id, "status": "joined", "is_deleted": False,
                 "actual_doj": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}
             }},
-            {"$addFields": {"doj_date": {"$dateFromString": {"dateString": "$actual_doj", "onError": None}}}},
+            {"$addFields": {"doj_date": {"$toDate": "$actual_doj"}}},
             {"$group": {
                 "_id": {
                     "client": "$client_name",
@@ -1418,7 +1417,6 @@ class ReportService:
         query = {
             "company_id": company_id,
             "status": "joined",
-            "payout_eligible": True,
             "is_deleted": False,
             "actual_doj": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}
         }
@@ -1508,8 +1506,9 @@ class ReportService:
 
         all_ids = list(set(list(user_apps.keys()) + list(user_intv.keys()) + list(user_cands.keys())))
         user_map = {}
-        async for user in self.db.users.find({"id": {"$in": all_ids}, "company_id": company_id}):
-            user_map[user["id"]] = user.get("full_name") or user.get("name") or user.get("username", "Unknown")
+        async for user in self.db.users.find({"_id": {"$in": all_ids}}):
+            uid = user.get("_id", "")
+            user_map[uid] = user.get("full_name") or user.get("name") or user.get("username", "Unknown")
 
         data = []
         for uid in all_ids:
@@ -1583,8 +1582,9 @@ class ReportService:
 
         user_ids = [d["_id"] for d in raw if d["_id"]]
         user_map = {}
-        async for user in self.db.users.find({"id": {"$in": user_ids}, "company_id": company_id}):
-            user_map[user["id"]] = user.get("full_name") or user.get("username", "Unknown")
+        async for user in self.db.users.find({"_id": {"$in": user_ids}}):
+            uid = user.get("_id", "")
+            user_map[uid] = user.get("full_name") or user.get("username", "Unknown")
 
         data = []
         for doc in raw:
@@ -1612,45 +1612,6 @@ class ReportService:
     ) -> tuple:
         """Login activity report — sessions are stored in master_db"""
         start_date, end_date = date_range
-
-        # Sessions live in master_db, not company_db
-        sessions_db = self.master_db if self.master_db else self.db
-        query = {
-            "company_id": company_id,
-            "created_at": {
-                "$gte": datetime.combine(start_date, datetime.min.time()),
-                "$lte": datetime.combine(end_date, datetime.max.time())
-            }
-        }
-
-        raw_sessions = []
-        async for doc in sessions_db.sessions.find(query).sort("created_at", -1).limit(1000):
-            raw_sessions.append(doc)
-
-        # Batch load user names from company_db
-        user_ids = list({doc["user_id"] for doc in raw_sessions if doc.get("user_id")})
-        user_map = {}
-        async for user in self.db.users.find(
-            {"$or": [{"id": {"$in": user_ids}}, {"_id": {"$in": user_ids}}]},
-            {"id": 1, "_id": 1, "full_name": 1, "username": 1, "email": 1}
-        ):
-            uid = user.get("id") or str(user.get("_id", ""))
-            user_map[uid] = user.get("full_name") or user.get("username") or user.get("email", "Unknown")
-
-        data = []
-        for doc in raw_sessions:
-            uid = doc.get("user_id", "")
-            created = doc.get("created_at")
-            is_active = doc.get("is_active", False)
-            session_status = doc.get("session_status") or ("active" if is_active else "ended")
-            data.append({
-                "user_name": user_map.get(uid, uid or "Unknown"),
-                "ip_address": doc.get("ip_address", ""),
-                "device_info": doc.get("device_info", ""),
-                "login_time": created.isoformat() if isinstance(created, datetime) else str(created or ""),
-                "session_status": session_status,
-            })
-
         columns = [
             ReportColumn(key="user_name", label="User", data_type="string"),
             ReportColumn(key="login_time", label="Login Time", data_type="date"),
@@ -1658,7 +1619,53 @@ class ReportService:
             ReportColumn(key="device_info", label="Device", data_type="string"),
             ReportColumn(key="session_status", label="Status", data_type="string"),
         ]
-        return data, columns
+
+        try:
+            sessions_db = self.master_db if self.master_db is not None else self.db
+            dt_start = datetime.combine(start_date, datetime.min.time())
+            dt_end = datetime.combine(end_date, datetime.max.time())
+            query = {
+                "company_id": company_id,
+                "created_at": {"$gte": dt_start, "$lte": dt_end}
+            }
+
+            raw_sessions = []
+            async for doc in sessions_db["sessions"].find(query).sort("created_at", -1).limit(1000):
+                raw_sessions.append(doc)
+
+            # Batch load user names from company_db
+            user_ids = list({str(doc["user_id"]) for doc in raw_sessions if doc.get("user_id")})
+            user_map = {}
+            if user_ids:
+                async for user in self.db.users.find(
+                    {"_id": {"$in": user_ids}},
+                    {"_id": 1, "full_name": 1, "username": 1, "email": 1}
+                ):
+                    uid = str(user.get("_id") or "")
+                    name = user.get("full_name") or user.get("username") or user.get("email", "")
+                    if uid:
+                        user_map[uid] = name
+
+            data = []
+            for doc in raw_sessions:
+                uid = str(doc.get("user_id") or "")
+                created = doc.get("created_at")
+                is_active = doc.get("is_active", False)
+                session_status = doc.get("session_status") or ("active" if is_active else "ended")
+                device = doc.get("device_info") or ""
+                if isinstance(device, dict):
+                    device = device.get("browser") or device.get("user_agent") or str(device)
+                data.append({
+                    "user_name": user_map.get(uid, uid or "Unknown"),
+                    "ip_address": str(doc.get("ip_address") or ""),
+                    "device_info": str(device),
+                    "login_time": created.isoformat() if isinstance(created, datetime) else str(created or ""),
+                    "session_status": str(session_status),
+                })
+            return data, columns
+
+        except Exception:
+            return [], columns
 
     async def _generate_user_actions(
         self, company_id: str, date_range: tuple, filters: Optional[ReportFilter]

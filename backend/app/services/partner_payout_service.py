@@ -43,10 +43,10 @@ class PartnerPayoutService:
         payout_eligible_date = data.joined_date + timedelta(days=data.payout_days_required)
         
         # Get partner details
-        partner = await self.db.users.find_one({"id": data.partner_id})
-        candidate = await self.db.candidates.find_one({"id": data.candidate_id})
-        job = await self.db.jobs.find_one({"id": data.job_id})
-        client = await self.db.clients.find_one({"id": data.client_id})
+        partner = await self.db.users.find_one({"_id": data.partner_id})
+        candidate = await self.db.candidates.find_one({"_id": data.candidate_id})
+        job = await self.db.jobs.find_one({"_id": data.job_id})
+        client = await self.db.clients.find_one({"_id": data.client_id})
         
         payout_data = {
             **data.model_dump(),
@@ -204,8 +204,8 @@ class PartnerPayoutService:
             raise ValueError("No eligible payouts found")
         
         # Get partner details
-        partner = await self.db.users.find_one({"id": partner_id})
-        
+        partner = await self.db.users.find_one({"_id": partner_id})
+
         # Build invoice items
         items = []
         subtotal = 0
