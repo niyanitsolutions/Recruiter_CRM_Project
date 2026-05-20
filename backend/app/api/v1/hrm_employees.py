@@ -74,3 +74,43 @@ async def delete_employee(
     deleted = await EmployeeService(db).delete(employee_id, cu["company_id"])
     if not deleted:
         raise HTTPException(status_code=404, detail="Employee not found")
+
+
+@router.get("/org-chart/tree")
+async def get_org_chart(
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:employees:view"])),
+):
+    """Return all active employees structured as a hierarchy tree."""
+    cursor = db.hrm_employees.find(
+        {"company_id": cu["company_id"], "is_deleted": False, "employment_status": "active"},
+        {"_id": 1, "full_name": 1, "designation_name": 1, "department_name": 1,
+         "reporting_manager_id": 1, "photo_url": 1, "employment_type": 1, "employee_id": 1},
+    )
+    employees = await cursor.to_list(length=None)
+
+    # Build id → node dict
+    nodes = {}
+    for e in employees:
+        nodes[e["_id"]] = {
+            "id": e["_id"],
+            "employee_id": e.get("employee_id", ""),
+            "name": e.get("full_name", ""),
+            "designation": e.get("designation_name", ""),
+            "department": e.get("department_name", ""),
+            "photo_url": e.get("photo_url"),
+            "employment_type": e.get("employment_type", ""),
+            "reporting_manager_id": e.get("reporting_manager_id"),
+            "children": [],
+        }
+
+    roots = []
+    for node in nodes.values():
+        mgr_id = node["reporting_manager_id"]
+        if mgr_id and mgr_id in nodes:
+            nodes[mgr_id]["children"].append(node)
+        else:
+            roots.append(node)
+
+    return {"tree": roots, "total": len(nodes)}

@@ -16,6 +16,8 @@ const deleteEmployee = (id) => api.delete(`${BASE}/employees/${id}`)
 // ── Attendance ─────────────────────────────────────────────────────────────
 const checkIn = (data) => api.post(`${BASE}/attendance/check-in`, data)
 const checkOut = (data) => api.post(`${BASE}/attendance/check-out`, data)
+const startBreak = (data) => api.post(`${BASE}/attendance/break/start`, data)
+const endBreak = (data) => api.post(`${BASE}/attendance/break/end`, data)
 const getTodayAttendance = (employeeId) => api.get(`${BASE}/attendance/today/${employeeId}`)
 const getMonthlyAttendance = (employeeId, year, month) =>
   api.get(`${BASE}/attendance/monthly/${employeeId}`, { params: { year, month } })
@@ -51,6 +53,8 @@ const listAnnouncements = (params) => api.get(`${BASE}/announcements`, { params 
 const getAnnouncement = (id) => api.get(`${BASE}/announcements/${id}`)
 const updateAnnouncement = (id, data) => api.put(`${BASE}/announcements/${id}`, data)
 const deleteAnnouncement = (id) => api.delete(`${BASE}/announcements/${id}`)
+const markAnnouncementRead = (id) => api.post(`${BASE}/announcements/${id}/read`)
+const getAnnouncementReadStats = (id) => api.get(`${BASE}/announcements/${id}/read-stats`)
 
 // ── Hiring — Jobs ──────────────────────────────────────────────────────────
 const createJob = (data) => api.post(`${BASE}/hiring/jobs`, data)
@@ -92,6 +96,36 @@ const getDocuments = (employeeId) => api.get(`${BASE}/documents/${employeeId}`)
 const deleteDocument = (employeeId, docIndex) =>
   api.delete(`${BASE}/documents/${employeeId}/${docIndex}`)
 
+// ── Org Chart ──────────────────────────────────────────────────────────────
+const getOrgChart = () => api.get(`${BASE}/employees/org-chart/tree`)
+
+// ── Assets ─────────────────────────────────────────────────────────────────
+const createAsset = (data) => api.post(`${BASE}/assets`, data)
+const listAssets = (params) => api.get(`${BASE}/assets`, { params })
+const getAsset = (id) => api.get(`${BASE}/assets/${id}`)
+const updateAsset = (id, data) => api.put(`${BASE}/assets/${id}`, data)
+const deleteAsset = (id) => api.delete(`${BASE}/assets/${id}`)
+const assignAsset = (id, data) => api.post(`${BASE}/assets/${id}/assign`, data)
+const returnAsset = (id, data) => api.post(`${BASE}/assets/${id}/return`, data)
+
+// ── Exit Management ────────────────────────────────────────────────────────
+const createExitRequest = (data) => api.post(`${BASE}/exit`, data)
+const listExitRequests = (params) => api.get(`${BASE}/exit`, { params })
+const getExitRequest = (id) => api.get(`${BASE}/exit/${id}`)
+const updateExitRequest = (id, data) => api.put(`${BASE}/exit/${id}`, data)
+const updateExitStatus = (id, data) => api.post(`${BASE}/exit/${id}/status`, data)
+const toggleChecklistItem = (id, index) => api.post(`${BASE}/exit/${id}/checklist/${index}`)
+const cancelExitRequest = (id) => api.delete(`${BASE}/exit/${id}`)
+
+// ── Sync ───────────────────────────────────────────────────────────────────
+const getSyncStatus = () => api.get(`${BASE}/sync/status`)
+const getUnlinkedUsers = (params) => api.get(`${BASE}/sync/unlinked-users`, { params })
+const getUnlinkedEmployees = (params) => api.get(`${BASE}/sync/unlinked-employees`, { params })
+const syncEmployeeToUser = (employeeId, params) => api.post(`${BASE}/sync/employee-to-user/${employeeId}`, null, { params })
+const syncUserToEmployee = (userId) => api.post(`${BASE}/sync/user-to-employee/${userId}`)
+const linkUserEmployee = (userId, employeeId) => api.post(`${BASE}/sync/link`, null, { params: { user_id: userId, employee_id: employeeId } })
+const unlinkUserEmployee = (userId) => api.delete(`${BASE}/sync/unlink/${userId}`)
+
 // ── Offer Templates ────────────────────────────────────────────────────────
 const createTemplate = (data) => api.post(`${BASE}/offer-templates`, data)
 const listTemplates = (params) => api.get(`${BASE}/offer-templates`, { params })
@@ -103,18 +137,25 @@ const generateFromTemplate = (id, data) => api.post(`${BASE}/offer-templates/${i
 const hrmService = {
   getDashboardStats, getAttendanceTrend,
   listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee,
-  checkIn, checkOut, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance,
+  checkIn, checkOut, startBreak, endBreak, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance,
   applyLeave, listLeaves, getLeave, leaveAction, getLeaveBalance,
   generatePayroll, listPayslips, getPayslip, updatePayslipStatus, deletePayslip,
   createReview, listReviews, getReview, submitSelfReview, submitManagerReview, deleteReview,
   createAnnouncement, listAnnouncements, getAnnouncement, updateAnnouncement, deleteAnnouncement,
+  markAnnouncementRead, getAnnouncementReadStats,
   createJob, listJobs, getJob, updateJob, deleteJob,
   createHiringCandidate, listHiringCandidates, getHiringCandidate, updateHiringCandidate,
   createInterview, listInterviews, submitInterviewFeedback,
   createOffer, listOffers, getOffer, respondOffer,
   createOnboarding, listOnboardings, getOnboarding, updateOnboarding, completeOnboarding,
   uploadDocument, getDocuments, deleteDocument,
+  getSyncStatus, getUnlinkedUsers, getUnlinkedEmployees,
+  syncEmployeeToUser, syncUserToEmployee, linkUserEmployee, unlinkUserEmployee,
   createTemplate, listTemplates, getTemplate, updateTemplate, deleteTemplate, generateFromTemplate,
+  getOrgChart,
+  createAsset, listAssets, getAsset, updateAsset, deleteAsset, assignAsset, returnAsset,
+  createExitRequest, listExitRequests, getExitRequest, updateExitRequest, updateExitStatus,
+  toggleChecklistItem, cancelExitRequest,
 }
 
 export default hrmService

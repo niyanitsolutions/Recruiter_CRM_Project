@@ -3,7 +3,12 @@ from datetime import datetime, date, timezone, timedelta
 from typing import Optional, List
 from bson import ObjectId
 
-from app.models.company.attendance import AttendanceStatus
+from app.models.company.attendance import AttendanceStatus, WorkMode
+
+
+HALF_DAY_THRESHOLD_HOURS = 4.5   # work_hours < this → half_day
+OVERTIME_THRESHOLD_HOURS = 9.0   # work_hours > this → count overtime
+MIDNIGHT_AUTO_CHECKOUT_HOUR = 0  # auto-checkout triggers at midnight
 
 
 class AttendanceService:
@@ -19,7 +24,6 @@ class AttendanceService:
         if not doc:
             return {}
         doc["id"] = str(doc.pop("_id", ""))
-        # Convert date to string
         if isinstance(doc.get("date"), date):
             doc["date"] = doc["date"].isoformat()
         return doc
@@ -27,7 +31,26 @@ class AttendanceService:
     async def _get_employee(self, emp_id: str, company_id: str) -> Optional[dict]:
         return await self.db[self.EMP_COL].find_one({"_id": emp_id, "company_id": company_id, "is_deleted": False})
 
-    async def check_in(self, employee_id: str, company_id: str, marked_by: str, notes: str = "") -> dict:
+    def _compute_work_hours(self, check_in: datetime, check_out: datetime, total_break_minutes: float) -> float:
+        gross = (check_out - check_in).total_seconds() / 3600
+        net = gross - (total_break_minutes / 60)
+        return round(max(0.0, net), 2)
+
+    # ── Check In ──────────────────────────────────────────────────────────────
+
+    async def check_in(
+        self,
+        employee_id: str,
+        company_id: str,
+        marked_by: str,
+        notes: str = "",
+        work_mode: str = "office",
+        client_ip: Optional[str] = None,
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        geo_city: Optional[str] = None,
+        geo_country: Optional[str] = None,
+    ) -> dict:
         today = date.today()
         now = datetime.now(timezone.utc)
         existing = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
@@ -36,12 +59,16 @@ class AttendanceService:
 
         emp = await self._get_employee(employee_id, company_id)
         shift_start = emp.get("shift_start_time", "09:00") if emp else "09:00"
-        grace = 15  # minutes
+        grace = 15
         sh, sm = map(int, shift_start.split(":"))
         shift_dt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
         late_threshold = shift_dt + timedelta(minutes=grace)
         is_late = now > late_threshold
         late_by = max(0, int((now - late_threshold).total_seconds() / 60)) if is_late else 0
+
+        geo = None
+        if latitude is not None or longitude is not None:
+            geo = {"latitude": latitude, "longitude": longitude, "city": geo_city, "country": geo_country}
 
         doc_id = str(existing["_id"]) if existing else str(ObjectId())
         update = {
@@ -54,6 +81,15 @@ class AttendanceService:
             "status": AttendanceStatus.LATE if is_late else AttendanceStatus.PRESENT,
             "is_late": is_late,
             "late_by_minutes": late_by,
+            "work_mode": work_mode,
+            "check_in_ip": client_ip,
+            "check_in_geo": geo,
+            "breaks": [],
+            "total_break_minutes": 0.0,
+            "work_hours": 0.0,
+            "is_half_day": False,
+            "overtime_hours": 0.0,
+            "auto_punched_out": False,
             "notes": notes,
             "marked_by": marked_by,
             "created_at": now,
@@ -62,23 +98,127 @@ class AttendanceService:
         await self.col.replace_one({"_id": doc_id}, update, upsert=True)
         return self._serialize(update)
 
-    async def check_out(self, employee_id: str, company_id: str, marked_by: str, notes: str = "") -> dict:
+    # ── Check Out ─────────────────────────────────────────────────────────────
+
+    async def check_out(
+        self,
+        employee_id: str,
+        company_id: str,
+        marked_by: str,
+        notes: str = "",
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        geo_city: Optional[str] = None,
+        geo_country: Optional[str] = None,
+        auto: bool = False,
+    ) -> dict:
+        today = date.today()
+        now = datetime.now(timezone.utc)
+        record = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
+        if not record or record.get("check_out"):
+            return self._serialize(record) if record else {}
+
+        # Close any open break
+        breaks = record.get("breaks", [])
+        total_break_minutes = record.get("total_break_minutes", 0.0)
+        if breaks and not breaks[-1].get("end"):
+            br_start = breaks[-1]["start"]
+            dur = (now - br_start).total_seconds() / 60
+            breaks[-1]["end"] = now
+            breaks[-1]["duration_minutes"] = round(dur, 1)
+            total_break_minutes += dur
+
+        work_hours = self._compute_work_hours(record["check_in"], now, total_break_minutes)
+        emp = await self._get_employee(employee_id, company_id)
+        shift_end = emp.get("shift_end_time", "18:00") if emp else "18:00"
+        eh, em = map(int, shift_end.split(":"))
+        shift_end_dt = now.replace(hour=eh, minute=em, second=0, microsecond=0)
+        overtime = max(0.0, round((now - shift_end_dt).total_seconds() / 3600, 2)) if now > shift_end_dt else 0.0
+        is_half_day = work_hours < HALF_DAY_THRESHOLD_HOURS
+
+        geo = None
+        if latitude is not None or longitude is not None:
+            geo = {"latitude": latitude, "longitude": longitude, "city": geo_city, "country": geo_country}
+
+        upd = {
+            "check_out": now,
+            "work_hours": work_hours,
+            "total_break_minutes": total_break_minutes,
+            "breaks": breaks,
+            "overtime_hours": overtime,
+            "is_half_day": is_half_day,
+            "check_out_geo": geo,
+            "auto_punched_out": auto,
+            "updated_at": now,
+        }
+        if is_half_day and record.get("status") not in [AttendanceStatus.ON_LEAVE]:
+            upd["status"] = AttendanceStatus.HALF_DAY
+
+        await self.col.update_one({"_id": record["_id"]}, {"$set": upd})
+        record.update(upd)
+        return self._serialize(record)
+
+    # ── Break Tracking ────────────────────────────────────────────────────────
+
+    async def start_break(self, employee_id: str, company_id: str, reason: str = "") -> dict:
+        today = date.today()
+        now = datetime.now(timezone.utc)
+        record = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
+        if not record or not record.get("check_in") or record.get("check_out"):
+            return {}
+        breaks = record.get("breaks", [])
+        if breaks and not breaks[-1].get("end"):
+            return self._serialize(record)  # already on break
+        breaks.append({"start": now, "end": None, "duration_minutes": None, "reason": reason})
+        await self.col.update_one({"_id": record["_id"]},
+            {"$set": {"breaks": breaks, "updated_at": now}})
+        record["breaks"] = breaks
+        return self._serialize(record)
+
+    async def end_break(self, employee_id: str, company_id: str) -> dict:
         today = date.today()
         now = datetime.now(timezone.utc)
         record = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
         if not record:
             return {}
-        work_hours = 0.0
-        if record.get("check_in"):
-            delta = now - record["check_in"]
-            work_hours = round(delta.total_seconds() / 3600, 2)
-        await self.col.update_one(
-            {"_id": record["_id"]},
-            {"$set": {"check_out": now, "work_hours": work_hours, "updated_at": now}},
-        )
-        record["check_out"] = now
-        record["work_hours"] = work_hours
+        breaks = record.get("breaks", [])
+        total_break_minutes = record.get("total_break_minutes", 0.0)
+        if not breaks or breaks[-1].get("end"):
+            return self._serialize(record)  # not on break
+        br_start = breaks[-1]["start"]
+        dur = round((now - br_start).total_seconds() / 60, 1)
+        breaks[-1]["end"] = now
+        breaks[-1]["duration_minutes"] = dur
+        total_break_minutes += dur
+        await self.col.update_one({"_id": record["_id"]},
+            {"$set": {"breaks": breaks, "total_break_minutes": total_break_minutes, "updated_at": now}})
+        record["breaks"] = breaks
+        record["total_break_minutes"] = total_break_minutes
         return self._serialize(record)
+
+    # ── Auto punch-out at midnight (called by scheduler) ─────────────────────
+
+    async def auto_checkout_all(self, company_id: str) -> int:
+        """Punch out all employees who are still checked in at midnight."""
+        today = date.today()
+        cursor = self.col.find({
+            "company_id": company_id,
+            "date": today,
+            "check_in": {"$ne": None},
+            "check_out": None,
+        })
+        count = 0
+        async for rec in cursor:
+            await self.check_out(
+                employee_id=rec["employee_id"],
+                company_id=company_id,
+                marked_by="system",
+                auto=True,
+            )
+            count += 1
+        return count
+
+    # ── Read queries ──────────────────────────────────────────────────────────
 
     async def get_today(self, employee_id: str, company_id: str) -> Optional[dict]:
         doc = await self.col.find_one({"employee_id": employee_id, "date": date.today(), "company_id": company_id})
@@ -86,10 +226,7 @@ class AttendanceService:
 
     async def get_monthly(self, employee_id: str, company_id: str, year: int, month: int) -> List[dict]:
         start = date(year, month, 1)
-        if month == 12:
-            end = date(year + 1, 1, 1)
-        else:
-            end = date(year, month + 1, 1)
+        end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
         cursor = self.col.find({
             "employee_id": employee_id,
             "company_id": company_id,
@@ -121,7 +258,7 @@ class AttendanceService:
         return await self.col.count_documents({
             "company_id": company_id,
             "date": date.today(),
-            "status": {"$in": [AttendanceStatus.PRESENT, AttendanceStatus.LATE]},
+            "status": {"$in": [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.WORK_FROM_HOME]},
         })
 
     async def count_late_today(self, company_id: str) -> int:

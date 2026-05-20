@@ -14,7 +14,13 @@
       "Bash(curl -L -o \"d:/crm-project/frontend/public/auth-bg-2.jpg\" \"https://images.unsplash.com/photo-1521737852567-6949f3f9f2b5?w=1920&q=85&fit=crop&crop=entropy&fm=jpg\" -A \"Mozilla/5.0\" --max-time 30)",
       "Bash(curl -L -o \"d:/crm-project/frontend/public/auth-bg-3.jpg\" \"https://images.unsplash.com/photo-1551434678-e076c223a692?w=1920&q=85&fit=crop&crop=entropy&fm=jpg\" -A \"Mozilla/5.0\" --max-time 30)",
       "Bash(Get-ChildItem -Path \"d:\\\\crm-project\" -Directory)",
-      "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\\\\services\\\\\" -Name | Select-Object -First 20)"
+      "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\\\\services\\\\\" -Name | Select-Object -First 20)",
+      "Bash(Get-ChildItem -Recurse -Force)",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path . -Directory)",
+      "Bash(xargs -I {} find {} -type d)",
+      "Bash(cd /d d:\\\\crm-project)",
+      "Bash(Get-ChildItem -Path \"frontend\\\\src\\\\components\\\\layout\\\\SideNav.jsx\" -ErrorAction SilentlyContinue)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

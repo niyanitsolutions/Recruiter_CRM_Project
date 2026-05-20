@@ -57,7 +57,8 @@ from app.api.v1 import export
 from app.api.v1 import (
     hrm_employees, hrm_attendance, hrm_leaves, hrm_payroll,
     hrm_performance, hrm_announcements, hrm_dashboard, hrm_hiring,
-    hrm_offer_templates, hrm_documents,
+    hrm_offer_templates, hrm_documents, hrm_sync,
+    hrm_assets, hrm_exit,
 )
 
 # ============== Company Settings ==============
@@ -334,6 +335,9 @@ app.include_router(hrm_announcements.router,   prefix=API_V1_PREFIX, tags=["HRM 
 app.include_router(hrm_hiring.router,           prefix=API_V1_PREFIX, tags=["HRM - Hiring"])
 app.include_router(hrm_offer_templates.router,  prefix=API_V1_PREFIX, tags=["HRM - Offer Templates"])
 app.include_router(hrm_documents.router,        prefix=API_V1_PREFIX, tags=["HRM - Documents"])
+app.include_router(hrm_sync.router,             prefix=API_V1_PREFIX, tags=["HRM - Sync"])
+app.include_router(hrm_assets.router,           prefix=API_V1_PREFIX, tags=["HRM - Assets"])
+app.include_router(hrm_exit.router,             prefix=API_V1_PREFIX, tags=["HRM - Exit Management"])
 
 
 # Serve uploaded files (resumes, etc.)

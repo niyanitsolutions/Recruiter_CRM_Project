@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
@@ -33,20 +33,18 @@ import {
   Plug,
   UserCog,
   Clock,
-  Megaphone,
-  TrendingUp,
-  Banknote,
   PersonStanding,
-  Briefcase as BriefcaseIcon,
-  UserSearch,
-  CalendarCheck,
-  FileBox,
-  UserCheck2,
-  LayoutTemplate,
+  GitBranch,
+  FolderOpen,
+  Package,
+  DoorOpen,
+  LayoutGrid,
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType } from '../../store/authSlice'
 import { useTheme } from '../../contexts/ThemeContext'
+import { notificationService } from '../../services'
+import hrmService from '../../services/hrmService'
 
 // ─── Permission → nav-item mapping ────────────────────────────────────────────
 // `permissions` is an array — the nav item shows if the user has ANY one of them.
@@ -101,27 +99,24 @@ const PERMISSION_NAV_MAP = [
     path: '/hrm/attendance',        icon: Clock,           label: 'Attendance',       section: 'HRM', hrmOnly: true },
   { permissions: ['hrm:leave:apply', 'hrm:leave:team_approve', 'hrm:leave:manage'],
     path: '/hrm/leaves',            icon: Calendar,        label: 'Leave Management', section: 'HRM', hrmOnly: true },
-  { permissions: ['hrm:payroll:view_self', 'hrm:payroll:manage'],
-    path: '/hrm/payroll',           icon: Banknote,        label: 'Payroll',          section: 'HRM', hrmOnly: true },
-  { permissions: ['hrm:performance:self', 'hrm:performance:team', 'hrm:performance:manage'],
-    path: '/hrm/performance',       icon: TrendingUp,      label: 'Performance',      section: 'HRM', hrmOnly: true },
-  { permissions: ['hrm:announcements:view', 'hrm:announcements:manage'],
-    path: '/hrm/announcements',        icon: Megaphone,       label: 'Announcements',   section: 'HRM', hrmOnly: true },
-  // Internal Hiring — each section is a direct nav item (no pipeline wrapper)
+  // Internal Hiring — single entry; tabs (Jobs/Candidates/Interviews/Offers/Offer Templates/Onboarding) live inside the page
   { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
     path: '/hrm/hiring',               icon: PersonStanding,  label: 'Hiring',          section: 'Internal Hiring', hrmOnly: true },
-  { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring/jobs',          icon: BriefcaseIcon,   label: 'Jobs',            section: 'Internal Hiring', hrmOnly: true },
-  { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring/candidates',    icon: UserSearch,      label: 'Candidates',      section: 'Internal Hiring', hrmOnly: true },
-  { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring/interviews',    icon: CalendarCheck,   label: 'Interviews',      section: 'Internal Hiring', hrmOnly: true },
-  { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring/offers',        icon: FileBox,         label: 'Offers',          section: 'Internal Hiring', hrmOnly: true },
-  { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring/onboarding',    icon: UserCheck2,      label: 'Onboarding',      section: 'Internal Hiring', hrmOnly: true },
-  { permissions: ['hrm:offer_templates:view', 'hrm:offer_templates:manage'],
-    path: '/hrm/offer-templates',      icon: LayoutTemplate,  label: 'Offer Templates', section: 'Internal Hiring', hrmOnly: true },
+  // Employee Self-Service
+  { permissions: ['hrm:attendance:self', 'hrm:leave:apply', 'hrm:payroll:view_self'],
+    path: '/hrm/ess',                  icon: LayoutGrid,      label: 'My Portal',       section: 'HRM', hrmOnly: true },
+  // Org Chart
+  { permissions: ['hrm:employees:view', 'hrm:employees:manage'],
+    path: '/hrm/org-chart',            icon: GitBranch,       label: 'Org Chart',       section: 'HRM', hrmOnly: true },
+  // Document Vault
+  { permissions: ['hrm:documents:manage', 'hrm:employees:view'],
+    path: '/hrm/documents',            icon: FolderOpen,      label: 'Document Vault',  section: 'HRM', hrmOnly: true },
+  // Asset Management
+  { permissions: ['hrm:assets:view', 'hrm:assets:manage'],
+    path: '/hrm/assets',               icon: Package,         label: 'Assets',          section: 'HRM', hrmOnly: true },
+  // Exit Management
+  { permissions: ['hrm:exit:manage', 'hrm:exit:view'],
+    path: '/hrm/exit',                 icon: DoorOpen,        label: 'Exit Management', section: 'HRM', hrmOnly: true },
 ]
 
 /**
@@ -157,11 +152,52 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
   const userType     = useSelector(selectUserType)
   const { isDark, themeMode } = useTheme()
   const location     = useLocation()
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [hrmBadges, setHrmBadges]     = useState({ pendingLeaves: 0, pendingExits: 0 })
 
   // Close mobile nav on route change
   useEffect(() => {
     if (mobileOpen && onMobileClose) onMobileClose()
   }, [location.pathname])
+
+  // Poll unread notification count every 60s
+  useEffect(() => {
+    if (isSuperAdmin || isSeller) return
+    const fetch = () => {
+      notificationService.getUnreadCount().then(r => setUnreadCount(r?.unread_count || 0)).catch(() => {})
+    }
+    fetch()
+    const id = setInterval(fetch, 60000)
+    return () => clearInterval(id)
+  }, [isSuperAdmin, isSeller])
+
+  // Poll HRM badge counts (pending leaves, exit requests) every 2 minutes
+  useEffect(() => {
+    if (isSuperAdmin || isSeller || !user?.permissions) return
+    const perms = new Set(user.permissions)
+    if (!perms.has('hrm:leave:team_approve') && !perms.has('hrm:leave:manage') && !perms.has('hrm:exit:manage')) return
+    const fetchBadges = async () => {
+      try {
+        const [leavesRes, exitRes] = await Promise.allSettled([
+          perms.has('hrm:leave:team_approve') || perms.has('hrm:leave:manage')
+            ? hrmService.listLeaves({ status: 'pending', limit: 1 })
+            : Promise.resolve(null),
+          perms.has('hrm:exit:manage')
+            ? hrmService.listExitRequests({ status: 'submitted', limit: 1 })
+            : Promise.resolve(null),
+        ])
+        setHrmBadges({
+          pendingLeaves: leavesRes.status === 'fulfilled' && leavesRes.value?.data?.total
+            ? leavesRes.value.data.total : 0,
+          pendingExits: exitRes.status === 'fulfilled' && exitRes.value?.data?.total
+            ? exitRes.value.data.total : 0,
+        })
+      } catch {}
+    }
+    fetchBadges()
+    const id = setInterval(fetchBadges, 120000)
+    return () => clearInterval(id)
+  }, [isSuperAdmin, isSeller, user?.permissions])
 
   const handleLogout = () => dispatch(logoutUser())
 
@@ -236,21 +272,46 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
   const { flat, sections } = getMenuSections()
 
   // ── Shared nav-link renderers ─────────────────────────────────────────────
-  const NavItem = ({ item }) => (
-    <li>
-      <NavLink
-        to={item.path}
-        end={item.exact}
-        title={isCollapsed ? item.label : undefined}
-        className={({ isActive }) =>
-          clsx('nav-item', isActive && 'nav-item-active', isCollapsed && 'justify-center px-3')
-        }
-      >
-        <item.icon className="w-5 h-5 flex-shrink-0" />
-        {!isCollapsed && <span>{item.label}</span>}
-      </NavLink>
-    </li>
-  )
+  const getBadgeCount = (path) => {
+    if (path === '/hrm/leaves') return hrmBadges.pendingLeaves
+    if (path === '/hrm/exit')   return hrmBadges.pendingExits
+    return 0
+  }
+
+  const NavItem = ({ item }) => {
+    const badge = getBadgeCount(item.path)
+    return (
+      <li>
+        <NavLink
+          to={item.path}
+          end={item.exact}
+          title={isCollapsed ? item.label : undefined}
+          className={({ isActive }) =>
+            clsx('nav-item', isActive && 'nav-item-active', isCollapsed && 'justify-center px-3')
+          }
+        >
+          <span className="relative flex-shrink-0">
+            <item.icon className="w-5 h-5" />
+            {badge > 0 && isCollapsed && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
+                {badge > 99 ? '99+' : badge}
+              </span>
+            )}
+          </span>
+          {!isCollapsed && (
+            <span className="flex items-center gap-2 flex-1">
+              {item.label}
+              {badge > 0 && (
+                <span className="ml-auto min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                  {badge > 99 ? '99+' : badge}
+                </span>
+              )}
+            </span>
+          )}
+        </NavLink>
+      </li>
+    )
+  }
 
   /**
    * Like NavItem but matches on both pathname AND a specific query-param value.
@@ -406,13 +467,29 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
             <li>
               <NavLink
                 to="/notifications"
-                title={isCollapsed ? 'Notifications' : undefined}
+                title={isCollapsed ? `Notifications${unreadCount ? ` (${unreadCount})` : ''}` : undefined}
                 className={({ isActive }) =>
                   clsx('nav-item', isActive && 'nav-item-active', isCollapsed && 'justify-center px-3')
                 }
               >
-                <Bell className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && <span>Notifications</span>}
+                <span className="relative flex-shrink-0">
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </span>
+                {!isCollapsed && (
+                  <span className="flex items-center gap-2">
+                    Notifications
+                    {unreadCount > 0 && (
+                      <span className="ml-auto min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
+                  </span>
+                )}
               </NavLink>
             </li>
             <li>

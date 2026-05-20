@@ -127,21 +127,26 @@ const LoginActivityPage       = lazy(() => import('./pages/settings').then(m => 
 const ActiveSessionsPage      = lazy(() => import('./pages/settings').then(m => ({ default: m.ActiveSessionsPage })))
 
 // HRM
-const HRMDashboard    = lazy(() => import('./pages/hrm/HRMDashboard'))
-const Employees       = lazy(() => import('./pages/hrm/Employees'))
-const EmployeeForm    = lazy(() => import('./pages/hrm/EmployeeForm'))
-const Attendance      = lazy(() => import('./pages/hrm/Attendance'))
-const LeaveManagement = lazy(() => import('./pages/hrm/LeaveManagement'))
-const Payroll         = lazy(() => import('./pages/hrm/Payroll'))
-const Performance     = lazy(() => import('./pages/hrm/Performance'))
-const Announcements   = lazy(() => import('./pages/hrm/Announcements'))
-const HiringDashboard = lazy(() => import('./pages/hrm/hiring/HiringDashboard'))
-const HRJobs          = lazy(() => import('./pages/hrm/hiring/HRJobs'))
-const HRCandidates    = lazy(() => import('./pages/hrm/hiring/HRCandidates'))
-const HRInterviews    = lazy(() => import('./pages/hrm/hiring/HRInterviews'))
-const HROffer         = lazy(() => import('./pages/hrm/hiring/HROffer'))
-const HROnboarding    = lazy(() => import('./pages/hrm/hiring/HROnboarding'))
-const OfferTemplates  = lazy(() => import('./pages/hrm/OfferTemplates'))
+const HRMDashboard       = lazy(() => import('./pages/hrm/HRMDashboard'))
+const Employees          = lazy(() => import('./pages/hrm/Employees'))
+const EmployeeForm       = lazy(() => import('./pages/hrm/EmployeeForm'))
+const Attendance         = lazy(() => import('./pages/hrm/Attendance'))
+const LeaveManagement    = lazy(() => import('./pages/hrm/LeaveManagement'))
+const Payroll            = lazy(() => import('./pages/hrm/Payroll'))
+const Performance        = lazy(() => import('./pages/hrm/Performance'))
+const Announcements      = lazy(() => import('./pages/hrm/Announcements'))
+const HiringDashboard    = lazy(() => import('./pages/hrm/hiring/HiringDashboard'))
+const HRJobs             = lazy(() => import('./pages/hrm/hiring/HRJobs'))
+const HRCandidates       = lazy(() => import('./pages/hrm/hiring/HRCandidates'))
+const HRInterviews       = lazy(() => import('./pages/hrm/hiring/HRInterviews'))
+const HROffer            = lazy(() => import('./pages/hrm/hiring/HROffer'))
+const HROnboarding       = lazy(() => import('./pages/hrm/hiring/HROnboarding'))
+const OfferTemplates     = lazy(() => import('./pages/hrm/OfferTemplates'))
+const EmployeeSelfService = lazy(() => import('./pages/hrm/EmployeeSelfService'))
+const OrgChart           = lazy(() => import('./pages/hrm/OrgChart'))
+const DocumentVault      = lazy(() => import('./pages/hrm/DocumentVault'))
+const AssetManagement    = lazy(() => import('./pages/hrm/AssetManagement'))
+const ExitManagement     = lazy(() => import('./pages/hrm/ExitManagement'))
 
 // Reports, Analytics, Imports, Exports, Targets, Audit
 const ReportsPage        = lazy(() => import('./pages/reports/ReportsPage'))
@@ -1124,6 +1129,11 @@ function App() {
         <Route path="/hrm/hiring/offers"       element={<PermissionRoute permission="hrm:hiring:view"><HROffer /></PermissionRoute>} />
         <Route path="/hrm/hiring/onboarding"   element={<PermissionRoute permission="hrm:hiring:view"><HROnboarding /></PermissionRoute>} />
         <Route path="/hrm/offer-templates"     element={<PermissionRoute permission="hrm:offer_templates:view"><OfferTemplates /></PermissionRoute>} />
+        <Route path="/hrm/ess"                 element={<PermissionRoute permission="hrm:attendance:self"><EmployeeSelfService /></PermissionRoute>} />
+        <Route path="/hrm/org-chart"           element={<PermissionRoute permission="hrm:employees:view"><OrgChart /></PermissionRoute>} />
+        <Route path="/hrm/documents"           element={<PermissionRoute permission="hrm:employees:view"><DocumentVault /></PermissionRoute>} />
+        <Route path="/hrm/assets"              element={<PermissionRoute permission="hrm:assets:view"><AssetManagement /></PermissionRoute>} />
+        <Route path="/hrm/exit"                element={<PermissionRoute permission="hrm:exit:manage"><ExitManagement /></PermissionRoute>} />
       </Route>
 
       {/* DEFAULT */}

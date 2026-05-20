@@ -51,6 +51,15 @@ class ReportType(str, Enum):
     LOGIN_ACTIVITY = "login_activity"
     USER_ACTIONS = "user_actions"
 
+    # HRM Reports
+    HRM_ATTENDANCE_SUMMARY = "hrm_attendance_summary"
+    HRM_LEAVE_SUMMARY = "hrm_leave_summary"
+    HRM_PAYROLL_SUMMARY = "hrm_payroll_summary"
+    HRM_HEADCOUNT = "hrm_headcount"
+    HRM_EMPLOYEE_DIRECTORY = "hrm_employee_directory"
+    HRM_ASSET_REGISTER = "hrm_asset_register"
+    HRM_EXIT_SUMMARY = "hrm_exit_summary"
+
 
 class ReportCategory(str, Enum):
     """Report categories"""
@@ -60,6 +69,7 @@ class ReportCategory(str, Enum):
     ONBOARDING = "onboarding"
     TEAM = "team"
     AUDIT = "audit"
+    HRM = "hrm"
     CUSTOM = "custom"
 
 
@@ -125,6 +135,14 @@ REPORT_TYPE_DISPLAY = {
     ReportType.RESPONSE_TIME: "Response Time Metrics",
     ReportType.LOGIN_ACTIVITY: "Login Activity Report",
     ReportType.USER_ACTIONS: "User Actions Report",
+    # HRM
+    ReportType.HRM_ATTENDANCE_SUMMARY: "HRM Attendance Summary",
+    ReportType.HRM_LEAVE_SUMMARY: "HRM Leave Summary",
+    ReportType.HRM_PAYROLL_SUMMARY: "HRM Payroll Summary",
+    ReportType.HRM_HEADCOUNT: "Headcount Report",
+    ReportType.HRM_EMPLOYEE_DIRECTORY: "Employee Directory",
+    ReportType.HRM_ASSET_REGISTER: "Asset Register",
+    ReportType.HRM_EXIT_SUMMARY: "Exit Summary Report",
 }
 
 REPORT_CATEGORY_DISPLAY = {
@@ -134,6 +152,7 @@ REPORT_CATEGORY_DISPLAY = {
     ReportCategory.ONBOARDING: "Onboarding",
     ReportCategory.TEAM: "Team Performance",
     ReportCategory.AUDIT: "Audit & Security",
+    ReportCategory.HRM: "HRM",
     ReportCategory.CUSTOM: "Custom",
 }
 
@@ -164,6 +183,14 @@ REPORT_TYPE_DESCRIPTIONS = {
     ReportType.RESPONSE_TIME: "Average time for coordinators to move candidates through pipeline stages",
     ReportType.LOGIN_ACTIVITY: "User login history with device, location and session duration",
     ReportType.USER_ACTIONS: "Detailed audit trail of all user actions within the selected period",
+    # HRM
+    ReportType.HRM_ATTENDANCE_SUMMARY: "Daily attendance log with check-in/out times, work hours, breaks, and late/half-day flags",
+    ReportType.HRM_LEAVE_SUMMARY: "Leave applications by employee and type — pending, approved, and rejected breakdown",
+    ReportType.HRM_PAYROLL_SUMMARY: "Monthly payroll with CTC, gross salary, deductions, and net take-home per employee",
+    ReportType.HRM_HEADCOUNT: "Headcount by department and designation — active, on-leave, and attrition data",
+    ReportType.HRM_EMPLOYEE_DIRECTORY: "Full employee directory with contact details, department, designation, and joining date",
+    ReportType.HRM_ASSET_REGISTER: "Complete asset inventory with status, assigned employee, and warranty details",
+    ReportType.HRM_EXIT_SUMMARY: "Employee exits by type (resignation/termination) with notice period and clearance status",
 }
 
 

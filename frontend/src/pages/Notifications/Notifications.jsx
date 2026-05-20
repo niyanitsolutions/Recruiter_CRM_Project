@@ -7,33 +7,80 @@ import {
 import { notificationService } from '../../services'
 
 const TYPE_ICONS = {
-  offer_released: UserPlus,
-  offer_accepted: CheckCircle,
-  candidate_joined: UserPlus,
-  payout_eligible: DollarSign,
-  invoice_raised: FileText,
-  invoice_approved: CheckCircle,
-  invoice_rejected: AlertCircle,
+  // Recruitment / Onboarding
+  offer_released:    UserPlus,
+  offer_accepted:    CheckCircle,
+  offer_declined:    AlertCircle,
+  doj_confirmed:     Calendar,
+  doj_reminder:      Clock,
+  doj_extended:      Clock,
+  candidate_joined:  UserPlus,
+  candidate_no_show: AlertCircle,
+  document_pending:  FileText,
+  document_submitted:FileText,
+  document_verified: CheckCircle,
+  document_rejected: AlertCircle,
+  // Financial
+  payout_eligible:   DollarSign,
+  invoice_raised:    FileText,
+  invoice_approved:  CheckCircle,
+  invoice_rejected:  AlertCircle,
   payment_processed: DollarSign,
-  day_10_reminder: Clock,
-  day_30_reminder: Clock,
-  system_alert: AlertCircle,
-  default: Bell
+  // Reminders
+  day_10_reminder:   Clock,
+  day_30_reminder:   Clock,
+  payout_day_reminder: DollarSign,
+  // Task / Mention
+  task_assigned:     FileText,
+  mention:           Bell,
+  system_alert:      AlertCircle,
+  // HRM
+  hrm_user_created:   UserPlus,
+  hrm_emp_created:    UserPlus,
+  hrm_leave_applied:  Calendar,
+  hrm_leave_action:   CheckCircle,
+  hrm_offer_sent:     FileText,
+  hrm_onboard_update: CheckCircle,
+  hrm_review_created: FileText,
+  hrm_review_submitted: CheckCircle,
+  hrm_announcement:   Bell,
+  default:            Bell,
 }
 
 const TYPE_COLORS = {
-  offer_released: 'bg-blue-100 text-blue-600',
-  offer_accepted: 'bg-green-100 text-green-600',
-  candidate_joined: 'bg-emerald-100 text-emerald-600',
-  payout_eligible: 'bg-purple-100 text-purple-600',
-  invoice_raised: 'bg-yellow-100 text-yellow-600',
-  invoice_approved: 'bg-green-100 text-green-600',
-  invoice_rejected: 'bg-red-100 text-red-600',
+  offer_released:    'bg-blue-100 text-blue-600',
+  offer_accepted:    'bg-green-100 text-green-600',
+  offer_declined:    'bg-red-100 text-red-600',
+  doj_confirmed:     'bg-teal-100 text-teal-600',
+  doj_reminder:      'bg-orange-100 text-orange-600',
+  doj_extended:      'bg-yellow-100 text-yellow-600',
+  candidate_joined:  'bg-emerald-100 text-emerald-600',
+  candidate_no_show: 'bg-red-100 text-red-600',
+  document_pending:  'bg-yellow-100 text-yellow-600',
+  document_submitted:'bg-blue-100 text-blue-600',
+  document_verified: 'bg-green-100 text-green-600',
+  document_rejected: 'bg-red-100 text-red-600',
+  payout_eligible:   'bg-purple-100 text-purple-600',
+  invoice_raised:    'bg-yellow-100 text-yellow-600',
+  invoice_approved:  'bg-green-100 text-green-600',
+  invoice_rejected:  'bg-red-100 text-red-600',
   payment_processed: 'bg-green-100 text-green-600',
-  day_10_reminder: 'bg-orange-100 text-orange-600',
-  day_30_reminder: 'bg-orange-100 text-orange-600',
-  system_alert: 'bg-red-100 text-red-600',
-  default: 'bg-gray-100 text-gray-600'
+  day_10_reminder:   'bg-orange-100 text-orange-600',
+  day_30_reminder:   'bg-orange-100 text-orange-600',
+  payout_day_reminder:'bg-purple-100 text-purple-600',
+  task_assigned:     'bg-blue-100 text-blue-600',
+  mention:           'bg-indigo-100 text-indigo-600',
+  system_alert:      'bg-red-100 text-red-600',
+  hrm_user_created:  'bg-indigo-100 text-indigo-600',
+  hrm_emp_created:   'bg-teal-100 text-teal-600',
+  hrm_leave_applied: 'bg-yellow-100 text-yellow-600',
+  hrm_leave_action:  'bg-green-100 text-green-600',
+  hrm_offer_sent:    'bg-blue-100 text-blue-600',
+  hrm_onboard_update:'bg-emerald-100 text-emerald-600',
+  hrm_review_created:'bg-purple-100 text-purple-600',
+  hrm_review_submitted:'bg-green-100 text-green-600',
+  hrm_announcement:  'bg-orange-100 text-orange-600',
+  default:           'bg-gray-100 text-gray-600',
 }
 
 const Notifications = () => {
@@ -184,13 +231,38 @@ const Notifications = () => {
             className="px-4 py-2 border border-surface-300 rounded-lg focus:ring-2 focus:ring-primary-500"
           >
             <option value="">All Types</option>
-            <option value="offer_released">Offer Released</option>
-            <option value="offer_accepted">Offer Accepted</option>
-            <option value="candidate_joined">Candidate Joined</option>
-            <option value="payout_eligible">Payout Eligible</option>
-            <option value="invoice_raised">Invoice Raised</option>
-            <option value="payment_processed">Payment Processed</option>
-            <option value="system_alert">System Alert</option>
+            <optgroup label="Recruitment">
+              <option value="offer_released">Offer Released</option>
+              <option value="offer_accepted">Offer Accepted</option>
+              <option value="offer_declined">Offer Declined</option>
+              <option value="candidate_joined">Candidate Joined</option>
+              <option value="candidate_no_show">Candidate No Show</option>
+              <option value="doj_confirmed">DOJ Confirmed</option>
+              <option value="doj_reminder">DOJ Reminder</option>
+              <option value="document_pending">Document Pending</option>
+              <option value="document_verified">Document Verified</option>
+            </optgroup>
+            <optgroup label="Financial">
+              <option value="payout_eligible">Payout Eligible</option>
+              <option value="invoice_raised">Invoice Raised</option>
+              <option value="invoice_approved">Invoice Approved</option>
+              <option value="invoice_rejected">Invoice Rejected</option>
+              <option value="payment_processed">Payment Processed</option>
+            </optgroup>
+            <optgroup label="HRM">
+              <option value="hrm_user_created">User Created (HRM)</option>
+              <option value="hrm_emp_created">Employee Created</option>
+              <option value="hrm_leave_applied">Leave Applied</option>
+              <option value="hrm_leave_action">Leave Action</option>
+              <option value="hrm_offer_sent">Offer Sent (HRM)</option>
+              <option value="hrm_onboard_update">Onboarding Update</option>
+              <option value="hrm_announcement">Announcement</option>
+            </optgroup>
+            <optgroup label="System">
+              <option value="task_assigned">Task Assigned</option>
+              <option value="mention">Mention</option>
+              <option value="system_alert">System Alert</option>
+            </optgroup>
           </select>
         </div>
       </div>

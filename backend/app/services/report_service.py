@@ -94,6 +94,20 @@ class ReportService:
             data, columns = await self._generate_login_activity(company_id, date_range, filters)
         elif report_type == ReportType.USER_ACTIONS:
             data, columns = await self._generate_user_actions(company_id, date_range, filters)
+        elif report_type == ReportType.HRM_ATTENDANCE_SUMMARY:
+            data, columns = await self._generate_hrm_attendance_summary(company_id, date_range, filters)
+        elif report_type == ReportType.HRM_LEAVE_SUMMARY:
+            data, columns = await self._generate_hrm_leave_summary(company_id, date_range, filters)
+        elif report_type == ReportType.HRM_PAYROLL_SUMMARY:
+            data, columns = await self._generate_hrm_payroll_summary(company_id, date_range, filters)
+        elif report_type == ReportType.HRM_HEADCOUNT:
+            data, columns = await self._generate_hrm_headcount(company_id, filters)
+        elif report_type == ReportType.HRM_EMPLOYEE_DIRECTORY:
+            data, columns = await self._generate_hrm_employee_directory(company_id, filters)
+        elif report_type == ReportType.HRM_ASSET_REGISTER:
+            data, columns = await self._generate_hrm_asset_register(company_id, filters)
+        elif report_type == ReportType.HRM_EXIT_SUMMARY:
+            data, columns = await self._generate_hrm_exit_summary(company_id, date_range, filters)
         else:
             data, columns = [], []
         
@@ -1709,6 +1723,259 @@ class ReportService:
         ]
         return data, columns
 
+    # ============== HRM Report Methods ==============
+
+    async def _generate_hrm_attendance_summary(
+        self, company_id: str, date_range: tuple, filters
+    ) -> tuple:
+        start_date, end_date = date_range
+        query = {
+            "company_id": company_id,
+            "date": {
+                "$gte": start_date.isoformat(),
+                "$lte": end_date.isoformat(),
+            },
+        }
+        cursor = self.db.hrm_attendance.find(query).sort("date", -1).limit(5000)
+        data = []
+        async for doc in cursor:
+            check_in = doc.get("check_in")
+            check_out = doc.get("check_out")
+            data.append({
+                "employee_id":   doc.get("employee_id", ""),
+                "employee_name": doc.get("employee_name", ""),
+                "date":          str(doc.get("date", "")),
+                "check_in":      check_in.strftime("%H:%M") if isinstance(check_in, datetime) else str(check_in or ""),
+                "check_out":     check_out.strftime("%H:%M") if isinstance(check_out, datetime) else str(check_out or ""),
+                "work_hours":    round(doc.get("work_hours", 0) or 0, 2),
+                "work_mode":     doc.get("work_mode", "office"),
+                "is_late":       "Yes" if doc.get("is_late") else "No",
+                "is_half_day":   "Yes" if doc.get("is_half_day") else "No",
+                "overtime_hours": round(doc.get("overtime_hours", 0) or 0, 2),
+                "status":        doc.get("status", "present"),
+            })
+        columns = [
+            ReportColumn(key="date",           label="Date",         data_type="date"),
+            ReportColumn(key="employee_id",    label="Emp ID",       data_type="string"),
+            ReportColumn(key="employee_name",  label="Employee",     data_type="string"),
+            ReportColumn(key="check_in",       label="Check In",     data_type="string"),
+            ReportColumn(key="check_out",      label="Check Out",    data_type="string"),
+            ReportColumn(key="work_hours",     label="Work Hours",   data_type="number"),
+            ReportColumn(key="work_mode",      label="Work Mode",    data_type="string"),
+            ReportColumn(key="is_late",        label="Late",         data_type="string"),
+            ReportColumn(key="is_half_day",    label="Half Day",     data_type="string"),
+            ReportColumn(key="overtime_hours", label="Overtime Hrs", data_type="number"),
+        ]
+        return data, columns
+
+    async def _generate_hrm_leave_summary(
+        self, company_id: str, date_range: tuple, filters
+    ) -> tuple:
+        start_date, end_date = date_range
+        query = {
+            "company_id": company_id,
+            "created_at": {
+                "$gte": datetime.combine(start_date, datetime.min.time()),
+                "$lte": datetime.combine(end_date, datetime.max.time()),
+            },
+        }
+        cursor = self.db.hrm_leaves.find(query).sort("created_at", -1).limit(3000)
+        data = []
+        async for doc in cursor:
+            data.append({
+                "employee_name": doc.get("employee_name", ""),
+                "leave_type":    doc.get("leave_type", ""),
+                "from_date":     str(doc.get("from_date", "")),
+                "to_date":       str(doc.get("to_date", "")),
+                "days":          doc.get("days", 0),
+                "reason":        doc.get("reason", ""),
+                "status":        doc.get("status", "pending"),
+                "approved_by":   doc.get("approved_by_name", ""),
+            })
+        columns = [
+            ReportColumn(key="employee_name", label="Employee",    data_type="string"),
+            ReportColumn(key="leave_type",    label="Leave Type",  data_type="string"),
+            ReportColumn(key="from_date",     label="From",        data_type="date"),
+            ReportColumn(key="to_date",       label="To",          data_type="date"),
+            ReportColumn(key="days",          label="Days",        data_type="number"),
+            ReportColumn(key="status",        label="Status",      data_type="string"),
+            ReportColumn(key="approved_by",   label="Approved By", data_type="string"),
+        ]
+        return data, columns
+
+    async def _generate_hrm_payroll_summary(
+        self, company_id: str, date_range: tuple, filters
+    ) -> tuple:
+        start_date, end_date = date_range
+        query = {
+            "company_id": company_id,
+            "period_start": {"$gte": start_date.isoformat()},
+            "period_end": {"$lte": end_date.isoformat()},
+        }
+        cursor = self.db.hrm_payroll.find(query).sort("period_start", -1).limit(3000)
+        data = []
+        async for doc in cursor:
+            data.append({
+                "employee_name":    doc.get("employee_name", ""),
+                "period":           f"{doc.get('period_start', '')} – {doc.get('period_end', '')}",
+                "gross_salary":     round(doc.get("gross_salary", 0) or 0, 2),
+                "total_deductions": round(doc.get("total_deductions", 0) or 0, 2),
+                "net_salary":       round(doc.get("net_salary", 0) or 0, 2),
+                "status":           doc.get("status", ""),
+                "paid_on":          str(doc.get("paid_on", "") or ""),
+            })
+        columns = [
+            ReportColumn(key="employee_name",    label="Employee",      data_type="string"),
+            ReportColumn(key="period",           label="Period",        data_type="string"),
+            ReportColumn(key="gross_salary",     label="Gross (₹)",     data_type="number"),
+            ReportColumn(key="total_deductions", label="Deductions (₹)", data_type="number"),
+            ReportColumn(key="net_salary",       label="Net Salary (₹)", data_type="number"),
+            ReportColumn(key="status",           label="Status",        data_type="string"),
+            ReportColumn(key="paid_on",          label="Paid On",       data_type="date"),
+        ]
+        return data, columns
+
+    async def _generate_hrm_headcount(self, company_id: str, filters) -> tuple:
+        pipeline = [
+            {"$match": {"company_id": company_id, "is_deleted": False}},
+            {"$group": {
+                "_id": {
+                    "department": "$department_name",
+                    "status":     "$employment_status",
+                },
+                "count": {"$sum": 1},
+            }},
+            {"$sort": {"_id.department": 1}},
+        ]
+        cursor = self.db.hrm_employees.aggregate(pipeline)
+        rows: dict = {}
+        async for doc in cursor:
+            dept   = doc["_id"]["department"] or "Unassigned"
+            status = doc["_id"]["status"] or "unknown"
+            if dept not in rows:
+                rows[dept] = {"department": dept, "active": 0, "inactive": 0, "on_leave": 0, "terminated": 0, "resigned": 0, "total": 0}
+            rows[dept][status] = rows[dept].get(status, 0) + doc["count"]
+            rows[dept]["total"] += doc["count"]
+
+        data = sorted(rows.values(), key=lambda x: x["department"])
+        columns = [
+            ReportColumn(key="department",  label="Department",  data_type="string"),
+            ReportColumn(key="active",      label="Active",      data_type="number"),
+            ReportColumn(key="on_leave",    label="On Leave",    data_type="number"),
+            ReportColumn(key="inactive",    label="Inactive",    data_type="number"),
+            ReportColumn(key="terminated",  label="Terminated",  data_type="number"),
+            ReportColumn(key="resigned",    label="Resigned",    data_type="number"),
+            ReportColumn(key="total",       label="Total",       data_type="number"),
+        ]
+        return data, columns
+
+    async def _generate_hrm_employee_directory(self, company_id: str, filters) -> tuple:
+        query = {"company_id": company_id, "is_deleted": False, "employment_status": "active"}
+        cursor = self.db.hrm_employees.find(query).sort("full_name", 1)
+        data = []
+        async for doc in cursor:
+            doj = doc.get("date_of_joining")
+            data.append({
+                "employee_id":     doc.get("employee_id", ""),
+                "full_name":       doc.get("full_name", ""),
+                "email":           doc.get("email", ""),
+                "phone":           doc.get("phone", ""),
+                "department":      doc.get("department_name", ""),
+                "designation":     doc.get("designation_name", ""),
+                "employment_type": doc.get("employment_type", ""),
+                "work_location":   doc.get("work_location", ""),
+                "date_of_joining": doj.isoformat() if hasattr(doj, "isoformat") else str(doj or ""),
+                "reporting_manager": doc.get("reporting_manager_name", ""),
+            })
+        columns = [
+            ReportColumn(key="employee_id",     label="Emp ID",          data_type="string"),
+            ReportColumn(key="full_name",        label="Name",            data_type="string"),
+            ReportColumn(key="email",            label="Email",           data_type="string"),
+            ReportColumn(key="phone",            label="Phone",           data_type="string"),
+            ReportColumn(key="department",       label="Department",      data_type="string"),
+            ReportColumn(key="designation",      label="Designation",     data_type="string"),
+            ReportColumn(key="employment_type",  label="Type",            data_type="string"),
+            ReportColumn(key="date_of_joining",  label="Joining Date",    data_type="date"),
+            ReportColumn(key="reporting_manager", label="Reports To",     data_type="string"),
+        ]
+        return data, columns
+
+    async def _generate_hrm_asset_register(self, company_id: str, filters) -> tuple:
+        query = {"company_id": company_id, "is_deleted": False}
+        cursor = self.db.hrm_assets.find(query).sort("asset_tag", 1)
+        data = []
+        async for doc in cursor:
+            data.append({
+                "asset_tag":       doc.get("asset_tag", ""),
+                "asset_type":      doc.get("asset_type", ""),
+                "brand":           doc.get("brand", ""),
+                "model_name":      doc.get("model_name", ""),
+                "serial_number":   doc.get("serial_number", ""),
+                "status":          doc.get("status", ""),
+                "condition":       doc.get("condition", ""),
+                "assigned_to":     doc.get("assigned_to_name", ""),
+                "assigned_on":     str(doc.get("assigned_on", "") or ""),
+                "purchase_cost":   round(doc.get("purchase_cost", 0) or 0, 2),
+                "warranty_expiry": str(doc.get("warranty_expiry", "") or ""),
+                "location":        doc.get("location", ""),
+            })
+        columns = [
+            ReportColumn(key="asset_tag",      label="Asset Tag",    data_type="string"),
+            ReportColumn(key="asset_type",     label="Type",         data_type="string"),
+            ReportColumn(key="brand",          label="Brand",        data_type="string"),
+            ReportColumn(key="model_name",     label="Model",        data_type="string"),
+            ReportColumn(key="serial_number",  label="Serial No.",   data_type="string"),
+            ReportColumn(key="status",         label="Status",       data_type="string"),
+            ReportColumn(key="condition",      label="Condition",    data_type="string"),
+            ReportColumn(key="assigned_to",    label="Assigned To",  data_type="string"),
+            ReportColumn(key="purchase_cost",  label="Cost (₹)",     data_type="number"),
+            ReportColumn(key="warranty_expiry", label="Warranty",    data_type="date"),
+            ReportColumn(key="location",       label="Location",     data_type="string"),
+        ]
+        return data, columns
+
+    async def _generate_hrm_exit_summary(
+        self, company_id: str, date_range: tuple, filters
+    ) -> tuple:
+        start_date, end_date = date_range
+        query = {
+            "company_id": company_id,
+            "is_deleted": False,
+            "created_at": {
+                "$gte": datetime.combine(start_date, datetime.min.time()),
+                "$lte": datetime.combine(end_date, datetime.max.time()),
+            },
+        }
+        cursor = self.db.hrm_exit.find(query).sort("created_at", -1).limit(2000)
+        data = []
+        async for doc in cursor:
+            data.append({
+                "employee_name":     doc.get("employee_name", ""),
+                "department":        doc.get("department_name", ""),
+                "designation":       doc.get("designation_name", ""),
+                "exit_type":         doc.get("exit_type", ""),
+                "resignation_date":  str(doc.get("resignation_date", "")),
+                "last_working_date": str(doc.get("last_working_date", "")),
+                "notice_days":       doc.get("notice_period_days", 0),
+                "status":            doc.get("status", ""),
+                "assets_returned":   "Yes" if doc.get("assets_returned") else "No",
+                "exit_interview":    "Yes" if doc.get("exit_interview_done") else "No",
+                "reason":            doc.get("reason", ""),
+            })
+        columns = [
+            ReportColumn(key="employee_name",     label="Employee",          data_type="string"),
+            ReportColumn(key="department",        label="Department",        data_type="string"),
+            ReportColumn(key="exit_type",         label="Exit Type",         data_type="string"),
+            ReportColumn(key="resignation_date",  label="Resignation Date",  data_type="date"),
+            ReportColumn(key="last_working_date", label="Last Working Day",  data_type="date"),
+            ReportColumn(key="notice_days",       label="Notice Days",       data_type="number"),
+            ReportColumn(key="status",            label="Status",            data_type="string"),
+            ReportColumn(key="assets_returned",   label="Assets Returned",   data_type="string"),
+            ReportColumn(key="exit_interview",    label="Exit Interview",    data_type="string"),
+            ReportColumn(key="reason",            label="Reason",            data_type="string"),
+        ]
+        return data, columns
+
     # ============== Helper Methods ==============
 
     def _resolve_date_range(self, date_range: Optional[DateRange]) -> tuple:
@@ -1747,6 +2014,13 @@ class ReportService:
             return ReportCategory.ONBOARDING
         if report_type in {ReportType.LOGIN_ACTIVITY, ReportType.USER_ACTIONS}:
             return ReportCategory.AUDIT
+        if report_type in {
+            ReportType.HRM_ATTENDANCE_SUMMARY, ReportType.HRM_LEAVE_SUMMARY,
+            ReportType.HRM_PAYROLL_SUMMARY, ReportType.HRM_HEADCOUNT,
+            ReportType.HRM_EMPLOYEE_DIRECTORY, ReportType.HRM_ASSET_REGISTER,
+            ReportType.HRM_EXIT_SUMMARY,
+        }:
+            return ReportCategory.HRM
         return ReportCategory.TEAM
     
     def _calculate_next_run(self, schedule: ScheduleConfig) -> Optional[datetime]:

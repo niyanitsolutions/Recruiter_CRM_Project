@@ -26,7 +26,13 @@ class AnnouncementService:
             "title": data["title"],
             "body": data["body"],
             "announcement_type": data.get("announcement_type", "general"),
+            "priority": data.get("priority", "normal"),
             "target_department_ids": data.get("target_department_ids") or [],
+            "target_employee_ids": data.get("target_employee_ids") or [],
+            "requires_acknowledgement": data.get("requires_acknowledgement", False),
+            "send_email": data.get("send_email", False),
+            "email_sent_at": None,
+            "read_by": [],
             "is_auto": False,
             "linked_employee_id": None,
             "publish_at": data.get("publish_at"),
@@ -64,3 +70,28 @@ class AnnouncementService:
     async def delete(self, ann_id: str, company_id: str) -> bool:
         result = await self.col.delete_one({"_id": ann_id, "company_id": company_id})
         return result.deleted_count > 0
+
+    async def mark_read(self, ann_id: str, company_id: str, employee_id: str, employee_name: str) -> Optional[dict]:
+        """Record that an employee has read/acknowledged this announcement."""
+        now = datetime.now(timezone.utc)
+        # Avoid duplicate read records
+        await self.col.update_one(
+            {"_id": ann_id, "company_id": company_id, "read_by.employee_id": {"$ne": employee_id}},
+            {"$push": {"read_by": {"employee_id": employee_id, "employee_name": employee_name, "read_at": now}},
+             "$set": {"updated_at": now}},
+        )
+        return await self.get(ann_id, company_id)
+
+    async def get_read_stats(self, ann_id: str, company_id: str) -> dict:
+        doc = await self.col.find_one({"_id": ann_id, "company_id": company_id})
+        if not doc:
+            return {}
+        read_by = doc.get("read_by", [])
+        total_employees = await self.db["hrm_employees"].count_documents(
+            {"company_id": company_id, "is_deleted": False}
+        )
+        return {
+            "total_employees": total_employees,
+            "read_count": len(read_by),
+            "read_by": read_by,
+        }

@@ -337,4 +337,11 @@ def get_category_for_type(report_type: ReportType) -> ReportCategory:
         return ReportCategory.ONBOARDING
     if report_type in {ReportType.LOGIN_ACTIVITY, ReportType.USER_ACTIONS}:
         return ReportCategory.AUDIT
+    if report_type in {
+        ReportType.HRM_ATTENDANCE_SUMMARY, ReportType.HRM_LEAVE_SUMMARY,
+        ReportType.HRM_PAYROLL_SUMMARY, ReportType.HRM_HEADCOUNT,
+        ReportType.HRM_EMPLOYEE_DIRECTORY, ReportType.HRM_ASSET_REGISTER,
+        ReportType.HRM_EXIT_SUMMARY,
+    }:
+        return ReportCategory.HRM
     return ReportCategory.TEAM

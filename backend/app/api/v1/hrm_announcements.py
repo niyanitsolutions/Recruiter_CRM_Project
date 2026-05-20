@@ -67,3 +67,31 @@ async def delete_announcement(
     deleted = await AnnouncementService(db).delete(ann_id, cu["company_id"])
     if not deleted:
         raise HTTPException(status_code=404, detail="Announcement not found")
+
+
+@router.post("/{ann_id}/read")
+async def mark_announcement_read(
+    ann_id: str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:announcements:view"])),
+):
+    """Mark an announcement as read by the current user/employee."""
+    employee_id = cu.get("hrm_employee_id") or cu["id"]
+    result = await AnnouncementService(db).mark_read(
+        ann_id, cu["company_id"], employee_id, cu.get("full_name", cu.get("username", ""))
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+    return result
+
+
+@router.get("/{ann_id}/read-stats")
+async def announcement_read_stats(
+    ann_id: str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:announcements:manage"])),
+):
+    """Get read/acknowledgement statistics for an announcement."""
+    return await AnnouncementService(db).get_read_stats(ann_id, cu["company_id"])

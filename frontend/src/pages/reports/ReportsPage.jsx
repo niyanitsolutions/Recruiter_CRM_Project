@@ -9,7 +9,7 @@ import {
   Play, Star, Trash2, Edit, ChevronRight,
   BarChart2, PieChart, TrendingUp, Users, DollarSign, Briefcase,
   Shield, UserCheck, RefreshCw, Filter, X, MoreVertical,
-  BookOpen, Layers, Activity, Target, AlertCircle
+  BookOpen, Layers, Activity, Target, AlertCircle, UserCog,
 } from 'lucide-react';
 import reportService from '../../services/reportService';
 
@@ -86,6 +86,16 @@ const CATEGORIES = [
     border: 'border-red-200',
     activeBg: 'bg-red-600',
   },
+  {
+    value: 'hrm',
+    label: 'HRM',
+    icon: UserCog,
+    gradient: 'from-indigo-500 to-indigo-700',
+    bg: 'bg-indigo-50',
+    text: 'text-indigo-700',
+    border: 'border-indigo-200',
+    activeBg: 'bg-indigo-600',
+  },
 ];
 
 const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map(c => [c.value, c]));
@@ -98,9 +108,10 @@ const getReportIcon = (type) => {
   if (type.includes('revenue') || type.includes('payout') || type.includes('invoice') || type.includes('commission') || type.includes('tax') || type.includes('payment')) return DollarSign;
   if (type.includes('recruiter') || type.includes('productivity') || type.includes('performance')) return Activity;
   if (type.includes('login') || type.includes('audit') || type.includes('action')) return Shield;
-  if (type.includes('document') || type.includes('compliance')) return BookOpen;
+  if (type.includes('document') || type.includes('compliance') || type.includes('asset')) return BookOpen;
   if (type.includes('client')) return Briefcase;
   if (type.includes('offer') || type.includes('no_show') || type.includes('doj') || type.includes('eligibility')) return Calendar;
+  if (type.startsWith('hrm_')) return UserCog;
   return BarChart2;
 };
 

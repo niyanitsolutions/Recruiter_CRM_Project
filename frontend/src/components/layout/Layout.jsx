@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { clsx } from 'clsx'
+import { useSelector } from 'react-redux'
+import { selectUser } from '../../store/authSlice'
 import SideNav from './SideNav'
 import TopBar from './TopBar'
 import GlobalSearch from '../common/GlobalSearch'
+import AttendanceBanner from '../hrm/AttendanceBanner'
 
 const Layout = ({ title, subtitle, actions }) => {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const user = useSelector(selectUser)
+  const showAttendanceBanner = !!(user?.hrm_employee_id)
 
   // Global Ctrl+K / Cmd+K shortcut
   useEffect(() => {
@@ -55,6 +60,9 @@ const Layout = ({ title, subtitle, actions }) => {
           onMobileToggle={() => setMobileOpen(true)}
           onSearchOpen={() => setSearchOpen(true)}
         />
+
+        {/* Attendance Banner — only for employees linked to HRM */}
+        {showAttendanceBanner && <AttendanceBanner />}
 
         {/* Page Content */}
         <main className="p-6">
