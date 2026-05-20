@@ -19,9 +19,10 @@ from app.models.company.report import (
 
 class ReportService:
     """Service for report operations"""
-    
-    def __init__(self, db):
+
+    def __init__(self, db, master_db=None):
         self.db = db
+        self.master_db = master_db
         self.saved_reports = db.saved_reports
         self.execution_logs = db.report_execution_logs
     
@@ -827,14 +828,14 @@ class ReportService:
         """Generate coordinator activity report"""
         start_date, end_date = date_range
         
-        query = {"company_id": company_id}
-
+        # audit_logs are DB-scoped (no company_id field) — filter by date only
+        query = {}
         if start_date and end_date:
             query["created_at"] = {
                 "$gte": datetime.combine(start_date, datetime.min.time()),
                 "$lte": datetime.combine(end_date, datetime.max.time())
             }
-        
+
         pipeline = [
             {"$match": query},
             {"$group": {
@@ -928,8 +929,8 @@ class ReportService:
     ) -> tuple:
         """Interview conversion funnel — scheduled → attended → passed → offered → joined"""
         start_date, end_date = date_range
+        # interviews are DB-scoped (no company_id field)
         base_query = {
-            "company_id": company_id,
             "is_deleted": False,
             "created_at": {
                 "$gte": datetime.combine(start_date, datetime.min.time()),
@@ -1005,12 +1006,9 @@ class ReportService:
             if doc["_id"]:
                 recruiter_apps[doc["_id"]] = {"applications": doc["applications"], "shortlisted": doc["shortlisted"]}
 
-        # Interviews scheduled per user
+        # Interviews scheduled per user (interviews are DB-scoped, no company_id)
         intv_pipeline = [
-            {"$match": {
-                "company_id": company_id, "is_deleted": False,
-                "created_at": dt_filter
-            }},
+            {"$match": {"is_deleted": False, "created_at": dt_filter}},
             {"$group": {"_id": "$created_by", "interviews": {"$sum": 1}}}
         ]
         recruiter_intv = {}
@@ -1381,25 +1379,24 @@ class ReportService:
         cursor = self.db.onboards.find(query).sort("actual_doj", 1)
         data = []
         async for doc in cursor:
-            # OnboardModel stores documents as List[OnboardDocument] with status per doc
-            docs_list = doc.get("documents", [])
-            docs_required = len(docs_list)
-            received_statuses = {"received", "approved", "verified"}
-            docs_received = sum(1 for d in docs_list if d.get("status") in received_statuses)
-            pending_docs = [
-                d.get("document_type", d.get("name", "Unknown"))
-                for d in docs_list if d.get("status") not in received_statuses
-            ]
+            # documents_required: List[str] of required doc type names
+            # documents: List[OnboardDocument] with document_type + status fields
+            required_types = doc.get("documents_required", [])
+            submitted_docs = doc.get("documents", [])
+            submitted_type_set = {d.get("document_type") for d in submitted_docs if d.get("document_type")}
+            received_statuses = {"submitted", "verified", "approved", "received"}
+            docs_received = sum(1 for d in submitted_docs if d.get("status") in received_statuses)
+            missing_types = [t for t in required_types if t not in submitted_type_set]
 
-            if pending_docs or (docs_required == 0):
+            if missing_types or not submitted_docs:
                 data.append({
                     "candidate_name": doc.get("candidate_name", ""),
                     "client_name": doc.get("client_name", ""),
                     "actual_doj": doc.get("actual_doj", doc.get("expected_doj", "")),
-                    "documents_required": docs_required,
+                    "documents_required": len(required_types),
                     "documents_received": docs_received,
-                    "missing_documents": ", ".join(pending_docs) if pending_docs else "No documents uploaded",
-                    "compliance_pct": round(docs_received / docs_required * 100, 0) if docs_required > 0 else 0,
+                    "missing_documents": ", ".join(missing_types) if missing_types else "No documents uploaded",
+                    "compliance_pct": round(docs_received / len(required_types) * 100, 0) if required_types else 0,
                 })
 
         columns = [
@@ -1489,8 +1486,9 @@ class ReportService:
                 user_apps[doc["_id"]] = doc["applications"]
 
         # Interviews scheduled per user
+        # interviews are DB-scoped (no company_id field)
         intv_pipeline = [
-            {"$match": {"company_id": company_id, "is_deleted": False, "created_at": dt_match}},
+            {"$match": {"is_deleted": False, "created_at": dt_match}},
             {"$group": {"_id": "$created_by", "interviews": {"$sum": 1}}}
         ]
         user_intv = {}
@@ -1612,27 +1610,45 @@ class ReportService:
     async def _generate_login_activity(
         self, company_id: str, date_range: tuple, filters: Optional[ReportFilter]
     ) -> tuple:
-        """Login activity report from sessions collection"""
+        """Login activity report — sessions are stored in master_db"""
         start_date, end_date = date_range
-        pipeline = [
-            {"$match": {
-                "company_id": company_id,
-                "created_at": {
-                    "$gte": datetime.combine(start_date, datetime.min.time()),
-                    "$lte": datetime.combine(end_date, datetime.max.time())
-                }
-            }},
-            {"$sort": {"created_at": -1}},
-            {"$limit": 1000}
-        ]
+
+        # Sessions live in master_db, not company_db
+        sessions_db = self.master_db if self.master_db else self.db
+        query = {
+            "company_id": company_id,
+            "created_at": {
+                "$gte": datetime.combine(start_date, datetime.min.time()),
+                "$lte": datetime.combine(end_date, datetime.max.time())
+            }
+        }
+
+        raw_sessions = []
+        async for doc in sessions_db.sessions.find(query).sort("created_at", -1).limit(1000):
+            raw_sessions.append(doc)
+
+        # Batch load user names from company_db
+        user_ids = list({doc["user_id"] for doc in raw_sessions if doc.get("user_id")})
+        user_map = {}
+        async for user in self.db.users.find(
+            {"$or": [{"id": {"$in": user_ids}}, {"_id": {"$in": user_ids}}]},
+            {"id": 1, "_id": 1, "full_name": 1, "username": 1, "email": 1}
+        ):
+            uid = user.get("id") or str(user.get("_id", ""))
+            user_map[uid] = user.get("full_name") or user.get("username") or user.get("email", "Unknown")
+
         data = []
-        async for doc in self.db.sessions.aggregate(pipeline):
+        for doc in raw_sessions:
+            uid = doc.get("user_id", "")
+            created = doc.get("created_at")
+            is_active = doc.get("is_active", False)
+            session_status = doc.get("session_status") or ("active" if is_active else "ended")
             data.append({
-                "user_name": doc.get("user_name", "") or doc.get("username", ""),
+                "user_name": user_map.get(uid, uid or "Unknown"),
                 "ip_address": doc.get("ip_address", ""),
                 "device_info": doc.get("device_info", ""),
-                "login_time": doc.get("created_at", "").isoformat() if isinstance(doc.get("created_at"), datetime) else str(doc.get("created_at", "")),
-                "session_status": doc.get("session_status", doc.get("is_active", False) and "active" or "ended"),
+                "login_time": created.isoformat() if isinstance(created, datetime) else str(created or ""),
+                "session_status": session_status,
             })
 
         columns = [
@@ -1649,8 +1665,8 @@ class ReportService:
     ) -> tuple:
         """User actions audit trail"""
         start_date, end_date = date_range
+        # audit_logs are DB-scoped (no company_id field) — filter by date only
         query = {
-            "company_id": company_id,
             "created_at": {
                 "$gte": datetime.combine(start_date, datetime.min.time()),
                 "$lte": datetime.combine(end_date, datetime.max.time())

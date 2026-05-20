@@ -9,8 +9,8 @@ from datetime import date
 import io
 
 from app.core.dependencies import (
-    get_current_user,
     get_company_db,
+    get_master_db,
     require_permissions
 )
 from app.models.company.report import (
@@ -70,11 +70,12 @@ async def get_report_categories(
 async def generate_report(
     data: GenerateReportRequest,
     current_user: dict = Depends(require_permissions(["reports:view"])),
-    db = Depends(get_company_db)
+    db = Depends(get_company_db),
+    master_db = Depends(get_master_db)
 ):
     """Generate a report"""
-    service = ReportService(db)
-    
+    service = ReportService(db, master_db=master_db)
+
     return await service.generate_report(
         report_type=data.report_type,
         company_id=current_user["company_id"],
@@ -93,12 +94,12 @@ async def generate_report_by_type(
     partner_ids: Optional[str] = None,
     group_by: Optional[str] = None,
     current_user: dict = Depends(require_permissions(["reports:view"])),
-    db = Depends(get_company_db)
+    db = Depends(get_company_db),
+    master_db = Depends(get_master_db)
 ):
     """Generate a specific report type with query parameters"""
-    service = ReportService(db)
-    
-    # Build filters
+    service = ReportService(db, master_db=master_db)
+
     filters = ReportFilter(
         date_range=DateRange(
             preset=preset,
@@ -109,7 +110,7 @@ async def generate_report_by_type(
         partner_ids=partner_ids.split(",") if partner_ids else None,
         group_by=group_by
     )
-    
+
     return await service.generate_report(
         report_type=report_type,
         company_id=current_user["company_id"],
@@ -124,28 +125,26 @@ async def generate_report_by_type(
 async def export_report(
     data: GenerateReportRequest,
     current_user: dict = Depends(require_permissions(["reports:export"])),
-    db = Depends(get_company_db)
+    db = Depends(get_company_db),
+    master_db = Depends(get_master_db)
 ):
     """Export a report to file"""
-    report_service = ReportService(db)
+    report_service = ReportService(db, master_db=master_db)
     export_service = ExportService(db)
-    
-    # Generate report
+
     report = await report_service.generate_report(
         report_type=data.report_type,
         company_id=current_user["company_id"],
         filters=data.filters,
         user_id=current_user["id"]
     )
-    
-    # Export to file
+
     content, filename = await export_service.export_report_data(
         report_data=report.data,
         report_name=report.report_name,
         format=data.format
     )
-    
-    # Determine content type
+
     if data.format == ReportFormat.EXCEL:
         content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     elif data.format == ReportFormat.CSV:
@@ -154,8 +153,7 @@ async def export_report(
         content_type = "application/pdf"
     else:
         content_type = "application/json"
-    
-    # Return file
+
     if isinstance(content, bytes):
         return StreamingResponse(
             io.BytesIO(content),
@@ -182,7 +180,7 @@ async def list_saved_reports(
 ):
     """List saved reports"""
     service = ReportService(db)
-    
+
     return await service.list_saved_reports(
         company_id=current_user["company_id"],
         user_id=current_user["id"],
@@ -200,7 +198,7 @@ async def save_report(
 ):
     """Save a report configuration"""
     service = ReportService(db)
-    
+
     return await service.save_report(
         data=data,
         company_id=current_user["company_id"],
@@ -216,18 +214,18 @@ async def get_saved_report(
 ):
     """Get a saved report"""
     service = ReportService(db)
-    
+
     report = await service.get_saved_report(
         report_id=report_id,
         company_id=current_user["company_id"]
     )
-    
+
     if not report:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Saved report not found"
         )
-    
+
     return report
 
 
@@ -240,20 +238,20 @@ async def update_saved_report(
 ):
     """Update a saved report"""
     service = ReportService(db)
-    
+
     result = await service.update_saved_report(
         report_id=report_id,
         data=data,
         company_id=current_user["company_id"],
         user_id=current_user["id"]
     )
-    
+
     if not result:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Saved report not found"
         )
-    
+
     return result
 
 
@@ -265,19 +263,19 @@ async def delete_saved_report(
 ):
     """Delete a saved report"""
     service = ReportService(db)
-    
+
     success = await service.delete_saved_report(
         report_id=report_id,
         company_id=current_user["company_id"],
         user_id=current_user["id"]
     )
-    
+
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Saved report not found"
         )
-    
+
     return {"message": "Saved report deleted successfully"}
 
 
@@ -285,26 +283,25 @@ async def delete_saved_report(
 async def run_saved_report(
     report_id: str,
     current_user: dict = Depends(require_permissions(["reports:view"])),
-    db = Depends(get_company_db)
+    db = Depends(get_company_db),
+    master_db = Depends(get_master_db)
 ):
     """Run a saved report"""
-    service = ReportService(db)
-    
-    # Get saved report
+    service = ReportService(db, master_db=master_db)
+
     saved_report = await service.get_saved_report(
         report_id=report_id,
         company_id=current_user["company_id"]
     )
-    
+
     if not saved_report:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Saved report not found"
         )
-    
-    # Generate report with saved filters
+
     filters = ReportFilter(**saved_report.filters) if saved_report.filters else None
-    
+
     return await service.generate_report(
         report_type=saved_report.report_type,
         company_id=current_user["company_id"],
@@ -317,44 +314,27 @@ async def run_saved_report(
 
 def get_category_for_type(report_type: ReportType) -> ReportCategory:
     """Get category for a report type"""
-    recruitment_types = {
+    if report_type in {
         ReportType.PLACEMENTS_SUMMARY, ReportType.APPLICATION_FUNNEL,
         ReportType.TIME_TO_HIRE, ReportType.SOURCE_EFFECTIVENESS,
         ReportType.JOB_AGING, ReportType.CANDIDATE_PIPELINE,
         ReportType.INTERVIEW_CONVERSION, ReportType.RECRUITER_PERFORMANCE,
-    }
-    client_types = {
-        ReportType.CLIENT_SUMMARY, ReportType.CLIENT_HIRING_TREND,
-    }
-    financial_types = {
+    }:
+        return ReportCategory.RECRUITMENT
+    if report_type in {ReportType.CLIENT_SUMMARY, ReportType.CLIENT_HIRING_TREND}:
+        return ReportCategory.CLIENT
+    if report_type in {
         ReportType.PAYOUT_SUMMARY, ReportType.INVOICE_AGING,
         ReportType.REVENUE_BY_CLIENT, ReportType.COMMISSION_TRENDS,
         ReportType.PAYMENT_HISTORY, ReportType.TAX_SUMMARY,
-    }
-    onboarding_types = {
+    }:
+        return ReportCategory.FINANCIAL
+    if report_type in {
         ReportType.OFFER_ACCEPTANCE, ReportType.NO_SHOW_ANALYSIS,
         ReportType.DOJ_EXTENSIONS, ReportType.DOCUMENT_COMPLIANCE,
         ReportType.PAYOUT_ELIGIBILITY,
-    }
-    team_types = {
-        ReportType.COORDINATOR_ACTIVITY, ReportType.USER_PRODUCTIVITY,
-        ReportType.RESPONSE_TIME,
-    }
-    audit_types = {
-        ReportType.LOGIN_ACTIVITY, ReportType.USER_ACTIONS,
-    }
-
-    if report_type in recruitment_types:
-        return ReportCategory.RECRUITMENT
-    elif report_type in client_types:
-        return ReportCategory.CLIENT
-    elif report_type in financial_types:
-        return ReportCategory.FINANCIAL
-    elif report_type in onboarding_types:
+    }:
         return ReportCategory.ONBOARDING
-    elif report_type in team_types:
-        return ReportCategory.TEAM
-    elif report_type in audit_types:
+    if report_type in {ReportType.LOGIN_ACTIVITY, ReportType.USER_ACTIONS}:
         return ReportCategory.AUDIT
-    else:
-        return ReportCategory.CUSTOM
+    return ReportCategory.TEAM
