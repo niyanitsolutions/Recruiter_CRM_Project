@@ -271,7 +271,7 @@ const AdminDashboard = () => {
   // ── Loading skeleton ──────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="p-6 space-y-5 page-enter">
+      <div className="p-3 space-y-4 page-enter">
         <div className="h-20 rounded-2xl skeleton" />
         <div className="grid grid-cols-3 xl:grid-cols-9 gap-3">
           {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-28 rounded-2xl skeleton" />)}
@@ -292,7 +292,7 @@ const AdminDashboard = () => {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div className="p-3">
         <div className="p-4 rounded-xl" style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
           {error}
           <button onClick={() => fetchDashboardData(true)} className="ml-4 underline">Retry</button>
@@ -418,7 +418,7 @@ const AdminDashboard = () => {
   })
 
   return (
-    <div className="p-6 space-y-5 page-enter">
+    <div className="p-3 space-y-4 page-enter">
 
       {/* ── Subscription Banner ─────────────────────────────────────────────────── */}
       {isAdminOrOwner && (
@@ -443,7 +443,7 @@ const AdminDashboard = () => {
 
           {/* Center — Subscription info (admin/owner, lg+ screens only) */}
           {isAdminOrOwner && seatStatus && (
-            <div className="hidden lg:flex flex-1 items-center justify-center">
+            <div className="hidden xl:flex flex-1 items-center justify-center">
               <div
                 className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
                 style={{ border: '1.5px dashed rgba(124,58,237,0.30)', background: 'rgba(124,58,237,0.03)' }}
@@ -478,7 +478,7 @@ const AdminDashboard = () => {
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.08)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
-                  Upgrade / Add Seats
+                  Upgrade
                 </button>
               </div>
             </div>
@@ -564,8 +564,10 @@ const AdminDashboard = () => {
       {/* 9 STAT KPI CARDS — with sparklines                                     */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {(() => {
-        // Sparkline data: use activity trend values (real live data from API)
-        const sparkVals = trendData.length > 1 ? trendData.map(d => d.value) : null
+        // Sparkline data: use real activity trend values; flat structural line if no data yet
+        const sparkVals = trendData.length > 1
+          ? trendData.map(d => d.value)
+          : [1, 1, 1, 1, 1, 1, 1]
         return (
           <div className="grid grid-cols-3 xl:grid-cols-9 gap-3">
             {has('candidates:view') && (
