@@ -267,11 +267,11 @@ class UserService:
                             {"$set": {"hrm_employee_id": emp_id, "updated_at": now_link}},
                         )
                     else:
-                        # No employee exists — notify HR team to create one
+                        # No employee exists — notify HR team to create one.
+                        # Users in the company-specific DB have no company_id field; omit it.
                         hr_ids = [
                             d["_id"] async for d in self.db.users.find(
-                                {"company_id": company_id, "role": "hr",
-                                 "is_deleted": False, "status": "active"},
+                                {"role": "hr", "is_deleted": {"$ne": True}, "status": "active"},
                                 {"_id": 1},
                             )
                         ]

@@ -22,10 +22,11 @@ function formatDuration(hours) {
 
 export default function AttendanceBanner() {
   const user = useSelector(selectUser)
-  const [record, setRecord]       = useState(null)
+  const [record,    setRecord]    = useState(null)
+  const [recordLoaded, setRecordLoaded] = useState(false)  // true once first API call completes
   const [showModal, setShowModal] = useState(false)
-  const [loading, setLoading]     = useState(false)
-  const [elapsed, setElapsed]     = useState(0)   // seconds since check_in
+  const [loading,   setLoading]   = useState(false)
+  const [elapsed,   setElapsed]   = useState(0)            // seconds since check_in
 
   const employeeId = user?.hrmEmployeeId
 
@@ -34,7 +35,12 @@ export default function AttendanceBanner() {
     try {
       const res = await hrmService.getTodayAttendance(employeeId)
       setRecord(res.data || null)
-    } catch {}
+    } catch {
+      // On error treat as no record (allow punch-in to appear)
+      setRecord(null)
+    } finally {
+      setRecordLoaded(true)
+    }
   }, [employeeId])
 
   // Load on mount and every 5 minutes
@@ -56,12 +62,14 @@ export default function AttendanceBanner() {
     return () => clearInterval(id)
   }, [record?.check_in, record?.check_out])
 
-  // Auto-show punch-in modal on mount if no record and not dismissed today
+  // Auto-show punch-in modal only AFTER the API call has confirmed no record today.
+  // Wait for recordLoaded=true to avoid showing the modal before we know the state.
   useEffect(() => {
-    if (!employeeId || record !== null) return
-    if (localStorage.getItem(DISMISS_KEY) === todayStr()) return
+    if (!employeeId || !recordLoaded) return  // wait for API response
+    if (record !== null) return               // already punched in
+    if (localStorage.getItem(DISMISS_KEY) === todayStr()) return  // dismissed today
     setShowModal(true)
-  }, [employeeId, record])
+  }, [employeeId, record, recordLoaded])
 
   const handleDismiss = () => {
     localStorage.setItem(DISMISS_KEY, todayStr())

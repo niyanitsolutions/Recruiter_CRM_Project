@@ -66,10 +66,12 @@ class EmployeeService:
             notif_svc = NotificationService(self.db)
             employee_email = str(data.email).lower().strip()
 
-            # Find CRM user with same email (case-insensitive)
+            # Find CRM user with same email (case-insensitive).
+            # Users in the company-specific DB do NOT store a company_id field
+            # (they are already in the per-company database), so no company_id filter.
             matched_user = await self.db.users.find_one(
-                {"company_id": company_id, "email": {"$regex": f"^{re.escape(employee_email)}$", "$options": "i"},
-                 "is_deleted": False},
+                {"email": {"$regex": f"^{re.escape(employee_email)}$", "$options": "i"},
+                 "is_deleted": {"$ne": True}},
                 {"_id": 1},
             )
 
@@ -102,9 +104,10 @@ class EmployeeService:
         return self._serialize(doc)
 
     async def _get_admin_ids(self, company_id: str) -> list:
-        """Return user _ids for all active admin/owner users in this company."""
+        """Return user _ids for all active admin/owner users in this company.
+        Users in the company-specific DB have no company_id field — omit that filter."""
         cursor = self.db.users.find(
-            {"company_id": company_id, "is_deleted": False,
+            {"is_deleted": {"$ne": True},
              "$or": [{"is_owner": True}, {"role": "admin"}]},
             {"_id": 1},
         )

@@ -21,7 +21,10 @@
       "Bash(xargs -I {} find {} -type d)",
       "Bash(cd /d d:\\\\crm-project)",
       "Bash(Get-ChildItem -Path \"frontend\\\\src\\\\components\\\\layout\\\\SideNav.jsx\" -ErrorAction SilentlyContinue)",
-      "Bash(Select-Object -ExpandProperty Name)"
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(Get-ChildItem -Path \"d:\\\\crm-project\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\\\\api\\\\v1\" -File)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

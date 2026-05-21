@@ -119,6 +119,7 @@ const cancelExitRequest = (id) => api.delete(`${BASE}/exit/${id}`)
 
 // ── Sync ───────────────────────────────────────────────────────────────────
 const getSyncStatus = () => api.get(`${BASE}/sync/status`)
+const getSyncUnlinkedPreview = (limit = 5) => api.get(`${BASE}/sync/unlinked-preview`, { params: { limit } })
 const getUnlinkedUsers = (params) => api.get(`${BASE}/sync/unlinked-users`, { params })
 const getUnlinkedEmployees = (params) => api.get(`${BASE}/sync/unlinked-employees`, { params })
 const syncEmployeeToUser = (employeeId, params) => api.post(`${BASE}/sync/employee-to-user/${employeeId}`, null, { params })
@@ -152,7 +153,7 @@ const hrmService = {
   createOnboarding, listOnboardings, getOnboarding, updateOnboarding, completeOnboarding,
   uploadDocument, getDocuments, deleteDocument,
   getAnnouncements,
-  getSyncStatus, getUnlinkedUsers, getUnlinkedEmployees,
+  getSyncStatus, getSyncUnlinkedPreview, getUnlinkedUsers, getUnlinkedEmployees,
   syncEmployeeToUser, syncUserToEmployee, linkUserEmployee, unlinkUserEmployee,
   createTemplate, listTemplates, getTemplate, updateTemplate, deleteTemplate, generateFromTemplate,
   getOrgChart,

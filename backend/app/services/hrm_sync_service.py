@@ -84,6 +84,54 @@ class HRMSyncService:
         items = [self._ser(doc) async for doc in cursor]
         return {"total": total, "items": items}
 
+    async def get_unlinked_preview(self, company_id: str, limit: int = 5) -> dict:
+        """Return first N names of unlinked users and unlinked employees for dashboard display."""
+        # Unlinked users (no hrm_employee_id)
+        user_query = {
+            "is_deleted": {"$ne": True},
+            "$or": [
+                {"hrm_employee_id": {"$exists": False}},
+                {"hrm_employee_id": None},
+            ],
+        }
+        user_cursor = self.users.find(
+            user_query,
+            {"full_name": 1, "email": 1},
+        ).sort("full_name", 1).limit(limit)
+        unlinked_users = []
+        async for doc in user_cursor:
+            unlinked_users.append({
+                "id":        str(doc.get("_id", "")),
+                "full_name": doc.get("full_name", ""),
+                "email":     doc.get("email", ""),
+            })
+
+        # Unlinked employees (no crm_user_id)
+        emp_query = {
+            "company_id": company_id,
+            "is_deleted": False,
+            "$or": [
+                {"crm_user_id": {"$exists": False}},
+                {"crm_user_id": None},
+            ],
+        }
+        emp_cursor = self.employees.find(
+            emp_query,
+            {"full_name": 1, "email": 1},
+        ).sort("full_name", 1).limit(limit)
+        unlinked_employees = []
+        async for doc in emp_cursor:
+            unlinked_employees.append({
+                "id":        str(doc.get("_id", "")),
+                "full_name": doc.get("full_name", ""),
+                "email":     doc.get("email", ""),
+            })
+
+        return {
+            "unlinked_users":     unlinked_users,
+            "unlinked_employees": unlinked_employees,
+        }
+
     # ── Sync: Employee → User ─────────────────────────────────────────────────
 
     async def sync_employee_to_user(

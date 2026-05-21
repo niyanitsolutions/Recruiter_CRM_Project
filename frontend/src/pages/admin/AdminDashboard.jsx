@@ -37,7 +37,7 @@ const _cache = {
   main: null, recruit: null, seat: null,
   ivStats: null, todayIv: null, jobStats: null,
   candStats: null, hrmStats: null, announcements: null,
-  syncStatus: null,
+  syncStatus: null, syncPreview: null,
   ts: 0, company_id: null,
 }
 
@@ -154,6 +154,7 @@ const AdminDashboard = () => {
   const [trendRaw,         setTrendRaw]         = useState(null)
   const [announcements,    setAnnouncements]    = useState([])
   const [syncStatus,       setSyncStatus]       = useState(null)
+  const [syncPreview,      setSyncPreview]      = useState(null)
   const [period,           setPeriod]           = useState(PERIODS[1])
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [showQuickAction,  setShowQuickAction]  = useState(false)
@@ -196,13 +197,14 @@ const AdminDashboard = () => {
       setSeatStatus(_cache.seat)
       setAnnouncements(_cache.announcements ?? [])
       setSyncStatus(_cache.syncStatus)
+      setSyncPreview(_cache.syncPreview)
       setLoading(false)
       return
     }
 
     try {
       setLoading(true)
-      const [mainRes, recruitRes, ivStatsRes, todayIvRes, jobRes, candRes, hrmRes, seatRes, annRes, syncRes] =
+      const [mainRes, recruitRes, ivStatsRes, todayIvRes, jobRes, candRes, hrmRes, seatRes, annRes, syncRes, syncPreviewRes] =
         await Promise.allSettled([
           adminDashboardService.getDashboardData(),
           applicationService.getDashboardStats(),
@@ -214,6 +216,7 @@ const AdminDashboard = () => {
           subscriptionService.getTenantSeatStatus(),
           hrmService.getAnnouncements({ limit: 3 }),
           hrmService.getSyncStatus(),
+          hrmService.getSyncUnlinkedPreview(5),
         ])
 
       const main    = mainRes.status    === 'fulfilled' ? mainRes.value?.data    : null
@@ -237,6 +240,9 @@ const AdminDashboard = () => {
       const rawSync = syncRes.status === 'fulfilled' ? syncRes.value?.data : null
       const syncData = rawSync?.data ?? rawSync
 
+      const rawSyncPreview = syncPreviewRes.status === 'fulfilled' ? syncPreviewRes.value?.data : null
+      const syncPreviewData = rawSyncPreview?.data ?? rawSyncPreview
+
       _cache.main          = main
       _cache.recruit       = recruit
       _cache.ivStats       = ivs
@@ -247,6 +253,7 @@ const AdminDashboard = () => {
       _cache.seat          = seat
       _cache.announcements = annList
       _cache.syncStatus    = syncData
+      _cache.syncPreview   = syncPreviewData
       _cache.ts            = Date.now()
       _cache.company_id    = user?.company_id
 
@@ -260,6 +267,7 @@ const AdminDashboard = () => {
       setSeatStatus(seat)
       setAnnouncements(annList)
       setSyncStatus(syncData)
+      setSyncPreview(syncPreviewData)
       setError(null)
     } catch (err) {
       setError('Failed to load dashboard data')
@@ -334,6 +342,8 @@ const AdminDashboard = () => {
   const offersPending   = recruitStats?.offered
   const placementsMonth = recruitStats?.joined
   const totalUsers      = user_stats?.total_users
+  const activeUsers     = user_stats?.active_users
+  const inactiveUsers   = user_stats?.inactive_users
   const loggedInToday   = user_stats?.logged_in_today
   const onLeaveToday    = hrmStats?.on_leave_today ?? hrmStats?.leaves_today ?? hrmStats?.on_leave
   const pendingFeedback = ivStats?.pending_feedback ?? ivStats?.pending_feedback_count
@@ -421,15 +431,17 @@ const AdminDashboard = () => {
     pendingFeedback > 0 && { label: 'Interview Feedback Needed', count: pendingFeedback,             color: '#FF4757', icon: Calendar, path: '/interviews'   },
     hrmStats?.pending_leaves > 0 && { label: 'Leave Requests',  count: hrmStats.pending_leaves,     color: '#7c3aed', icon: Building, path: '/hrm/leaves'   },
     hrmStats?.pending_exits > 0  && { label: 'Exit Requests',   count: hrmStats.pending_exits,      color: '#FF6B9D', icon: Users,    path: '/hrm/exit'     },
-    // Sync pending items from User↔Employee sync status
+    // Sync pending items — show actual names from preview, fall back to count
     syncStatus?.unlinked_users > 0 && {
       label: 'Users Without Employee Profile',
       count: syncStatus.unlinked_users,
+      names: syncPreview?.unlinked_users || [],
       color: '#4FACFE', icon: Users2, path: '/hrm/employees',
     },
     syncStatus?.unlinked_employees > 0 && {
       label: 'Employees Without User Account',
       count: syncStatus.unlinked_employees,
+      names: syncPreview?.unlinked_employees || [],
       color: '#38F9D7', icon: UserPlus, path: '/hrm/employees',
     },
   ].filter(Boolean)
@@ -734,7 +746,7 @@ const AdminDashboard = () => {
                 value={totalUsers}
                 icon={Users}
                 color="indigo"
-                subtitle={loggedInToday != null ? `${loggedInToday} Active` : 'System users'}
+                subtitle={activeUsers != null ? `${activeUsers} active` : 'System users'}
                 compact={true}
                 linkTo="/users"
                 delay={300}
@@ -742,12 +754,13 @@ const AdminDashboard = () => {
             )}
             {has('users:view') && (
               <KpiCard
-                title="Logged In Today"
-                value={loggedInToday}
+                title="Active Users"
+                value={activeUsers}
                 icon={UserCheck}
                 color="blue"
-                subtitle={`${loggedInToday ?? 0} Online Now`}
+                subtitle={loggedInToday != null ? `${loggedInToday} online today` : 'Status: active'}
                 compact={true}
+                linkTo="/users"
                 delay={350}
               />
             )}
@@ -982,22 +995,43 @@ const AdminDashboard = () => {
             <div className="space-y-2.5">
               {pendingItems.map((item, i) => {
                 const ItemIcon = item.icon
+                const hasNames = item.names && item.names.length > 0
                 return (
                   <Link
                     key={i}
                     to={item.path}
-                    className="flex items-center gap-3 rounded-xl p-3 transition-all block"
+                    className="flex flex-col gap-1.5 rounded-xl p-3 transition-all block"
                     style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}
                     onMouseEnter={e => { e.currentTarget.style.background = `${item.color}0d`; e.currentTarget.style.borderColor = `${item.color}30` }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.borderColor = 'var(--border)' }}
                   >
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${item.color}15` }}>
-                      <ItemIcon className="w-3.5 h-3.5" style={{ color: item.color }} />
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${item.color}15` }}>
+                        <ItemIcon className="w-3.5 h-3.5" style={{ color: item.color }} />
+                      </div>
+                      <p className="flex-1 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{item.label}</p>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: `${item.color}15`, color: item.color }}>
+                        {item.count}
+                      </span>
                     </div>
-                    <p className="flex-1 text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{item.label}</p>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: `${item.color}15`, color: item.color }}>
-                      {item.count}
-                    </span>
+                    {/* Show actual names if available */}
+                    {hasNames && (
+                      <div className="pl-11 space-y-0.5">
+                        {item.names.map((n, ni) => (
+                          <p key={ni} className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>
+                            {n.full_name || n.email}
+                            {n.email && n.full_name && (
+                              <span className="ml-1 opacity-60">·&nbsp;{n.email}</span>
+                            )}
+                          </p>
+                        ))}
+                        {item.count > item.names.length && (
+                          <p className="text-[10px]" style={{ color: item.color }}>
+                            +{item.count - item.names.length} more
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </Link>
                 )
               })}

@@ -22,6 +22,17 @@ async def sync_status(
     return await svc.get_sync_status(current_user["company_id"])
 
 
+@router.get("/unlinked-preview")
+async def unlinked_preview(
+    limit: int = Query(5, ge=1, le=20),
+    current_user: dict = Depends(require_permissions(["hrm:employees:manage"])),
+    db=Depends(get_company_db),
+):
+    """Return first N names of unlinked users and employees for dashboard display."""
+    svc = HRMSyncService(db)
+    return await svc.get_unlinked_preview(current_user["company_id"], limit=limit)
+
+
 @router.get("/unlinked-users")
 async def unlinked_users(
     page: int = Query(1, ge=1),
