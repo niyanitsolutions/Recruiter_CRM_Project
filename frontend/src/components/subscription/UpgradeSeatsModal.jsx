@@ -65,6 +65,13 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
   const [additionalSeats, setAdditionalSeats] = useState(1)
   const [extendMonths, setExtendMonths] = useState(null)
 
+  // ── Button enable logic — must be before early return (Rules of Hooks) ──────
+  const canProceed = useMemo(() => {
+    if (mode === 'duration') return extendMonths != null
+    if (mode === 'seats')    return additionalSeats >= 1
+    return additionalSeats >= 1 || extendMonths != null
+  }, [mode, additionalSeats, extendMonths])
+
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -97,14 +104,6 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
   const newExpiry  = (mode !== 'seats' && extendMonths)
     ? addMonths(plan_expiry, extendMonths)
     : null
-
-  // ── Button enable logic ───────────────────────────────────────────────────
-  const canProceed = useMemo(() => {
-    if (mode === 'duration') return extendMonths != null
-    if (mode === 'seats')    return additionalSeats >= 1
-    // 'both': at least one field changed
-    return additionalSeats >= 1 || extendMonths != null
-  }, [mode, additionalSeats, extendMonths])
 
   const adjustSeats = (delta) => setAdditionalSeats(prev => Math.max(1, prev + delta))
 

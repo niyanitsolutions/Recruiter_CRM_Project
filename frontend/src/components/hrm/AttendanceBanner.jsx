@@ -27,7 +27,7 @@ export default function AttendanceBanner() {
   const [loading, setLoading]     = useState(false)
   const [elapsed, setElapsed]     = useState(0)   // seconds since check_in
 
-  const employeeId = user?.hrm_employee_id
+  const employeeId = user?.hrmEmployeeId
 
   const loadRecord = useCallback(async () => {
     if (!employeeId) return

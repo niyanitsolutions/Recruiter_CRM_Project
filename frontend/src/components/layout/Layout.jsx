@@ -13,7 +13,7 @@ const Layout = ({ title, subtitle, actions }) => {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const user = useSelector(selectUser)
-  const showAttendanceBanner = !!(user?.hrm_employee_id)
+  const showAttendanceBanner = !!(user?.hrmEmployeeId)
 
   // Global Ctrl+K / Cmd+K shortcut
   useEffect(() => {

@@ -544,6 +544,7 @@ class AuthService:
             "designation":  user.get("designation", ""),
             "department_id": user.get("department_id"),
             "reporting_to": user.get("reporting_to"),
+            "hrm_employee_id": user.get("hrm_employee_id"),
             # Module flags — CRM + HRM always active for all tenants
             "crm_enabled":  True,
             "hrm_enabled":  True,
@@ -618,6 +619,8 @@ class AuthService:
             # Onboarding flags
             "must_change_password": bool(user.get("must_change_password", False)),
             "profile_completed":    bool(user.get("profile_completed", True)),
+            # HRM employee link
+            "hrm_employee_id": user.get("hrm_employee_id"),
             # Module flags — CRM + HRM always active for all tenants
             "crm_enabled": True,
             "hrm_enabled": True,
@@ -1112,6 +1115,7 @@ class AuthService:
                 "designation": user.get("designation", ""),
                 "department_id": user.get("department_id"),
                 "reporting_to": user.get("reporting_to"),
+                "hrm_employee_id": user.get("hrm_employee_id"),
             }
 
         access_token = create_access_token(token_data)

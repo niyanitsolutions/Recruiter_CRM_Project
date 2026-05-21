@@ -30,11 +30,12 @@ class HRMSyncService:
 
     async def get_sync_status(self, company_id: str) -> dict:
         """Return counts of unlinked users and employees."""
+        # Users are already in the company-specific DB — no company_id field needed
         total_users = await self.users.count_documents({
-            "company_id": company_id, "is_deleted": {"$ne": True}
+            "is_deleted": {"$ne": True}
         })
         linked_users = await self.users.count_documents({
-            "company_id": company_id, "is_deleted": {"$ne": True},
+            "is_deleted": {"$ne": True},
             "hrm_employee_id": {"$exists": True, "$ne": None}
         })
         total_employees = await self.employees.count_documents({
@@ -55,8 +56,8 @@ class HRMSyncService:
 
     async def list_unlinked_users(self, company_id: str, page: int = 1, page_size: int = 20):
         skip = (page - 1) * page_size
+        # Users are already in the company-specific DB — no company_id filter needed
         query = {
-            "company_id": company_id,
             "is_deleted": {"$ne": True},
             "$or": [
                 {"hrm_employee_id": {"$exists": False}},
@@ -104,7 +105,7 @@ class HRMSyncService:
             return {"success": True, "message": "Already linked", "user": self._ser(user) if user else None}
 
         # Check if a user with this email already exists
-        existing = await self.users.find_one({"email": emp["email"], "company_id": company_id, "is_deleted": {"$ne": True}})
+        existing = await self.users.find_one({"email": emp["email"], "is_deleted": {"$ne": True}})
         if existing:
             # Just link them
             now = datetime.now(timezone.utc)
@@ -161,7 +162,7 @@ class HRMSyncService:
         extra_fields: Optional[dict] = None,
     ) -> dict:
         """Create an employee record from a CRM user and link them."""
-        user = await self.users.find_one({"_id": user_id, "company_id": company_id, "is_deleted": {"$ne": True}})
+        user = await self.users.find_one({"_id": user_id, "is_deleted": {"$ne": True}})
         if not user:
             return {"success": False, "message": "User not found"}
 
@@ -215,7 +216,7 @@ class HRMSyncService:
 
     async def link(self, user_id: str, employee_id: str, company_id: str) -> dict:
         """Manually link an existing user to an existing employee."""
-        user = await self.users.find_one({"_id": user_id, "company_id": company_id})
+        user = await self.users.find_one({"_id": user_id})
         emp = await self.employees.find_one({"_id": employee_id, "company_id": company_id})
         if not user or not emp:
             return {"success": False, "message": "User or employee not found"}
@@ -226,7 +227,7 @@ class HRMSyncService:
 
     async def unlink(self, user_id: str, company_id: str) -> dict:
         """Remove the link between a user and their employee record."""
-        user = await self.users.find_one({"_id": user_id, "company_id": company_id})
+        user = await self.users.find_one({"_id": user_id})
         if not user:
             return {"success": False, "message": "User not found"}
         emp_id = user.get("hrm_employee_id")

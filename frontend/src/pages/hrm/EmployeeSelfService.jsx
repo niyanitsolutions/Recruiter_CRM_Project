@@ -316,7 +316,7 @@ function LeaveTab({ employeeId }) {
 
 export default function EmployeeSelfService() {
   const user = useSelector(selectUser)
-  const employeeId = user?.hrm_employee_id
+  const employeeId = user?.hrmEmployeeId
   const [activeTab, setActiveTab] = useState('profile')
 
   return (

@@ -159,7 +159,7 @@ const AdminDashboard = () => {
   const [showQuickAction,  setShowQuickAction]  = useState(false)
 
   // Attendance warning: show card if user dismissed the punch-in modal today
-  const hasEmployeeId = !!user?.hrm_employee_id
+  const hasEmployeeId = !!user?.hrmEmployeeId
   const [attendanceDismissed, setAttendanceDismissed] = useState(
     () => hasEmployeeId && localStorage.getItem(ATTEND_DISMISS_KEY) === todayISO()
   )
@@ -601,7 +601,7 @@ const AdminDashboard = () => {
               setAttendanceDismissed(false)
               setShowDashPunchIn(false)
             }}
-            employeeId={user?.hrm_employee_id}
+            employeeId={user?.hrmEmployeeId}
           />
           <div
             className="flex items-center gap-3 px-5 py-3 rounded-2xl"
