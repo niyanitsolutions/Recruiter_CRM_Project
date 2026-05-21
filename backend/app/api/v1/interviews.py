@@ -178,6 +178,18 @@ async def schedule_interview(
         company_name=current_user.get("company_name", ""),
         scheduler_name=current_user.get("full_name", ""),
     )
+    try:
+        from app.services.notification_service import NotificationService
+        await NotificationService(db).notify_interview_scheduled(
+            company_id=current_user.get("company_id", ""),
+            interview_id=interview.id,
+            candidate_name=interview.candidate_name or "",
+            job_title=interview.job_title or "",
+            scheduled_date=str(interview_data.scheduled_date) if interview_data.scheduled_date else "",
+            scheduled_by_id=current_user["id"],
+        )
+    except Exception:
+        pass
     return {"success": True, "message": "Interview scheduled successfully", "data": interview}
 
 

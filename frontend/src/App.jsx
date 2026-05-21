@@ -1059,7 +1059,7 @@ function App() {
         <Route path="/reports/view/:reportId"
           element={<PermissionRoute permission="reports:view"><ReportViewer /></PermissionRoute>} />
         <Route path="/reports/edit/:reportId"
-          element={<PermissionRoute permission="reports:edit"><ReportGenerator /></PermissionRoute>} />
+          element={<PermissionRoute permission="reports:view"><ReportGenerator /></PermissionRoute>} />
         <Route path="/reports/saved"
           element={<PermissionRoute permission="reports:view"><SavedReports /></PermissionRoute>} />
 

@@ -29,14 +29,20 @@ class HRMSyncService:
     # ── Status ────────────────────────────────────────────────────────────────
 
     async def get_sync_status(self, company_id: str) -> dict:
-        """Return counts of unlinked users and employees."""
-        # Users are already in the company-specific DB — no company_id field needed
-        total_users = await self.users.count_documents({
-            "is_deleted": {"$ne": True}
-        })
-        linked_users = await self.users.count_documents({
+        """Return counts of unlinked users and employees.
+
+        Only internal users (user_type != 'partner') are eligible for HRM
+        employee profiles, so partners are excluded from all sync counts.
+        """
+        # Internal users only — partners don't need employee profiles
+        internal_filter = {
             "is_deleted": {"$ne": True},
-            "hrm_employee_id": {"$exists": True, "$ne": None}
+            "user_type": {"$ne": "partner"},
+        }
+        total_users = await self.users.count_documents(internal_filter)
+        linked_users = await self.users.count_documents({
+            **internal_filter,
+            "hrm_employee_id": {"$exists": True, "$ne": None},
         })
         total_employees = await self.employees.count_documents({
             "company_id": company_id, "is_deleted": False
@@ -56,13 +62,13 @@ class HRMSyncService:
 
     async def list_unlinked_users(self, company_id: str, page: int = 1, page_size: int = 20):
         skip = (page - 1) * page_size
-        # Users are already in the company-specific DB — no company_id filter needed
         query = {
             "is_deleted": {"$ne": True},
+            "user_type": {"$ne": "partner"},
             "$or": [
                 {"hrm_employee_id": {"$exists": False}},
                 {"hrm_employee_id": None},
-            ]
+            ],
         }
         total = await self.users.count_documents(query)
         cursor = self.users.find(query).sort("full_name", 1).skip(skip).limit(page_size)
@@ -86,9 +92,10 @@ class HRMSyncService:
 
     async def get_unlinked_preview(self, company_id: str, limit: int = 5) -> dict:
         """Return first N names of unlinked users and unlinked employees for dashboard display."""
-        # Unlinked users (no hrm_employee_id)
+        # Unlinked users (no hrm_employee_id) — exclude partners
         user_query = {
             "is_deleted": {"$ne": True},
+            "user_type": {"$ne": "partner"},
             "$or": [
                 {"hrm_employee_id": {"$exists": False}},
                 {"hrm_employee_id": None},

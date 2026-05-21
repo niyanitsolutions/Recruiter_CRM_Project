@@ -112,7 +112,12 @@ class NotificationService:
         
         skip = (page - 1) * page_size
         cursor = self.notifications_collection.find(query).sort("created_at", -1).skip(skip).limit(page_size)
-        items = [NotificationResponse(**doc) async for doc in cursor]
+        items = []
+        async for doc in cursor:
+            try:
+                items.append(NotificationResponse(**doc))
+            except Exception:
+                pass
         
         return NotificationListResponse(
             items=items,
@@ -774,3 +779,264 @@ class NotificationService:
             "is_deleted": False,
         }
         await self.notifications_collection.insert_one(doc)
+
+    async def notify_announcement_created(
+        self,
+        company_id: str,
+        announcement_id: str,
+        title: str,
+        body: str,
+        created_by_name: str,
+        target_department_ids: list,
+        target_employee_ids: list,
+        priority: str = "normal",
+    ) -> None:
+        """Fanout an announcement to all targeted internal users as in-app notifications.
+
+        Target resolution order:
+        1. If target_employee_ids specified → notify users linked to those employees.
+        2. If target_department_ids specified → notify users whose department_id matches.
+        3. If neither → notify ALL internal users in the company.
+        """
+        from bson import ObjectId
+        now = datetime.now(timezone.utc)
+
+        # Resolve target user IDs
+        target_user_ids = []
+
+        if target_employee_ids:
+            # Find users linked to the specified employees via hrm_employee_id
+            cursor = self.db.users.find(
+                {
+                    "hrm_employee_id": {"$in": target_employee_ids},
+                    "is_deleted": {"$ne": True},
+                    "user_type": {"$ne": "partner"},
+                },
+                {"_id": 1},
+            )
+            async for doc in cursor:
+                target_user_ids.append(str(doc["_id"]))
+
+        elif target_department_ids:
+            # Find employees in those departments, then their linked users
+            emp_cursor = self.db.hrm_employees.find(
+                {
+                    "company_id": company_id,
+                    "department_id": {"$in": target_department_ids},
+                    "is_deleted": False,
+                },
+                {"_id": 1, "crm_user_id": 1},
+            )
+            emp_user_ids = []
+            async for emp in emp_cursor:
+                if emp.get("crm_user_id"):
+                    emp_user_ids.append(emp["crm_user_id"])
+
+            # Also directly match users with that department_id
+            user_cursor = self.db.users.find(
+                {
+                    "department_id": {"$in": target_department_ids},
+                    "is_deleted": {"$ne": True},
+                    "user_type": {"$ne": "partner"},
+                },
+                {"_id": 1},
+            )
+            async for doc in user_cursor:
+                uid = str(doc["_id"])
+                if uid not in emp_user_ids:
+                    emp_user_ids.append(uid)
+
+            target_user_ids = list(set(emp_user_ids))
+
+        else:
+            # Company-wide announcement — notify all internal users
+            cursor = self.db.users.find(
+                {
+                    "is_deleted": {"$ne": True},
+                    "user_type": {"$ne": "partner"},
+                    "status": {"$ne": "suspended"},
+                },
+                {"_id": 1},
+            )
+            async for doc in cursor:
+                target_user_ids.append(str(doc["_id"]))
+
+        if not target_user_ids:
+            return
+
+        notif_priority = "high" if priority == "urgent" else "medium" if priority == "high" else "low"
+        short_body = body[:120] + "…" if len(body) > 120 else body
+
+        docs = [
+            {
+                "_id": str(ObjectId()),
+                "id": str(ObjectId()),
+                "company_id": company_id,
+                "user_id": uid,
+                "type": "announcement",
+                "title": f"📢 {title}",
+                "message": f"{created_by_name}: {short_body}",
+                "data": {
+                    "announcement_id": announcement_id,
+                    "priority": priority,
+                },
+                "channels": ["in_app"],
+                "channel_status": {"in_app": "delivered"},
+                "is_read": False,
+                "priority": notif_priority,
+                "action_url": "/hrm/announcements",
+                "created_at": now,
+                "updated_at": now,
+                "is_deleted": False,
+            }
+            for uid in target_user_ids
+        ]
+        if docs:
+            await self.notifications_collection.insert_many(docs)
+
+    async def notify_leave_applied(
+        self,
+        company_id: str,
+        employee_user_id: str,
+        employee_name: str,
+        leave_type: str,
+        from_date: str,
+        to_date: str,
+        leave_id: str,
+    ) -> None:
+        """Leave applied → notify users with hrm:leave:team_approve permission or admin/hr role."""
+        now = datetime.now(timezone.utc)
+        cursor = self.db.users.find(
+            {
+                "is_deleted": {"$ne": True},
+                "user_type": {"$ne": "partner"},
+                "$or": [
+                    {"permissions": "hrm:leave:team_approve"},
+                    {"role": {"$in": ["admin", "hr"]}},
+                ],
+            },
+            {"_id": 1},
+        )
+        approver_ids = []
+        async for doc in cursor:
+            uid = str(doc["_id"])
+            if uid != employee_user_id:
+                approver_ids.append(uid)
+        if not approver_ids:
+            return
+        date_str = from_date if from_date == to_date else f"{from_date} – {to_date}"
+        leave_label = leave_type.replace("_", " ").title()
+        docs = [
+            {
+                "_id": str(ObjectId()),
+                "id": str(ObjectId()),
+                "company_id": company_id,
+                "user_id": uid,
+                "type": "hrm_leave_applied",
+                "title": "New Leave Request",
+                "message": f"{employee_name} applied for {leave_label} leave ({date_str}). Action required.",
+                "channels": ["in_app"],
+                "channel_status": {"in_app": "delivered"},
+                "is_read": False,
+                "priority": "medium",
+                "action_url": "/hrm/leaves",
+                "data": {"leave_id": leave_id},
+                "created_at": now,
+                "updated_at": now,
+                "is_deleted": False,
+            }
+            for uid in approver_ids
+        ]
+        if docs:
+            await self.notifications_collection.insert_many(docs)
+
+    async def notify_leave_actioned(
+        self,
+        company_id: str,
+        employee_user_id: str,
+        action: str,
+        leave_type: str,
+        from_date: str,
+        to_date: str,
+        leave_id: str,
+    ) -> None:
+        """Leave approved/rejected → notify the employee's CRM user."""
+        if not employee_user_id:
+            return
+        now = datetime.now(timezone.utc)
+        action_word = "approved" if action == "approve" else "rejected"
+        date_str = from_date if from_date == to_date else f"{from_date} – {to_date}"
+        leave_label = leave_type.replace("_", " ").title()
+        doc = {
+            "_id": str(ObjectId()),
+            "id": str(ObjectId()),
+            "company_id": company_id,
+            "user_id": employee_user_id,
+            "type": "hrm_leave_action",
+            "title": f"Leave {action_word.title()}",
+            "message": f"Your {leave_label} leave ({date_str}) has been {action_word}.",
+            "channels": ["in_app"],
+            "channel_status": {"in_app": "delivered"},
+            "is_read": False,
+            "priority": "medium" if action == "approve" else "high",
+            "action_url": "/hrm/self-service",
+            "data": {"leave_id": leave_id},
+            "created_at": now,
+            "updated_at": now,
+            "is_deleted": False,
+        }
+        await self.notifications_collection.insert_one(doc)
+
+    async def notify_interview_scheduled(
+        self,
+        company_id: str,
+        interview_id: str,
+        candidate_name: str,
+        job_title: str,
+        scheduled_date: str,
+        scheduled_by_id: str,
+    ) -> None:
+        """Interview scheduled → notify candidate coordinators and admins (excluding the scheduler)."""
+        now = datetime.now(timezone.utc)
+        cursor = self.db.users.find(
+            {
+                "is_deleted": {"$ne": True},
+                "user_type": {"$ne": "partner"},
+                "$or": [
+                    {"permissions": "interviews:schedule"},
+                    {"role": {"$in": ["admin", "candidate_coordinator"]}},
+                ],
+            },
+            {"_id": 1},
+        )
+        recipient_ids = []
+        async for doc in cursor:
+            uid = str(doc["_id"])
+            if uid != scheduled_by_id:
+                recipient_ids.append(uid)
+        if not recipient_ids:
+            return
+        docs = [
+            {
+                "_id": str(ObjectId()),
+                "id": str(ObjectId()),
+                "company_id": company_id,
+                "user_id": uid,
+                "type": "interview_scheduled",
+                "title": "Interview Scheduled",
+                "message": f"Interview scheduled for {candidate_name} — {job_title}"
+                           + (f" on {scheduled_date}" if scheduled_date else "") + ".",
+                "channels": ["in_app"],
+                "channel_status": {"in_app": "delivered"},
+                "is_read": False,
+                "priority": "medium",
+                "action_url": f"/interviews/{interview_id}",
+                "data": {"interview_id": interview_id},
+                "created_at": now,
+                "updated_at": now,
+                "is_deleted": False,
+            }
+            for uid in recipient_ids
+        ]
+        if docs:
+            await self.notifications_collection.insert_many(docs)

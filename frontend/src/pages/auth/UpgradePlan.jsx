@@ -86,8 +86,18 @@ const UpgradePlan = () => {
         const paid = (res.data.plans || []).filter(p => !p.is_trial)
         setPlans(paid)
         if (paid.length > 0) {
-          const popular = paid.find(p => p.is_popular) || paid[0]
-          setSelectedPlan(popular)
+          // For dashboard upgrade flows, always use the tenant's current plan for pricing.
+          // Selecting the wrong plan (e.g. popular Quantum when user is on Neon) causes
+          // wrong amounts to be shown and the wrong plan name to be written to DB after payment.
+          if (fromDashboard && currentPlan) {
+            const matched = paid.find(p =>
+              p.display_name?.toLowerCase() === currentPlan.toLowerCase() ||
+              p.name?.toLowerCase() === currentPlan.toLowerCase()
+            )
+            setSelectedPlan(matched || paid.find(p => p.is_popular) || paid[0])
+          } else {
+            setSelectedPlan(paid.find(p => p.is_popular) || paid[0])
+          }
         }
       } catch {
         toast.error('Failed to load plans')
@@ -96,7 +106,7 @@ const UpgradePlan = () => {
       }
     }
     fetchPlans()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Pricing helpers ────────────────────────────────────────────────────────
   const getPricePerUser = (plan) => {
@@ -106,14 +116,20 @@ const UpgradePlan = () => {
       : plan.price_per_user_monthly
   }
 
+  // For duration extensions: 12-month automatically uses the yearly (discounted) rate
+  const getPpuForExtension = (plan, months) => {
+    if (!plan) return 0
+    return months >= 12 ? plan.price_per_user_yearly : plan.price_per_user_monthly
+  }
+
   const getSubtotal = (plan) => {
     if (!plan) return 0
     const ppu = getPricePerUser(plan)
 
     if (upgradeType === 'duration') {
-      // Charge: existing_seats × monthly_price × months
+      // 12-month extension uses yearly (discounted) rate automatically
       const months = extendMonths || 1
-      return ppu * existingSeats * months
+      return getPpuForExtension(plan, months) * existingSeats * months
     }
 
     if (upgradeType === 'seats') {
@@ -124,9 +140,10 @@ const UpgradePlan = () => {
     }
 
     if (upgradeType === 'both') {
-      const months    = extendMonths || 1
-      const seatCost  = ppu * Math.max(userCount, 1)
-      const extCost   = ppu * existingSeats * months
+      const months   = extendMonths || 1
+      const ppuExt   = getPpuForExtension(plan, months)
+      const seatCost = ppu * Math.max(userCount, 1)
+      const extCost  = ppuExt * existingSeats * months
       return seatCost + extCost
     }
 

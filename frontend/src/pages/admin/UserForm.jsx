@@ -37,18 +37,20 @@ const MODULE_PERMS = {
   crm_settings:            ['crm_settings:view','crm_settings:edit'],
   audit:                   ['audit:view','audit:sessions','audit:alerts','audit:admin'],
   notifications:           ['notifications:create'],
-  // HRM modules
-  hrm_employees:           ['employees:view','employees:create','employees:edit','employees:delete'],
-  hrm_attendance:          ['attendance:view','attendance:create','attendance:edit'],
-  hrm_leaves:              ['leaves:view','leaves:create','leaves:edit','leaves:approve'],
-  hrm_payroll:             ['payroll:view','payroll:create','payroll:edit'],
-  hrm_performance:         ['performance:view','performance:create','performance:edit'],
-  hrm_announcements:       ['announcements:view','announcements:create','announcements:edit','announcements:delete'],
-  // Internal hiring modules
-  hrm_requisitions:        ['requisitions:view','requisitions:create','requisitions:edit','requisitions:delete','requisitions:approve'],
-  hrm_internal_jobs:       ['internal_jobs:view','internal_jobs:create','internal_jobs:edit','internal_jobs:delete'],
-  hrm_internal_apps:       ['internal_apps:view','internal_apps:create','internal_apps:edit','internal_apps:approve'],
-  hrm_referrals:           ['referrals:view','referrals:create','referrals:edit','referrals:approve'],
+  // HRM modules — must match backend Permission enum (hrm:* prefixed)
+  hrm_employees:           ['hrm:employees:view', 'hrm:employees:manage'],
+  hrm_attendance:          ['hrm:attendance:self', 'hrm:attendance:team', 'hrm:attendance:manage'],
+  hrm_leaves:              ['hrm:leave:apply', 'hrm:leave:team_approve', 'hrm:leave:manage'],
+  hrm_payroll:             ['hrm:payroll:view_self', 'hrm:payroll:manage'],
+  hrm_performance:         ['hrm:performance:self', 'hrm:performance:team', 'hrm:performance:manage'],
+  hrm_announcements:       ['hrm:announcements:view', 'hrm:announcements:manage'],
+  // Internal hiring modules (all map to the hrm:hiring:* permission set)
+  hrm_requisitions:        ['hrm:hiring:view', 'hrm:hiring:manage'],
+  hrm_internal_jobs:       ['hrm:hiring:view', 'hrm:hiring:manage'],
+  hrm_internal_apps:       ['hrm:hiring:view', 'hrm:hiring:manage'],
+  hrm_referrals:           ['hrm:hiring:view', 'hrm:hiring:manage'],
+  hrm_assets:              ['hrm:assets:view', 'hrm:assets:manage'],
+  hrm_exit:                ['hrm:exit:view', 'hrm:exit:manage'],
 }
 
 const MODULE_LABELS = {
@@ -66,6 +68,7 @@ const MODULE_LABELS = {
   // Internal hiring
   hrm_requisitions: 'Job Requisitions', hrm_internal_jobs: 'Internal Job Board',
   hrm_internal_apps: 'Internal Applications', hrm_referrals: 'Referrals',
+  hrm_assets: 'Assets', hrm_exit: 'Exit Management',
 }
 
 const DEPT_MODULES = {
@@ -74,7 +77,7 @@ const DEPT_MODULES = {
   client_coordinator:   { full: ['clients','jobs','interviews','interview_settings','onboards'], view_only: ['candidates','reports'] },
   candidate_coordinator:{ full: ['candidates','interviews_no_schedule','interview_settings'], view_only: ['jobs','clients','onboards','reports'] },
   recruiter:            { full: ['candidates','interviews','clients','jobs','interview_settings'], view_only: ['onboards','reports'] },
-  hr:                   { full: ['users','candidates','onboards','hrm_employees','hrm_attendance','hrm_leaves','hrm_payroll','hrm_performance','hrm_announcements','hrm_requisitions','hrm_internal_jobs','hrm_internal_apps','hrm_referrals'], view_only: ['reports'] },
+  hr:                   { full: ['users','candidates','onboards','hrm_employees','hrm_attendance','hrm_leaves','hrm_payroll','hrm_performance','hrm_announcements','hrm_requisitions','hrm_internal_jobs','hrm_internal_apps','hrm_referrals','hrm_assets','hrm_exit'], view_only: ['reports'] },
   accounts:             { full: ['accounts','payouts','invoices','imports','exports'], view_only: ['clients','partners','reports'] },
   partner:              { full: ['candidates'], view_only: ['jobs','interviews'] },
 }
@@ -157,7 +160,9 @@ function computePermissions(dept, level, restrictedMods, additionalDepts) {
   })
 
   viewMods.forEach(mod => {
-    ;(MODULE_PERMS[mod] || []).filter(p => p.endsWith(':view')).forEach(p => perms.add(p))
+    ;(MODULE_PERMS[mod] || []).filter(p =>
+      p.endsWith(':view') || p.endsWith(':self') || p.endsWith(':view_self')
+    ).forEach(p => perms.add(p))
   })
 
   // Issue 5: remove all permissions for restricted modules

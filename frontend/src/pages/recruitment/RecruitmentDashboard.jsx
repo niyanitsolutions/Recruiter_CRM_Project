@@ -198,12 +198,22 @@ const RecruitmentDashboard = () => {
 
       const val = r => r.status === 'fulfilled' ? r.value?.data || null : null
 
+      // Normalise a raw API result to an array, handling nested {data:[]} and {interviews:[]} shapes
+      const toArray = (raw) => {
+        if (!raw) return []
+        if (Array.isArray(raw)) return raw
+        // Axios wraps body in .data — already unwrapped by val(), but body may still have a .data array
+        const inner = raw.data ?? raw
+        if (Array.isArray(inner)) return inner
+        return inner?.interviews || inner?.items || inner?.results || []
+      }
+
       const cs = val(tasks[0])
       const js = val(tasks[1])
       const as = val(tasks[2])
       const is = val(tasks[3])
-      const ti = val(tasks[4]) || []
-      const pf = val(tasks[5]) || []
+      const ti = toArray(val(tasks[4]))
+      const pf = toArray(val(tasks[5]))
 
       // Build pipeline chart data from appStats.by_status
       const pd = PIPELINE_STAGES.map(s => ({

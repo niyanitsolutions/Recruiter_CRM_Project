@@ -34,7 +34,10 @@ export default function AttendanceBanner() {
     if (!employeeId) return
     try {
       const res = await hrmService.getTodayAttendance(employeeId)
-      setRecord(res.data || null)
+      // Treat null, undefined, or empty object {} as "no record today"
+      const data = res.data
+      const hasRecord = data && typeof data === 'object' && Object.keys(data).length > 0
+      setRecord(hasRecord ? data : null)
     } catch {
       // On error treat as no record (allow punch-in to appear)
       setRecord(null)

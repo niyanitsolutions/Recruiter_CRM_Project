@@ -6,7 +6,7 @@ import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
 import {
   User, Clock, Calendar, Banknote, Download, Plus,
-  CheckCircle, AlertCircle, Loader2,
+  CheckCircle, AlertCircle, Loader2, UserX,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
@@ -26,7 +26,7 @@ function ProfileTab({ employeeId }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!employeeId) return
+    if (!employeeId) { setLoading(false); return }
     hrmService.getEmployee(employeeId)
       .then(r => setEmp(r.data))
       .catch(() => {})
@@ -84,7 +84,7 @@ function AttendanceTab({ employeeId }) {
   const [loading, setLoading] = useState(true)
 
   const load = () => {
-    if (!employeeId) return
+    if (!employeeId) { setLoading(false); return }
     setLoading(true)
     hrmService.getMonthlyAttendance(employeeId, year, month)
       .then(r => setRecords(Array.isArray(r.data) ? r.data : []))
@@ -209,6 +209,7 @@ function LeaveTab({ employeeId }) {
   const [saving, setSaving]     = useState(false)
 
   const load = async () => {
+    if (!employeeId) { setLoading(false); return }
     setLoading(true)
     try {
       const res = await hrmService.listLeaves({ employee_id: employeeId, page_size: 20 })
@@ -326,6 +327,26 @@ export default function EmployeeSelfService() {
         <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Employee Self-Service</p>
       </div>
 
+      {!employeeId && (
+        <div
+          className="rounded-2xl p-10 flex flex-col items-center justify-center text-center"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+        >
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: 'rgba(245,158,11,0.12)' }}>
+            <UserX className="w-8 h-8" style={{ color: '#F59E0B' }} />
+          </div>
+          <h2 className="text-lg font-semibold mb-2" style={{ color: 'var(--text-heading)' }}>
+            Employee Profile Not Available
+          </h2>
+          <p className="text-sm max-w-sm" style={{ color: 'var(--text-muted)' }}>
+            Your account is not linked to an employee profile yet. Please contact your HR administrator to set up your employee record.
+          </p>
+        </div>
+      )}
+
+      {!employeeId ? null :
+      <>
+
       <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
         {/* Tabs */}
         <div className="flex border-b" style={{ borderColor: 'var(--border)' }}>
@@ -350,6 +371,7 @@ export default function EmployeeSelfService() {
         {activeTab === 'payslips'   && <PayslipsTab    employeeId={employeeId} />}
         {activeTab === 'leaves'     && <LeaveTab       employeeId={employeeId} />}
       </div>
+      </>}
     </div>
   )
 }

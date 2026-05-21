@@ -133,11 +133,12 @@ async def get_subscription(
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant record not found")
 
-    # Count active users in company_db
-    current_users = await db.users.count_documents({"status": "active", "is_deleted": {"$ne": True}})
+    # Count internal users — same filter as users/seat-status so both endpoints agree
+    current_users = await db.users.count_documents({"user_type": "internal", "is_deleted": False})
 
     max_users = tenant.get("max_users") or 0
     plan_name = tenant.get("plan_name") or "—"
+    plan_display_name = tenant.get("plan_display_name") or plan_name
     price_per_user = tenant.get("price_per_user") or 0
     plan_start = tenant.get("plan_start_date")
     plan_expiry = tenant.get("plan_expiry")
@@ -171,6 +172,7 @@ async def get_subscription(
         "success": True,
         "data": {
             "plan_name": plan_name,
+            "plan_display_name": plan_display_name,
             "price_per_user": price_per_user,
             "max_users": max_users,
             "current_users": current_users,

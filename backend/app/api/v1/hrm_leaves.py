@@ -17,7 +17,22 @@ async def apply_leave(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:leave:apply"])),
 ):
-    return await LeaveService(db).apply(data.model_dump(), cu["id"], cu.get("username", ""), cu["company_id"])
+    employee_name = cu.get("full_name") or cu.get("username", "")
+    result = await LeaveService(db).apply(data.model_dump(), cu["id"], employee_name, cu["company_id"])
+    try:
+        from app.services.notification_service import NotificationService
+        await NotificationService(db).notify_leave_applied(
+            company_id=cu["company_id"],
+            employee_user_id=cu["id"],
+            employee_name=employee_name,
+            leave_type=data.leave_type.value if hasattr(data.leave_type, "value") else str(data.leave_type),
+            from_date=str(data.from_date),
+            to_date=str(data.to_date),
+            leave_id=result.get("id", ""),
+        )
+    except Exception:
+        pass
+    return result
 
 
 @router.get("")
@@ -71,4 +86,20 @@ async def approve_reject(
     )
     if not result:
         raise HTTPException(status_code=404, detail="Leave not found")
+    try:
+        from app.services.notification_service import NotificationService
+        leave_type = result.get("leave_type", "")
+        if hasattr(leave_type, "value"):
+            leave_type = leave_type.value
+        await NotificationService(db).notify_leave_actioned(
+            company_id=cu["company_id"],
+            employee_user_id=result.get("employee_id", ""),
+            action=data.action,
+            leave_type=str(leave_type),
+            from_date=str(result.get("from_date", "")),
+            to_date=str(result.get("to_date", "")),
+            leave_id=leave_id,
+        )
+    except Exception:
+        pass
     return result

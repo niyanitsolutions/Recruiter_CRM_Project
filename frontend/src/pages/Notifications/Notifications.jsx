@@ -43,7 +43,8 @@ const TYPE_ICONS = {
   hrm_onboard_update: CheckCircle,
   hrm_review_created: FileText,
   hrm_review_submitted: CheckCircle,
-  hrm_announcement:   Bell,
+  announcement:       Bell,
+  interview_scheduled: Calendar,
   default:            Bell,
 }
 
@@ -79,7 +80,8 @@ const TYPE_COLORS = {
   hrm_onboard_update:'bg-emerald-100 text-emerald-600',
   hrm_review_created:'bg-purple-100 text-purple-600',
   hrm_review_submitted:'bg-green-100 text-green-600',
-  hrm_announcement:  'bg-orange-100 text-orange-600',
+  announcement:      'bg-orange-100 text-orange-600',
+  interview_scheduled:'bg-blue-100 text-blue-600',
   default:           'bg-gray-100 text-gray-600',
 }
 
@@ -256,7 +258,8 @@ const Notifications = () => {
               <option value="hrm_leave_action">Leave Action</option>
               <option value="hrm_offer_sent">Offer Sent (HRM)</option>
               <option value="hrm_onboard_update">Onboarding Update</option>
-              <option value="hrm_announcement">Announcement</option>
+              <option value="announcement">Announcement</option>
+              <option value="interview_scheduled">Interview Scheduled</option>
             </optgroup>
             <optgroup label="System">
               <option value="task_assigned">Task Assigned</option>

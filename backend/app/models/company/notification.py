@@ -36,6 +36,10 @@ class NotificationType(str, Enum):
     SYSTEM_ALERT = "system_alert"
     TASK_ASSIGNED = "task_assigned"
     MENTION = "mention"
+    # ── Announcement events ───────────────────────────────────────────────────
+    ANNOUNCEMENT = "announcement"                # company-wide or targeted announcement
+    # ── Interview events ──────────────────────────────────────────────────────
+    INTERVIEW_SCHEDULED = "interview_scheduled"  # interview scheduled → notify coordinators
     # ── HRM sync events ───────────────────────────────────────────────────────
     HRM_USER_CREATED  = "hrm_user_created"    # CRM user created → notify HR
     HRM_EMP_CREATED   = "hrm_emp_created"     # HRM employee created → notify Admin
@@ -124,6 +128,14 @@ NOTIFICATION_TYPE_DISPLAY = {
     NotificationType.SYSTEM_ALERT: "System Alert",
     NotificationType.TASK_ASSIGNED: "Task Assigned",
     NotificationType.MENTION: "Mention",
+    NotificationType.ANNOUNCEMENT: "Announcement",
+    NotificationType.INTERVIEW_SCHEDULED: "Interview Scheduled",
+    NotificationType.HRM_USER_CREATED: "New CRM User",
+    NotificationType.HRM_EMP_CREATED: "New Employee",
+    NotificationType.HRM_LEAVE_APPLIED: "Leave Request",
+    NotificationType.HRM_LEAVE_ACTION: "Leave Update",
+    NotificationType.HRM_OFFER_SENT: "Offer Sent",
+    NotificationType.HRM_ONBOARD_UPDATE: "Onboarding Update",
     NotificationType.ATTENDANCE_PUNCH_IN: "Punched In",
     NotificationType.ATTENDANCE_PUNCH_OUT: "Punched Out",
     NotificationType.ATTENDANCE_PENDING: "Attendance Pending",

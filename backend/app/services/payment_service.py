@@ -65,17 +65,26 @@ class PaymentService:
 
         # ── Amount and days calculation per payment type ───────────────────────
         if payment_type == "extend_duration":
-            # Charge: existing_seats × monthly_price × extend_months
             months = max(int(extend_months), 1)
-            base_amount = price_per_user * existing_seats * months
+            # 12-month extension uses yearly (discounted) per-user rate
+            pu_ext = (
+                plan.get("price_per_user_yearly", plan.get("price_yearly", price_per_user))
+                if months >= 12 else price_per_user
+            )
+            base_amount = pu_ext * existing_seats * months
             days = 30 * months
             user_count = 0  # no seat change
         elif payment_type in ("seat_upgrade", "seat_upgrade_extend"):
             user_count = max(int(user_count), 1)
             if payment_type == "seat_upgrade_extend":
                 months = max(int(extend_months), 1)
-                # Charge: new_seats * monthly + existing_seats * monthly * months
-                base_amount = (price_per_user * user_count) + (price_per_user * existing_seats * months)
+                # 12-month extensions use yearly rate; shorter ones use monthly rate
+                pu_ext = (
+                    plan.get("price_per_user_yearly", plan.get("price_yearly", price_per_user))
+                    if months >= 12 else price_per_user
+                )
+                # Charge: new_seats × monthly + existing_seats × rate × months
+                base_amount = (price_per_user * user_count) + (pu_ext * existing_seats * months)
                 days = 30 * months
             else:
                 # seat_upgrade: standard monthly billing for the new seats
@@ -282,19 +291,21 @@ class PaymentService:
             "reminder_sent": False,
         }
 
-        if payment_type not in ("seat_upgrade",):
-            # Always set plan meta for non-seat-only upgrades
+        if payment_type in ("renewal", "new_subscription"):
+            # Full renewal / new subscription: replace plan meta, seats, and expiry
             tenant_update["plan_id"] = payment["plan_id"]
             tenant_update["plan_name"] = payment["plan_name"]
             tenant_update["plan_display_name"] = payment.get("plan_display_name", payment["plan_name"])
             tenant_update["billing_cycle"] = billing_cycle
             tenant_update["plan_start_date"] = payment_time
             tenant_update["plan_expiry"] = new_subscription_end
-        else:
-            # seat_upgrade: update only seats, keep current expiry intact
-            tenant_update["plan_id"] = payment["plan_id"]
-            tenant_update["plan_name"] = payment["plan_name"]
-            tenant_update["plan_display_name"] = payment.get("plan_display_name", payment["plan_name"])
+        elif payment_type == "extend_duration":
+            # Extend expiry only — plan and seats stay as-is, only update expiry
+            tenant_update["plan_expiry"] = new_subscription_end
+        elif payment_type == "seat_upgrade_extend":
+            # Add seats + extend expiry — plan stays as-is
+            tenant_update["plan_expiry"] = new_subscription_end
+        # seat_upgrade: max_users already set above, everything else preserved
 
         await master_db.tenants.update_one(
             {"_id": payment["tenant_id"]},

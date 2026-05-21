@@ -1350,7 +1350,7 @@ const AdminDashboard = () => {
                       )}
                     </div>
                     <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                      {ann.content || ann.message || ann.description}
+                      {ann.body || ann.content || ann.message || ann.description}
                     </p>
                     {ann.created_at && (
                       <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-disabled)' }}>

@@ -446,7 +446,7 @@ const CompanySettings = () => {
               <div className="flex items-center justify-between bg-accent-50 rounded-xl px-5 py-4 border border-accent-100">
                 <div>
                   <p className="text-xs text-accent-600 font-medium uppercase tracking-wide">Current Plan</p>
-                  <p className="text-xl font-bold text-accent-700 mt-0.5">{subscription.plan_name}</p>
+                  <p className="text-xl font-bold text-accent-700 mt-0.5">{subscription.plan_display_name || subscription.plan_name}</p>
                 </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-semibold
                   ${subscription.is_trial
@@ -495,7 +495,7 @@ const CompanySettings = () => {
               <div className="flex flex-wrap gap-3 pt-2">
                 <button
                   onClick={() => navigate('/upgrade-plan', {
-                    state: { tenantId: user?.companyId, currentPlan: subscription?.plan_name }
+                    state: { tenantId: user?.companyId, currentPlan: subscription?.plan_display_name || subscription?.plan_name }
                   })}
                   className="px-4 py-2 bg-accent-600 text-white text-sm font-medium rounded-lg hover:bg-accent-700 transition-colors"
                 >
@@ -640,7 +640,7 @@ const CompanySettings = () => {
           current_active_users: subscription.current_users,
           remaining_seats:      subscription.remaining_users,
           plan_name:            subscription.plan_name,
-          plan_display_name:    subscription.plan_name,
+          plan_display_name:    subscription.plan_display_name || subscription.plan_name,
           plan_expiry:          subscription.plan_expiry_date,
           is_trial:             subscription.is_trial,
         } : {}}

@@ -20,6 +20,8 @@ class AnnouncementService:
 
     async def create(self, company_id: str, data: dict, created_by: str, created_by_name: str) -> dict:
         now = datetime.now(timezone.utc)
+        target_department_ids = data.get("target_department_ids") or []
+        target_employee_ids = data.get("target_employee_ids") or []
         doc = {
             "_id": str(ObjectId()),
             "company_id": company_id,
@@ -27,8 +29,8 @@ class AnnouncementService:
             "body": data["body"],
             "announcement_type": data.get("announcement_type", "general"),
             "priority": data.get("priority", "normal"),
-            "target_department_ids": data.get("target_department_ids") or [],
-            "target_employee_ids": data.get("target_employee_ids") or [],
+            "target_department_ids": target_department_ids,
+            "target_employee_ids": target_employee_ids,
             "requires_acknowledgement": data.get("requires_acknowledgement", False),
             "send_email": data.get("send_email", False),
             "email_sent_at": None,
@@ -45,7 +47,26 @@ class AnnouncementService:
             "updated_at": now,
         }
         await self.col.insert_one(doc)
-        return self._serialize(doc)
+        result = self._serialize(doc)
+
+        # Fire-and-forget notification fanout — notify all targeted users
+        try:
+            from app.services.notification_service import NotificationService
+            ns = NotificationService(self.db)
+            await ns.notify_announcement_created(
+                company_id=company_id,
+                announcement_id=result["id"],
+                title=data["title"],
+                body=data["body"],
+                created_by_name=created_by_name,
+                target_department_ids=target_department_ids,
+                target_employee_ids=target_employee_ids,
+                priority=data.get("priority", "normal"),
+            )
+        except Exception:
+            pass  # Never let notification failure block announcement creation
+
+        return result
 
     async def list(self, company_id: str, active_only: bool, page: int, page_size: int) -> dict:
         query: dict = {"company_id": company_id}

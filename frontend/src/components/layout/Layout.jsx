@@ -7,6 +7,7 @@ import SideNav from './SideNav'
 import TopBar from './TopBar'
 import GlobalSearch from '../common/GlobalSearch'
 import AttendanceBanner from '../hrm/AttendanceBanner'
+import AnnouncementPopup from '../hrm/AnnouncementPopup'
 
 const Layout = ({ title, subtitle, actions }) => {
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -72,6 +73,9 @@ const Layout = ({ title, subtitle, actions }) => {
 
       {/* Global Search overlay */}
       {searchOpen && <GlobalSearch onClose={() => setSearchOpen(false)} />}
+
+      {/* Announcement popup — shown once per session for unread announcements */}
+      <AnnouncementPopup />
     </div>
   )
 }

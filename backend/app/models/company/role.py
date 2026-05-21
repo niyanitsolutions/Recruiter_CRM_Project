@@ -174,6 +174,12 @@ class Permission(str, Enum):
     HRM_OFFER_TEMPLATES_MANAGE = "hrm:offer_templates:manage"
     # Documents
     HRM_DOCUMENTS_MANAGE     = "hrm:documents:manage"
+    # Assets
+    HRM_ASSETS_VIEW          = "hrm:assets:view"
+    HRM_ASSETS_MANAGE        = "hrm:assets:manage"
+    # Exit Management
+    HRM_EXIT_VIEW            = "hrm:exit:view"
+    HRM_EXIT_MANAGE          = "hrm:exit:manage"
     # Notifications (in-app read access)
     NOTIFICATIONS_VIEW       = "notifications:view"
 
@@ -203,6 +209,10 @@ _HRM_FULL = [
     Permission.HRM_OFFER_TEMPLATES_VIEW,
     Permission.HRM_OFFER_TEMPLATES_MANAGE,
     Permission.HRM_DOCUMENTS_MANAGE,
+    Permission.HRM_ASSETS_VIEW,
+    Permission.HRM_ASSETS_MANAGE,
+    Permission.HRM_EXIT_VIEW,
+    Permission.HRM_EXIT_MANAGE,
     Permission.NOTIFICATIONS_VIEW,
 ]
 

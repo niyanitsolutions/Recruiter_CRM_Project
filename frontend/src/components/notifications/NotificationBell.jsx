@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Bell, Check, CheckCheck, X,
   UserPlus, DollarSign, FileText,
-  Clock, AlertCircle, Calendar, Users2, RefreshCw, CreditCard,
+  Clock, AlertCircle, Calendar, Users2, RefreshCw, CreditCard, Megaphone, CheckCircle,
 } from 'lucide-react'
 import { notificationService } from '../../services'
 
@@ -21,9 +21,11 @@ const TYPE_ICONS = {
   interview_scheduled:  Calendar,
   task_assigned:        FileText,
   system_alert:         AlertCircle,
-  // HRM / Attendance
+  // HRM / Attendance / Leave
   hrm_user_created:     UserPlus,
   hrm_emp_created:      UserPlus,
+  hrm_leave_applied:    Calendar,
+  hrm_leave_action:     CheckCircle,
   attendance_punch_in:  Clock,
   attendance_punch_out: Clock,
   attendance_pending:   AlertCircle,
@@ -31,6 +33,8 @@ const TYPE_ICONS = {
   // Subscription
   subscription_expiry:  CreditCard,
   seat_limit_reached:   Users2,
+  // Announcements
+  announcement:         Megaphone,
 }
 
 const TYPE_COLORS = {
@@ -47,9 +51,11 @@ const TYPE_COLORS = {
   interview_scheduled:  { bg: 'rgba(79,172,254,0.15)',  color: '#4FACFE' },
   task_assigned:        { bg: 'rgba(56,249,215,0.15)',  color: '#38F9D7' },
   system_alert:         { bg: 'rgba(255,71,87,0.15)',   color: '#FF4757' },
-  // HRM / Attendance
+  // HRM / Attendance / Leave
   hrm_user_created:     { bg: 'rgba(79,172,254,0.15)',  color: '#4FACFE' },
   hrm_emp_created:      { bg: 'rgba(56,249,215,0.15)',  color: '#38F9D7' },
+  hrm_leave_applied:    { bg: 'rgba(79,172,254,0.15)',  color: '#4FACFE' },
+  hrm_leave_action:     { bg: 'rgba(67,233,123,0.15)',  color: '#43E97B' },
   attendance_punch_in:  { bg: 'rgba(67,233,123,0.15)',  color: '#43E97B' },
   attendance_punch_out: { bg: 'rgba(245,158,11,0.15)',  color: '#F59E0B' },
   attendance_pending:   { bg: 'rgba(255,71,87,0.15)',   color: '#FF4757' },
@@ -57,6 +63,8 @@ const TYPE_COLORS = {
   // Subscription
   subscription_expiry:  { bg: 'rgba(255,107,157,0.15)', color: '#FF6B9D' },
   seat_limit_reached:   { bg: 'rgba(255,71,87,0.15)',   color: '#FF4757' },
+  // Announcements
+  announcement:         { bg: 'rgba(245,158,11,0.15)',  color: '#F59E0B' },
   default:              { bg: 'rgba(139,143,168,0.15)', color: '#8B8FA8' },
 }
 

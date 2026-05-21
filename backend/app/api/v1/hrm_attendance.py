@@ -99,7 +99,7 @@ async def get_today(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:attendance:self"])),
 ):
-    return await AttendanceService(db).get_today(employee_id, cu["company_id"]) or {}
+    return await AttendanceService(db).get_today(employee_id, cu["company_id"])
 
 
 @router.get("/monthly/{employee_id}")
