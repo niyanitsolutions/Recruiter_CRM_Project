@@ -66,10 +66,11 @@ class UserService:
                 if tenant:
                     total_seats = int(tenant.get("max_users", 0))
                     if total_seats > 0:
-                        # Count all non-deleted internal users (including the owner)
+                        # Count only internal users — matches the seat-status endpoint
+                        # and the Users page, so all three modules show the same number.
                         current_count = await self.collection.count_documents({
                             "is_deleted": False,
-                            "user_type": {"$ne": "partner"},
+                            "user_type": "internal",
                         })
                         if current_count >= total_seats:
                             remaining = max(0, total_seats - current_count)

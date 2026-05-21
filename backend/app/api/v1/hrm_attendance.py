@@ -1,5 +1,7 @@
 """HRM — Attendance API Routes"""
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
 from app.models.company.attendance import (
@@ -8,6 +10,11 @@ from app.models.company.attendance import (
 from app.services.attendance_service import AttendanceService
 
 router = APIRouter(prefix="/hrm/attendance", tags=["HRM - Attendance"])
+
+
+class OfficeIPSettings(BaseModel):
+    enabled: bool = False
+    approved_ips: List[str] = []
 
 
 @router.post("/check-in")
@@ -20,18 +27,21 @@ async def check_in(
 ):
     emp_id = data.employee_id or cu.get("hrm_employee_id") or cu["id"]
     client_ip = data.client_ip or request.client.host
-    return await AttendanceService(db).check_in(
-        employee_id=emp_id,
-        company_id=cu["company_id"],
-        marked_by=cu["id"],
-        notes=data.notes or "",
-        work_mode=data.work_mode.value if hasattr(data.work_mode, "value") else str(data.work_mode),
-        client_ip=client_ip,
-        latitude=data.latitude,
-        longitude=data.longitude,
-        geo_city=data.geo_city,
-        geo_country=data.geo_country,
-    )
+    try:
+        return await AttendanceService(db).check_in(
+            employee_id=emp_id,
+            company_id=cu["company_id"],
+            marked_by=cu["id"],
+            notes=data.notes or "",
+            work_mode=data.work_mode.value if hasattr(data.work_mode, "value") else str(data.work_mode),
+            client_ip=client_ip,
+            latitude=data.latitude,
+            longitude=data.longitude,
+            geo_city=data.geo_city,
+            geo_country=data.geo_country,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 @router.post("/check-out")
@@ -121,3 +131,41 @@ async def manual_update(
     _perm=Depends(require_permissions(["hrm:attendance:manage"])),
 ):
     return await AttendanceService(db).manual_update(cu["company_id"], data.model_dump(exclude_none=True))
+
+
+# ── Office IP Management ──────────────────────────────────────────────────────
+
+@router.get("/office-ips")
+async def get_office_ips(
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:settings:view"])),
+):
+    """Get current office IP restriction settings."""
+    doc = await db["company_settings"].find_one({}) or {}
+    return {
+        "enabled": bool(doc.get("attendance_ip_restriction_enabled", False)),
+        "approved_ips": doc.get("approved_office_ips", []),
+    }
+
+
+@router.put("/office-ips")
+async def update_office_ips(
+    data: OfficeIPSettings,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:settings:edit"])),
+):
+    """Update office IP restriction settings."""
+    from datetime import datetime, timezone
+    await db["company_settings"].update_one(
+        {},
+        {"$set": {
+            "attendance_ip_restriction_enabled": data.enabled,
+            "approved_office_ips": data.approved_ips,
+            "updated_at": datetime.now(timezone.utc),
+            "updated_by": cu["id"],
+        }},
+        upsert=True,
+    )
+    return {"enabled": data.enabled, "approved_ips": data.approved_ips}

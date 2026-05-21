@@ -1,4 +1,5 @@
 """HRM — Attendance Service"""
+import ipaddress
 from datetime import datetime, date, timezone, timedelta
 from typing import Optional, List
 from bson import ObjectId
@@ -18,6 +19,26 @@ class AttendanceService:
     def __init__(self, db):
         self.db = db
         self.col = db[self.COL]
+
+    SETTINGS_COL = "company_settings"
+
+    @staticmethod
+    def _is_ip_allowed(client_ip: str, approved_ips: List[str]) -> bool:
+        """Check if client_ip matches any entry in approved_ips (exact or CIDR)."""
+        try:
+            client = ipaddress.ip_address(client_ip)
+        except ValueError:
+            return False
+        for entry in approved_ips:
+            try:
+                if '/' in entry:
+                    if client in ipaddress.ip_network(entry, strict=False):
+                        return True
+                elif client == ipaddress.ip_address(entry):
+                    return True
+            except ValueError:
+                continue
+        return False
 
     @staticmethod
     def _serialize(doc: dict) -> dict:
@@ -56,6 +77,16 @@ class AttendanceService:
         existing = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
         if existing and existing.get("check_in"):
             return self._serialize(existing)
+
+        # ── IP restriction: only enforced for office mode ────────────────────────
+        if work_mode == "office":
+            settings = await self.db[self.SETTINGS_COL].find_one({}) or {}
+            if settings.get("attendance_ip_restriction_enabled"):
+                approved_ips = settings.get("approved_office_ips", [])
+                if approved_ips and not self._is_ip_allowed(client_ip or "", approved_ips):
+                    raise ValueError(
+                        f"Check-in blocked: your IP ({client_ip}) is not in the list of approved office IPs."
+                    )
 
         emp = await self._get_employee(employee_id, company_id)
         shift_start = emp.get("shift_start_time", "09:00") if emp else "09:00"
@@ -96,6 +127,22 @@ class AttendanceService:
             "updated_at": now,
         }
         await self.col.replace_one({"_id": doc_id}, update, upsert=True)
+
+        # Fire punch-in notification (non-blocking)
+        crm_user_id = emp.get("crm_user_id") if emp else None
+        if crm_user_id:
+            try:
+                from app.services.notification_service import NotificationService
+                check_in_str = now.astimezone().strftime("%I:%M %p")
+                await NotificationService(self.db).notify_punch_in(
+                    company_id=company_id,
+                    user_id=crm_user_id,
+                    check_in_time=check_in_str,
+                    work_mode=work_mode,
+                )
+            except Exception:
+                pass
+
         return self._serialize(update)
 
     # ── Check Out ─────────────────────────────────────────────────────────────
@@ -156,6 +203,21 @@ class AttendanceService:
 
         await self.col.update_one({"_id": record["_id"]}, {"$set": upd})
         record.update(upd)
+
+        # Fire punch-out notification (non-blocking)
+        if not auto:
+            crm_user_id = emp.get("crm_user_id") if emp else None
+            if crm_user_id:
+                try:
+                    from app.services.notification_service import NotificationService
+                    await NotificationService(self.db).notify_punch_out(
+                        company_id=company_id,
+                        user_id=crm_user_id,
+                        work_hours=work_hours,
+                    )
+                except Exception:
+                    pass
+
         return self._serialize(record)
 
     # ── Break Tracking ────────────────────────────────────────────────────────

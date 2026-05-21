@@ -19,6 +19,7 @@ class HRMDashboardService:
         ann_col = self.db["hrm_announcements"]
         job_col = self.db["hrm_jobs"]
         cand_col = self.db["hrm_candidates"]
+        exit_col = self.db["hrm_exit"]
 
         total_employees = await emp_col.count_documents({"company_id": company_id, "is_deleted": False, "employment_status": "active"})
 
@@ -44,6 +45,12 @@ class HRMDashboardService:
         pending_leaves = await leave_col.count_documents({
             "company_id": company_id,
             "status": "pending",
+        })
+
+        pending_exits = await exit_col.count_documents({
+            "company_id": company_id,
+            "status": {"$in": ["pending", "in_progress"]},
+            "is_deleted": False,
         })
 
         payroll_this_month = await payslip_col.count_documents({
@@ -73,7 +80,8 @@ class HRMDashboardService:
             "absent_today": absent_today,
             "late_today": late_today,
             "on_leave_today": on_leave_today,
-            "pending_leave_requests": pending_leaves,
+            "pending_leaves": pending_leaves,
+            "pending_exits": pending_exits,
             "payroll_processed_this_month": payroll_this_month,
             "open_jobs": open_jobs,
             "candidates_in_pipeline": candidates_in_pipeline,

@@ -134,6 +134,8 @@ const updateTemplate = (id, data) => api.put(`${BASE}/offer-templates/${id}`, da
 const deleteTemplate = (id) => api.delete(`${BASE}/offer-templates/${id}`)
 const generateFromTemplate = (id, data) => api.post(`${BASE}/offer-templates/${id}/generate`, data)
 
+const getAnnouncements = listAnnouncements
+
 const hrmService = {
   getDashboardStats, getAttendanceTrend,
   listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee,
@@ -149,6 +151,7 @@ const hrmService = {
   createOffer, listOffers, getOffer, respondOffer,
   createOnboarding, listOnboardings, getOnboarding, updateOnboarding, completeOnboarding,
   uploadDocument, getDocuments, deleteDocument,
+  getAnnouncements,
   getSyncStatus, getUnlinkedUsers, getUnlinkedEmployees,
   syncEmployeeToUser, syncUserToEmployee, linkUserEmployee, unlinkUserEmployee,
   createTemplate, listTemplates, getTemplate, updateTemplate, deleteTemplate, generateFromTemplate,

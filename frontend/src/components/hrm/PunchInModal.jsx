@@ -15,7 +15,7 @@ const WORK_MODES = [
   { key: 'field',  label: 'Field Work',   icon: MapPin,    color: 'text-orange-600 bg-orange-50 border-orange-200' },
 ]
 
-export default function PunchInModal({ isOpen, onClose, onPunchedIn, employeeId }) {
+export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn, employeeId }) {
   const [workMode, setWorkMode] = useState('office')
   const [geo, setGeo]           = useState(null)
   const [geoLoading, setGeoLoading] = useState(false)
@@ -116,7 +116,7 @@ export default function PunchInModal({ isOpen, onClose, onPunchedIn, employeeId 
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
               {loading ? 'Punching In…' : 'Punch In'}
             </button>
-            <button onClick={onClose} className="w-full text-sm text-gray-400 hover:text-gray-600">
+            <button onClick={onDismiss ?? onClose} className="w-full text-sm text-gray-400 hover:text-gray-600">
               Remind me later
             </button>
           </div>

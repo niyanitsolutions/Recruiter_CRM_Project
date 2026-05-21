@@ -40,7 +40,8 @@ class RenewalOrderRequest(BaseModel):
     plan_id: str
     billing_cycle: str = "monthly"
     user_count: int = 1
-    payment_type: str = "renewal"  # renewal | seat_upgrade
+    payment_type: str = "renewal"  # renewal | seat_upgrade | extend_duration | seat_upgrade_extend
+    extend_months: int = 0         # months to extend for extend_duration / seat_upgrade_extend
 
 
 class RenewalVerifyRequest(BaseModel):
@@ -639,6 +640,7 @@ async def create_renewal_order(data: RenewalOrderRequest):
     result, error = await payment_service.create_razorpay_order(
         tenant["_id"], data.plan_id, data.billing_cycle, data.user_count,
         payment_type=data.payment_type,
+        extend_months=data.extend_months,
     )
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)

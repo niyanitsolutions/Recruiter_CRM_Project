@@ -263,9 +263,13 @@ async def get_seat_status(
         raise HTTPException(status_code=404, detail="Company not found")
 
     total_seats = int(tenant.get("max_users", 0))
+    # Count only internal users (same filter as the Users page) so every
+    # module shows the same number.  Owner accounts that have is_owner=True
+    # but user_type=None were being counted here but not on the Users page —
+    # that was the source of the +1 discrepancy.
     current_count = await db.users.count_documents({
         "is_deleted": False,
-        "user_type": {"$ne": "partner"},
+        "user_type": "internal",
     })
     remaining = max(0, total_seats - current_count) if total_seats > 0 else 9999
 

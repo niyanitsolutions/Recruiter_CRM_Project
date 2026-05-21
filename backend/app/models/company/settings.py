@@ -342,6 +342,10 @@ class CompanySettings(BaseModel):
     geo_fence_locations: List[GeoFenceLocation] = Field(default_factory=list)
     user_geo_fence: List[UserGeoFenceConfig] = Field(default_factory=list)
 
+    # ===== Attendance IP Restriction =====
+    attendance_ip_restriction_enabled: bool = Field(default=False)
+    approved_office_ips: List[str] = Field(default_factory=list)
+
     # ===== Data Retention =====
     auto_archive_rejected_days: int = Field(default=90)
     auto_archive_closed_jobs_days: int = Field(default=180)
@@ -409,6 +413,10 @@ class CompanySettingsUpdate(BaseModel):
     geo_fence_enabled: Optional[bool] = None
     geo_fence_locations: Optional[List[GeoFenceLocation]] = None
     user_geo_fence: Optional[List[UserGeoFenceConfig]] = None
+
+    # Attendance IP Restriction
+    attendance_ip_restriction_enabled: Optional[bool] = None
+    approved_office_ips: Optional[List[str]] = None
 
     # Working hours
     working_days: Optional[List[int]] = None

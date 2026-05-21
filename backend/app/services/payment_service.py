@@ -34,13 +34,21 @@ class PaymentService:
         plan_id: str,
         billing_cycle: str = "monthly",
         user_count: int = 1,
-        payment_type: str = "new_subscription",  # new_subscription | renewal | seat_upgrade
+        payment_type: str = "new_subscription",
+        # payment_type options:
+        #   new_subscription    — fresh subscription, sets both seats and expiry
+        #   renewal             — renew expired sub, sets both seats and expiry
+        #   seat_upgrade        — add seats only, PRESERVES current expiry
+        #   extend_duration     — extend expiry only, PRESERVES current seats
+        #   seat_upgrade_extend — add seats AND extend expiry together
+        extend_months: int = 0,  # used for extend_duration and seat_upgrade_extend
     ) -> Tuple[Optional[dict], str]:
         """
         Create a Razorpay order for subscription payment.
 
         Pricing model: price_per_user × user_count (× 12 for yearly).
         For reseller tenants the reseller discount is applied on the subtotal.
+        For extend_duration: price = price_per_user × existing_seats × extend_months.
         """
         master_db = get_master_db()
 
@@ -52,17 +60,42 @@ class PaymentService:
         if not plan:
             return None, "Plan not found"
 
-        user_count = max(int(user_count), 1)
+        price_per_user = plan.get("price_per_user_monthly", plan.get("price_monthly", 0))
+        existing_seats = int(tenant.get("max_users", 1))
 
-        # Per-user price and subscription duration
-        if billing_cycle == "yearly":
-            price_per_user = plan.get("price_per_user_yearly", plan.get("price_yearly", 0))
-            base_amount = price_per_user * user_count * 12   # 12 months
-            days = 365
-        else:  # monthly (default)
-            price_per_user = plan.get("price_per_user_monthly", plan.get("price_monthly", 0))
-            base_amount = price_per_user * user_count
-            days = 30
+        # ── Amount and days calculation per payment type ───────────────────────
+        if payment_type == "extend_duration":
+            # Charge: existing_seats × monthly_price × extend_months
+            months = max(int(extend_months), 1)
+            base_amount = price_per_user * existing_seats * months
+            days = 30 * months
+            user_count = 0  # no seat change
+        elif payment_type in ("seat_upgrade", "seat_upgrade_extend"):
+            user_count = max(int(user_count), 1)
+            if payment_type == "seat_upgrade_extend":
+                months = max(int(extend_months), 1)
+                # Charge: new_seats * monthly + existing_seats * monthly * months
+                base_amount = (price_per_user * user_count) + (price_per_user * existing_seats * months)
+                days = 30 * months
+            else:
+                # seat_upgrade: standard monthly billing for the new seats
+                if billing_cycle == "yearly":
+                    price_per_user = plan.get("price_per_user_yearly", plan.get("price_yearly", 0))
+                    base_amount = price_per_user * user_count * 12
+                    days = 365
+                else:
+                    base_amount = price_per_user * user_count
+                    days = 30
+        else:
+            # new_subscription / renewal: standard billing
+            user_count = max(int(user_count), 1)
+            if billing_cycle == "yearly":
+                price_per_user = plan.get("price_per_user_yearly", plan.get("price_yearly", 0))
+                base_amount = price_per_user * user_count * 12
+                days = 365
+            else:
+                base_amount = price_per_user * user_count
+                days = 30
 
         if base_amount == 0:
             return None, "This plan is free and doesn't require payment"
@@ -106,8 +139,8 @@ class PaymentService:
             "total_amount": total_amount,
             "razorpay_order_id": razorpay_order_id,
             "payment_method": PaymentMethod.RAZORPAY,
-            # payment_type is passed by the caller: new_subscription | renewal | seat_upgrade
             "payment_type": payment_type,
+            "extend_months": extend_months,
             "status": PaymentStatus.PENDING,
             "subscription_start": datetime.now(timezone.utc),
             "subscription_end": subscription_end,
@@ -171,15 +204,50 @@ class PaymentService:
         # Recalculate subscription_end from actual payment time (not order creation time)
         payment_time = datetime.now(timezone.utc)
         billing_cycle = payment.get("billing_cycle", "monthly")
-        if billing_cycle == "monthly":
-            renewal_days = 30
-        elif billing_cycle == "quarterly":
-            renewal_days = 90
-        else:  # yearly
-            renewal_days = 365
-        new_subscription_end = payment_time + timedelta(days=renewal_days)
+        payment_type  = payment.get("payment_type", "renewal")
+        extend_months = int(payment.get("extend_months", 0))
 
-        # Update payment record with actual timestamps
+        # ── Fetch current tenant state (needed for seat/expiry preservation) ──
+        current_tenant = await master_db.tenants.find_one({"_id": payment["tenant_id"]})
+        existing_seats = int((current_tenant or {}).get("max_users", 0))
+        current_expiry = (current_tenant or {}).get("plan_expiry")
+        if current_expiry and getattr(current_expiry, "tzinfo", None) is None:
+            current_expiry = current_expiry.replace(tzinfo=timezone.utc)
+
+        # ── Calculate new expiry and seat totals per payment type ─────────────
+        newly_purchased = int(payment.get("user_count", 0))
+
+        if payment_type == "seat_upgrade":
+            # Add seats only — KEEP current expiry unchanged
+            new_subscription_end = current_expiry  # preserve
+            new_total_seats = existing_seats + newly_purchased
+
+        elif payment_type == "extend_duration":
+            # Extend expiry only — KEEP current seat count unchanged
+            base = (current_expiry if current_expiry and current_expiry > payment_time else payment_time)
+            months = max(extend_months, 1)
+            new_subscription_end = base + timedelta(days=30 * months)
+            new_total_seats = existing_seats  # preserve
+
+        elif payment_type == "seat_upgrade_extend":
+            # Add seats AND extend expiry
+            base = (current_expiry if current_expiry and current_expiry > payment_time else payment_time)
+            months = max(extend_months, 1)
+            new_subscription_end = base + timedelta(days=30 * months)
+            new_total_seats = existing_seats + newly_purchased
+
+        else:
+            # renewal / new_subscription: calculate from billing_cycle, replace both
+            if billing_cycle == "monthly":
+                renewal_days = 30
+            elif billing_cycle == "quarterly":
+                renewal_days = 90
+            else:  # yearly
+                renewal_days = 365
+            new_subscription_end = payment_time + timedelta(days=renewal_days)
+            new_total_seats = max(newly_purchased, 1)
+
+        # ── Update payment record with actual timestamps ───────────────────────
         await master_db.payments.update_one(
             {"_id": payment["_id"]},
             {
@@ -195,44 +263,42 @@ class PaymentService:
             }
         )
 
-        # Activate tenant subscription
-        success, error = await tenant_service.activate_tenant(
-            payment["tenant_id"],
-            new_subscription_end
-        )
+        # ── Activate tenant subscription ──────────────────────────────────────
+        if payment_type != "seat_upgrade":
+            # Only call activate_tenant when expiry actually changes
+            success, error = await tenant_service.activate_tenant(
+                payment["tenant_id"],
+                new_subscription_end
+            )
+            if not success:
+                logger.error(f"Failed to activate tenant: {error}")
 
-        if not success:
-            logger.error(f"Failed to activate tenant: {error}")
+        # ── Build tenant update payload ────────────────────────────────────────
+        tenant_update: dict = {
+            "max_users": new_total_seats,
+            "is_trial": False,
+            "status": TenantStatus.ACTIVE,
+            "updated_at": payment_time,
+            "reminder_sent": False,
+        }
 
-        # ── Update tenant plan details ────────────────────────────────────────
-        # seat_upgrade: user_count = ADDITIONAL seats → add to existing total
-        # renewal / new_subscription: user_count = desired total → replace
-        newly_purchased = int(payment.get("user_count", 1))
-        if payment.get("payment_type") == "seat_upgrade":
-            current_tenant = await master_db.tenants.find_one({"_id": payment["tenant_id"]})
-            previous_seats = int((current_tenant or {}).get("max_users", 0))
-            new_total_seats = previous_seats + newly_purchased
+        if payment_type not in ("seat_upgrade",):
+            # Always set plan meta for non-seat-only upgrades
+            tenant_update["plan_id"] = payment["plan_id"]
+            tenant_update["plan_name"] = payment["plan_name"]
+            tenant_update["plan_display_name"] = payment.get("plan_display_name", payment["plan_name"])
+            tenant_update["billing_cycle"] = billing_cycle
+            tenant_update["plan_start_date"] = payment_time
+            tenant_update["plan_expiry"] = new_subscription_end
         else:
-            new_total_seats = newly_purchased
+            # seat_upgrade: update only seats, keep current expiry intact
+            tenant_update["plan_id"] = payment["plan_id"]
+            tenant_update["plan_name"] = payment["plan_name"]
+            tenant_update["plan_display_name"] = payment.get("plan_display_name", payment["plan_name"])
 
         await master_db.tenants.update_one(
             {"_id": payment["tenant_id"]},
-            {
-                "$set": {
-                    "plan_id": payment["plan_id"],
-                    "plan_name": payment["plan_name"],
-                    "plan_display_name": payment.get("plan_display_name", payment["plan_name"]),
-                    "billing_cycle": billing_cycle,
-                    "max_users": new_total_seats,
-                    "plan_start_date": payment_time,
-                    "plan_expiry": new_subscription_end,
-                    "is_trial": False,
-                    "status": TenantStatus.ACTIVE,
-                    "updated_at": payment_time,
-                    # Reset reminder flag so next expiry cycle sends a fresh reminder
-                    "reminder_sent": False
-                }
-            }
+            {"$set": tenant_update}
         )
 
         # Create commission record if this tenant belongs to a seller

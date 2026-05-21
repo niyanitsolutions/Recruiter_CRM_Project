@@ -25,7 +25,11 @@ import SubscriptionBanner from '../../components/subscription/SubscriptionBanner
 import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 import KpiCard from '../../components/dashboard/KpiCard'
 import HiringTrend from '../../components/dashboard/HiringTrend'
+import PunchInModal from '../../components/hrm/PunchInModal'
 import { formatDateTime } from '../../utils/format'
+
+const ATTEND_DISMISS_KEY = 'attendance_modal_dismissed'
+const todayISO = () => new Date().toISOString().slice(0, 10)
 
 // ── Module-level cache — survives SPA navigation, TTL 5 min ─────────────────
 const DASH_CACHE_TTL = 5 * 60 * 1000
@@ -33,6 +37,7 @@ const _cache = {
   main: null, recruit: null, seat: null,
   ivStats: null, todayIv: null, jobStats: null,
   candStats: null, hrmStats: null, announcements: null,
+  syncStatus: null,
   ts: 0, company_id: null,
 }
 
@@ -148,9 +153,17 @@ const AdminDashboard = () => {
   const [seatStatus,       setSeatStatus]       = useState(null)
   const [trendRaw,         setTrendRaw]         = useState(null)
   const [announcements,    setAnnouncements]    = useState([])
+  const [syncStatus,       setSyncStatus]       = useState(null)
   const [period,           setPeriod]           = useState(PERIODS[1])
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [showQuickAction,  setShowQuickAction]  = useState(false)
+
+  // Attendance warning: show card if user dismissed the punch-in modal today
+  const hasEmployeeId = !!user?.hrm_employee_id
+  const [attendanceDismissed, setAttendanceDismissed] = useState(
+    () => hasEmployeeId && localStorage.getItem(ATTEND_DISMISS_KEY) === todayISO()
+  )
+  const [showDashPunchIn, setShowDashPunchIn] = useState(false)
 
   // ── Fetch trend ──────────────────────────────────────────────────────────────
   const fetchTrend = useCallback(async (days) => {
@@ -182,13 +195,14 @@ const AdminDashboard = () => {
       setHrmStats(_cache.hrmStats)
       setSeatStatus(_cache.seat)
       setAnnouncements(_cache.announcements ?? [])
+      setSyncStatus(_cache.syncStatus)
       setLoading(false)
       return
     }
 
     try {
       setLoading(true)
-      const [mainRes, recruitRes, ivStatsRes, todayIvRes, jobRes, candRes, hrmRes, seatRes, annRes] =
+      const [mainRes, recruitRes, ivStatsRes, todayIvRes, jobRes, candRes, hrmRes, seatRes, annRes, syncRes] =
         await Promise.allSettled([
           adminDashboardService.getDashboardData(),
           applicationService.getDashboardStats(),
@@ -198,9 +212,8 @@ const AdminDashboard = () => {
           candidateService.getDashboardStats(),
           hrmService.getDashboardStats(),
           subscriptionService.getTenantSeatStatus(),
-          typeof hrmService.getAnnouncements === 'function'
-            ? hrmService.getAnnouncements({ limit: 3 })
-            : Promise.resolve(null),
+          hrmService.getAnnouncements({ limit: 3 }),
+          hrmService.getSyncStatus(),
         ])
 
       const main    = mainRes.status    === 'fulfilled' ? mainRes.value?.data    : null
@@ -221,6 +234,9 @@ const AdminDashboard = () => {
       const annList = Array.isArray(rawAnn) ? rawAnn
         : (rawAnn?.data?.items || rawAnn?.data || rawAnn?.items || [])
 
+      const rawSync = syncRes.status === 'fulfilled' ? syncRes.value?.data : null
+      const syncData = rawSync?.data ?? rawSync
+
       _cache.main          = main
       _cache.recruit       = recruit
       _cache.ivStats       = ivs
@@ -230,6 +246,7 @@ const AdminDashboard = () => {
       _cache.hrmStats      = hrm
       _cache.seat          = seat
       _cache.announcements = annList
+      _cache.syncStatus    = syncData
       _cache.ts            = Date.now()
       _cache.company_id    = user?.company_id
 
@@ -242,6 +259,7 @@ const AdminDashboard = () => {
       setHrmStats(hrm)
       setSeatStatus(seat)
       setAnnouncements(annList)
+      setSyncStatus(syncData)
       setError(null)
     } catch (err) {
       setError('Failed to load dashboard data')
@@ -403,6 +421,17 @@ const AdminDashboard = () => {
     pendingFeedback > 0 && { label: 'Interview Feedback Needed', count: pendingFeedback,             color: '#FF4757', icon: Calendar, path: '/interviews'   },
     hrmStats?.pending_leaves > 0 && { label: 'Leave Requests',  count: hrmStats.pending_leaves,     color: '#7c3aed', icon: Building, path: '/hrm/leaves'   },
     hrmStats?.pending_exits > 0  && { label: 'Exit Requests',   count: hrmStats.pending_exits,      color: '#FF6B9D', icon: Users,    path: '/hrm/exit'     },
+    // Sync pending items from User↔Employee sync status
+    syncStatus?.unlinked_users > 0 && {
+      label: 'Users Without Employee Profile',
+      count: syncStatus.unlinked_users,
+      color: '#4FACFE', icon: Users2, path: '/hrm/employees',
+    },
+    syncStatus?.unlinked_employees > 0 && {
+      label: 'Employees Without User Account',
+      count: syncStatus.unlinked_employees,
+      color: '#38F9D7', icon: UserPlus, path: '/hrm/employees',
+    },
   ].filter(Boolean)
 
   // ── Recruitment health metrics ────────────────────────────────────────────────
@@ -559,6 +588,52 @@ const AdminDashboard = () => {
           </div>
         </div>
       </Card>
+
+      {/* ── Attendance Warning Card ─────────────────────────────────────────────── */}
+      {attendanceDismissed && (
+        <>
+          <PunchInModal
+            isOpen={showDashPunchIn}
+            onClose={() => setShowDashPunchIn(false)}
+            onDismiss={() => setShowDashPunchIn(false)}
+            onPunchedIn={() => {
+              localStorage.removeItem(ATTEND_DISMISS_KEY)
+              setAttendanceDismissed(false)
+              setShowDashPunchIn(false)
+            }}
+            employeeId={user?.hrm_employee_id}
+          />
+          <div
+            className="flex items-center gap-3 px-5 py-3 rounded-2xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.04) 100%)',
+              border: '1px solid rgba(239,68,68,0.25)',
+            }}
+          >
+            <Clock className="w-5 h-5 flex-shrink-0" style={{ color: '#ef4444' }} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold" style={{ color: '#ef4444' }}>Attendance Pending — Punch In Required</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>You haven't punched in yet today. Your work hours won't be recorded until you do.</p>
+            </div>
+            <button
+              onClick={() => setShowDashPunchIn(true)}
+              className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all"
+              style={{ background: '#ef4444' }}
+              onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
+              onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
+            >
+              <Clock className="w-3.5 h-3.5" /> Punch In Now
+            </button>
+            <button
+              onClick={() => setAttendanceDismissed(false)}
+              className="flex-shrink-0 text-xs px-2 py-1 rounded-lg transition-all"
+              style={{ color: 'var(--text-muted)', background: 'var(--bg-hover)' }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </>
+      )}
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* 9 STAT KPI CARDS — with sparklines                                     */}

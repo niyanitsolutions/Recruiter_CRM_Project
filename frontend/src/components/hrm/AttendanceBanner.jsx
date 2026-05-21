@@ -11,6 +11,9 @@ import { selectUser } from '../../store/authSlice'
 import hrmService from '../../services/hrmService'
 import PunchInModal from './PunchInModal'
 
+const DISMISS_KEY = 'attendance_modal_dismissed'
+const todayStr = () => new Date().toISOString().slice(0, 10)
+
 function formatDuration(hours) {
   const h = Math.floor(hours)
   const m = Math.round((hours - h) * 60)
@@ -53,14 +56,22 @@ export default function AttendanceBanner() {
     return () => clearInterval(id)
   }, [record?.check_in, record?.check_out])
 
-  // Auto-show punch-in modal if no record by 9:30am
+  // Auto-show punch-in modal on mount if no record and not dismissed today
   useEffect(() => {
     if (!employeeId || record !== null) return
-    const now = new Date()
-    if (now.getHours() >= 9 && now.getMinutes() >= 30) {
-      setShowModal(true)
-    }
+    if (localStorage.getItem(DISMISS_KEY) === todayStr()) return
+    setShowModal(true)
   }, [employeeId, record])
+
+  const handleDismiss = () => {
+    localStorage.setItem(DISMISS_KEY, todayStr())
+    setShowModal(false)
+  }
+
+  const handlePunchedIn = useCallback(() => {
+    localStorage.removeItem(DISMISS_KEY)
+    loadRecord()
+  }, [loadRecord])
 
   // Auto punch-out at midnight
   useEffect(() => {
@@ -124,7 +135,8 @@ export default function AttendanceBanner() {
       <PunchInModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        onPunchedIn={loadRecord}
+        onDismiss={handleDismiss}
+        onPunchedIn={handlePunchedIn}
         employeeId={employeeId}
       />
 

@@ -20,7 +20,8 @@
       "Bash(Get-ChildItem -Path . -Directory)",
       "Bash(xargs -I {} find {} -type d)",
       "Bash(cd /d d:\\\\crm-project)",
-      "Bash(Get-ChildItem -Path \"frontend\\\\src\\\\components\\\\layout\\\\SideNav.jsx\" -ErrorAction SilentlyContinue)"
+      "Bash(Get-ChildItem -Path \"frontend\\\\src\\\\components\\\\layout\\\\SideNav.jsx\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty Name)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

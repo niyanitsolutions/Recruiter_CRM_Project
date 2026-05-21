@@ -43,6 +43,15 @@ class NotificationType(str, Enum):
     HRM_LEAVE_ACTION  = "hrm_leave_action"    # leave approved/rejected → notify employee
     HRM_OFFER_SENT    = "hrm_offer_sent"      # offer released → notify candidate
     HRM_ONBOARD_UPDATE = "hrm_onboard_update" # onboarding status updated
+    # ── Attendance events ─────────────────────────────────────────────────────
+    ATTENDANCE_PUNCH_IN  = "attendance_punch_in"   # employee punched in
+    ATTENDANCE_PUNCH_OUT = "attendance_punch_out"  # employee punched out
+    ATTENDANCE_PENDING   = "attendance_pending"    # employee hasn't punched in (reminder)
+    # ── Sync pending ─────────────────────────────────────────────────────────
+    SYNC_PENDING = "sync_pending"
+    # ── Subscription events ───────────────────────────────────────────────────
+    SUBSCRIPTION_EXPIRY  = "subscription_expiry"
+    SEAT_LIMIT_REACHED   = "seat_limit_reached"
 
 
 class NotificationChannel(str, Enum):
@@ -114,7 +123,13 @@ NOTIFICATION_TYPE_DISPLAY = {
     NotificationType.PAYOUT_DAY_REMINDER: "Payout Day Reminder",
     NotificationType.SYSTEM_ALERT: "System Alert",
     NotificationType.TASK_ASSIGNED: "Task Assigned",
-    NotificationType.MENTION: "Mention"
+    NotificationType.MENTION: "Mention",
+    NotificationType.ATTENDANCE_PUNCH_IN: "Punched In",
+    NotificationType.ATTENDANCE_PUNCH_OUT: "Punched Out",
+    NotificationType.ATTENDANCE_PENDING: "Attendance Pending",
+    NotificationType.SYNC_PENDING: "Sync Required",
+    NotificationType.SUBSCRIPTION_EXPIRY: "Subscription Expiring",
+    NotificationType.SEAT_LIMIT_REACHED: "Seat Limit Reached",
 }
 
 NOTIFICATION_CHANNEL_DISPLAY = {

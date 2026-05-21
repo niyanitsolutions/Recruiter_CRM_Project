@@ -716,3 +716,61 @@ class NotificationService:
         ]
         if docs:
             await self.notifications_collection.insert_many(docs)
+
+    async def notify_punch_in(
+        self,
+        company_id: str,
+        user_id: str,
+        check_in_time: str,
+        work_mode: str = "office",
+    ) -> None:
+        """Attendance: employee punched in."""
+        from bson import ObjectId
+        now = datetime.now(timezone.utc)
+        doc = {
+            "_id": str(ObjectId()),
+            "id": str(ObjectId()),
+            "company_id": company_id,
+            "user_id": user_id,
+            "type": "attendance_punch_in",
+            "title": "Punch-in recorded",
+            "message": f"You punched in at {check_in_time} ({work_mode.replace('_', ' ').title()}).",
+            "channels": ["in_app"],
+            "channel_status": {"in_app": "delivered"},
+            "is_read": False,
+            "priority": "low",
+            "created_at": now,
+            "updated_at": now,
+            "is_deleted": False,
+        }
+        await self.notifications_collection.insert_one(doc)
+
+    async def notify_punch_out(
+        self,
+        company_id: str,
+        user_id: str,
+        work_hours: float,
+    ) -> None:
+        """Attendance: employee punched out."""
+        from bson import ObjectId
+        h = int(work_hours)
+        m = round((work_hours - h) * 60)
+        duration = f"{h}h {m}m" if h else f"{m}m"
+        now = datetime.now(timezone.utc)
+        doc = {
+            "_id": str(ObjectId()),
+            "id": str(ObjectId()),
+            "company_id": company_id,
+            "user_id": user_id,
+            "type": "attendance_punch_out",
+            "title": "Punch-out recorded",
+            "message": f"Work day complete. Total time: {duration}.",
+            "channels": ["in_app"],
+            "channel_status": {"in_app": "delivered"},
+            "is_read": False,
+            "priority": "low",
+            "created_at": now,
+            "updated_at": now,
+            "is_deleted": False,
+        }
+        await self.notifications_collection.insert_one(doc)
