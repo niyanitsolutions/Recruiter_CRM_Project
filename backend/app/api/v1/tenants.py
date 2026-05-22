@@ -68,11 +68,11 @@ async def get_current_plan(auth: AuthContext = Depends(get_current_user)):
     # Get plan details
     plan = await master_db.plans.find_one({"_id": tenant.get("plan_id")})
     
-    # Get current usage
-    user_count = await company_db.users.count_documents({"is_deleted": False})
-    # These collections will be created in later phases
-    # candidate_count = await company_db.candidates.count_documents({"is_deleted": False})
-    # job_count = await company_db.jobs.count_documents({"is_deleted": False})
+    # Count internal users only — same filter as /users/seat-status so both endpoints agree
+    user_count = await company_db.users.count_documents({
+        "is_deleted": False,
+        "user_type": "internal",
+    })
     
     return {
         "plan": {

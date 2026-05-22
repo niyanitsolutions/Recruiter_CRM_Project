@@ -24,6 +24,7 @@ async def apply_leave(
         await NotificationService(db).notify_leave_applied(
             company_id=cu["company_id"],
             employee_user_id=cu["id"],
+            employee_hrm_id=cu.get("hrm_employee_id"),
             employee_name=employee_name,
             leave_type=data.leave_type.value if hasattr(data.leave_type, "value") else str(data.leave_type),
             from_date=str(data.from_date),

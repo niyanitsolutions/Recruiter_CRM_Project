@@ -243,6 +243,18 @@ _HRM_SELF = [
     Permission.NOTIFICATIONS_VIEW,
 ]
 
+# Minimum HRM self-service for all internal non-partner roles
+# Every employee account (regardless of CRM role) must be able to:
+#   - Punch in/out  - Apply for leave  - View own payslips  - See announcements
+_HRM_ESS_MINIMUM = [
+    Permission.HRM_ATTENDANCE_SELF,
+    Permission.HRM_LEAVE_APPLY,
+    Permission.HRM_PAYROLL_VIEW_SELF,
+    Permission.HRM_PERFORMANCE_SELF,
+    Permission.HRM_ANNOUNCEMENTS_VIEW,
+    Permission.NOTIFICATIONS_VIEW,
+]
+
 
 # ── Shared CRM permission set (platform-management permissions for OWNER/ADMIN) ──
 _CRM_ADMIN_BASE = [
@@ -305,6 +317,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.ONBOARDS_VIEW,
         Permission.REPORTS_VIEW,
         Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
+        *_HRM_ESS_MINIMUM,
     ],
 
     SystemRole.CLIENT_COORDINATOR: [
@@ -318,6 +331,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.ONBOARDS_VIEW,
         Permission.REPORTS_VIEW,
         Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
+        *_HRM_ESS_MINIMUM,
     ],
 
     # ── HR: CRM onboarding tasks + full HRM access ────────────────────────────
@@ -340,6 +354,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.PARTNERS_VIEW,
         Permission.REPORTS_VIEW, Permission.REPORTS_EXPORT,
         Permission.TASKS_VIEW,
+        *_HRM_ESS_MINIMUM,
     ],
 
     SystemRole.PARTNER: [

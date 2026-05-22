@@ -359,6 +359,7 @@ class ResetPasswordByAdmin(BaseModel):
 
 # Default permissions for each role (used as fallback in auth tokens)
 ROLE_PERMISSIONS = {
+    # ── Full admin + HRM ──────────────────────────────────────────────────────
     "admin": [
         "dashboard:view",
         "users:view", "users:create", "users:edit", "users:delete", "users:manage_roles",
@@ -383,7 +384,20 @@ ROLE_PERMISSIONS = {
         "interview_settings:view", "interview_settings:create",
         "interview_settings:edit", "interview_settings:delete",
         "audit:view", "audit:sessions", "audit:alerts", "audit:admin",
-        "notifications:create",
+        "notifications:view", "notifications:create",
+        # Full HRM
+        "hrm:dashboard:view",
+        "hrm:employees:view", "hrm:employees:manage",
+        "hrm:attendance:self", "hrm:attendance:team", "hrm:attendance:manage",
+        "hrm:leave:apply", "hrm:leave:team_approve", "hrm:leave:manage",
+        "hrm:payroll:view_self", "hrm:payroll:manage",
+        "hrm:performance:self", "hrm:performance:team", "hrm:performance:manage",
+        "hrm:announcements:view", "hrm:announcements:manage",
+        "hrm:hiring:view", "hrm:hiring:manage",
+        "hrm:offer_templates:view", "hrm:offer_templates:manage",
+        "hrm:documents:manage",
+        "hrm:assets:view", "hrm:assets:manage",
+        "hrm:exit:view", "hrm:exit:manage",
     ],
     "candidate_coordinator": [
         "dashboard:view",
@@ -393,6 +407,9 @@ ROLE_PERMISSIONS = {
         "interview_settings:view", "interview_settings:create",
         "interview_settings:edit", "interview_settings:delete",
         "jobs:view", "onboards:view", "reports:view",
+        "tasks:view", "tasks:create", "tasks:edit",
+        "hrm:attendance:self", "hrm:leave:apply", "hrm:payroll:view_self",
+        "hrm:performance:self", "hrm:announcements:view", "notifications:view",
     ],
     "client_coordinator": [
         "dashboard:view",
@@ -401,24 +418,67 @@ ROLE_PERMISSIONS = {
         "interviews:view", "interviews:schedule", "interviews:update_status",
         "interview_settings:view",
         "candidates:view", "onboards:view", "reports:view",
+        "tasks:view", "tasks:create", "tasks:edit",
+        "hrm:attendance:self", "hrm:leave:apply", "hrm:payroll:view_self",
+        "hrm:performance:self", "hrm:announcements:view", "notifications:view",
     ],
+    # ── HR: CRM onboarding + full HRM ─────────────────────────────────────────
     "hr": [
         "dashboard:view",
         "users:view", "candidates:view",
         "onboards:view", "onboards:create", "onboards:edit",
         "reports:view",
+        "tasks:view", "tasks:create", "tasks:edit",
+        # Full HRM
+        "hrm:dashboard:view",
+        "hrm:employees:view", "hrm:employees:manage",
+        "hrm:attendance:self", "hrm:attendance:team", "hrm:attendance:manage",
+        "hrm:leave:apply", "hrm:leave:team_approve", "hrm:leave:manage",
+        "hrm:payroll:view_self", "hrm:payroll:manage",
+        "hrm:performance:self", "hrm:performance:team", "hrm:performance:manage",
+        "hrm:announcements:view", "hrm:announcements:manage",
+        "hrm:hiring:view", "hrm:hiring:manage",
+        "hrm:offer_templates:view", "hrm:offer_templates:manage",
+        "hrm:documents:manage",
+        "hrm:assets:view", "hrm:assets:manage",
+        "hrm:exit:view", "hrm:exit:manage",
+        "notifications:view",
     ],
     "accounts": [
         "dashboard:view",
         "accounts:view", "accounts:invoices", "accounts:payouts",
         "clients:view", "partners:view", "reports:view", "reports:export",
         "payouts:view", "payouts:edit", "invoices:view", "invoices:approve",
+        "tasks:view",
+        "hrm:attendance:self", "hrm:leave:apply", "hrm:payroll:view_self",
+        "hrm:performance:self", "hrm:announcements:view", "notifications:view",
     ],
     "partner": [
         "dashboard:view",
         "candidates:view", "candidates:create",
         "jobs:view", "interviews:view",
         "accounts:view", "accounts:invoices",
+    ],
+    # ── HRM-only roles ────────────────────────────────────────────────────────
+    "manager": [
+        "hrm:dashboard:view",
+        "hrm:employees:view",
+        "hrm:attendance:self", "hrm:attendance:team",
+        "hrm:leave:apply", "hrm:leave:team_approve",
+        "hrm:payroll:view_self",
+        "hrm:performance:self", "hrm:performance:team",
+        "hrm:announcements:view",
+        "hrm:hiring:view",
+        "notifications:view",
+    ],
+    "employee": [
+        "hrm:dashboard:view",
+        "hrm:attendance:self",
+        "hrm:leave:apply",
+        "hrm:payroll:view_self",
+        "hrm:performance:self",
+        "hrm:announcements:view",
+        "notifications:view",
     ],
 }
 

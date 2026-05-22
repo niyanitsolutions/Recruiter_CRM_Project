@@ -5,6 +5,7 @@ import { refreshToken } from '../../store/authSlice'
 import { ArrowLeft, Save, Loader2, Shield, GitBranch, ChevronDown } from 'lucide-react'
 import toast from 'react-hot-toast'
 import userService from '../../services/userService'
+import hrmService from '../../services/hrmService'
 import departmentService from '../../services/departmentService'
 import designationService from '../../services/designationService'
 import OrgTree from '../../components/OrgTree'
@@ -186,6 +187,7 @@ const UserForm = () => {
   const [loading, setLoading]   = useState(false)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState(null)
+  const [createEmployeeProfile, setCreateEmployeeProfile] = useState(false)
 
   // Duplicate user modal state
   const [duplicateModal, setDuplicateModal] = useState({
@@ -585,8 +587,19 @@ const [errors,       setErrors]       = useState({})
           dispatch(refreshToken())
         }
       } else {
-        await userService.createUser(submitData)
+        const res = await userService.createUser(submitData)
         toast.success('User created successfully. Share credentials manually.')
+        if (createEmployeeProfile) {
+          const userId = res?.data?.id
+          if (userId) {
+            try {
+              await hrmService.syncUserToEmployee(userId)
+              toast.success('Employee profile created')
+            } catch {
+              toast.error('User created — but employee profile setup failed. Use the Sync panel to retry.')
+            }
+          }
+        }
       }
 
       navigate('/users')
@@ -1040,6 +1053,26 @@ const [errors,       setErrors]       = useState({})
             </div>
           )}
         </div>}
+
+        {/* ── Create Employee Profile toggle (create mode only) ──────── */}
+        {!isEdit && (
+          <div
+            className="flex items-center gap-3 p-4 rounded-xl"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+          >
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={createEmployeeProfile}
+                onChange={e => setCreateEmployeeProfile(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-body)' }}>
+                Also create an HRM employee profile for this user
+              </span>
+            </label>
+          </div>
+        )}
 
         {/* ── Actions ──────────────────────────────────────────────────── */}
         <div className="flex justify-end gap-4">

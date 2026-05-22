@@ -45,13 +45,22 @@ const StatCard = ({ icon: Icon, label, value, sub, to, color = 'blue' }) => {
   return to ? <Link to={to}>{card}</Link> : card
 }
 
+const SYNC_ROLES = [
+  { value: 'hr',                    label: 'HR' },
+  { value: 'candidate_coordinator', label: 'Candidate Coordinator' },
+  { value: 'client_coordinator',    label: 'Client Coordinator' },
+  { value: 'accounts',              label: 'Accounts' },
+  { value: 'admin',                 label: 'Admin' },
+]
+
 function SyncWidget() {
-  const [sync, setSync] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(null)
+  const [sync, setSync]               = useState(null)
+  const [loading, setLoading]         = useState(true)
+  const [syncing, setSyncing]         = useState(null)
   const [unlinkedUsers, setUnlinkedUsers] = useState([])
-  const [unlinkedEmps, setUnlinkedEmps] = useState([])
-  const [expanded, setExpanded] = useState(false)
+  const [unlinkedEmps, setUnlinkedEmps]   = useState([])
+  const [expanded, setExpanded]       = useState(false)
+  const [roleMap, setRoleMap]         = useState({})  // empId → selected role
 
   const load = async () => {
     setLoading(true)
@@ -75,25 +84,26 @@ function SyncWidget() {
 
   useEffect(() => { load() }, [])
 
-  const handleCreateEmployee = async (userId) => {
+  const handleAddEmployeeProfile = async (userId) => {
     setSyncing(userId)
     try {
       const res = await hrmService.syncUserToEmployee(userId)
-      toast.success(res.data.message || 'Employee created')
+      toast.success(res.data.message || 'Employee profile created')
       load()
       loadDetails()
-    } catch { toast.error('Sync failed') }
+    } catch { toast.error('Failed to create employee profile') }
     setSyncing(null)
   }
 
-  const handleCreateUser = async (empId) => {
+  const handleAddLoginAccount = async (empId) => {
     setSyncing(empId)
+    const role = roleMap[empId] || 'hr'
     try {
-      const res = await hrmService.syncEmployeeToUser(empId)
-      toast.success(res.data.message || 'User created')
+      const res = await hrmService.syncEmployeeToUser(empId, { role })
+      toast.success(res.data.message || 'Login account created')
       load()
       loadDetails()
-    } catch { toast.error('Sync failed') }
+    } catch { toast.error('Failed to create login account') }
     setSyncing(null)
   }
 
@@ -126,7 +136,7 @@ function SyncWidget() {
           {unlinkedUsers.length > 0 && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-muted)' }}>
-                Users without employee record
+                Users without employee profile
               </p>
               <div className="space-y-1">
                 {unlinkedUsers.map(u => (
@@ -134,12 +144,12 @@ function SyncWidget() {
                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
                     <span style={{ color: 'var(--text-body)' }}>{u.full_name || u.email}</span>
                     <button
-                      onClick={() => handleCreateEmployee(u.id)}
+                      onClick={() => handleAddEmployeeProfile(u.id)}
                       disabled={syncing === u.id}
                       className="btn-secondary text-xs py-1 flex items-center gap-1"
                     >
                       {syncing === u.id ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                      Create Employee
+                      Add Employee Profile
                     </button>
                   </div>
                 ))}
@@ -150,21 +160,33 @@ function SyncWidget() {
           {unlinkedEmps.length > 0 && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-muted)' }}>
-                Employees without user account
+                Employees without login account
               </p>
               <div className="space-y-1">
                 {unlinkedEmps.map(e => (
-                  <div key={e.id} className="flex items-center justify-between rounded-lg px-3 py-2 text-sm"
+                  <div key={e.id} className="rounded-lg px-3 py-2 text-sm space-y-2"
                        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-                    <span style={{ color: 'var(--text-body)' }}>{e.full_name || e.email}</span>
-                    <button
-                      onClick={() => handleCreateUser(e.id)}
-                      disabled={syncing === e.id}
-                      className="btn-secondary text-xs py-1 flex items-center gap-1"
-                    >
-                      {syncing === e.id ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                      Create User
-                    </button>
+                    <div className="flex items-center justify-between">
+                      <span style={{ color: 'var(--text-body)' }}>{e.full_name || e.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={roleMap[e.id] || 'hr'}
+                        onChange={ev => setRoleMap(m => ({ ...m, [e.id]: ev.target.value }))}
+                        className="text-xs rounded px-2 py-1 flex-1"
+                        style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)' }}
+                      >
+                        {SYNC_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      </select>
+                      <button
+                        onClick={() => handleAddLoginAccount(e.id)}
+                        disabled={syncing === e.id}
+                        className="btn-secondary text-xs py-1 flex items-center gap-1"
+                      >
+                        {syncing === e.id ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                        Add Login Account
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

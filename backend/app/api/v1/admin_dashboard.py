@@ -204,27 +204,29 @@ async def get_system_health(
     day_ago = now - timedelta(days=1)
     week_ago = now - timedelta(days=7)
     
-    # Users created this week
+    _internal = {"is_deleted": False, "user_type": "internal"}
+
+    # Users created this week (internal only — partners don't count against seats)
     new_users_week = await db.users.count_documents({
-        "is_deleted": False,
-        "created_at": {"$gte": week_ago}
+        **_internal,
+        "created_at": {"$gte": week_ago},
     })
-    
+
     # Active users today
     active_today = await db.users.count_documents({
-        "is_deleted": False,
-        "last_login": {"$gte": day_ago}
+        **_internal,
+        "last_login": {"$gte": day_ago},
     })
-    
+
     # Total actions today
     actions_today = await db.audit_logs.count_documents({
         "created_at": {"$gte": day_ago}
     })
-    
+
     # Suspended users
     suspended_users = await db.users.count_documents({
-        "is_deleted": False,
-        "status": "suspended"
+        **_internal,
+        "status": "suspended",
     })
     
     return {

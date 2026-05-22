@@ -1169,8 +1169,10 @@ class AuthService:
                 return None, "Company not found"
             owner = tenant.get("owner", {})
             if str(owner.get("_id", "")) == user_id:
-                # Owner always has full admin permissions
-                return list(ROLE_PERMISSIONS.get("admin", [])), ""
+                # Owner always has full permissions — use authoritative ROLE_DEFAULT_PERMISSIONS
+                owner_perms = [p.value if hasattr(p, "value") else p
+                               for p in ROLE_DEFAULT_PERMISSIONS.get(SystemRole.OWNER, [])]
+                return owner_perms, ""
             return None, "User not found"
 
         role_name = user.get("role", "admin")

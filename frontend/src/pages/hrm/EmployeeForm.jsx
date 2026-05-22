@@ -97,9 +97,11 @@ export default function EmployeeForm() {
   const isEdit   = !!id
   const fileRef  = useRef(null)
 
-  const [saving, setSaving]     = useState(false)
-  const [error, setError]       = useState('')
-  const [form, setForm]         = useState({ ...EMPTY_FORM })
+  const [saving, setSaving]               = useState(false)
+  const [error, setError]                 = useState('')
+  const [form, setForm]                   = useState({ ...EMPTY_FORM })
+  const [createLoginAccount, setCreateLoginAccount] = useState(false)
+  const [loginRole, setLoginRole]         = useState('hr')
 
   const { errors: fErrors, touched: fTouched, touch, validate: fValidate } = useFormValidation({
     full_name: validators.required('Full name'),
@@ -224,8 +226,19 @@ export default function EmployeeForm() {
         await hrmService.updateEmployee(id, buildPayload())
         toast.success('Employee updated')
       } else {
-        await hrmService.createEmployee(buildPayload())
+        const res = await hrmService.createEmployee(buildPayload())
         toast.success('Employee created')
+        if (createLoginAccount) {
+          const empId = res.data?.id
+          if (empId) {
+            try {
+              await hrmService.syncEmployeeToUser(empId, { role: loginRole })
+              toast.success('Login account created')
+            } catch {
+              toast.error('Employee created — but login account setup failed. Use the Sync panel to retry.')
+            }
+          }
+        }
       }
       navigate('/hrm/employees')
     } catch (err) {
@@ -532,6 +545,40 @@ export default function EmployeeForm() {
               )}
             </div>
           </Section>
+        )}
+
+        {/* ── Create Login Account toggle (create mode only) ─────────────── */}
+        {!isEdit && (
+          <div
+            className="flex flex-wrap items-center gap-3 p-4 rounded-xl"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+          >
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={createLoginAccount}
+                onChange={e => setCreateLoginAccount(e.target.checked)}
+                className="w-4 h-4 accent-indigo-600"
+              />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-body)' }}>
+                Also create a CRM login account for this employee
+              </span>
+            </label>
+            {createLoginAccount && (
+              <select
+                value={loginRole}
+                onChange={e => setLoginRole(e.target.value)}
+                className="ml-auto text-sm rounded-lg px-3 py-1.5"
+                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)' }}
+              >
+                <option value="hr">HR</option>
+                <option value="candidate_coordinator">Candidate Coordinator</option>
+                <option value="client_coordinator">Client Coordinator</option>
+                <option value="accounts">Accounts</option>
+                <option value="admin">Admin</option>
+              </select>
+            )}
+          </div>
         )}
 
         {/* ── Actions ──────────────────────────────────────────────────────── */}

@@ -59,6 +59,34 @@ async def get_unread_count(
     return {"unread_count": result.unread_count}
 
 
+@router.get("/preferences", response_model=NotificationPreference)
+async def get_preferences_inline(
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db)
+):
+    """Get current user's notification preferences"""
+    service = NotificationService(db)
+    return await service.get_user_preferences(
+        user_id=current_user["id"],
+        company_id=current_user["company_id"]
+    )
+
+
+@router.put("/preferences", response_model=NotificationPreference)
+async def update_preferences_inline(
+    data: NotificationPreferenceUpdate,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db)
+):
+    """Update notification preferences"""
+    service = NotificationService(db)
+    return await service.update_user_preferences(
+        user_id=current_user["id"],
+        data=data,
+        company_id=current_user["company_id"]
+    )
+
+
 @router.get("/{notification_id}", response_model=NotificationResponse)
 async def get_notification(
     notification_id: str,
@@ -70,20 +98,20 @@ async def get_notification(
     notification = await service.get_notification_by_id(
         notification_id, current_user["company_id"]
     )
-    
+
     if not notification:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Notification not found"
         )
-    
+
     # Verify ownership
     if notification.user_id != current_user["id"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied"
         )
-    
+
     return notification
 
 
@@ -219,33 +247,3 @@ async def cancel_reminder(
         )
     
     return {"message": "Reminder cancelled"}
-
-
-# ============== Preferences ==============
-
-@router.get("/preferences", response_model=NotificationPreference)
-async def get_preferences(
-    current_user: dict = Depends(get_current_user),
-    db = Depends(get_company_db)
-):
-    """Get current user's notification preferences"""
-    service = NotificationService(db)
-    return await service.get_user_preferences(
-        user_id=current_user["id"],
-        company_id=current_user["company_id"]
-    )
-
-
-@router.put("/preferences", response_model=NotificationPreference)
-async def update_preferences(
-    data: NotificationPreferenceUpdate,
-    current_user: dict = Depends(get_current_user),
-    db = Depends(get_company_db)
-):
-    """Update notification preferences"""
-    service = NotificationService(db)
-    return await service.update_user_preferences(
-        user_id=current_user["id"],
-        data=data,
-        company_id=current_user["company_id"]
-    )

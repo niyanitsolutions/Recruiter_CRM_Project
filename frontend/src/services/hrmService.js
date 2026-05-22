@@ -94,8 +94,11 @@ const uploadDocument = (employeeId, formData) =>
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 const getDocuments = (employeeId) => api.get(`${BASE}/documents/${employeeId}`)
+const getAllDocuments = (params) => api.get(`${BASE}/documents/all`, { params })
 const deleteDocument = (employeeId, docIndex) =>
   api.delete(`${BASE}/documents/${employeeId}/${docIndex}`)
+const updateDocumentMeta = (employeeId, docIndex, data) =>
+  api.patch(`${BASE}/documents/${employeeId}/${docIndex}`, data)
 
 // ── Org Chart ──────────────────────────────────────────────────────────────
 const getOrgChart = () => api.get(`${BASE}/employees/org-chart/tree`)
@@ -152,7 +155,7 @@ const hrmService = {
   createInterview, listInterviews, submitInterviewFeedback,
   createOffer, listOffers, getOffer, respondOffer,
   createOnboarding, listOnboardings, getOnboarding, updateOnboarding, completeOnboarding,
-  uploadDocument, getDocuments, deleteDocument,
+  uploadDocument, getDocuments, getAllDocuments, deleteDocument, updateDocumentMeta,
   getAnnouncements,
   getSyncStatus, getSyncUnlinkedPreview, getUnlinkedUsers, getUnlinkedEmployees,
   syncEmployeeToUser, syncUserToEmployee, linkUserEmployee, unlinkUserEmployee,

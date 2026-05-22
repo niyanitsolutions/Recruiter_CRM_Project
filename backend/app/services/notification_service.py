@@ -1003,9 +1003,31 @@ class NotificationService:
         from_date: str,
         to_date: str,
         leave_id: str,
+        employee_hrm_id: Optional[str] = None,
     ) -> None:
-        """Leave applied → notify users with hrm:leave:team_approve permission or admin/hr role."""
+        """Leave applied → notify direct manager (hierarchy) then HR/admin fallback."""
         now = datetime.now(timezone.utc)
+        approver_ids = []
+
+        # ── Step 1: hierarchy — find direct reporting manager ─────────────────
+        if employee_hrm_id:
+            emp_doc = await self.db.hrm_employees.find_one(
+                {"_id": employee_hrm_id, "is_deleted": False},
+                {"reporting_to": 1, "reporting_manager_id": 1},
+            )
+            if emp_doc:
+                manager_emp_id = emp_doc.get("reporting_manager_id") or emp_doc.get("reporting_to")
+                if manager_emp_id:
+                    mgr_emp = await self.db.hrm_employees.find_one(
+                        {"_id": manager_emp_id, "is_deleted": False},
+                        {"crm_user_id": 1},
+                    )
+                    if mgr_emp and mgr_emp.get("crm_user_id"):
+                        mgr_user_id = str(mgr_emp["crm_user_id"])
+                        if mgr_user_id != employee_user_id:
+                            approver_ids.append(mgr_user_id)
+
+        # ── Step 2: always also notify HR/admin approvers ─────────────────────
         cursor = self.db.users.find(
             {
                 "is_deleted": {"$ne": True},
@@ -1017,11 +1039,11 @@ class NotificationService:
             },
             {"_id": 1},
         )
-        approver_ids = []
         async for doc in cursor:
             uid = str(doc["_id"])
-            if uid != employee_user_id:
+            if uid != employee_user_id and uid not in approver_ids:
                 approver_ids.append(uid)
+
         if not approver_ids:
             return
         date_str = from_date if from_date == to_date else f"{from_date} – {to_date}"
