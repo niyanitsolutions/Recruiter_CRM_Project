@@ -141,6 +141,14 @@ export default function AttendanceBanner() {
   const elapsedHours = elapsed / 3600
   const workHoursDisplay = checkedOut ? record.work_hours : elapsedHours
 
+  const bannerStyle = checkedOut
+    ? { background: 'var(--bg-card-alt)', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }
+    : onBreak
+    ? { background: 'var(--bg-warning)', color: 'var(--text-warning)', borderBottom: '1px solid var(--border)' }
+    : checkedIn
+    ? { background: 'var(--bg-success)', color: 'var(--text-success)', borderBottom: '1px solid var(--border)' }
+    : { background: 'var(--bg-danger)', color: 'var(--text-danger)', borderBottom: '1px solid var(--border)' }
+
   return (
     <>
       <PunchInModal
@@ -151,12 +159,7 @@ export default function AttendanceBanner() {
         employeeId={employeeId}
       />
 
-      <div className={`w-full px-4 py-2 flex items-center gap-4 text-sm transition-colors ${
-        checkedOut   ? 'bg-gray-100 text-gray-600' :
-        onBreak      ? 'bg-amber-50 text-amber-800 border-b border-amber-200' :
-        checkedIn    ? 'bg-green-50 text-green-800 border-b border-green-200' :
-                       'bg-red-50 text-red-800 border-b border-red-200'
-      }`}>
+      <div className="w-full px-4 py-2 flex items-center gap-4 text-sm transition-colors" style={bannerStyle}>
         <Clock className="w-4 h-4 flex-shrink-0" />
 
         {checkedOut ? (
@@ -174,17 +177,20 @@ export default function AttendanceBanner() {
             <div className="ml-auto flex items-center gap-2">
               {!onBreak ? (
                 <button onClick={handleStartBreak} disabled={loading}
-                  className="flex items-center gap-1 px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200 text-xs font-medium">
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium"
+                  style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>
                   <Coffee className="w-3.5 h-3.5" /> Break
                 </button>
               ) : (
                 <button onClick={handleEndBreak} disabled={loading}
-                  className="flex items-center gap-1 px-2 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200 text-xs font-medium">
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium"
+                  style={{ background: 'var(--bg-success)', color: 'var(--text-success)' }}>
                   <Clock className="w-3.5 h-3.5" /> End Break
                 </button>
               )}
               <button onClick={handlePunchOut} disabled={loading}
-                className="flex items-center gap-1 px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 text-xs font-medium">
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium"
+                style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
                 {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
                 Punch Out
               </button>
@@ -194,7 +200,8 @@ export default function AttendanceBanner() {
           <>
             <span>You haven't punched in today.</span>
             <button onClick={() => setShowModal(true)}
-              className="ml-auto flex items-center gap-1 px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700 text-xs font-semibold">
+              className="ml-auto flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold text-white"
+              style={{ background: 'var(--accent)' }}>
               <Clock className="w-3.5 h-3.5" /> Punch In
             </button>
           </>

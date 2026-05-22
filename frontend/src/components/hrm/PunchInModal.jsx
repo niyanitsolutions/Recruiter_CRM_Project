@@ -59,7 +59,8 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn, 
   return (
     <ModalPortal isOpen={isOpen}>
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+        <div className="rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
+          style={{ background: 'var(--bg-card)' }}>
           {/* Header */}
           <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-5 text-white relative">
             <button onClick={onClose} className="absolute top-3 right-3 text-white/70 hover:text-white">
@@ -81,14 +82,19 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn, 
 
           {/* Work Mode */}
           <div className="p-5 space-y-4">
-            <p className="text-sm font-semibold text-gray-700">Where are you working from today?</p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>
+              Where are you working from today?
+            </p>
             <div className="grid grid-cols-2 gap-2">
               {WORK_MODES.map(m => (
                 <button
                   key={m.key}
                   onClick={() => setWorkMode(m.key)}
-                  className={`flex items-center gap-2 p-3 rounded-xl border-2 text-sm font-medium transition-all
-                    ${workMode === m.key ? m.color + ' border-current' : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300'}`}
+                  className="flex items-center gap-2 p-3 rounded-xl border-2 text-sm font-medium transition-all"
+                  style={workMode === m.key
+                    ? { borderColor: 'var(--accent)', background: 'var(--bg-info)', color: 'var(--text-link)' }
+                    : { borderColor: 'var(--border)', background: 'var(--bg-hover)', color: 'var(--text-secondary)' }
+                  }
                 >
                   <m.icon className="w-4 h-4" />
                   {m.label}
@@ -97,12 +103,16 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn, 
             </div>
 
             {/* Geo status */}
-            <div className="flex items-center gap-2 text-xs text-gray-500">
+            <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-muted)' }}>
               <MapPin className="w-3.5 h-3.5" />
               {geoLoading ? (
-                <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Detecting location…</span>
+                <span className="flex items-center gap-1">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Detecting location…
+                </span>
               ) : geo ? (
-                <span className="text-green-600">Location captured ({geo.accuracy ? Math.round(geo.accuracy) + 'm accuracy' : 'OK'})</span>
+                <span style={{ color: 'var(--text-success)' }}>
+                  Location captured ({geo.accuracy ? Math.round(geo.accuracy) + 'm accuracy' : 'OK'})
+                </span>
               ) : (
                 <span>Location not available</span>
               )}
@@ -111,12 +121,17 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn, 
             <button
               onClick={handlePunchIn}
               disabled={loading}
-              className="w-full btn-primary py-3 text-base font-semibold flex items-center justify-center gap-2"
+              className="w-full py-3 text-base font-semibold flex items-center justify-center gap-2 rounded-xl text-white transition-opacity disabled:opacity-60"
+              style={{ background: 'var(--accent)' }}
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
               {loading ? 'Punching In…' : 'Punch In'}
             </button>
-            <button onClick={onDismiss ?? onClose} className="w-full text-sm text-gray-400 hover:text-gray-600">
+            <button
+              onClick={onDismiss ?? onClose}
+              className="w-full text-sm"
+              style={{ color: 'var(--text-muted)' }}
+            >
               Remind me later
             </button>
           </div>
