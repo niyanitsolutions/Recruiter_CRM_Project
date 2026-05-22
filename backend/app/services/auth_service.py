@@ -545,6 +545,23 @@ class AuthService:
         user_id    = str(user.get("_id") or user.get("id", ""))
         _user_type = "partner" if role_name == "partner" else user.get("user_type", "internal")
 
+        # ── HRM employee link — auto-resolve if missing from user doc ─────────
+        # Partners never get employee profiles; all other internal users may have
+        # one linked via hrm_sync. If hrm_employee_id is absent, do a reverse
+        # lookup by crm_user_id so the banner shows on first login after sync.
+        hrm_employee_id = user.get("hrm_employee_id")
+        if not hrm_employee_id and _user_type != "partner":
+            linked_emp = await company_db.hrm_employees.find_one(
+                {"crm_user_id": user_id, "is_deleted": False},
+                {"_id": 1},
+            )
+            if linked_emp:
+                hrm_employee_id = str(linked_emp["_id"])
+                await company_db.users.update_one(
+                    {"_id": user.get("_id") or user.get("id")},
+                    {"$set": {"hrm_employee_id": hrm_employee_id}},
+                )
+
         # ── Session + tokens ──────────────────────────────────────────────────
         await AuthService._revoke_sessions(user_id)
 
@@ -561,7 +578,7 @@ class AuthService:
             "designation":  user.get("designation", ""),
             "department_id": user.get("department_id"),
             "reporting_to": user.get("reporting_to"),
-            "hrm_employee_id": user.get("hrm_employee_id"),
+            "hrm_employee_id": hrm_employee_id,
             # Module flags — CRM + HRM always active for all tenants
             "crm_enabled":  True,
             "hrm_enabled":  True,
@@ -637,7 +654,7 @@ class AuthService:
             "must_change_password": bool(user.get("must_change_password", False)),
             "profile_completed":    bool(user.get("profile_completed", True)),
             # HRM employee link
-            "hrm_employee_id": user.get("hrm_employee_id"),
+            "hrm_employee_id": hrm_employee_id,
             # Module flags — CRM + HRM always active for all tenants
             "crm_enabled": True,
             "hrm_enabled": True,
@@ -1119,6 +1136,21 @@ class AuthService:
             effective_perms = await _resolve_effective_permissions(user, role_doc, db=company_db)
 
             _user_type = "partner" if role_name == "partner" else user.get("user_type", "internal")
+
+            # Auto-resolve hrm_employee_id — if not on user doc, check hrm_employees
+            hrm_employee_id = user.get("hrm_employee_id")
+            if not hrm_employee_id and _user_type != "partner":
+                linked_emp = await company_db.hrm_employees.find_one(
+                    {"crm_user_id": str(user_id), "is_deleted": False},
+                    {"_id": 1},
+                )
+                if linked_emp:
+                    hrm_employee_id = str(linked_emp["_id"])
+                    await company_db.users.update_one(
+                        {"_id": user.get("_id") or user_id},
+                        {"$set": {"hrm_employee_id": hrm_employee_id}},
+                    )
+
             token_data = {
                 "sub": str(user_id),
                 "company_id": company_id,
@@ -1132,7 +1164,7 @@ class AuthService:
                 "designation": user.get("designation", ""),
                 "department_id": user.get("department_id"),
                 "reporting_to": user.get("reporting_to"),
-                "hrm_employee_id": user.get("hrm_employee_id"),
+                "hrm_employee_id": hrm_employee_id,
             }
 
         access_token = create_access_token(token_data)

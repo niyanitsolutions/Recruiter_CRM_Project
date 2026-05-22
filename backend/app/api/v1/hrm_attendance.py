@@ -26,7 +26,8 @@ async def check_in(
     _perm=Depends(require_permissions(["hrm:attendance:self"])),
 ):
     emp_id = data.employee_id or cu.get("hrm_employee_id") or cu["id"]
-    client_ip = data.client_ip or request.client.host
+    forwarded = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    client_ip = data.client_ip or forwarded or (request.client.host if request.client else None)
     try:
         return await AttendanceService(db).check_in(
             employee_id=emp_id,
