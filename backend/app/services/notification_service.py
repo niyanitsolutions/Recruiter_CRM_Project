@@ -112,12 +112,14 @@ class NotificationService:
         
         skip = (page - 1) * page_size
         cursor = self.notifications_collection.find(query).sort("created_at", -1).skip(skip).limit(page_size)
+        import logging as _logging
+        _log = _logging.getLogger(__name__)
         items = []
         async for doc in cursor:
             try:
                 items.append(NotificationResponse(**doc))
-            except Exception:
-                pass
+            except Exception as _e:
+                _log.warning("NotificationResponse parse error (doc id=%s): %s", doc.get("id") or doc.get("_id"), _e)
         
         import math
         return NotificationListResponse(
@@ -674,6 +676,7 @@ class NotificationService:
                 "id": str(ObjectId()),
                 "company_id": company_id,
                 "user_id": hr_id,
+                "user_type": "user",
                 "type": "hrm_user_created",
                 "title": "New user added — create employee profile",
                 "message": f"{new_user_name} ({new_user_email}) was added as a CRM user. "
@@ -707,6 +710,7 @@ class NotificationService:
                 "id": str(ObjectId()),
                 "company_id": company_id,
                 "user_id": admin_id,
+                "user_type": "user",
                 "type": "hrm_emp_created",
                 "title": "New employee added — create user account",
                 "message": f"{employee_name} ({employee_email}) was added as an HRM employee. "
@@ -739,6 +743,7 @@ class NotificationService:
             "id": str(ObjectId()),
             "company_id": company_id,
             "user_id": user_id,
+            "user_type": "user",
             "type": "attendance_punch_in",
             "title": "Punch-in recorded",
             "message": f"You punched in at {check_in_time} ({work_mode.replace('_', ' ').title()}).",
@@ -769,6 +774,7 @@ class NotificationService:
             "id": str(ObjectId()),
             "company_id": company_id,
             "user_id": user_id,
+            "user_type": "user",
             "type": "attendance_punch_out",
             "title": "Punch-out recorded",
             "message": f"Work day complete. Total time: {duration}.",
@@ -875,6 +881,7 @@ class NotificationService:
                 "id": str(ObjectId()),
                 "company_id": company_id,
                 "user_id": uid,
+                "user_type": "user",
                 "type": "announcement",
                 "title": f"📢 {title}",
                 "message": f"{created_by_name}: {short_body}",
@@ -932,6 +939,7 @@ class NotificationService:
                 "id": str(ObjectId()),
                 "company_id": company_id,
                 "user_id": uid,
+                "user_type": "user",
                 "type": "seat_limit_reached",
                 "title": "User Seat Limit Reached",
                 "message": f"All {total_seats} user seats are occupied ({current_active} active). "
@@ -976,6 +984,7 @@ class NotificationService:
                 "id": str(ObjectId()),
                 "company_id": company_id,
                 "user_id": uid,
+                "user_type": "user",
                 "type": "subscription_expiry",
                 "title": "Subscription Expiring Soon",
                 "message": f"Your {plan_name} plan expires in {days_remaining} day"
@@ -1054,6 +1063,7 @@ class NotificationService:
                 "id": str(ObjectId()),
                 "company_id": company_id,
                 "user_id": uid,
+                "user_type": "user",
                 "type": "hrm_leave_applied",
                 "title": "New Leave Request",
                 "message": f"{employee_name} applied for {leave_label} leave ({date_str}). Action required.",
@@ -1094,6 +1104,7 @@ class NotificationService:
             "id": str(ObjectId()),
             "company_id": company_id,
             "user_id": employee_user_id,
+            "user_type": "user",
             "type": "hrm_leave_action",
             "title": f"Leave {action_word.title()}",
             "message": f"Your {leave_label} leave ({date_str}) has been {action_word}.",
@@ -1144,6 +1155,7 @@ class NotificationService:
                 "id": str(ObjectId()),
                 "company_id": company_id,
                 "user_id": uid,
+                "user_type": "user",
                 "type": "interview_scheduled",
                 "title": "Interview Scheduled",
                 "message": f"Interview scheduled for {candidate_name} — {job_title}"

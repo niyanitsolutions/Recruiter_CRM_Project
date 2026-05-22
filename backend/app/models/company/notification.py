@@ -284,7 +284,7 @@ class NotificationResponse(BaseModel):
     id: str
     company_id: str
     user_id: str
-    user_type: str
+    user_type: str = "user"
     type: NotificationType
     type_display: Optional[str] = None
     title: str
