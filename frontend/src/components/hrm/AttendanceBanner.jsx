@@ -1,10 +1,12 @@
 /**
  * AttendanceBanner — persistent top banner showing punch-in/out status.
- * Shows for HRM users who have an employee record.
- * Auto-polls today's record every 5 minutes and handles auto-punch-out at midnight.
+ * Shows for any user that has a linked employee profile (resolved server-side).
+ * Does NOT depend on hrmEmployeeId being in the JWT — uses /me/today endpoint
+ * which resolves the employee link via JWT → DB → email match.
+ * Auto-polls every 5 minutes and handles auto-punch-out at midnight.
  */
 import React, { useState, useEffect, useCallback } from 'react'
-import { Clock, Coffee, LogOut, Loader2, MapPin } from 'lucide-react'
+import { Clock, Coffee, LogOut, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
@@ -22,29 +24,42 @@ function formatDuration(hours) {
 
 export default function AttendanceBanner() {
   const user = useSelector(selectUser)
-  const [record,    setRecord]    = useState(null)
-  const [recordLoaded, setRecordLoaded] = useState(false)  // true once first API call completes
-  const [showModal, setShowModal] = useState(false)
-  const [loading,   setLoading]   = useState(false)
-  const [elapsed,   setElapsed]   = useState(0)            // seconds since check_in
 
-  const employeeId = user?.hrmEmployeeId
+  const [record,          setRecord]          = useState(null)
+  const [recordLoaded,    setRecordLoaded]    = useState(false)
+  const [resolvedEmpId,   setResolvedEmpId]   = useState(null)  // from /me/today response
+  const [showModal,       setShowModal]       = useState(false)
+  const [loading,         setLoading]         = useState(false)
+  const [elapsed,         setElapsed]         = useState(0)     // seconds since check_in
+
+  // Only internal users (non-partner) can have employee profiles
+  const isPartner = user?.userType === 'partner'
 
   const loadRecord = useCallback(async () => {
-    if (!employeeId) return
+    if (!user || isPartner) return
     try {
-      const res = await hrmService.getTodayAttendance(employeeId)
-      // Treat null, undefined, or empty object {} as "no record today"
+      const res = await hrmService.getMyTodayAttendance()
       const data = res.data
-      const hasRecord = data && typeof data === 'object' && Object.keys(data).length > 0
+
+      // null = no employee profile exists for this user
+      if (!data || typeof data !== 'object') {
+        setResolvedEmpId(null)
+        setRecord(null)
+        return
+      }
+
+      // Always store the resolved employee ID (present even when not punched in)
+      setResolvedEmpId(data.employee_id || null)
+
+      // An attendance record exists when check_in is set (or record has an id)
+      const hasRecord = !!(data.check_in || (data.id && data.id !== data.employee_id))
       setRecord(hasRecord ? data : null)
     } catch {
-      // On error treat as no record (allow punch-in to appear)
       setRecord(null)
     } finally {
       setRecordLoaded(true)
     }
-  }, [employeeId])
+  }, [user, isPartner])
 
   // Load on mount and every 5 minutes
   useEffect(() => {
@@ -53,7 +68,7 @@ export default function AttendanceBanner() {
     return () => clearInterval(id)
   }, [loadRecord])
 
-  // Live elapsed timer
+  // Live elapsed timer — ticks every minute while punched in
   useEffect(() => {
     if (!record?.check_in || record?.check_out) return
     const update = () => {
@@ -65,14 +80,13 @@ export default function AttendanceBanner() {
     return () => clearInterval(id)
   }, [record?.check_in, record?.check_out])
 
-  // Auto-show punch-in modal only AFTER the API call has confirmed no record today.
-  // Wait for recordLoaded=true to avoid showing the modal before we know the state.
+  // Auto-show punch-in modal only AFTER API confirms: employee exists + no record today
   useEffect(() => {
-    if (!employeeId || !recordLoaded) return  // wait for API response
-    if (record !== null) return               // already punched in
-    if (localStorage.getItem(DISMISS_KEY) === todayStr()) return  // dismissed today
+    if (!recordLoaded || !resolvedEmpId) return  // wait for API
+    if (record !== null) return                   // already has activity today
+    if (localStorage.getItem(DISMISS_KEY) === todayStr()) return
     setShowModal(true)
-  }, [employeeId, record, recordLoaded])
+  }, [recordLoaded, resolvedEmpId, record])
 
   const handleDismiss = () => {
     localStorage.setItem(DISMISS_KEY, todayStr())
@@ -93,19 +107,21 @@ export default function AttendanceBanner() {
     const msToMidnight = midnight.getTime() - now.getTime()
     const id = setTimeout(async () => {
       try {
-        await hrmService.checkOut({ employee_id: employeeId })
+        // Backend resolves employee_id from JWT/DB — no need to pass it
+        await hrmService.checkOut({})
         loadRecord()
         toast('Auto punch-out at midnight', { icon: '🌙' })
       } catch {}
     }, msToMidnight)
     return () => clearTimeout(id)
-  }, [record?.check_in, record?.check_out, employeeId])
+  }, [record?.check_in, record?.check_out])
 
   const handlePunchOut = async () => {
     setLoading(true)
     try {
       const geo = await getGeo()
-      await hrmService.checkOut({ employee_id: employeeId, ...geo })
+      // Backend resolves employee_id — only pass geo
+      await hrmService.checkOut({ ...geo })
       toast.success('Punched out. See you tomorrow!')
       loadRecord()
     } catch { toast.error('Punch out failed') }
@@ -115,7 +131,7 @@ export default function AttendanceBanner() {
   const handleStartBreak = async () => {
     setLoading(true)
     try {
-      await hrmService.startBreak({ employee_id: employeeId })
+      await hrmService.startBreak({})
       toast.success('Break started')
       loadRecord()
     } catch { toast.error('Failed') }
@@ -125,17 +141,18 @@ export default function AttendanceBanner() {
   const handleEndBreak = async () => {
     setLoading(true)
     try {
-      await hrmService.endBreak({ employee_id: employeeId })
+      await hrmService.endBreak({})
       toast.success('Break ended')
       loadRecord()
     } catch { toast.error('Failed') }
     setLoading(false)
   }
 
-  if (!employeeId) return null
+  // Hide if: not loaded yet, partner account, or no employee profile
+  if (!recordLoaded || isPartner || !resolvedEmpId) return null
 
-  const onBreak = record?.breaks?.length > 0 && !record.breaks[record.breaks.length - 1]?.end
-  const checkedIn = !!record?.check_in
+  const onBreak    = record?.breaks?.length > 0 && !record.breaks[record.breaks.length - 1]?.end
+  const checkedIn  = !!record?.check_in
   const checkedOut = !!record?.check_out
 
   const elapsedHours = elapsed / 3600
@@ -156,7 +173,6 @@ export default function AttendanceBanner() {
         onClose={() => setShowModal(false)}
         onDismiss={handleDismiss}
         onPunchedIn={handlePunchedIn}
-        employeeId={employeeId}
       />
 
       <div className="w-full px-4 py-2 flex items-center gap-4 text-sm transition-colors" style={bannerStyle}>

@@ -18,6 +18,8 @@ const checkIn = (data) => api.post(`${BASE}/attendance/check-in`, data)
 const checkOut = (data) => api.post(`${BASE}/attendance/check-out`, data)
 const startBreak = (data) => api.post(`${BASE}/attendance/break/start`, data)
 const endBreak = (data) => api.post(`${BASE}/attendance/break/end`, data)
+// Self-service: returns { employee_id, ...record } or null (no employee profile)
+const getMyTodayAttendance = () => api.get(`${BASE}/attendance/me/today`)
 const getTodayAttendance = (employeeId) => api.get(`${BASE}/attendance/today/${employeeId}`)
 const getMonthlyAttendance = (employeeId, year, month) =>
   api.get(`${BASE}/attendance/monthly/${employeeId}`, { params: { year, month } })
@@ -144,7 +146,7 @@ const getAnnouncements = listAnnouncements
 const hrmService = {
   getDashboardStats, getAttendanceTrend,
   listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee,
-  checkIn, checkOut, startBreak, endBreak, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance,
+  checkIn, checkOut, startBreak, endBreak, getMyTodayAttendance, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance,
   applyLeave, listLeaves, getLeave, leaveAction, getLeaveBalance,
   generatePayroll, listPayslips, listOwnPayslips, getPayslip, updatePayslipStatus, deletePayslip,
   createReview, listReviews, getReview, submitSelfReview, submitManagerReview, deleteReview,

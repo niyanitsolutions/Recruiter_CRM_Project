@@ -546,20 +546,38 @@ class AuthService:
         _user_type = "partner" if role_name == "partner" else user.get("user_type", "internal")
 
         # ── HRM employee link — auto-resolve if missing from user doc ─────────
-        # Partners never get employee profiles; all other internal users may have
-        # one linked via hrm_sync. If hrm_employee_id is absent, do a reverse
-        # lookup by crm_user_id so the banner shows on first login after sync.
+        # Three-path resolution so the banner shows even when the link was never
+        # written back to the user document (e.g. employee created before this fix,
+        # or email mismatch during auto-link at employee creation time).
         hrm_employee_id = user.get("hrm_employee_id")
         if not hrm_employee_id and _user_type != "partner":
+            import re as _re
+            # Path 1: reverse lookup by crm_user_id field on employee doc
             linked_emp = await company_db.hrm_employees.find_one(
                 {"crm_user_id": user_id, "is_deleted": False},
                 {"_id": 1},
             )
+            # Path 2: email-based match (handles employees with no crm_user_id set)
+            if not linked_emp:
+                _email = (user.get("email") or "").strip()
+                if _email:
+                    linked_emp = await company_db.hrm_employees.find_one(
+                        {
+                            "email": _re.compile(f"^{_re.escape(_email)}$", _re.IGNORECASE),
+                            "is_deleted": False,
+                        },
+                        {"_id": 1},
+                    )
             if linked_emp:
                 hrm_employee_id = str(linked_emp["_id"])
+                _raw_uid = user.get("_id") or user.get("id")
                 await company_db.users.update_one(
-                    {"_id": user.get("_id") or user.get("id")},
+                    {"_id": _raw_uid},
                     {"$set": {"hrm_employee_id": hrm_employee_id}},
+                )
+                await company_db.hrm_employees.update_one(
+                    {"_id": hrm_employee_id},
+                    {"$set": {"crm_user_id": user_id}},
                 )
 
         # ── Session + tokens ──────────────────────────────────────────────────
@@ -1137,18 +1155,34 @@ class AuthService:
 
             _user_type = "partner" if role_name == "partner" else user.get("user_type", "internal")
 
-            # Auto-resolve hrm_employee_id — if not on user doc, check hrm_employees
+            # Auto-resolve hrm_employee_id — three-path resolution (see _complete_company_login)
             hrm_employee_id = user.get("hrm_employee_id")
             if not hrm_employee_id and _user_type != "partner":
+                import re as _re
                 linked_emp = await company_db.hrm_employees.find_one(
                     {"crm_user_id": str(user_id), "is_deleted": False},
                     {"_id": 1},
                 )
+                if not linked_emp:
+                    _email = (user.get("email") or "").strip()
+                    if _email:
+                        linked_emp = await company_db.hrm_employees.find_one(
+                            {
+                                "email": _re.compile(f"^{_re.escape(_email)}$", _re.IGNORECASE),
+                                "is_deleted": False,
+                            },
+                            {"_id": 1},
+                        )
                 if linked_emp:
                     hrm_employee_id = str(linked_emp["_id"])
+                    _raw_uid = user.get("_id") or user_id
                     await company_db.users.update_one(
-                        {"_id": user.get("_id") or user_id},
+                        {"_id": _raw_uid},
                         {"$set": {"hrm_employee_id": hrm_employee_id}},
+                    )
+                    await company_db.hrm_employees.update_one(
+                        {"_id": hrm_employee_id},
+                        {"$set": {"crm_user_id": str(user_id)}},
                     )
 
             token_data = {

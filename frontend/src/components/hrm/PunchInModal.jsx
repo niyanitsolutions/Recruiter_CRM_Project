@@ -1,6 +1,7 @@
 /**
  * PunchInModal — shown once per day when the user hasn't punched in yet.
  * Captures work_mode + optional geo-location, then fires checkIn.
+ * Does NOT pass employee_id — the backend resolves it from JWT/DB/email.
  */
 import React, { useState, useEffect } from 'react'
 import { Clock, MapPin, Loader2, Wifi, Home, Building2, X } from 'lucide-react'
@@ -15,11 +16,11 @@ const WORK_MODES = [
   { key: 'field',  label: 'Field Work',   icon: MapPin,    color: 'text-orange-600 bg-orange-50 border-orange-200' },
 ]
 
-export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn, employeeId }) {
-  const [workMode, setWorkMode] = useState('office')
-  const [geo, setGeo]           = useState(null)
-  const [geoLoading, setGeoLoading] = useState(false)
-  const [loading, setLoading]   = useState(false)
+export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn }) {
+  const [workMode,    setWorkMode]    = useState('office')
+  const [geo,         setGeo]         = useState(null)
+  const [geoLoading,  setGeoLoading]  = useState(false)
+  const [loading,     setLoading]     = useState(false)
 
   useEffect(() => {
     if (!isOpen) return
@@ -40,10 +41,10 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn, 
   const handlePunchIn = async () => {
     setLoading(true)
     try {
+      // employee_id intentionally omitted — backend resolves via JWT → DB → email match
       await hrmService.checkIn({
-        employee_id: employeeId || null,
         work_mode: workMode,
-        latitude: geo?.latitude ?? null,
+        latitude:  geo?.latitude  ?? null,
         longitude: geo?.longitude ?? null,
       })
       toast.success('Punched in! Have a productive day.')
@@ -51,7 +52,7 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn, 
       onClose()
     } catch (err) {
       const msg = err?.response?.data?.detail || 'Failed to punch in'
-      toast.error(msg)
+      toast.error(typeof msg === 'string' ? msg : 'Failed to punch in')
     }
     setLoading(false)
   }
