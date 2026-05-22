@@ -42,8 +42,13 @@ async def get_employee(
     employee_id: str,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:employees:view"])),
 ):
+    # Allow users to read their own employee record (ESS use-case); otherwise require view perm
+    is_own = cu.get("hrm_employee_id") == employee_id
+    if not is_own:
+        perms = set(cu.get("permissions") or [])
+        if "hrm:employees:view" not in perms:
+            raise HTTPException(status_code=403, detail="Permission denied")
     emp = await EmployeeService(db).get(employee_id, cu["company_id"])
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
@@ -90,11 +95,12 @@ async def get_org_chart(
     )
     employees = await cursor.to_list(length=None)
 
-    # Build id → node dict
+    # Build id → node dict (string keys so reporting_manager_id comparisons work)
     nodes = {}
     for e in employees:
-        nodes[e["_id"]] = {
-            "id": e["_id"],
+        eid = str(e["_id"])
+        nodes[eid] = {
+            "id": eid,
             "employee_id": e.get("employee_id", ""),
             "name": e.get("full_name", ""),
             "designation": e.get("designation_name", ""),
@@ -108,8 +114,8 @@ async def get_org_chart(
     roots = []
     for node in nodes.values():
         mgr_id = node["reporting_manager_id"]
-        if mgr_id and mgr_id in nodes:
-            nodes[mgr_id]["children"].append(node)
+        if mgr_id and str(mgr_id) in nodes:
+            nodes[str(mgr_id)]["children"].append(node)
         else:
             roots.append(node)
 

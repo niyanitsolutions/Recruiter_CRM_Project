@@ -24,7 +24,8 @@
       "Bash(Select-Object -ExpandProperty Name)",
       "Bash(Get-ChildItem -Path \"d:\\\\crm-project\" -Recurse -Directory)",
       "Bash(Select-Object -ExpandProperty FullName)",
-      "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\\\\api\\\\v1\" -File)"
+      "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\\\\api\\\\v1\" -File)",
+      "Bash(Get-ChildItem \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\\\\\" -Name | Select-Object -First 30)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Users, Clock, Calendar, Banknote, Briefcase, UserCheck,
-  AlertCircle, RefreshCw, TrendingUp, Megaphone, Link2, Loader2,
+  AlertCircle, RefreshCw, TrendingUp, Megaphone, Link2, Loader2, DoorOpen,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import toast from 'react-hot-toast'
@@ -130,8 +130,9 @@ function SyncWidget() {
               </p>
               <div className="space-y-1">
                 {unlinkedUsers.map(u => (
-                  <div key={u.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 text-sm">
-                    <span className="text-gray-800">{u.full_name || u.email}</span>
+                  <div key={u.id} className="flex items-center justify-between rounded-lg px-3 py-2 text-sm"
+                       style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+                    <span style={{ color: 'var(--text-body)' }}>{u.full_name || u.email}</span>
                     <button
                       onClick={() => handleCreateEmployee(u.id)}
                       disabled={syncing === u.id}
@@ -153,8 +154,9 @@ function SyncWidget() {
               </p>
               <div className="space-y-1">
                 {unlinkedEmps.map(e => (
-                  <div key={e.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 text-sm">
-                    <span className="text-gray-800">{e.full_name || e.email}</span>
+                  <div key={e.id} className="flex items-center justify-between rounded-lg px-3 py-2 text-sm"
+                       style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+                    <span style={{ color: 'var(--text-body)' }}>{e.full_name || e.email}</span>
                     <button
                       onClick={() => handleCreateUser(e.id)}
                       disabled={syncing === e.id}
@@ -219,9 +221,11 @@ function OverviewTab() {
             <StatCard icon={AlertCircle} label="Absent Today"           value={stats?.absent_today}                                      color="red" />
             <StatCard icon={Clock}       label="Late Today"             value={stats?.late_today}                                        color="yellow" />
             <StatCard icon={Calendar}    label="On Leave Today"         value={stats?.on_leave_today}               to="/hrm/leaves"     color="purple" />
-            <StatCard icon={Calendar}    label="Pending Leave Req."     value={stats?.pending_leave_requests}       to="/hrm/leaves"     color="yellow" />
+            <StatCard icon={Calendar}    label="Pending Leave Req."     value={stats?.pending_leaves}               to="/hrm/leaves"     color="yellow" />
+            <StatCard icon={DoorOpen}    label="Pending Exits"          value={stats?.pending_exits}                to="/hrm/exit"       color="red" />
             <StatCard icon={Banknote}    label="Payroll This Month"     value={stats?.payroll_processed_this_month}                      color="indigo" />
             <StatCard icon={Briefcase}   label="Open Jobs"              value={stats?.open_jobs}                    to="/hrm/hiring"     color="blue" />
+            <StatCard icon={UserCheck}   label="In Pipeline"            value={stats?.candidates_in_pipeline}       to="/hrm/hiring"     color="purple" />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

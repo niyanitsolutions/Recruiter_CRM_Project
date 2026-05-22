@@ -210,6 +210,17 @@ async def create_user(
             total   = int(parts[1]) if len(parts) > 1 else 0
             current = int(parts[2]) if len(parts) > 2 else 0
             remaining = int(parts[3]) if len(parts) > 3 else 0
+            # Fire admin notification (best-effort, non-blocking)
+            try:
+                from app.services.notification_service import NotificationService
+                ns = NotificationService(db)
+                await ns.notify_seat_limit_reached(
+                    company_id=current_user["company_id"],
+                    total_seats=total,
+                    current_active=current,
+                )
+            except Exception:
+                pass
             raise HTTPException(
                 status_code=402,
                 detail={

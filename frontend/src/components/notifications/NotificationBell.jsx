@@ -106,7 +106,7 @@ const NotificationBell = () => {
       const data = await notificationService.getAll({ page: 1, page_size: 15 })
       const list = data.items || data.notifications || []
       setItems(list)
-      setUnread(list.filter(n => !n.is_read).length)
+      setUnread(data.unread_count ?? list.filter(n => !n.is_read).length)
     } catch {/* silent */}
     finally { setLoading(false) }
   }, [])

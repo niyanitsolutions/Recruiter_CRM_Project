@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, Suspense, lazy } from 'react'
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -147,6 +147,7 @@ const OrgChart           = lazy(() => import('./pages/hrm/OrgChart'))
 const DocumentVault      = lazy(() => import('./pages/hrm/DocumentVault'))
 const AssetManagement    = lazy(() => import('./pages/hrm/AssetManagement'))
 const ExitManagement     = lazy(() => import('./pages/hrm/ExitManagement'))
+const HRMSyncPanel       = lazy(() => import('./pages/hrm/HRMSyncPanel'))
 
 // Reports, Analytics, Imports, Exports, Targets, Audit
 const ReportsPage        = lazy(() => import('./pages/reports/ReportsPage'))
@@ -326,7 +327,7 @@ const Unauthorized = () => {
  * instead of a white screen.
  */
 class ErrorBoundary extends React.Component {
-  state = { hasError: false }
+  state = { hasError: false, errorPath: null }
 
   static getDerivedStateFromError() {
     return { hasError: true }
@@ -336,25 +337,45 @@ class ErrorBoundary extends React.Component {
     console.error('App render error:', error, info)
   }
 
+  componentDidUpdate(prevProps) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false })
+    }
+  }
+
   render() {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-surface-50">
           <div className="text-center p-8">
             <h1 className="text-4xl font-bold text-surface-300 mb-4">Something went wrong</h1>
-            <p className="text-surface-500 mb-6">An unexpected error occurred. Please refresh the page.</p>
-            <a
-              href="/login"
-              className="inline-block px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-            >
-              Return to Login
-            </a>
+            <p className="text-surface-500 mb-6">An unexpected error occurred. Please try navigating to another page.</p>
+            <div className="flex items-center justify-center gap-3">
+              <button
+                onClick={() => this.setState({ hasError: false })}
+                className="inline-block px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+              >
+                Try Again
+              </button>
+              <a
+                href="/dashboard"
+                className="inline-block px-6 py-3 border border-primary-500 text-primary-500 rounded-lg hover:bg-primary-50 transition-colors"
+              >
+                Go to Dashboard
+              </a>
+            </div>
           </div>
         </div>
       )
     }
     return this.props.children
   }
+}
+
+// Wraps ErrorBoundary so it resets automatically when the URL changes
+const LocationAwareErrorBoundary = ({ children }) => {
+  const { pathname } = useLocation()
+  return <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
 }
 
 // ─── Force Password Change Modal ─────────────────────────────────────────────
@@ -830,7 +851,7 @@ function App() {
   useFavicon()             // imperatively enforce favicon on every page/route
 
   return (
-    <ErrorBoundary>
+    <LocationAwareErrorBoundary>
     <AuthInitializer>
     <SessionManager />
     <ForcePasswordModal />
@@ -1134,6 +1155,7 @@ function App() {
         <Route path="/hrm/documents"           element={<PermissionRoute permission="hrm:employees:view"><DocumentVault /></PermissionRoute>} />
         <Route path="/hrm/assets"              element={<PermissionRoute permission="hrm:assets:view"><AssetManagement /></PermissionRoute>} />
         <Route path="/hrm/exit"                element={<PermissionRoute permission="hrm:exit:manage"><ExitManagement /></PermissionRoute>} />
+        <Route path="/hrm/sync"                element={<PermissionRoute permission="hrm:employees:manage"><HRMSyncPanel /></PermissionRoute>} />
       </Route>
 
       {/* DEFAULT */}
@@ -1150,7 +1172,7 @@ function App() {
     </Routes>
     </Suspense>
     </AuthInitializer>
-    </ErrorBoundary>
+    </LocationAwareErrorBoundary>
   )
 }
 

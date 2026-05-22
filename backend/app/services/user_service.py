@@ -903,25 +903,27 @@ class UserService:
     
     async def get_dashboard_stats(self) -> Dict:
         """Get user statistics for admin dashboard"""
-        total = await self.collection.count_documents({"is_deleted": False})
-        active = await self.collection.count_documents({"is_deleted": False, "status": "active"})
-        inactive = await self.collection.count_documents({"is_deleted": False, "status": "inactive"})
-        suspended = await self.collection.count_documents({"is_deleted": False, "status": "suspended"})
-        
-        # Users by role
+        # Exclude partner users to match the Users page which only shows internal users
+        internal_filter = {"is_deleted": False, "user_type": {"$in": ["internal", None]}}
+        total = await self.collection.count_documents(internal_filter)
+        active = await self.collection.count_documents({**internal_filter, "status": "active"})
+        inactive = await self.collection.count_documents({**internal_filter, "status": "inactive"})
+        suspended = await self.collection.count_documents({**internal_filter, "status": "suspended"})
+
+        # Users by role (internal only)
         role_pipeline = [
-            {"$match": {"is_deleted": False}},
+            {"$match": internal_filter},
             {"$group": {"_id": "$role", "count": {"$sum": 1}}}
         ]
         role_stats = {}
         async for doc in self.collection.aggregate(role_pipeline):
             role_stats[doc["_id"]] = doc["count"]
-        
+
         # Recently logged in (last 24 hours)
         from datetime import timedelta
         day_ago = datetime.now(timezone.utc) - timedelta(days=1)
         logged_in_today = await self.collection.count_documents({
-            "is_deleted": False,
+            **internal_filter,
             "last_login": {"$gte": day_ago}
         })
         

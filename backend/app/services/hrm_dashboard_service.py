@@ -49,8 +49,7 @@ class HRMDashboardService:
 
         pending_exits = await exit_col.count_documents({
             "company_id": company_id,
-            "status": {"$in": ["pending", "in_progress"]},
-            "is_deleted": False,
+            "status": {"$in": ["submitted", "in_notice", "in_progress"]},
         })
 
         payroll_this_month = await payslip_col.count_documents({

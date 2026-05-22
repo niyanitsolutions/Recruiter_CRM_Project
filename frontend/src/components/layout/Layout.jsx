@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
+import { usePermissions } from '../../hooks/usePermissions'
 import SideNav from './SideNav'
 import TopBar from './TopBar'
 import GlobalSearch from '../common/GlobalSearch'
@@ -14,7 +15,8 @@ const Layout = ({ title, subtitle, actions }) => {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const user = useSelector(selectUser)
-  const showAttendanceBanner = !!(user?.hrmEmployeeId)
+  const { has } = usePermissions()
+  const showAttendanceBanner = !!(user?.hrmEmployeeId) && has('hrm:attendance:self')
 
   // Global Ctrl+K / Cmd+K shortcut
   useEffect(() => {

@@ -313,6 +313,7 @@ class NotificationListResponse(BaseModel):
     unread_count: int
     page: int
     page_size: int
+    pages: int = 1
 
 
 # ============== Notification Preferences ==============

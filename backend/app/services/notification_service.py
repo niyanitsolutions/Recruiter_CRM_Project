@@ -119,12 +119,14 @@ class NotificationService:
             except Exception:
                 pass
         
+        import math
         return NotificationListResponse(
             items=items,
             total=total,
             unread_count=unread_count,
             page=page,
-            page_size=page_size
+            page_size=page_size,
+            pages=max(1, math.ceil(total / page_size)) if page_size > 0 else 1,
         )
     
     async def mark_as_read(
@@ -890,6 +892,104 @@ class NotificationService:
                 "is_deleted": False,
             }
             for uid in target_user_ids
+        ]
+        if docs:
+            await self.notifications_collection.insert_many(docs)
+
+    async def notify_seat_limit_reached(
+        self,
+        company_id: str,
+        total_seats: int,
+        current_active: int,
+    ) -> None:
+        """Seat limit hit — notify all admin/owner users once per day (deduplicated)."""
+        now = datetime.now(timezone.utc)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        # Skip if already sent today for this company
+        existing = await self.notifications_collection.find_one({
+            "company_id": company_id,
+            "type": "seat_limit_reached",
+            "created_at": {"$gte": today_start},
+        })
+        if existing:
+            return
+        cursor = self.db.users.find(
+            {
+                "is_deleted": {"$ne": True},
+                "user_type": {"$ne": "partner"},
+                "$or": [{"role": "admin"}, {"is_owner": True}],
+            },
+            {"_id": 1},
+        )
+        admin_ids = []
+        async for doc in cursor:
+            admin_ids.append(str(doc["_id"]))
+        if not admin_ids:
+            return
+        docs = [
+            {
+                "_id": str(ObjectId()),
+                "id": str(ObjectId()),
+                "company_id": company_id,
+                "user_id": uid,
+                "type": "seat_limit_reached",
+                "title": "User Seat Limit Reached",
+                "message": f"All {total_seats} user seats are occupied ({current_active} active). "
+                           "Upgrade your plan to add more users.",
+                "channels": ["in_app"],
+                "channel_status": {"in_app": "delivered"},
+                "is_read": False,
+                "priority": "high",
+                "action_url": "/upgrade-plan",
+                "created_at": now,
+                "updated_at": now,
+                "is_deleted": False,
+            }
+            for uid in admin_ids
+        ]
+        if docs:
+            await self.notifications_collection.insert_many(docs)
+
+    async def notify_subscription_expiry(
+        self,
+        company_id: str,
+        days_remaining: int,
+        plan_name: str,
+        admin_user_ids: List[str],
+    ) -> None:
+        """Subscription expiring soon — notify admins (deduped: once per day)."""
+        now = datetime.now(timezone.utc)
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        existing = await self.notifications_collection.find_one({
+            "company_id": company_id,
+            "type": "subscription_expiry",
+            "created_at": {"$gte": today_start},
+        })
+        if existing:
+            return
+        if not admin_user_ids:
+            return
+        urgency = "high" if days_remaining <= 3 else "medium"
+        docs = [
+            {
+                "_id": str(ObjectId()),
+                "id": str(ObjectId()),
+                "company_id": company_id,
+                "user_id": uid,
+                "type": "subscription_expiry",
+                "title": "Subscription Expiring Soon",
+                "message": f"Your {plan_name} plan expires in {days_remaining} day"
+                           f"{'s' if days_remaining != 1 else ''}. Renew to avoid service interruption.",
+                "channels": ["in_app"],
+                "channel_status": {"in_app": "delivered"},
+                "is_read": False,
+                "priority": urgency,
+                "action_url": "/upgrade-plan",
+                "created_at": now,
+                "updated_at": now,
+                "is_deleted": False,
+            }
+            for uid in admin_user_ids
         ]
         if docs:
             await self.notifications_collection.insert_many(docs)

@@ -511,11 +511,28 @@ class AuthService:
         if plan_expiry:
             if plan_expiry.tzinfo is None:
                 plan_expiry = plan_expiry.replace(tzinfo=timezone.utc)
-            if datetime.now(timezone.utc) > plan_expiry:
+            now_utc = datetime.now(timezone.utc)
+            if now_utc > plan_expiry:
                 is_owner  = user.get("is_owner", False)
                 expiry_str = plan_expiry.isoformat()
                 prefix = "SUBSCRIPTION_EXPIRED_OWNER" if is_owner else "SUBSCRIPTION_EXPIRED_USER"
                 return None, f"{prefix}|{expiry_str}|Your subscription has expired. Please upgrade your plan to continue."
+            # Warn admins/owners when expiry is within 7 days
+            days_left = (plan_expiry - now_utc).days
+            if days_left <= 7 and (user.get("is_owner") or user.get("role") == "admin"):
+                try:
+                    company_id_early = tenant.get("company_id")
+                    company_db_early = get_company_db(company_id_early)
+                    from app.services.notification_service import NotificationService
+                    ns = NotificationService(company_db_early)
+                    await ns.notify_subscription_expiry(
+                        company_id=company_id_early,
+                        days_remaining=days_left,
+                        plan_name=tenant.get("plan_display_name") or tenant.get("plan_name", "Current"),
+                        admin_user_ids=[str(user.get("_id") or user.get("id", ""))],
+                    )
+                except Exception:
+                    pass
 
         # ── Permission resolution ─────────────────────────────────────────────
         company_id  = tenant.get("company_id")

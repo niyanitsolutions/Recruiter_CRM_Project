@@ -35,6 +35,7 @@ const getLeaveBalance = (employeeId, year) =>
 // ── Payroll ────────────────────────────────────────────────────────────────
 const generatePayroll = (data) => api.post(`${BASE}/payroll/generate`, data)
 const listPayslips = (params) => api.get(`${BASE}/payroll`, { params })
+const listOwnPayslips = (params) => api.get(`${BASE}/payroll/self`, { params })
 const getPayslip = (id) => api.get(`${BASE}/payroll/${id}`)
 const updatePayslipStatus = (id, data) => api.patch(`${BASE}/payroll/${id}/status`, data)
 const deletePayslip = (id) => api.delete(`${BASE}/payroll/${id}`)
@@ -142,7 +143,7 @@ const hrmService = {
   listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee,
   checkIn, checkOut, startBreak, endBreak, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance,
   applyLeave, listLeaves, getLeave, leaveAction, getLeaveBalance,
-  generatePayroll, listPayslips, getPayslip, updatePayslipStatus, deletePayslip,
+  generatePayroll, listPayslips, listOwnPayslips, getPayslip, updatePayslipStatus, deletePayslip,
   createReview, listReviews, getReview, submitSelfReview, submitManagerReview, deleteReview,
   createAnnouncement, listAnnouncements, getAnnouncement, updateAnnouncement, deleteAnnouncement,
   markAnnouncementRead, getAnnouncementReadStats,

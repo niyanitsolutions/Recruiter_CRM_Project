@@ -39,6 +39,7 @@ import {
   Package,
   DoorOpen,
   LayoutGrid,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType } from '../../store/authSlice'
@@ -117,6 +118,9 @@ const PERMISSION_NAV_MAP = [
   // Exit Management
   { permissions: ['hrm:exit:manage', 'hrm:exit:view'],
     path: '/hrm/exit',                 icon: DoorOpen,        label: 'Exit Management', section: 'HRM', hrmOnly: true },
+  // User ↔ Employee Sync
+  { permissions: ['hrm:employees:manage'],
+    path: '/hrm/sync',                 icon: ArrowLeftRight,  label: 'User Sync',       section: 'HRM', hrmOnly: true },
 ]
 
 /**

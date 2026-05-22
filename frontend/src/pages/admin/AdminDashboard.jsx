@@ -119,7 +119,9 @@ const PeriodFilter = ({ value, onChange }) => (
 // ── Format trend data ─────────────────────────────────────────────────────────
 const formatTrendData = (raw) => {
   if (!raw) return []
-  const items = Array.isArray(raw) ? raw : (raw.data || raw.items || [])
+  const items = Array.isArray(raw)
+    ? raw
+    : (raw.daily_activity || raw.data || raw.items || [])
   if (!Array.isArray(items)) return []
   return items.map(item => ({
     label: item.date
@@ -436,13 +438,13 @@ const AdminDashboard = () => {
       label: 'Users Without Employee Profile',
       count: syncStatus.unlinked_users,
       names: syncPreview?.unlinked_users || [],
-      color: '#4FACFE', icon: Users2, path: '/hrm/employees',
+      color: '#4FACFE', icon: Users2, path: '/hrm/sync',
     },
     syncStatus?.unlinked_employees > 0 && {
       label: 'Employees Without User Account',
       count: syncStatus.unlinked_employees,
       names: syncPreview?.unlinked_employees || [],
-      color: '#38F9D7', icon: UserPlus, path: '/hrm/employees',
+      color: '#38F9D7', icon: UserPlus, path: '/hrm/sync',
     },
   ].filter(Boolean)
 

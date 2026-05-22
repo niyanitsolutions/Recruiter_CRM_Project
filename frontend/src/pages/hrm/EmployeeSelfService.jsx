@@ -165,7 +165,7 @@ function PayslipsTab({ employeeId }) {
   const [loading, setLoading]   = useState(true)
 
   useEffect(() => {
-    hrmService.listPayslips({ page_size: 24 })
+    hrmService.listOwnPayslips({ page_size: 24 })
       .then(r => setPayslips(r.data.items || []))
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -205,7 +205,7 @@ function LeaveTab({ employeeId }) {
   const [total, setTotal]       = useState(0)
   const [loading, setLoading]   = useState(true)
   const [showApply, setShowApply] = useState(false)
-  const [form, setForm]         = useState({ leave_type: 'casual', start_date: '', end_date: '', reason: '' })
+  const [form, setForm]         = useState({ leave_type: 'casual', from_date: '', to_date: '', reason: '' })
   const [saving, setSaving]     = useState(false)
 
   const load = async () => {
@@ -264,13 +264,13 @@ function LeaveTab({ employeeId }) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium text-gray-700">From</label>
-                <input type="date" className="input w-full mt-1" value={form.start_date}
-                  onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} required />
+                <input type="date" className="input w-full mt-1" value={form.from_date}
+                  onChange={e => setForm(f => ({ ...f, from_date: e.target.value }))} required />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">To</label>
-                <input type="date" className="input w-full mt-1" value={form.end_date}
-                  onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} required />
+                <input type="date" className="input w-full mt-1" value={form.to_date}
+                  onChange={e => setForm(f => ({ ...f, to_date: e.target.value }))} required />
               </div>
             </div>
             <div>
@@ -297,7 +297,7 @@ function LeaveTab({ employeeId }) {
               <div>
                 <p className="font-medium text-gray-800 capitalize">{l.leave_type?.replace('_', ' ')} Leave</p>
                 <p className="text-xs text-gray-500">
-                  {new Date(l.start_date).toLocaleDateString('en-IN')} – {new Date(l.end_date).toLocaleDateString('en-IN')}
+                  {new Date(l.from_date).toLocaleDateString('en-IN')} – {new Date(l.to_date).toLocaleDateString('en-IN')}
                   {l.total_days ? ` · ${l.total_days} day${l.total_days > 1 ? 's' : ''}` : ''}
                 </p>
                 {l.reason && <p className="text-xs text-gray-500 mt-0.5">{l.reason}</p>}
