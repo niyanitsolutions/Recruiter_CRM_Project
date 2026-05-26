@@ -1,9 +1,17 @@
 """HRM Sync API — User ↔ Employee bidirectional linking"""
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
+from pydantic import BaseModel
 
 from app.core.dependencies import get_company_db, require_permissions
 from app.services.hrm_sync_service import HRMSyncService
+
+
+class UserToEmployeeBody(BaseModel):
+    full_name: Optional[str] = None
+    department: Optional[str] = None
+    designation_name: Optional[str] = None
+    phone: Optional[str] = None
 
 router = APIRouter(prefix="/hrm/sync", tags=["HRM - Sync"])
 
@@ -79,15 +87,18 @@ async def employee_to_user(
 @router.post("/user-to-employee/{user_id}")
 async def user_to_employee(
     user_id: str,
+    body: Optional[UserToEmployeeBody] = None,
     current_user: dict = Depends(require_permissions(["hrm:employees:manage", "users:view"])),
     db=Depends(get_company_db),
 ):
     """Create an employee record from a CRM user and link them."""
     svc = HRMSyncService(db)
+    extra = body.model_dump(exclude_none=True) if body else None
     return await svc.sync_user_to_employee(
         user_id=user_id,
         company_id=current_user["company_id"],
         created_by=current_user["id"],
+        extra_fields=extra or None,
     )
 
 

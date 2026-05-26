@@ -1,4 +1,5 @@
 """HRM — Asset Management API"""
+import re as _re
 from datetime import datetime, timezone
 from typing import Optional
 import uuid
@@ -74,6 +75,42 @@ async def list_assets(
     cursor = db.hrm_assets.find(query).sort("created_at", -1).skip(skip).limit(page_size)
     items = await cursor.to_list(length=page_size)
     return {"items": [_serial(i) for i in items], "total": total, "page": page, "page_size": page_size}
+
+
+@router.get("/me")
+async def get_my_assets(
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:attendance:self"])),
+):
+    """Return assets assigned to the calling user's linked employee record."""
+    emp_id = cu.get("hrm_employee_id")
+    if not emp_id:
+        user_doc = await db.users.find_one(
+            {"_id": cu["id"]}, {"hrm_employee_id": 1, "email": 1}
+        )
+        if user_doc:
+            emp_id = user_doc.get("hrm_employee_id")
+            if not emp_id:
+                user_email = (user_doc.get("email") or "").strip()
+                if user_email:
+                    emp_doc = await db.hrm_employees.find_one(
+                        {
+                            "email": _re.compile(f"^{_re.escape(user_email)}$", _re.IGNORECASE),
+                            "company_id": cu["company_id"],
+                            "is_deleted": False,
+                        },
+                        {"_id": 1},
+                    )
+                    if emp_doc:
+                        emp_id = str(emp_doc["_id"])
+    if not emp_id:
+        return {"items": [], "total": 0}
+    query = {"company_id": cu["company_id"], "assigned_to_id": emp_id, "is_deleted": False}
+    total = await db.hrm_assets.count_documents(query)
+    cursor = db.hrm_assets.find(query).sort("created_at", -1)
+    items = await cursor.to_list(length=100)
+    return {"items": [_serial(i) for i in items], "total": total}
 
 
 @router.get("/{asset_id}")

@@ -96,6 +96,7 @@ const uploadDocument = (employeeId, formData) =>
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 const getDocuments = (employeeId) => api.get(`${BASE}/documents/${employeeId}`)
+const getMyDocuments = () => api.get(`${BASE}/documents/me`)
 const getAllDocuments = (params) => api.get(`${BASE}/documents/all`, { params })
 const deleteDocument = (employeeId, docIndex) =>
   api.delete(`${BASE}/documents/${employeeId}/${docIndex}`)
@@ -107,6 +108,7 @@ const getOrgChart = () => api.get(`${BASE}/employees/org-chart/tree`)
 
 // ── Assets ─────────────────────────────────────────────────────────────────
 const createAsset = (data) => api.post(`${BASE}/assets`, data)
+const getMyAssets = () => api.get(`${BASE}/assets/me`)
 const listAssets = (params) => api.get(`${BASE}/assets`, { params })
 const getAsset = (id) => api.get(`${BASE}/assets/${id}`)
 const updateAsset = (id, data) => api.put(`${BASE}/assets/${id}`, data)
@@ -129,7 +131,7 @@ const getSyncUnlinkedPreview = (limit = 5) => api.get(`${BASE}/sync/unlinked-pre
 const getUnlinkedUsers = (params) => api.get(`${BASE}/sync/unlinked-users`, { params })
 const getUnlinkedEmployees = (params) => api.get(`${BASE}/sync/unlinked-employees`, { params })
 const syncEmployeeToUser = (employeeId, params) => api.post(`${BASE}/sync/employee-to-user/${employeeId}`, null, { params })
-const syncUserToEmployee = (userId) => api.post(`${BASE}/sync/user-to-employee/${userId}`)
+const syncUserToEmployee = (userId, data = null) => api.post(`${BASE}/sync/user-to-employee/${userId}`, data)
 const linkUserEmployee = (userId, employeeId) => api.post(`${BASE}/sync/link`, null, { params: { user_id: userId, employee_id: employeeId } })
 const unlinkUserEmployee = (userId) => api.delete(`${BASE}/sync/unlink/${userId}`)
 
@@ -157,13 +159,13 @@ const hrmService = {
   createInterview, listInterviews, submitInterviewFeedback,
   createOffer, listOffers, getOffer, respondOffer,
   createOnboarding, listOnboardings, getOnboarding, updateOnboarding, completeOnboarding,
-  uploadDocument, getDocuments, getAllDocuments, deleteDocument, updateDocumentMeta,
+  uploadDocument, getDocuments, getMyDocuments, getAllDocuments, deleteDocument, updateDocumentMeta,
   getAnnouncements,
   getSyncStatus, getSyncUnlinkedPreview, getUnlinkedUsers, getUnlinkedEmployees,
   syncEmployeeToUser, syncUserToEmployee, linkUserEmployee, unlinkUserEmployee,
   createTemplate, listTemplates, getTemplate, updateTemplate, deleteTemplate, generateFromTemplate,
   getOrgChart,
-  createAsset, listAssets, getAsset, updateAsset, deleteAsset, assignAsset, returnAsset,
+  createAsset, getMyAssets, listAssets, getAsset, updateAsset, deleteAsset, assignAsset, returnAsset,
   createExitRequest, listExitRequests, getExitRequest, updateExitRequest, updateExitStatus,
   toggleChecklistItem, cancelExitRequest,
 }

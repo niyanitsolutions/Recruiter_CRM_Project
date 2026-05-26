@@ -1,21 +1,26 @@
 /**
- * Employee Self-Service portal — profile, attendance, payslips, leave apply
+ * Employee Self-Service portal — profile, attendance, payslips, leave, documents, assets.
+ * Employee ID is resolved dynamically via /me/today (server-side), NOT from JWT.
+ * This ensures the portal works even when the JWT was issued before employee linking.
  */
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
 import {
   User, Clock, Calendar, Banknote, Plus, UserX,
+  Loader2, FolderOpen, Package, FileText, Download,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
 import ModalPortal from '../../components/common/ModalPortal'
 
 const TABS = [
-  { key: 'profile',    label: 'My Profile', icon: User },
-  { key: 'attendance', label: 'Attendance',  icon: Clock },
-  { key: 'payslips',   label: 'Payslips',    icon: Banknote },
-  { key: 'leaves',     label: 'Leave',       icon: Calendar },
+  { key: 'profile',    label: 'My Profile',  icon: User },
+  { key: 'attendance', label: 'Attendance',   icon: Clock },
+  { key: 'payslips',   label: 'Payslips',     icon: Banknote },
+  { key: 'leaves',     label: 'Leave',        icon: Calendar },
+  { key: 'documents',  label: 'Documents',    icon: FolderOpen },
+  { key: 'assets',     label: 'Assets',       icon: Package },
 ]
 
 const STATUS_COLORS = {
@@ -33,6 +38,10 @@ const STATUS_COLORS = {
   cancelled:{ bg: 'rgba(139,143,168,0.15)', color: '#8B8FA8' },
   paid:     { bg: 'rgba(67,233,123,0.15)',  color: '#43E97B' },
   draft:    { bg: 'rgba(245,158,11,0.15)',  color: '#F59E0B' },
+  active:   { bg: 'rgba(67,233,123,0.15)',  color: '#43E97B' },
+  assigned: { bg: 'rgba(79,172,254,0.15)',  color: '#4FACFE' },
+  returned: { bg: 'rgba(139,143,168,0.15)', color: '#8B8FA8' },
+  available:{ bg: 'rgba(67,233,123,0.10)',  color: '#10b981' },
 }
 
 function StatusBadge({ status }) {
@@ -121,16 +130,16 @@ function AttendanceTab({ employeeId }) {
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
 
-  const load = () => {
+  const load = useCallback(() => {
     if (!employeeId) { setLoading(false); return }
     setLoading(true)
     hrmService.getMonthlyAttendance(employeeId, year, month)
       .then(r => setRecords(Array.isArray(r.data) ? r.data : []))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }
+  }, [year, month, employeeId])
 
-  useEffect(() => { load() }, [year, month, employeeId])
+  useEffect(() => { load() }, [load])
 
   const summary = records.reduce((acc, r) => {
     acc[r.status] = (acc[r.status] || 0) + 1
@@ -160,7 +169,6 @@ function AttendanceTab({ employeeId }) {
         </select>
       </div>
 
-      {/* Summary chips */}
       {Object.entries(summary).length > 0 && (
         <div className="flex flex-wrap gap-2">
           {Object.entries(summary).map(([status, count]) => (
@@ -211,7 +219,7 @@ function PayslipsTab() {
 
   useEffect(() => {
     hrmService.listOwnPayslips({ page_size: 24 })
-      .then(r => setPayslips(r.data.items || []))
+      .then(r => setPayslips(r.data?.items || r.data || []))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
@@ -255,18 +263,18 @@ function LeaveTab({ employeeId }) {
   const [form, setForm]           = useState({ leave_type: 'casual', from_date: '', to_date: '', reason: '' })
   const [saving, setSaving]       = useState(false)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!employeeId) { setLoading(false); return }
     setLoading(true)
     try {
       const res = await hrmService.listLeaves({ employee_id: employeeId, page_size: 20 })
-      setLeaves(res.data.items || [])
-      setTotal(res.data.total || 0)
+      setLeaves(res.data?.items || [])
+      setTotal(res.data?.total || 0)
     } catch {/* silent */}
     setLoading(false)
-  }
+  }, [employeeId])
 
-  useEffect(() => { load() }, [employeeId])
+  useEffect(() => { load() }, [load])
 
   const handleApply = async (e) => {
     e.preventDefault()
@@ -386,12 +394,169 @@ function LeaveTab({ employeeId }) {
   )
 }
 
+// ── Documents Tab ─────────────────────────────────────────────────────────────
+
+function DocumentsTab() {
+  const [docs, setDocs]     = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    hrmService.getMyDocuments()
+      .then(r => setDocs(r.data?.documents || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const DOC_ICONS = {
+    pdf:  { bg: 'rgba(255,71,87,0.12)',  color: '#FF4757' },
+    image:{ bg: 'rgba(79,172,254,0.12)', color: '#4FACFE' },
+    doc:  { bg: 'rgba(67,233,123,0.12)', color: '#43E97B' },
+  }
+
+  const docIconType = (url = '') => {
+    const ext = url.split('.').pop()?.toLowerCase()
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return 'image'
+    if (ext === 'pdf') return 'pdf'
+    return 'doc'
+  }
+
+  if (loading) return (
+    <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading…</div>
+  )
+
+  return (
+    <div className="p-6 space-y-3">
+      {docs.length === 0 ? (
+        <div className="py-10 flex flex-col items-center gap-3" style={{ color: 'var(--text-muted)' }}>
+          <FolderOpen className="w-10 h-10 opacity-30" />
+          <p className="text-sm">No documents uploaded yet</p>
+        </div>
+      ) : docs.map((doc, idx) => {
+        const iconType = docIconType(doc.file_url)
+        const cfg = DOC_ICONS[iconType]
+        return (
+          <div
+            key={idx}
+            className="flex items-center gap-3 p-3 rounded-xl"
+            style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)' }}
+          >
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: cfg.bg }}
+            >
+              <FileText className="w-5 h-5" style={{ color: cfg.color }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate" style={{ color: 'var(--text-body)' }}>
+                {doc.doc_name || 'Document'}
+              </p>
+              <p className="text-xs capitalize mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                {doc.doc_type?.replace(/_/g, ' ')}
+                {doc.uploaded_at ? ` · ${new Date(doc.uploaded_at).toLocaleDateString('en-IN')}` : ''}
+              </p>
+            </div>
+            {doc.file_url && (
+              <a
+                href={doc.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-shrink-0 p-2 rounded-lg transition-colors"
+                style={{ color: 'var(--text-muted)' }}
+                title="Download"
+              >
+                <Download className="w-4 h-4" />
+              </a>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Assets Tab ────────────────────────────────────────────────────────────────
+
+function AssetsTab() {
+  const [assets, setAssets]   = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    hrmService.getMyAssets()
+      .then(r => setAssets(r.data?.items || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return (
+    <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading…</div>
+  )
+
+  return (
+    <div className="p-6 space-y-3">
+      {assets.length === 0 ? (
+        <div className="py-10 flex flex-col items-center gap-3" style={{ color: 'var(--text-muted)' }}>
+          <Package className="w-10 h-10 opacity-30" />
+          <p className="text-sm">No assets assigned to you</p>
+        </div>
+      ) : assets.map(asset => (
+        <div
+          key={asset.id}
+          className="flex items-center gap-3 p-3 rounded-xl"
+          style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)' }}
+        >
+          <div
+            className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(124,58,237,0.12)' }}
+          >
+            <Package className="w-5 h-5" style={{ color: '#7c3aed' }} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate" style={{ color: 'var(--text-body)' }}>
+              {asset.brand ? `${asset.brand} ${asset.model_name || ''}` : (asset.asset_tag || 'Asset')}
+            </p>
+            <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
+              {asset.asset_type?.replace(/_/g, ' ')}
+              {asset.asset_tag ? ` · ${asset.asset_tag}` : ''}
+            </p>
+          </div>
+          <StatusBadge status={asset.status} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function EmployeeSelfService() {
-  const user       = useSelector(selectUser)
-  const employeeId = user?.hrmEmployeeId
+  const user = useSelector(selectUser)
   const [activeTab, setActiveTab] = useState('profile')
+
+  // Resolved employee ID — may come from JWT (fast path) or server-side resolution
+  const [employeeId, setEmployeeId] = useState(user?.hrmEmployeeId || null)
+  const [resolving, setResolving]   = useState(!user?.hrmEmployeeId)
+  const [noEmployee, setNoEmployee] = useState(false)
+
+  useEffect(() => {
+    // If we already have the ID from JWT, skip the API call
+    if (user?.hrmEmployeeId) {
+      setEmployeeId(user.hrmEmployeeId)
+      setResolving(false)
+      return
+    }
+    // Resolve server-side: works even when JWT was issued before employee linking
+    hrmService.getMyTodayAttendance()
+      .then(res => {
+        const empId = res.data?.employee_id
+        if (empId) {
+          setEmployeeId(empId)
+        } else {
+          setNoEmployee(true)
+        }
+      })
+      .catch(() => setNoEmployee(true))
+      .finally(() => setResolving(false))
+  }, [user?.hrmEmployeeId])
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -400,7 +565,15 @@ export default function EmployeeSelfService() {
         <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Employee Self-Service</p>
       </div>
 
-      {!employeeId ? (
+      {resolving ? (
+        <div
+          className="rounded-2xl p-10 flex items-center justify-center gap-3"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+        >
+          <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--accent)' }} />
+          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading your profile…</span>
+        </div>
+      ) : noEmployee || !employeeId ? (
         <div
           className="rounded-2xl p-10 flex flex-col items-center justify-center text-center"
           style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
@@ -412,7 +585,7 @@ export default function EmployeeSelfService() {
             <UserX className="w-8 h-8" style={{ color: '#F59E0B' }} />
           </div>
           <h2 className="text-lg font-semibold mb-2" style={{ color: 'var(--text-heading)' }}>
-            Employee Profile Not Available
+            Employee Profile Not Linked
           </h2>
           <p className="text-sm max-w-sm" style={{ color: 'var(--text-muted)' }}>
             Your account is not linked to an employee profile yet. Please contact your HR administrator.
@@ -424,12 +597,12 @@ export default function EmployeeSelfService() {
           style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
         >
           {/* Tabs */}
-          <div className="flex border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex border-b overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
             {TABS.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative"
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative flex-shrink-0"
                 style={{
                   color: activeTab === tab.key ? 'var(--text-link)' : 'var(--text-muted)',
                   background: 'transparent',
@@ -451,8 +624,10 @@ export default function EmployeeSelfService() {
 
           {activeTab === 'profile'    && <ProfileTab    employeeId={employeeId} />}
           {activeTab === 'attendance' && <AttendanceTab  employeeId={employeeId} />}
-          {activeTab === 'payslips'   && <PayslipsTab    employeeId={employeeId} />}
+          {activeTab === 'payslips'   && <PayslipsTab />}
           {activeTab === 'leaves'     && <LeaveTab       employeeId={employeeId} />}
+          {activeTab === 'documents'  && <DocumentsTab />}
+          {activeTab === 'assets'     && <AssetsTab />}
         </div>
       )}
     </div>

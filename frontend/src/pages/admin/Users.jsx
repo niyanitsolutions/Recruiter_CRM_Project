@@ -574,6 +574,7 @@ const Users = () => {
         role: searchParams.get('role') || undefined,
         status: activeTab === 'inactive' ? 'inactive' : 'active',
         department_id: searchParams.get('department_id') || undefined,
+        user_type: 'internal',
       }
       const response = await userService.getUsers(params)
       setUsers(response.data || [])
