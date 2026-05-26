@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, Component } from 'react'
 import { Link } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import {
@@ -27,6 +27,26 @@ import KpiCard from '../../components/dashboard/KpiCard'
 import HiringTrend from '../../components/dashboard/HiringTrend'
 import PunchInModal from '../../components/hrm/PunchInModal'
 import { formatDateTime } from '../../utils/format'
+
+// ── Per-widget error boundary — prevents one broken widget crashing the page ──
+class WidgetErrorBoundary extends Component {
+  state = { hasError: false }
+  static getDerivedStateFromError() { return { hasError: true } }
+  componentDidCatch(err) { console.error('[Dashboard widget error]', err) }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div
+          className="rounded-2xl p-5 flex flex-col items-center justify-center gap-2"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)', minHeight: 120 }}
+        >
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Widget unavailable</p>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 const ATTEND_DISMISS_KEY = 'attendance_modal_dismissed'
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -652,6 +672,7 @@ const AdminDashboard = () => {
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* 9 STAT KPI CARDS — with sparklines                                     */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <WidgetErrorBoundary>
       {(() => {
         // Sparkline data: use real activity trend values; flat structural line if no data yet
         const sparkVals = trendData.length > 1
@@ -783,10 +804,12 @@ const AdminDashboard = () => {
           </div>
         )
       })()}
+      </WidgetErrorBoundary>
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* MIDDLE ROW — Pipeline | Interviews | AI Assistant | Pending Approvals  */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <WidgetErrorBoundary>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
 
         {/* Hiring Pipeline */}
@@ -1048,10 +1071,12 @@ const AdminDashboard = () => {
         </Card>
 
       </div>
+      </WidgetErrorBoundary>
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* LOWER ROW — Top Recruiters | Source Analytics | Activity | Health     */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <WidgetErrorBoundary>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
 
         {/* Top Recruiters */}
@@ -1267,10 +1292,12 @@ const AdminDashboard = () => {
         </Card>
 
       </div>
+      </WidgetErrorBoundary>
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* BOTTOM ROW — Recent Activity | Announcements                           */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <WidgetErrorBoundary>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Recent Activity */}
@@ -1375,6 +1402,7 @@ const AdminDashboard = () => {
         </Card>
 
       </div>
+      </WidgetErrorBoundary>
 
       {/* ── Upgrade Modal ─────────────────────────────────────────────────────── */}
       <UpgradeSeatsModal

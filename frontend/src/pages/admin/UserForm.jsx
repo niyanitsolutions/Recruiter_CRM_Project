@@ -99,7 +99,7 @@ const DEPT_TO_ROLE = {
   admin:                'admin',
   client_coordinator:   'client_coordinator',
   candidate_coordinator:'candidate_coordinator',
-  recruiter:            'candidate_coordinator',
+  recruiter:            'recruiter',
   hr:                   'hr',
   accounts:             'accounts',
   partner:              'partner',
@@ -109,6 +109,7 @@ const ROLE_TO_DEPT = {
   admin:                'admin',
   client_coordinator:   'client_coordinator',
   candidate_coordinator:'candidate_coordinator',
+  recruiter:            'recruiter',
   hr:                   'hr',
   accounts:             'accounts',
   partner:              'partner',
@@ -122,7 +123,8 @@ function guessDeptFromName(name) {
   if (/account|finance|billing|payment/.test(n)) return 'accounts'
   if (/hr|human.?resource/.test(n)) return 'hr'
   if (/client|sales|business.?dev|bd/.test(n)) return 'client_coordinator'
-  if (/recruit|talent|candidate|sourcing/.test(n)) return 'candidate_coordinator'
+  if (/recruit|talent|sourcing/.test(n)) return 'recruiter'
+  if (/candidate/.test(n)) return 'candidate_coordinator'
   if (/admin|management|operation/.test(n)) return 'admin'
   return ''
 }

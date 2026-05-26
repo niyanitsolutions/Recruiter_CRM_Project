@@ -20,6 +20,7 @@ class UserStatus(str, Enum):
 class UserRole(str, Enum):
     """System-defined user roles"""
     ADMIN = "admin"
+    RECRUITER = "recruiter"
     CANDIDATE_COORDINATOR = "candidate_coordinator"
     CLIENT_COORDINATOR = "client_coordinator"
     HR = "hr"
@@ -399,6 +400,18 @@ ROLE_PERMISSIONS = {
         "hrm:assets:view", "hrm:assets:manage",
         "hrm:exit:view", "hrm:exit:manage",
     ],
+    "recruiter": [
+        "dashboard:view",
+        "candidates:view", "candidates:create", "candidates:edit", "candidates:delete", "candidates:assign",
+        "interviews:view", "interviews:schedule", "interviews:update_status",
+        "interview_settings:view",
+        "jobs:view", "jobs:create", "jobs:edit",
+        "clients:view",
+        "onboards:view", "reports:view",
+        "tasks:view", "tasks:create", "tasks:edit",
+        "hrm:attendance:self", "hrm:leave:apply", "hrm:payroll:view_self",
+        "hrm:performance:self", "hrm:announcements:view", "notifications:view",
+    ],
     "candidate_coordinator": [
         "dashboard:view",
         "clients:view",
@@ -486,6 +499,7 @@ ROLE_PERMISSIONS = {
 # Role display names
 ROLE_DISPLAY_NAMES = {
     UserRole.ADMIN.value: "Administrator",
+    UserRole.RECRUITER.value: "Recruiter",
     UserRole.CANDIDATE_COORDINATOR.value: "Candidate Coordinator",
     UserRole.CLIENT_COORDINATOR.value: "Client Coordinator",
     UserRole.HR.value: "HR",

@@ -12,6 +12,7 @@ class SystemRole(str, Enum):
     """System-defined roles (cannot be deleted)"""
     OWNER = "owner"                                   # Company owner — full access within subscription
     ADMIN = "admin"
+    RECRUITER = "recruiter"                           # Recruitment specialist — candidates + jobs
     CANDIDATE_COORDINATOR = "candidate_coordinator"
     CLIENT_COORDINATOR = "client_coordinator"
     HR = "hr"
@@ -304,6 +305,20 @@ ROLE_DEFAULT_PERMISSIONS = {
     SystemRole.ADMIN: _CRM_ADMIN_BASE + _HRM_FULL,
 
     # ── CRM specialist roles ──────────────────────────────────────────────────
+
+    SystemRole.RECRUITER: [
+        Permission.DASHBOARD_VIEW,
+        Permission.CANDIDATES_VIEW, Permission.CANDIDATES_CREATE,
+        Permission.CANDIDATES_EDIT, Permission.CANDIDATES_DELETE, Permission.CANDIDATES_ASSIGN,
+        Permission.INTERVIEWS_VIEW, Permission.INTERVIEWS_SCHEDULE, Permission.INTERVIEWS_UPDATE_STATUS,
+        Permission.INTERVIEW_SETTINGS_VIEW,
+        Permission.JOBS_VIEW, Permission.JOBS_CREATE, Permission.JOBS_EDIT,
+        Permission.CLIENTS_VIEW,
+        Permission.ONBOARDS_VIEW,
+        Permission.REPORTS_VIEW,
+        Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
+        *_HRM_ESS_MINIMUM,
+    ],
 
     SystemRole.CANDIDATE_COORDINATOR: [
         Permission.DASHBOARD_VIEW,
