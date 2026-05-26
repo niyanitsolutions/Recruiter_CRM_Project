@@ -9,6 +9,7 @@ import {
   initAuth, setProfileCompleted, clearForcePasswordChange, refreshToken, logoutUser,
 } from './store/authSlice'
 import { useAutoLogout } from './hooks/useAutoLogout'
+import { MY_PORTAL_ALLOWED_ROLES } from './config/portalConfig'
 import { useSessionWebSocket } from './hooks/useSessionWebSocket'
 import { useFavicon } from './hooks/useFavicon'
 import api from './services/api'
@@ -259,7 +260,7 @@ const CompanyRoute = ({ children, allowedRoles = [] }) => {
  * showUnauthorized=true → render an inline "Access Denied" page instead of
  * silently redirecting (useful for routes the user can navigate TO manually).
  */
-const PermissionRoute = ({ children, permission, showUnauthorized = false }) => {
+const PermissionRoute = ({ children, permission, allowedRoles, showUnauthorized = false }) => {
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const isSuperAdmin   = useSelector(selectIsSuperAdmin)
   const user           = useSelector(selectUser)
@@ -273,6 +274,15 @@ const PermissionRoute = ({ children, permission, showUnauthorized = false }) => 
 
   // Partners have their own route block — skip checks inside partner routes
   if (userType === 'partner') return children
+
+  // Role-based gate (used for My Portal and similar routes)
+  if (allowedRoles) {
+    if (!allowedRoles.includes(userRole)) {
+      if (showUnauthorized) return <Unauthorized />
+      return <Navigate to={getDefaultRoute(userRole, user?.permissions, userType)} replace />
+    }
+    return children
+  }
 
   // Enforce permission
   const permissionSet = new Set(user?.permissions || [])
@@ -1150,7 +1160,7 @@ function App() {
         <Route path="/hrm/hiring/offers"       element={<PermissionRoute permission="hrm:hiring:view"><HROffer /></PermissionRoute>} />
         <Route path="/hrm/hiring/onboarding"   element={<PermissionRoute permission="hrm:hiring:view"><HROnboarding /></PermissionRoute>} />
         <Route path="/hrm/offer-templates"     element={<PermissionRoute permission="hrm:offer_templates:view"><OfferTemplates /></PermissionRoute>} />
-        <Route path="/hrm/ess"                 element={<PermissionRoute permission="hrm:attendance:self"><EmployeeSelfService /></PermissionRoute>} />
+        <Route path="/hrm/ess"                 element={<PermissionRoute allowedRoles={MY_PORTAL_ALLOWED_ROLES}><EmployeeSelfService /></PermissionRoute>} />
         <Route path="/hrm/org-chart"           element={<PermissionRoute permission="hrm:employees:view"><OrgChart /></PermissionRoute>} />
         <Route path="/hrm/documents"           element={<PermissionRoute permission="hrm:employees:view"><DocumentVault /></PermissionRoute>} />
         <Route path="/hrm/assets"              element={<PermissionRoute permission="hrm:assets:view"><AssetManagement /></PermissionRoute>} />
