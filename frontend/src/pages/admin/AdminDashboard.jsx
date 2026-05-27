@@ -679,7 +679,6 @@ const AdminDashboard = () => {
               setAttendanceDismissed(false)
               setShowDashPunchIn(false)
             }}
-            employeeId={user?.hrmEmployeeId}
           />
           <div
             className="flex items-center gap-3 px-5 py-3 rounded-2xl"

@@ -27,7 +27,12 @@
       "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\\\\api\\\\v1\" -File)",
       "Bash(Get-ChildItem \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\\\\\" -Name | Select-Object -First 30)",
       "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\\\\services\\\\\" -File | Select-Object -ExpandProperty Name)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(Get-Content \"d:\\\\crm-project\\\\backend\\\\migrations\\\\*\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-String -Pattern \"attendance\")",
+      "Bash(Get-Content \"d:\\\\crm-project\\\\backend\\\\app\\\\main.py\")",
+      "Bash(Select-String -Pattern \"attendance|auto_checkout\" -Context 3)",
+      "Bash(python3 -c ' *)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

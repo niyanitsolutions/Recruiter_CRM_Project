@@ -12,6 +12,17 @@ OVERTIME_THRESHOLD_HOURS = 9.0   # work_hours > this → count overtime
 MIDNIGHT_AUTO_CHECKOUT_HOUR = 0  # auto-checkout triggers at midnight
 
 
+def _today_dt() -> datetime:
+    """Return today's date as a naive datetime at midnight.
+
+    PyMongo 4.x cannot encode Python datetime.date objects — only datetime.datetime.
+    Using midnight naive datetime ensures consistent date-keyed queries and inserts.
+    Naive (no tzinfo) matches what Motor stores/returns for date fields.
+    """
+    d = date.today()
+    return datetime(d.year, d.month, d.day)
+
+
 class AttendanceService:
     COL = "hrm_attendance"
     EMP_COL = "hrm_employees"
@@ -45,8 +56,12 @@ class AttendanceService:
         if not doc:
             return {}
         doc["id"] = str(doc.pop("_id", ""))
-        if isinstance(doc.get("date"), date):
-            doc["date"] = doc["date"].isoformat()
+        # date field may be stored as datetime (midnight) or date — normalize to ISO string
+        date_val = doc.get("date")
+        if isinstance(date_val, datetime):
+            doc["date"] = date_val.strftime("%Y-%m-%d")
+        elif isinstance(date_val, date):
+            doc["date"] = date_val.isoformat()
         return doc
 
     async def _get_employee(self, emp_id: str, company_id: str) -> Optional[dict]:
@@ -72,8 +87,8 @@ class AttendanceService:
         geo_city: Optional[str] = None,
         geo_country: Optional[str] = None,
     ) -> dict:
-        today = date.today()
-        now = datetime.now(timezone.utc)
+        today = _today_dt()  # naive datetime at midnight — PyMongo 4.x requires datetime, not date
+        now = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC — Motor returns naive datetimes
         existing = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
         if existing and existing.get("check_in"):
             return self._serialize(existing)
@@ -133,7 +148,7 @@ class AttendanceService:
         if crm_user_id:
             try:
                 from app.services.notification_service import NotificationService
-                check_in_str = now.astimezone().strftime("%I:%M %p")
+                check_in_str = now.strftime("%I:%M %p")
                 await NotificationService(self.db).notify_punch_in(
                     company_id=company_id,
                     user_id=crm_user_id,
@@ -159,8 +174,8 @@ class AttendanceService:
         geo_country: Optional[str] = None,
         auto: bool = False,
     ) -> dict:
-        today = date.today()
-        now = datetime.now(timezone.utc)
+        today = _today_dt()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC — Motor returns naive datetimes
         record = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
         if not record or record.get("check_out"):
             return self._serialize(record) if record else {}
@@ -223,8 +238,8 @@ class AttendanceService:
     # ── Break Tracking ────────────────────────────────────────────────────────
 
     async def start_break(self, employee_id: str, company_id: str, reason: str = "") -> dict:
-        today = date.today()
-        now = datetime.now(timezone.utc)
+        today = _today_dt()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC — Motor returns naive datetimes
         record = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
         if not record or not record.get("check_in") or record.get("check_out"):
             return {}
@@ -238,8 +253,8 @@ class AttendanceService:
         return self._serialize(record)
 
     async def end_break(self, employee_id: str, company_id: str) -> dict:
-        today = date.today()
-        now = datetime.now(timezone.utc)
+        today = _today_dt()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC — Motor returns naive datetimes
         record = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
         if not record:
             return {}
@@ -262,7 +277,7 @@ class AttendanceService:
 
     async def auto_checkout_all(self, company_id: str) -> int:
         """Punch out all employees who are still checked in at midnight."""
-        today = date.today()
+        today = _today_dt()
         cursor = self.col.find({
             "company_id": company_id,
             "date": today,
@@ -283,12 +298,12 @@ class AttendanceService:
     # ── Read queries ──────────────────────────────────────────────────────────
 
     async def get_today(self, employee_id: str, company_id: str) -> Optional[dict]:
-        doc = await self.col.find_one({"employee_id": employee_id, "date": date.today(), "company_id": company_id})
+        doc = await self.col.find_one({"employee_id": employee_id, "date": _today_dt(), "company_id": company_id})
         return self._serialize(doc) if doc else None
 
     async def get_monthly(self, employee_id: str, company_id: str, year: int, month: int) -> List[dict]:
-        start = date(year, month, 1)
-        end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        start = datetime(year, month, 1)
+        end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
         cursor = self.col.find({
             "employee_id": employee_id,
             "company_id": company_id,
@@ -297,13 +312,21 @@ class AttendanceService:
         return [self._serialize(d) async for d in cursor]
 
     async def get_team_today(self, company_id: str) -> List[dict]:
-        cursor = self.col.find({"company_id": company_id, "date": date.today()})
+        cursor = self.col.find({"company_id": company_id, "date": _today_dt()})
         return [self._serialize(d) async for d in cursor]
 
     async def manual_update(self, company_id: str, update_data: dict) -> dict:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC — Motor returns naive datetimes
         emp_id = update_data["employee_id"]
-        d = update_data["date"]
+        raw_d = update_data["date"]
+        # Normalize to naive midnight datetime so PyMongo 4.x can encode it
+        if isinstance(raw_d, datetime):
+            d = raw_d.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        elif isinstance(raw_d, date):
+            d = datetime(raw_d.year, raw_d.month, raw_d.day)
+        else:
+            d = raw_d
+        update_data["date"] = d
         update_data["updated_at"] = now
         update_data["company_id"] = company_id
         existing = await self.col.find_one({"employee_id": emp_id, "date": d, "company_id": company_id})
@@ -319,13 +342,13 @@ class AttendanceService:
     async def count_present_today(self, company_id: str) -> int:
         return await self.col.count_documents({
             "company_id": company_id,
-            "date": date.today(),
+            "date": _today_dt(),
             "status": {"$in": [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.WORK_FROM_HOME]},
         })
 
     async def count_late_today(self, company_id: str) -> int:
         return await self.col.count_documents({
             "company_id": company_id,
-            "date": date.today(),
+            "date": _today_dt(),
             "is_late": True,
         })

@@ -1,4 +1,5 @@
 """HRM — Attendance API Routes"""
+import logging
 import re as _re
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -9,6 +10,8 @@ from app.models.company.attendance import (
     CheckInRequest, CheckOutRequest, ManualAttendanceUpdate, BreakRequest
 )
 from app.services.attendance_service import AttendanceService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/hrm/attendance", tags=["HRM - Attendance"])
 
@@ -110,7 +113,11 @@ async def get_me_today(
     emp_id = await _resolve_emp_id_optional(cu, db)
     if not emp_id:
         return None
-    record = await AttendanceService(db).get_today(emp_id, cu["company_id"])
+    try:
+        record = await AttendanceService(db).get_today(emp_id, cu["company_id"])
+    except Exception as e:
+        logger.error("get_today failed for employee %s: %s", emp_id, e, exc_info=True)
+        record = None
     return {"employee_id": emp_id, **(record or {})}
 
 
@@ -142,6 +149,9 @@ async def check_in(
         )
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        logger.error("Attendance check-in failed for employee %s: %s", emp_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Attendance check-in failed. Please try again.")
 
 
 # ── Punch Out ─────────────────────────────────────────────────────────────────

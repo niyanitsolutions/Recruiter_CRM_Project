@@ -1,6 +1,19 @@
 """HRM — Dashboard Service"""
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 from typing import Optional
+
+
+def _today_dt() -> datetime:
+    """Return today's date as naive midnight datetime — PyMongo 4.x requires datetime, not date."""
+    d = date.today()
+    return datetime(d.year, d.month, d.day)
+
+
+def _date_to_dt(d: date) -> datetime:
+    """Convert any date/datetime to naive midnight datetime for MongoDB queries."""
+    if isinstance(d, datetime):
+        return d.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    return datetime(d.year, d.month, d.day)
 
 
 class HRMDashboardService:
@@ -8,9 +21,10 @@ class HRMDashboardService:
         self.db = db
 
     async def get_stats(self, company_id: str) -> dict:
-        today = date.today()
-        month = today.month
-        year = today.year
+        today = _today_dt()
+        today_date = date.today()
+        month = today_date.month
+        year = today_date.year
 
         emp_col = self.db["hrm_employees"]
         att_col = self.db["hrm_attendance"]
@@ -35,11 +49,14 @@ class HRMDashboardService:
             "is_late": True,
         })
 
+        # Leave date fields may be stored as string ("YYYY-MM-DD"), date, or datetime.
+        # Use string comparison for portability — isoformat gives "YYYY-MM-DD" which sorts correctly.
+        today_str = today_date.isoformat()
         on_leave_today = await leave_col.count_documents({
             "company_id": company_id,
             "status": "approved",
-            "from_date": {"$lte": today},
-            "to_date": {"$gte": today},
+            "from_date": {"$lte": today_str},
+            "to_date": {"$gte": today_str},
         })
 
         pending_leaves = await leave_col.count_documents({
@@ -89,21 +106,21 @@ class HRMDashboardService:
         }
 
     async def get_attendance_trend(self, company_id: str, days: int = 7) -> list:
-        from datetime import timedelta
         att_col = self.db["hrm_attendance"]
-        today = date.today()
+        today_date = date.today()
         result = []
         for i in range(days - 1, -1, -1):
-            d = today - timedelta(days=i)
+            raw_d = today_date - timedelta(days=i)
+            d_dt = _date_to_dt(raw_d)
             present = await att_col.count_documents({
                 "company_id": company_id,
-                "date": d,
+                "date": d_dt,
                 "status": {"$in": ["present", "late"]},
             })
             late = await att_col.count_documents({
                 "company_id": company_id,
-                "date": d,
+                "date": d_dt,
                 "is_late": True,
             })
-            result.append({"date": d.isoformat(), "present": present, "late": late})
+            result.append({"date": raw_d.isoformat(), "present": present, "late": late})
         return result

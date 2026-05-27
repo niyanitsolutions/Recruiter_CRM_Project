@@ -55,6 +55,9 @@ export default function AttendanceBanner() {
       const hasRecord = !!(data.check_in || (data.id && data.id !== data.employee_id))
       setRecord(hasRecord ? data : null)
     } catch {
+      // API failed — fall back to JWT employee ID so banner still shows
+      const fallbackEmpId = user?.hrmEmployeeId || null
+      setResolvedEmpId(prev => prev || fallbackEmpId)
       setRecord(null)
     } finally {
       setRecordLoaded(true)

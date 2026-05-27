@@ -142,10 +142,10 @@ class LeaveService:
         }
 
     async def count_on_leave_today(self, company_id: str) -> int:
-        today = date.today()
+        today_str = date.today().isoformat()
         return await self.col.count_documents({
             "company_id": company_id,
             "status": LeaveStatus.APPROVED,
-            "from_date": {"$lte": today},
-            "to_date": {"$gte": today},
+            "from_date": {"$lte": today_str},
+            "to_date": {"$gte": today_str},
         })
