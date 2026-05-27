@@ -1,4 +1,5 @@
 """HRM — Attendance Service"""
+import asyncio
 import ipaddress
 from datetime import datetime, date, timezone, timedelta
 from typing import Optional, List
@@ -7,9 +8,19 @@ from bson import ObjectId
 from app.models.company.attendance import AttendanceStatus, WorkMode
 
 
-HALF_DAY_THRESHOLD_HOURS = 4.5   # work_hours < this → half_day
-OVERTIME_THRESHOLD_HOURS = 9.0   # work_hours > this → count overtime
-MIDNIGHT_AUTO_CHECKOUT_HOUR = 0  # auto-checkout triggers at midnight
+# Fallback defaults — used when company_settings has no attendance config.
+_DEFAULT_GRACE_MINUTES      = 15
+_DEFAULT_HALF_DAY_HOURS     = 4.5
+_DEFAULT_FULL_DAY_HOURS     = 8.0
+_DEFAULT_OFFICE_START       = "09:00"
+_DEFAULT_OFFICE_END         = "18:00"
+_DEFAULT_MAX_BREAK_MINUTES  = 90
+_DEFAULT_MAX_BREAKS         = 5
+
+# Keep old name as alias so any external callers aren't broken
+HALF_DAY_THRESHOLD_HOURS = _DEFAULT_HALF_DAY_HOURS
+OVERTIME_THRESHOLD_HOURS = 9.0
+MIDNIGHT_AUTO_CHECKOUT_HOUR = 0
 
 
 def _today_dt() -> datetime:
@@ -26,12 +37,28 @@ def _today_dt() -> datetime:
 class AttendanceService:
     COL = "hrm_attendance"
     EMP_COL = "hrm_employees"
+    SETTINGS_COL = "company_settings"
 
     def __init__(self, db):
         self.db = db
         self.col = db[self.COL]
 
-    SETTINGS_COL = "company_settings"
+    # ── Settings ──────────────────────────────────────────────────────────────
+
+    async def _get_settings(self) -> dict:
+        """Load attendance config from company_settings with safe fallbacks."""
+        doc = await self.db[self.SETTINGS_COL].find_one({}) or {}
+        return {
+            "office_start":         doc.get("attendance_office_start",    _DEFAULT_OFFICE_START),
+            "office_end":           doc.get("attendance_office_end",      _DEFAULT_OFFICE_END),
+            "grace_minutes":        int(doc.get("attendance_grace_minutes",    _DEFAULT_GRACE_MINUTES)),
+            "half_day_hours":       float(doc.get("attendance_half_day_hours",  _DEFAULT_HALF_DAY_HOURS)),
+            "full_day_hours":       float(doc.get("attendance_full_day_hours",  _DEFAULT_FULL_DAY_HOURS)),
+            "max_break_minutes":    int(doc.get("attendance_max_break_minutes", _DEFAULT_MAX_BREAK_MINUTES)),
+            "max_breaks":           int(doc.get("attendance_max_breaks",        _DEFAULT_MAX_BREAKS)),
+            "ip_restriction":       bool(doc.get("attendance_ip_restriction_enabled", False)),
+            "approved_ips":         doc.get("approved_office_ips", []),
+        }
 
     @staticmethod
     def _is_ip_allowed(client_ip: str, approved_ips: List[str]) -> bool:
@@ -111,24 +138,34 @@ class AttendanceService:
         if existing and existing.get("check_in"):
             return self._serialize(existing)
 
-        # ── IP restriction: only enforced for office mode ────────────────────────
-        if work_mode == "office":
-            settings = await self.db[self.SETTINGS_COL].find_one({}) or {}
-            if settings.get("attendance_ip_restriction_enabled"):
-                approved_ips = settings.get("approved_office_ips", [])
-                if approved_ips and not self._is_ip_allowed(client_ip or "", approved_ips):
-                    raise ValueError(
-                        f"Check-in blocked: your IP ({client_ip}) is not in the list of approved office IPs."
-                    )
+        settings = await self._get_settings()
+
+        # ── IP restriction: only enforced for office mode ────────────────────
+        if work_mode == "office" and settings["ip_restriction"] and settings["approved_ips"]:
+            if not self._is_ip_allowed(client_ip or "", settings["approved_ips"]):
+                raise ValueError(
+                    f"Check-in blocked: your IP ({client_ip}) is not in the list of approved office IPs."
+                )
 
         emp = await self._get_employee(employee_id, company_id)
-        shift_start = emp.get("shift_start_time", "09:00") if emp else "09:00"
-        grace = 15
+        # Employee's personal shift overrides company default
+        shift_start = (emp.get("shift_start_time") or settings["office_start"]) if emp else settings["office_start"]
+        grace = settings["grace_minutes"]
         sh, sm = map(int, shift_start.split(":"))
         shift_dt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
         late_threshold = shift_dt + timedelta(minutes=grace)
         is_late = now > late_threshold
         late_by = max(0, int((now - late_threshold).total_seconds() / 60)) if is_late else 0
+
+        # ── Status determination ─────────────────────────────────────────────
+        # WFH takes priority over late; a WFH employee who clocks in late can
+        # be seen in the WFH bucket and the is_late flag still records the fact.
+        if work_mode == "wfh":
+            initial_status = AttendanceStatus.WORK_FROM_HOME
+        elif is_late:
+            initial_status = AttendanceStatus.LATE
+        else:
+            initial_status = AttendanceStatus.PRESENT
 
         geo = None
         if latitude is not None or longitude is not None:
@@ -142,7 +179,7 @@ class AttendanceService:
             "employee_name": emp.get("full_name", "") if emp else "",
             "date": today,
             "check_in": now,
-            "status": AttendanceStatus.LATE if is_late else AttendanceStatus.PRESENT,
+            "status": initial_status,
             "is_late": is_late,
             "late_by_minutes": late_by,
             "work_mode": work_mode,
@@ -198,6 +235,8 @@ class AttendanceService:
         if not record or record.get("check_out"):
             return self._serialize(record) if record else {}
 
+        settings = await self._get_settings()
+
         # Close any open break
         breaks = record.get("breaks", [])
         total_break_minutes = record.get("total_break_minutes", 0.0)
@@ -210,11 +249,11 @@ class AttendanceService:
 
         work_hours = self._compute_work_hours(record["check_in"], now, total_break_minutes)
         emp = await self._get_employee(employee_id, company_id)
-        shift_end = emp.get("shift_end_time", "18:00") if emp else "18:00"
-        eh, em = map(int, shift_end.split(":"))
+        shift_end_str = (emp.get("shift_end_time") or settings["office_end"]) if emp else settings["office_end"]
+        eh, em = map(int, shift_end_str.split(":"))
         shift_end_dt = now.replace(hour=eh, minute=em, second=0, microsecond=0)
         overtime = max(0.0, round((now - shift_end_dt).total_seconds() / 3600, 2)) if now > shift_end_dt else 0.0
-        is_half_day = work_hours < HALF_DAY_THRESHOLD_HOURS
+        is_half_day = work_hours < settings["half_day_hours"]
 
         geo = None
         if latitude is not None or longitude is not None:
@@ -231,7 +270,8 @@ class AttendanceService:
             "auto_punched_out": auto,
             "updated_at": now,
         }
-        if is_half_day and record.get("status") not in [AttendanceStatus.ON_LEAVE]:
+        # Update status on checkout: half_day overrides present/late (but not on_leave/wfh)
+        if is_half_day and record.get("status") not in [AttendanceStatus.ON_LEAVE, AttendanceStatus.WORK_FROM_HOME]:
             upd["status"] = AttendanceStatus.HALF_DAY
 
         await self.col.update_one({"_id": record["_id"]}, {"$set": upd})
@@ -357,12 +397,50 @@ class AttendanceService:
         await self.col.insert_one(update_data)
         return self._serialize(update_data)
 
+    # ── Counters ──────────────────────────────────────────────────────────────
+
     async def count_present_today(self, company_id: str) -> int:
+        """Count employees who punched in today — regardless of punch-out status.
+
+        'Present' means the employee showed up (has a check_in record), not that
+        they are currently clocked in.  Previously used status-based counting
+        which dropped to 0 once employees punched out during testing sessions
+        (work_hours < half_day_threshold → status = 'half_day').
+        """
         return await self.col.count_documents({
             "company_id": company_id,
             "date": _today_dt(),
-            "status": {"$in": [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.WORK_FROM_HOME]},
+            "check_in": {"$ne": None},
         })
+
+    async def count_currently_working(self, company_id: str) -> int:
+        """Count employees clocked in but not yet clocked out."""
+        return await self.col.count_documents({
+            "company_id": company_id,
+            "date": _today_dt(),
+            "check_in": {"$ne": None},
+            "check_out": None,
+        })
+
+    async def count_on_break(self, company_id: str) -> int:
+        """Count employees currently on a break (break started, not ended)."""
+        today = _today_dt()
+        pipeline = [
+            {"$match": {
+                "company_id": company_id,
+                "date": today,
+                "check_in": {"$ne": None},
+                "check_out": None,
+            }},
+            {"$project": {"last_break": {"$arrayElemAt": ["$breaks", -1]}}},
+            {"$match": {
+                "last_break": {"$ne": None},
+                "last_break.end": None,
+            }},
+            {"$count": "total"},
+        ]
+        result = await self.col.aggregate(pipeline).to_list(1)
+        return result[0]["total"] if result else 0
 
     async def count_late_today(self, company_id: str) -> int:
         return await self.col.count_documents({
@@ -370,3 +448,51 @@ class AttendanceService:
             "date": _today_dt(),
             "is_late": True,
         })
+
+    async def count_half_day_today(self, company_id: str) -> int:
+        return await self.col.count_documents({
+            "company_id": company_id,
+            "date": _today_dt(),
+            "is_half_day": True,
+        })
+
+    async def count_wfh_today(self, company_id: str) -> int:
+        return await self.col.count_documents({
+            "company_id": company_id,
+            "date": _today_dt(),
+            "work_mode": "wfh",
+            "check_in": {"$ne": None},
+        })
+
+    async def get_today_stats(self, company_id: str) -> dict:
+        """All today's attendance counters in parallel for efficiency."""
+        today = _today_dt()
+
+        present, currently_working, late, half_day, wfh, on_break = await asyncio.gather(
+            self.col.count_documents({
+                "company_id": company_id, "date": today, "check_in": {"$ne": None},
+            }),
+            self.col.count_documents({
+                "company_id": company_id, "date": today,
+                "check_in": {"$ne": None}, "check_out": None,
+            }),
+            self.col.count_documents({
+                "company_id": company_id, "date": today, "is_late": True,
+            }),
+            self.col.count_documents({
+                "company_id": company_id, "date": today, "is_half_day": True,
+            }),
+            self.col.count_documents({
+                "company_id": company_id, "date": today,
+                "work_mode": "wfh", "check_in": {"$ne": None},
+            }),
+            self.count_on_break(company_id),
+        )
+        return {
+            "present":           present,
+            "currently_working": currently_working,
+            "on_break":          on_break,
+            "late":              late,
+            "half_day":          half_day,
+            "wfh":               wfh,
+        }

@@ -26,21 +26,38 @@ class HRMDashboardService:
         month = today_date.month
         year = today_date.year
 
-        emp_col = self.db["hrm_employees"]
-        att_col = self.db["hrm_attendance"]
-        leave_col = self.db["hrm_leaves"]
+        emp_col     = self.db["hrm_employees"]
+        att_col     = self.db["hrm_attendance"]
+        leave_col   = self.db["hrm_leaves"]
         payslip_col = self.db["hrm_payslips"]
-        ann_col = self.db["hrm_announcements"]
-        job_col = self.db["hrm_jobs"]
-        cand_col = self.db["hrm_candidates"]
-        exit_col = self.db["hrm_exit"]
+        ann_col     = self.db["hrm_announcements"]
+        job_col     = self.db["hrm_jobs"]
+        cand_col    = self.db["hrm_candidates"]
+        exit_col    = self.db["hrm_exit"]
 
-        total_employees = await emp_col.count_documents({"company_id": company_id, "is_deleted": False, "employment_status": "active"})
+        total_employees = await emp_col.count_documents({
+            "company_id": company_id,
+            "is_deleted": False,
+            "employment_status": "active",
+        })
 
+        # ── Attendance counters ───────────────────────────────────────────────
+        # "Present today" = employee has a check_in record today, regardless of
+        # whether they've punched out or what their status field says.
+        # The old status-based query ("present", "late") dropped to zero after
+        # short test sessions where work_hours < half_day_threshold → status="half_day".
         present_today = await att_col.count_documents({
             "company_id": company_id,
             "date": today,
-            "status": {"$in": ["present", "late"]},
+            "check_in": {"$ne": None},
+        })
+
+        # Currently working = clocked in and not yet clocked out
+        currently_working = await att_col.count_documents({
+            "company_id": company_id,
+            "date": today,
+            "check_in": {"$ne": None},
+            "check_out": None,
         })
 
         late_today = await att_col.count_documents({
@@ -49,8 +66,35 @@ class HRMDashboardService:
             "is_late": True,
         })
 
-        # Leave date fields may be stored as string ("YYYY-MM-DD"), date, or datetime.
-        # Use string comparison for portability — isoformat gives "YYYY-MM-DD" which sorts correctly.
+        half_day_today = await att_col.count_documents({
+            "company_id": company_id,
+            "date": today,
+            "is_half_day": True,
+        })
+
+        wfh_today = await att_col.count_documents({
+            "company_id": company_id,
+            "date": today,
+            "work_mode": "wfh",
+            "check_in": {"$ne": None},
+        })
+
+        # ── On break: aggregation needed (check last break element) ──────────
+        on_break_pipeline = [
+            {"$match": {
+                "company_id": company_id,
+                "date": today,
+                "check_in": {"$ne": None},
+                "check_out": None,
+            }},
+            {"$project": {"last_break": {"$arrayElemAt": ["$breaks", -1]}}},
+            {"$match": {"last_break": {"$ne": None}, "last_break.end": None}},
+            {"$count": "total"},
+        ]
+        on_break_result = await att_col.aggregate(on_break_pipeline).to_list(1)
+        on_break = on_break_result[0]["total"] if on_break_result else 0
+
+        # ── Leave date fields stored as "YYYY-MM-DD" strings ─────────────────
         today_str = today_date.isoformat()
         on_leave_today = await leave_col.count_documents({
             "company_id": company_id,
@@ -58,6 +102,9 @@ class HRMDashboardService:
             "from_date": {"$lte": today_str},
             "to_date": {"$gte": today_str},
         })
+
+        # Absent = employees who have NO attendance record today and are not on leave
+        absent_today = max(0, total_employees - present_today - on_leave_today)
 
         pending_leaves = await leave_col.count_documents({
             "company_id": company_id,
@@ -75,7 +122,11 @@ class HRMDashboardService:
             "year": year,
         })
 
-        open_jobs = await job_col.count_documents({"company_id": company_id, "status": "open", "is_deleted": False})
+        open_jobs = await job_col.count_documents({
+            "company_id": company_id,
+            "status": "open",
+            "is_deleted": False,
+        })
 
         candidates_in_pipeline = await cand_col.count_documents({
             "company_id": company_id,
@@ -88,21 +139,25 @@ class HRMDashboardService:
             "is_active": True,
         })
 
-        absent_today = max(0, total_employees - present_today - on_leave_today)
-
         return {
-            "total_employees": total_employees,
-            "present_today": present_today,
-            "absent_today": absent_today,
-            "late_today": late_today,
-            "on_leave_today": on_leave_today,
-            "pending_leaves": pending_leaves,
-            "pending_exits": pending_exits,
+            "total_employees":              total_employees,
+            "present_today":                present_today,
+            "absent_today":                 absent_today,
+            "late_today":                   late_today,
+            "half_day_today":               half_day_today,
+            "wfh_today":                    wfh_today,
+            "currently_working":            currently_working,
+            "on_break":                     on_break,
+            "on_leave_today":               on_leave_today,
+            "pending_leaves":               pending_leaves,
+            "pending_exits":                pending_exits,
             "payroll_processed_this_month": payroll_this_month,
-            "open_jobs": open_jobs,
-            "candidates_in_pipeline": candidates_in_pipeline,
-            "active_announcements": recent_announcements,
-            "attendance_rate": round((present_today / total_employees * 100) if total_employees else 0, 1),
+            "open_jobs":                    open_jobs,
+            "candidates_in_pipeline":       candidates_in_pipeline,
+            "active_announcements":         recent_announcements,
+            "attendance_rate":              round(
+                (present_today / total_employees * 100) if total_employees else 0, 1
+            ),
         }
 
     async def get_attendance_trend(self, company_id: str, days: int = 7) -> list:
@@ -112,10 +167,11 @@ class HRMDashboardService:
         for i in range(days - 1, -1, -1):
             raw_d = today_date - timedelta(days=i)
             d_dt = _date_to_dt(raw_d)
+            # Use check_in presence for "present" — same fix as get_stats above
             present = await att_col.count_documents({
                 "company_id": company_id,
                 "date": d_dt,
-                "status": {"$in": ["present", "late"]},
+                "check_in": {"$ne": None},
             })
             late = await att_col.count_documents({
                 "company_id": company_id,

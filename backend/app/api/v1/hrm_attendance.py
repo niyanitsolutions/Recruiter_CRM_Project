@@ -1,15 +1,17 @@
 """HRM — Attendance API Routes"""
 import logging
 import re as _re
-from datetime import datetime
+from datetime import datetime, date, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from bson import ObjectId
 
-from app.core.dependencies import get_company_db, require_hrm_module, require_permissions, require_non_partner
+from app.core.dependencies import (
+    get_company_db, require_hrm_module, require_permissions, require_non_partner,
+)
 from app.models.company.attendance import (
-    CheckInRequest, CheckOutRequest, ManualAttendanceUpdate, BreakRequest
+    CheckInRequest, CheckOutRequest, ManualAttendanceUpdate, BreakRequest,
 )
 from app.services.attendance_service import AttendanceService
 
@@ -18,10 +20,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/hrm/attendance", tags=["HRM - Attendance"])
 
 
+# ── Settings models ───────────────────────────────────────────────────────────
+
+class AttendanceSettingsUpdate(BaseModel):
+    office_start_time: str = Field("09:00", pattern=r"^\d{2}:\d{2}$")
+    office_end_time:   str = Field("18:00", pattern=r"^\d{2}:\d{2}$")
+    grace_minutes:          int   = Field(15,   ge=0,   le=120)
+    half_day_hours:         float = Field(4.5,  ge=0.5, le=12.0)
+    full_day_hours:         float = Field(8.0,  ge=1.0, le=24.0)
+    max_break_minutes:      int   = Field(90,   ge=0,   le=480)
+    max_breaks:             int   = Field(5,    ge=0,   le=20)
+    wfh_enabled:            bool  = True
+    geo_fence_enabled:      bool  = False
+    geo_fence_radius_meters: int  = Field(100,  ge=10,  le=10000)
+    geo_fence_latitude:     Optional[float] = None
+    geo_fence_longitude:    Optional[float] = None
+    ip_restriction_enabled: bool  = False
+    approved_ips:           List[str] = Field(default_factory=list)
+
+
 class OfficeIPSettings(BaseModel):
     enabled: bool = False
     approved_ips: List[str] = []
 
+
+# ── Employee ID resolution ─────────────────────────────────────────────────────
 
 async def _resolve_emp_id(
     cu: dict,
@@ -155,15 +178,11 @@ async def get_me_today(
     Also exposes the resolved employee_id so the frontend can use it for
     subsequent punch-in/out calls even when it is absent from the JWT.
 
-    Returns null when the user has no linked employee profile.
-    Returns {"employee_id": "..."} (with no check_in) when linked but not yet punched in.
-    Returns the full attendance record merged with employee_id when punched in.
+    Returns {"employee_id": null, "awaiting_profile": true} when the user has
+    no linked employee profile yet (profile is auto-created on first punch-in).
     """
     emp_id = await _resolve_emp_id_optional(cu, db)
     if not emp_id:
-        # User has no linked employee profile yet.
-        # Return a sentinel so the frontend shows the punch-in popup.
-        # A minimal profile is auto-created when the user first punches in.
         return {"employee_id": None, "awaiting_profile": True}
     try:
         record = await AttendanceService(db).get_today(emp_id, cu["company_id"])
@@ -287,6 +306,46 @@ async def get_team_today(
     return await AttendanceService(db).get_team_today(cu["company_id"])
 
 
+# ── Today stats (summary counters) ───────────────────────────────────────────
+
+@router.get("/stats/today")
+async def get_stats_today(
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:attendance:team"])),
+):
+    """Return all attendance counters for today.
+
+    Used by the Attendance page summary cards.  Requires team-view permission
+    so managers and HR can see aggregated numbers.
+    """
+    svc = AttendanceService(db)
+    stats = await svc.get_today_stats(cu["company_id"])
+
+    total_employees = await db["hrm_employees"].count_documents({
+        "company_id": cu["company_id"],
+        "is_deleted": False,
+        "employment_status": "active",
+    })
+    today_str = date.today().isoformat()
+    on_leave = await db["hrm_leaves"].count_documents({
+        "company_id": cu["company_id"],
+        "status": "approved",
+        "from_date": {"$lte": today_str},
+        "to_date": {"$gte": today_str},
+    })
+    absent = max(0, total_employees - stats["present"] - on_leave)
+
+    return {
+        "total_employees":   total_employees,
+        "on_leave":          on_leave,
+        "absent":            absent,
+        **stats,
+    }
+
+
+# ── Manual update ─────────────────────────────────────────────────────────────
+
 @router.post("/manual")
 async def manual_update(
     data: ManualAttendanceUpdate,
@@ -297,15 +356,75 @@ async def manual_update(
     return await AttendanceService(db).manual_update(cu["company_id"], data.model_dump(exclude_none=True))
 
 
-# ── Office IP Management ──────────────────────────────────────────────────────
+# ── Attendance Settings ───────────────────────────────────────────────────────
+
+@router.get("/settings")
+async def get_attendance_settings(
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
+):
+    """Return the full attendance configuration for this company."""
+    doc = await db["company_settings"].find_one({}) or {}
+    return {
+        "office_start_time":      doc.get("attendance_office_start",          "09:00"),
+        "office_end_time":        doc.get("attendance_office_end",            "18:00"),
+        "grace_minutes":          int(doc.get("attendance_grace_minutes",     15)),
+        "half_day_hours":         float(doc.get("attendance_half_day_hours",  4.5)),
+        "full_day_hours":         float(doc.get("attendance_full_day_hours",  8.0)),
+        "max_break_minutes":      int(doc.get("attendance_max_break_minutes", 90)),
+        "max_breaks":             int(doc.get("attendance_max_breaks",        5)),
+        "wfh_enabled":            bool(doc.get("attendance_wfh_enabled",      True)),
+        "geo_fence_enabled":      bool(doc.get("attendance_geo_fence_enabled",   False)),
+        "geo_fence_radius_meters": int(doc.get("attendance_geo_fence_radius_meters", 100)),
+        "geo_fence_latitude":     doc.get("attendance_geo_fence_latitude"),
+        "geo_fence_longitude":    doc.get("attendance_geo_fence_longitude"),
+        "ip_restriction_enabled": bool(doc.get("attendance_ip_restriction_enabled", False)),
+        "approved_ips":           doc.get("approved_office_ips", []),
+    }
+
+
+@router.put("/settings")
+async def update_attendance_settings(
+    data: AttendanceSettingsUpdate,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
+):
+    """Save attendance configuration for this company."""
+    await db["company_settings"].update_one(
+        {},
+        {"$set": {
+            "attendance_office_start":           data.office_start_time,
+            "attendance_office_end":             data.office_end_time,
+            "attendance_grace_minutes":          data.grace_minutes,
+            "attendance_half_day_hours":         data.half_day_hours,
+            "attendance_full_day_hours":         data.full_day_hours,
+            "attendance_max_break_minutes":      data.max_break_minutes,
+            "attendance_max_breaks":             data.max_breaks,
+            "attendance_wfh_enabled":            data.wfh_enabled,
+            "attendance_geo_fence_enabled":      data.geo_fence_enabled,
+            "attendance_geo_fence_radius_meters": data.geo_fence_radius_meters,
+            "attendance_geo_fence_latitude":     data.geo_fence_latitude,
+            "attendance_geo_fence_longitude":    data.geo_fence_longitude,
+            "attendance_ip_restriction_enabled": data.ip_restriction_enabled,
+            "approved_office_ips":               data.approved_ips,
+            "updated_at": datetime.now(timezone.utc),
+            "updated_by": cu["id"],
+        }},
+        upsert=True,
+    )
+    return {"ok": True, **data.model_dump()}
+
+
+# ── Office IP Management (legacy — kept for backwards compat) ─────────────────
 
 @router.get("/office-ips")
 async def get_office_ips(
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:settings:view"])),
+    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
 ):
-    """Get current office IP restriction settings."""
     doc = await db["company_settings"].find_one({}) or {}
     return {
         "enabled": bool(doc.get("attendance_ip_restriction_enabled", False)),
@@ -318,10 +437,8 @@ async def update_office_ips(
     data: OfficeIPSettings,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:settings:edit"])),
+    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
 ):
-    """Update office IP restriction settings."""
-    from datetime import datetime, timezone
     await db["company_settings"].update_one(
         {},
         {"$set": {

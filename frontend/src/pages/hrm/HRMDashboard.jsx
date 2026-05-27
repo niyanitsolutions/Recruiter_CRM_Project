@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Users, Clock, Calendar, Banknote, Briefcase, UserCheck,
   AlertCircle, RefreshCw, TrendingUp, Megaphone, Link2, Loader2, DoorOpen,
+  Activity, Coffee,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import toast from 'react-hot-toast'
@@ -230,7 +231,7 @@ function OverviewTab() {
 
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[...Array(8)].map((_, i) => (
+          {[...Array(12)].map((_, i) => (
             <div key={i} className="rounded-xl p-5 h-24 animate-pulse"
                  style={{ background: 'var(--bg-card-alt)', border: '1px solid var(--border-card)' }} />
           ))}
@@ -241,6 +242,8 @@ function OverviewTab() {
             <StatCard icon={Users}       label="Total Employees"        value={stats?.total_employees}              to="/hrm/employees"  color="blue" />
             <StatCard icon={UserCheck}   label="Present Today"          value={stats?.present_today}                to="/hrm/attendance" color="green" />
             <StatCard icon={AlertCircle} label="Absent Today"           value={stats?.absent_today}                                      color="red" />
+            <StatCard icon={Activity}    label="Currently Working"      value={stats?.currently_working}            to="/hrm/attendance" color="green" />
+            <StatCard icon={Coffee}      label="On Break"               value={stats?.on_break}                     to="/hrm/attendance" color="yellow" />
             <StatCard icon={Clock}       label="Late Today"             value={stats?.late_today}                                        color="yellow" />
             <StatCard icon={Calendar}    label="On Leave Today"         value={stats?.on_leave_today}               to="/hrm/leaves"     color="purple" />
             <StatCard icon={Calendar}    label="Pending Leave Req."     value={stats?.pending_leaves}               to="/hrm/leaves"     color="yellow" />

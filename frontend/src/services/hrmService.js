@@ -25,6 +25,9 @@ const getMonthlyAttendance = (employeeId, year, month) =>
   api.get(`${BASE}/attendance/monthly/${employeeId}`, { params: { year, month } })
 const getTeamToday = () => api.get(`${BASE}/attendance/team/today`)
 const manualAttendance = (data) => api.post(`${BASE}/attendance/manual`, data)
+const getAttendanceTodayStats = () => api.get(`${BASE}/attendance/stats/today`)
+const getAttendanceSettings = () => api.get(`${BASE}/attendance/settings`)
+const updateAttendanceSettings = (data) => api.put(`${BASE}/attendance/settings`, data)
 
 // ── Leaves ─────────────────────────────────────────────────────────────────
 const applyLeave = (data) => api.post(`${BASE}/leaves`, data)
@@ -149,6 +152,7 @@ const hrmService = {
   getDashboardStats, getAttendanceTrend,
   listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee,
   checkIn, checkOut, startBreak, endBreak, getMyTodayAttendance, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance,
+  getAttendanceTodayStats, getAttendanceSettings, updateAttendanceSettings,
   applyLeave, listLeaves, getLeave, leaveAction, getLeaveBalance,
   generatePayroll, listPayslips, listOwnPayslips, getPayslip, updatePayslipStatus, deletePayslip,
   createReview, listReviews, getReview, submitSelfReview, submitManagerReview, deleteReview,

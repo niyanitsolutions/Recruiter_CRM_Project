@@ -23,6 +23,18 @@ const TABS = [
   { key: 'assets',     label: 'Assets',       icon: Package },
 ]
 
+/** Convert decimal hours to human-readable format: 0.03 → "2m", 2.2 → "2h 12m" */
+function fmtHours(hours) {
+  if (!hours) return '—'
+  const totalMinutes = Math.round(Math.abs(hours) * 60)
+  if (totalMinutes === 0) return '—'
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
+  if (h === 0) return `${m}m`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}
+
 const STATUS_COLORS = {
   present:  { bg: 'rgba(67,233,123,0.15)',  color: '#43E97B' },
   late:     { bg: 'rgba(245,158,11,0.15)',  color: '#F59E0B' },
@@ -201,7 +213,7 @@ function AttendanceTab({ employeeId }) {
                 {r.check_out ? new Date(r.check_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}
               </span>
               <span className="w-16 text-right" style={{ color: 'var(--text-secondary)' }}>
-                {r.work_hours ? `${r.work_hours}h` : ''}
+                {r.work_hours ? fmtHours(r.work_hours) : ''}
               </span>
             </div>
           ))}
