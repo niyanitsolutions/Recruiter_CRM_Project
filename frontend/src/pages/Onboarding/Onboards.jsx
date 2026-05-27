@@ -42,14 +42,14 @@ const STAT_CARDS = [
 ]
 
 const TABS = [
-  { key: 'selected',      label: 'Selected',      statuses: ['offer_released', 'offer_accepted'] },
-  { key: 'offer_released', label: 'Offer Released', statuses: ['offer_declined', 'doj_confirmed', 'doj_extended'] },
-  { key: 'onboarded',     label: 'Onboarded',      statuses: ['joined', 'no_show', 'absconded', 'terminated', 'completed'] },
+  { key: 'offer_released', label: 'Offer Released', statuses: ['offer_released', 'offer_declined'] },
+  { key: 'selected',       label: 'Selected',       statuses: ['offer_accepted', 'doj_confirmed', 'doj_extended'] },
+  { key: 'onboarded',      label: 'Onboarded',      statuses: ['joined', 'no_show', 'absconded', 'terminated', 'completed'] },
 ]
 
 const Onboards = () => {
   const { has } = usePermissions()
-  const [activeTab, setActiveTab] = useState('selected')
+  const [activeTab, setActiveTab] = useState('offer_released')
   const [onboards, setOnboards] = useState([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState(null)

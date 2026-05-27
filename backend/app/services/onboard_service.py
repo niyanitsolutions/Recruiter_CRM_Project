@@ -151,7 +151,8 @@ class OnboardService:
         query = {"company_id": company_id, "is_deleted": False}
         
         if status:
-            query["status"] = status
+            status_list = [s.strip() for s in status.split(',') if s.strip()]
+            query["status"] = {"$in": status_list} if len(status_list) > 1 else status_list[0]
         if client_id:
             query["client_id"] = client_id
         if partner_id:
