@@ -56,6 +56,24 @@ class AttendanceService:
         if not doc:
             return {}
         doc["id"] = str(doc.pop("_id", ""))
+
+        # Normalize datetime fields → explicit UTC ISO strings with 'Z' suffix.
+        # Motor returns naive datetimes (no tzinfo); JavaScript's Date constructor
+        # treats strings without a timezone as LOCAL time, not UTC.  Without 'Z'
+        # a check-in stored at 09:30 UTC appears as 09:30 local (wrong in any
+        # non-UTC timezone) causing the timer to be off by the UTC offset.
+        for field in ("check_in", "check_out", "created_at", "updated_at"):
+            val = doc.get(field)
+            if isinstance(val, datetime):
+                doc[field] = val.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+
+        # Normalize break-session timestamps (same UTC issue)
+        for br in doc.get("breaks", []):
+            for ts_field in ("start", "end"):
+                val = br.get(ts_field)
+                if isinstance(val, datetime):
+                    br[ts_field] = val.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+
         # date field may be stored as datetime (midnight) or date — normalize to ISO string
         date_val = doc.get("date")
         if isinstance(date_val, datetime):

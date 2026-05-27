@@ -1,9 +1,11 @@
 """HRM — Attendance API Routes"""
 import logging
 import re as _re
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from bson import ObjectId
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
 from app.models.company.attendance import (
@@ -21,7 +23,12 @@ class OfficeIPSettings(BaseModel):
     approved_ips: List[str] = []
 
 
-async def _resolve_emp_id(cu: dict, data_employee_id: Optional[str], db) -> str:
+async def _resolve_emp_id(
+    cu: dict,
+    data_employee_id: Optional[str],
+    db,
+    auto_create: bool = False,
+) -> str:
     """
     Resolve the employee ID for any attendance action.
 
@@ -30,11 +37,12 @@ async def _resolve_emp_id(cu: dict, data_employee_id: Optional[str], db) -> str:
       2. hrm_employee_id from JWT (fast path — most common after first login).
       3. hrm_employee_id from users collection (JWT stale but DB has it).
       4. Email match against hrm_employees (handles accounts not yet linked).
+      5. Auto-create minimal employee profile (only when auto_create=True).
 
-    On path 3 or 4, the bidirectional link is backfilled so future requests
+    On paths 3-5, the bidirectional link is backfilled so future requests
     hit path 2 without a DB round-trip.
 
-    Raises HTTPException(422) if no employee profile can be found.
+    Raises HTTPException(422) only when auto_create=False and no profile found.
     """
     # 1. Explicit employee_id in request (admin use-case)
     if data_employee_id:
@@ -48,7 +56,7 @@ async def _resolve_emp_id(cu: dict, data_employee_id: Optional[str], db) -> str:
     # 3. Users collection (handles stale JWT after linking)
     user_doc = await db.users.find_one(
         {"_id": cu["id"]},
-        {"hrm_employee_id": 1, "email": 1},
+        {"hrm_employee_id": 1, "email": 1, "full_name": 1},
     )
     if user_doc:
         emp_id = user_doc.get("hrm_employee_id")
@@ -78,6 +86,48 @@ async def _resolve_emp_id(cu: dict, data_employee_id: Optional[str], db) -> str:
                     {"$set": {"crm_user_id": cu["id"]}},
                 )
                 return emp_id
+
+    # 5. Auto-create minimal employee profile so ALL internal users can punch in.
+    #    Only runs on write operations (auto_create=True) to avoid creating profiles
+    #    from read operations like get_me_today.  HR can fill in details later.
+    if auto_create and cu.get("user_type", "internal") != "partner":
+        now = datetime.utcnow()
+        count = await db.hrm_employees.count_documents({"company_id": cu["company_id"]})
+        new_emp_id = str(ObjectId())
+        full_name = (
+            (user_doc or {}).get("full_name")
+            or cu.get("full_name")
+            or cu.get("username")
+            or "Employee"
+        )
+        email = (
+            (user_doc or {}).get("email")
+            or cu.get("email")
+            or ""
+        )
+        emp_doc = {
+            "_id": new_emp_id,
+            "company_id": cu["company_id"],
+            "employee_id": f"EMP{(count + 1):04d}",
+            "full_name": full_name,
+            "email": email,
+            "role": cu.get("role", ""),
+            "crm_user_id": cu["id"],
+            "employment_status": "active",
+            "is_deleted": False,
+            "created_at": now,
+            "updated_at": now,
+        }
+        await db.hrm_employees.insert_one(emp_doc)
+        await db.users.update_one(
+            {"_id": cu["id"]},
+            {"$set": {"hrm_employee_id": new_emp_id}},
+        )
+        logger.info(
+            "Auto-created employee profile | company=%s | user=%s | emp=%s",
+            cu["company_id"], cu["id"], new_emp_id,
+        )
+        return new_emp_id
 
     raise HTTPException(
         status_code=422,
@@ -112,7 +162,10 @@ async def get_me_today(
     """
     emp_id = await _resolve_emp_id_optional(cu, db)
     if not emp_id:
-        return None
+        # User has no linked employee profile yet.
+        # Return a sentinel so the frontend shows the punch-in popup.
+        # A minimal profile is auto-created when the user first punches in.
+        return {"employee_id": None, "awaiting_profile": True}
     try:
         record = await AttendanceService(db).get_today(emp_id, cu["company_id"])
     except Exception as e:
@@ -131,7 +184,7 @@ async def check_in(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:attendance:self"])),
 ):
-    emp_id = await _resolve_emp_id(cu, data.employee_id, db)
+    emp_id = await _resolve_emp_id(cu, data.employee_id, db, auto_create=True)
     forwarded = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
     client_ip = data.client_ip or forwarded or (request.client.host if request.client else None)
     try:
