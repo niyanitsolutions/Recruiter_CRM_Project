@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from bson import ObjectId
 
-from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
+from app.core.dependencies import get_company_db, require_hrm_module, require_permissions, require_non_partner
 from app.models.company.attendance import (
     CheckInRequest, CheckOutRequest, ManualAttendanceUpdate, BreakRequest
 )
@@ -147,9 +147,8 @@ async def _resolve_emp_id_optional(cu: dict, db) -> Optional[str]:
 
 @router.get("/me/today")
 async def get_me_today(
-    cu: dict = Depends(require_hrm_module),
+    cu: dict = Depends(require_non_partner),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:self"])),
 ):
     """Return today's attendance record for the calling user.
 
@@ -180,9 +179,8 @@ async def get_me_today(
 async def check_in(
     data: CheckInRequest,
     request: Request,
-    cu: dict = Depends(require_hrm_module),
+    cu: dict = Depends(require_non_partner),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:self"])),
 ):
     emp_id = await _resolve_emp_id(cu, data.employee_id, db, auto_create=True)
     forwarded = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
@@ -212,9 +210,8 @@ async def check_in(
 @router.post("/check-out")
 async def check_out(
     data: CheckOutRequest,
-    cu: dict = Depends(require_hrm_module),
+    cu: dict = Depends(require_non_partner),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:self"])),
 ):
     emp_id = await _resolve_emp_id(cu, data.employee_id, db)
     rec = await AttendanceService(db).check_out(
@@ -237,9 +234,8 @@ async def check_out(
 @router.post("/break/start")
 async def start_break(
     data: BreakRequest,
-    cu: dict = Depends(require_hrm_module),
+    cu: dict = Depends(require_non_partner),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:self"])),
 ):
     emp_id = await _resolve_emp_id(cu, data.employee_id, db)
     rec = await AttendanceService(db).start_break(emp_id, cu["company_id"], data.reason or "")
@@ -251,9 +247,8 @@ async def start_break(
 @router.post("/break/end")
 async def end_break(
     data: BreakRequest,
-    cu: dict = Depends(require_hrm_module),
+    cu: dict = Depends(require_non_partner),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:self"])),
 ):
     emp_id = await _resolve_emp_id(cu, data.employee_id, db)
     return await AttendanceService(db).end_break(emp_id, cu["company_id"])

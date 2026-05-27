@@ -301,6 +301,21 @@ async def require_hrm_module(
     return current_user
 
 
+async def require_non_partner(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Block partner users from employee self-service endpoints.
+    All authenticated internal users (any role) are allowed through.
+    Used on attendance self-service routes instead of require_permissions so that
+    users with stale JWTs (missing hrm:attendance:self) are never locked out."""
+    if current_user.get("user_type") == "partner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Partner accounts cannot use employee self-service.",
+        )
+    return current_user
+
+
 async def require_crm_module(
     current_user: dict = Depends(get_current_user),
 ) -> dict:

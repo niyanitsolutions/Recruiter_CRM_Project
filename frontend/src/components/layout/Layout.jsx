@@ -3,7 +3,6 @@ import { Outlet } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
-import { usePermissions } from '../../hooks/usePermissions'
 import SideNav from './SideNav'
 import TopBar from './TopBar'
 import GlobalSearch from '../common/GlobalSearch'
@@ -15,12 +14,12 @@ const Layout = ({ title, subtitle, actions }) => {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const user = useSelector(selectUser)
-  const { has } = usePermissions()
-  // Show for all non-partner internal users who have the attendance permission.
-  // Do NOT gate on hrmEmployeeId — users without a linked employee profile will
-  // see the banner via the 'awaiting_profile' flow; profile is auto-created on
-  // first punch-in.  AttendanceBanner manages its own loading/visibility state.
-  const showAttendanceBanner = user?.userType !== 'partner' && has('hrm:attendance:self')
+  // Show for ALL non-partner internal users — no permission check needed here.
+  // AttendanceBanner manages its own visibility: it calls /me/today on mount and
+  // handles 'awaiting_profile' for users without an employee record yet.
+  // Gating on has('hrm:attendance:self') broke the banner for users whose JWT was
+  // issued before HRM permissions were added to their role — removed.
+  const showAttendanceBanner = user?.userType !== 'partner'
 
   // Global Ctrl+K / Cmd+K shortcut
   useEffect(() => {
@@ -68,7 +67,7 @@ const Layout = ({ title, subtitle, actions }) => {
           onSearchOpen={() => setSearchOpen(true)}
         />
 
-        {/* Attendance Banner — only for employees linked to HRM */}
+        {/* Attendance Banner — shown for all non-partner users */}
         {showAttendanceBanner && <AttendanceBanner />}
 
         {/* Page Content */}
