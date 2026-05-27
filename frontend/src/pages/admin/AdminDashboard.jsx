@@ -283,9 +283,12 @@ const AdminDashboard = () => {
       const ivs     = ivStatsRes.status === 'fulfilled' ? ivStatsRes.value?.data : null
 
       const rawTodayIv = todayIvRes.status === 'fulfilled' ? todayIvRes.value?.data : null
-      const todayIvList = Array.isArray(rawTodayIv)
-        ? rawTodayIv
-        : (rawTodayIv?.interviews || rawTodayIv?.data || [])
+      const todayIvList = (() => {
+        if (!rawTodayIv) return []
+        if (Array.isArray(rawTodayIv)) return rawTodayIv
+        const inner = rawTodayIv?.interviews ?? rawTodayIv?.data ?? rawTodayIv?.items
+        return Array.isArray(inner) ? inner : []
+      })()
 
       const jobs  = jobRes.status  === 'fulfilled' ? jobRes.value?.data  : null
       const cands = candRes.status === 'fulfilled' ? candRes.value?.data : null
@@ -293,8 +296,12 @@ const AdminDashboard = () => {
       const seat  = seatRes.status === 'fulfilled' ? (seatRes.value?.data?.data ?? seatRes.value?.data) : null
 
       const rawAnn = annRes.status === 'fulfilled' ? annRes.value : null
-      const annList = Array.isArray(rawAnn) ? rawAnn
-        : (rawAnn?.data?.items || rawAnn?.data || rawAnn?.items || [])
+      const annList = (() => {
+        if (!rawAnn) return []
+        if (Array.isArray(rawAnn)) return rawAnn
+        const items = rawAnn?.data?.items ?? rawAnn?.data ?? rawAnn?.items
+        return Array.isArray(items) ? items : []
+      })()
 
       const rawSync = syncRes.status === 'fulfilled' ? syncRes.value?.data : null
       const syncData = rawSync?.data ?? rawSync
@@ -932,7 +939,7 @@ const AdminDashboard = () => {
                 </Link>
               }
             />
-            {todayIvs.length > 0
+            {Array.isArray(todayIvs) && todayIvs.length > 0
               ? todayIvs.slice(0, 5).map((iv, i) => {
                   const dt = iv.scheduled_at || iv.interview_time || iv.scheduled_time
                   const roundNum = iv.round
@@ -1348,7 +1355,7 @@ const AdminDashboard = () => {
                 <Link to="/audit-logs" className="text-xs font-medium" style={{ color: '#7c3aed' }}>View all</Link>
               }
             />
-            {recent_activity?.length > 0
+            {Array.isArray(recent_activity) && recent_activity.length > 0
               ? recent_activity.slice(0, 7).map((a, i) => {
                   const cfg = {
                     create: { bg: 'rgba(34,197,94,0.10)',  color: '#22c55e' },
@@ -1394,7 +1401,7 @@ const AdminDashboard = () => {
               <Link to="/hrm" className="text-xs font-medium" style={{ color: '#7c3aed' }}>View all</Link>
             }
           />
-          {announcements.length > 0 ? (
+          {Array.isArray(announcements) && announcements.length > 0 ? (
             <div className="space-y-3">
               {announcements.slice(0, 3).map((ann, i) => {
                 const isHigh = ann.priority === 'high' || ann.priority === 'urgent'
