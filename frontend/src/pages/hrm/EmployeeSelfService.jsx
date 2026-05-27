@@ -544,13 +544,16 @@ export default function EmployeeSelfService() {
       setResolving(false)
       return
     }
-    // Resolve server-side: works even when JWT was issued before employee linking
+    // Resolve server-side: works even when JWT was issued before employee linking.
+    // awaiting_profile means no profile yet — created on first punch-in.
     hrmService.getMyTodayAttendance()
       .then(res => {
-        const empId = res.data?.employee_id
+        const data  = res.data
+        const empId = data?.employee_id
         if (empId) {
           setEmployeeId(empId)
         } else {
+          // awaiting_profile or null — treat as no linked profile yet
           setNoEmployee(true)
         }
       })

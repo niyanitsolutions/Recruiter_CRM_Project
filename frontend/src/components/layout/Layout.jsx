@@ -16,7 +16,11 @@ const Layout = ({ title, subtitle, actions }) => {
   const [searchOpen, setSearchOpen] = useState(false)
   const user = useSelector(selectUser)
   const { has } = usePermissions()
-  const showAttendanceBanner = !!(user?.hrmEmployeeId) && has('hrm:attendance:self')
+  // Show for all non-partner internal users who have the attendance permission.
+  // Do NOT gate on hrmEmployeeId — users without a linked employee profile will
+  // see the banner via the 'awaiting_profile' flow; profile is auto-created on
+  // first punch-in.  AttendanceBanner manages its own loading/visibility state.
+  const showAttendanceBanner = user?.userType !== 'partner' && has('hrm:attendance:self')
 
   // Global Ctrl+K / Cmd+K shortcut
   useEffect(() => {

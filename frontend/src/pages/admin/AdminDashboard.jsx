@@ -218,10 +218,10 @@ const AdminDashboard = () => {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [showQuickAction,  setShowQuickAction]  = useState(false)
 
-  // Attendance warning: show card if user dismissed the punch-in modal today
-  const hasEmployeeId = !!user?.hrmEmployeeId
+  // Attendance warning: show card if user dismissed the punch-in modal today.
+  // Do NOT gate on hrmEmployeeId — show for all non-partner internal users.
   const [attendanceDismissed, setAttendanceDismissed] = useState(
-    () => hasEmployeeId && localStorage.getItem(ATTEND_DISMISS_KEY) === todayISO()
+    () => user?.userType !== 'partner' && localStorage.getItem(ATTEND_DISMISS_KEY) === todayISO()
   )
   const [showDashPunchIn, setShowDashPunchIn] = useState(false)
 
