@@ -28,7 +28,7 @@ import HiringTrend from '../../components/dashboard/HiringTrend'
 import PunchInModal from '../../components/hrm/PunchInModal'
 import { formatDateTime } from '../../utils/format'
 
-// ── Per-widget error boundary — prevents one broken widget crashing the page ──
+// ── Section-level error boundary — wraps individual grid rows ────────────────
 class WidgetErrorBoundary extends Component {
   state = { hasError: false }
   static getDerivedStateFromError() { return { hasError: true } }
@@ -41,6 +41,43 @@ class WidgetErrorBoundary extends Component {
           style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)', minHeight: 120 }}
         >
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Widget unavailable</p>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+// ── Page-level error boundary — wraps the entire dashboard ───────────────────
+class DashboardPageBoundary extends Component {
+  state = { hasError: false, error: null }
+  static getDerivedStateFromError(err) { return { hasError: true, error: err } }
+  componentDidCatch(err, info) { console.error('[Dashboard crash]', err, info) }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center">
+          <div
+            className="rounded-2xl p-8 max-w-md w-full"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+          >
+            <p className="text-lg font-semibold mb-2" style={{ color: 'var(--text-heading)' }}>
+              Dashboard failed to load
+            </p>
+            <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+              {this.state.error?.message || 'An unexpected error occurred while rendering the dashboard.'}
+            </p>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null })
+                window.location.reload()
+              }}
+              className="px-5 py-2 rounded-xl text-sm font-semibold text-white"
+              style={{ background: '#7c3aed' }}
+            >
+              Reload Dashboard
+            </button>
+          </div>
         </div>
       )
     }
@@ -1408,10 +1445,17 @@ const AdminDashboard = () => {
       <UpgradeSeatsModal
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
-        seatStatus={seatStatus}
+        seatStatus={seatStatus ?? {}}
       />
     </div>
   )
 }
 
-export default AdminDashboard
+// ── Exported component — wraps inner component with page-level error boundary ─
+const AdminDashboardWithBoundary = () => (
+  <DashboardPageBoundary>
+    <AdminDashboard />
+  </DashboardPageBoundary>
+)
+
+export default AdminDashboardWithBoundary
