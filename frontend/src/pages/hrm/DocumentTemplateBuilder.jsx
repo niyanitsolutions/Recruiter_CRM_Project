@@ -1903,6 +1903,19 @@ export default function DocumentTemplateBuilder() {
   // Compute page count from page_break blocks
   const pageCount = 1 + blocks.filter(b => b.type === 'page_break').length
 
+  // Inline preview handler – works even before first save
+  const handlePreview = useCallback(() => {
+    const html = buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta })
+    const win = window.open('', '_blank', 'width=900,height=700')
+    if (!win) { toast.error('Allow popups for preview'); return }
+    win.document.write(`
+      <html><head><title>Preview — ${meta.name}</title>
+      <style>body{margin:0;background:#e8edf2;} .page{background:#fff;margin:20px auto;padding:20mm;max-width:794px;box-shadow:0 4px 24px rgba(0,0,0,.15);}</style></head>
+      <body><div class="page">${buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta }).replace(/<!DOCTYPE html>[\s\S]*?<body[^>]*>/, '').replace('</body></html>', '')}</div></body></html>
+    `)
+    win.document.close()
+  }, [blocks, branding, header, footer, watermark, pageConfig, meta])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-primary)' }}
       onClick={() => { setShowExportMenu(false); setZoomMenuOpen(false) }}>
@@ -1911,49 +1924,60 @@ export default function DocumentTemplateBuilder() {
       <style>{ENTERPRISE_CSS}</style>
 
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 10px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', flexShrink: 0, zIndex: 20, gap: 6 }}>
-        {/* Left */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', flexShrink: 0, zIndex: 20, height: 46, gap: 0 }}>
+
+        {/* ── Left cluster: back + name + type ────────────────────────────── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: '0 0 auto', marginRight: 8 }}>
           <button onClick={() => navigate('/hrm/doc-templates')}
-            style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: '3px 6px', borderRadius: 5 }}>
+            title="Back to templates"
+            style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', borderRadius: 5, flexShrink: 0, whiteSpace: 'nowrap' }}>
             <ArrowLeft size={14} /> Back
           </button>
           <div style={{ width: 1, height: 18, background: 'var(--border-color)', flexShrink: 0 }} />
-          <input value={meta.name} onChange={e => setMeta(m => ({ ...m, name: e.target.value }))}
-            style={{ fontWeight: 600, fontSize: 13, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', minWidth: 140, maxWidth: 240 }} />
+          <input
+            value={meta.name}
+            onChange={e => setMeta(m => ({ ...m, name: e.target.value }))}
+            placeholder="Template name"
+            title="Ctrl+S to save"
+            style={{ fontWeight: 600, fontSize: 13, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', width: 160 }}
+          />
           {meta.is_active === false && (
-            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: 'var(--bg-warning)', color: 'var(--text-warning)', flexShrink: 0 }}>Draft</span>
+            <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: 'var(--bg-warning)', color: 'var(--text-warning)', flexShrink: 0, whiteSpace: 'nowrap' }}>Draft</span>
           )}
           <select value={meta.doc_type} onChange={e => setMeta(m => ({ ...m, doc_type: e.target.value }))}
-            style={{ ...inputSm, fontSize: 11, flexShrink: 0 }}>
+            style={{ ...inputSm, fontSize: 11, flexShrink: 0, maxWidth: 130 }}>
             {DOC_TYPES.map(dt => <option key={dt.value} value={dt.value}>{dt.label}</option>)}
           </select>
         </div>
 
-        {/* Center controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-          {/* Undo/Redo */}
+        {/* ── Spacer pushes right cluster to the right ─────────────────── */}
+        <div style={{ flex: 1 }} />
+
+        {/* ── Right cluster: undo/redo + zoom + page + status + actions ─── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+
+          {/* Undo / Redo */}
           <div style={{ display: 'flex', border: '1px solid var(--border-color)', borderRadius: 6 }}>
             <button onClick={undo} disabled={!undoInfo.canUndo} title="Undo (Ctrl+Z)"
-              style={{ padding: '4px 6px', background: 'none', border: 'none', cursor: undoInfo.canUndo ? 'pointer' : 'default', color: 'var(--text-secondary)', opacity: undoInfo.canUndo ? 1 : 0.3, display: 'flex', alignItems: 'center' }}>
-              <RotateCcw size={12} />
+              style={{ padding: '4px 7px', background: 'none', border: 'none', cursor: undoInfo.canUndo ? 'pointer' : 'default', color: 'var(--text-secondary)', opacity: undoInfo.canUndo ? 1 : 0.3, display: 'flex', alignItems: 'center' }}>
+              <RotateCcw size={13} />
             </button>
             <div style={{ width: 1, background: 'var(--border-color)' }} />
             <button onClick={redo} disabled={!undoInfo.canRedo} title="Redo (Ctrl+Y)"
-              style={{ padding: '4px 6px', background: 'none', border: 'none', cursor: undoInfo.canRedo ? 'pointer' : 'default', color: 'var(--text-secondary)', opacity: undoInfo.canRedo ? 1 : 0.3, display: 'flex', alignItems: 'center', transform: 'scaleX(-1)' }}>
-              <RotateCcw size={12} />
+              style={{ padding: '4px 7px', background: 'none', border: 'none', cursor: undoInfo.canRedo ? 'pointer' : 'default', color: 'var(--text-secondary)', opacity: undoInfo.canRedo ? 1 : 0.3, display: 'flex', alignItems: 'center', transform: 'scaleX(-1)' }}>
+              <RotateCcw size={13} />
             </button>
           </div>
 
-          {/* Zoom with presets */}
+          {/* Zoom */}
           <div style={{ position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 1, border: '1px solid var(--border-color)', borderRadius: 6, padding: '2px 3px' }}>
-              <button onClick={() => setZoom(z => Math.max(50, z - 10))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', padding: '1px 2px' }}><ZoomOut size={11} /></button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 1, border: '1px solid var(--border-color)', borderRadius: 6, padding: '2px 4px' }}>
+              <button onClick={() => setZoom(z => Math.max(50, z - 10))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', padding: '1px 3px' }}><ZoomOut size={12} /></button>
               <button onClick={e => { e.stopPropagation(); setZoomMenuOpen(z => !z) }}
-                style={{ fontSize: 11, color: 'var(--text-secondary)', width: 36, textAlign: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 0' }}>
+                style={{ fontSize: 11, color: 'var(--text-secondary)', width: 38, textAlign: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 0' }}>
                 {zoom}%
               </button>
-              <button onClick={() => setZoom(z => Math.min(150, z + 10))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', padding: '1px 2px' }}><ZoomIn size={11} /></button>
+              <button onClick={() => setZoom(z => Math.min(150, z + 10))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', padding: '1px 3px' }}><ZoomIn size={12} /></button>
             </div>
             {zoomMenuOpen && (
               <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 999, minWidth: 90, overflow: 'hidden' }}
@@ -1968,69 +1992,92 @@ export default function DocumentTemplateBuilder() {
             )}
           </div>
 
-          {/* Page counter */}
-          <span style={{ fontSize: 11, color: 'var(--text-disabled)', flexShrink: 0, padding: '0 4px' }}>
-            {pageCount} page{pageCount !== 1 ? 's' : ''}
+          {/* Page count */}
+          <span style={{ fontSize: 11, color: 'var(--text-disabled)', padding: '0 2px', whiteSpace: 'nowrap' }}>
+            {pageCount}pg
           </span>
 
-          {/* Save status indicator */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 99, fontSize: 10, fontWeight: 500, flexShrink: 0,
-            background: saveState === 'saved' ? 'rgba(16,185,129,0.1)' : saveState === 'saving' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-            color: saveState === 'saved' ? '#10b981' : saveState === 'saving' ? '#d97706' : '#ef4444',
-          }}>
-            {saveState === 'saved'   && <><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} /> Saved</>}
-            {saveState === 'saving'  && <><span className="eb-spinner" style={{ width: 8, height: 8, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', flexShrink: 0 }} /> Saving…</>}
-            {saveState === 'unsaved' && <><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} /> Unsaved changes</>}
-          </div>
-        </div>
+          <div style={{ width: 1, height: 18, background: 'var(--border-color)' }} />
 
-        {/* Right actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-          <button onClick={() => navigate(`/hrm/doc-generator?template=${id}&preview=1`)} disabled={isNew}
-            style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 3, opacity: isNew ? 0.4 : 1 }}>
-            <Eye size={11} /> Preview
+          {/* Preview (works even for unsaved new template) */}
+          <button onClick={handlePreview} title="Preview document"
+            style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Eye size={12} /> Preview
           </button>
-          <button onClick={() => handleSave('Draft', false)} disabled={saving}
-            style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 3 }}>
-            <Clock size={11} /> Draft
+
+          {/* Draft save */}
+          <button onClick={() => handleSave('Draft', false)} disabled={saving} title="Save as inactive draft"
+            style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Clock size={12} /> Draft
           </button>
 
           {/* Export menu */}
           <div style={{ position: 'relative' }}>
             <button onClick={e => { e.stopPropagation(); setShowExportMenu(v => !v) }}
-              style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 3 }}>
-              <Download size={11} /> Export
+              style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Download size={12} /> Export
             </button>
             {showExportMenu && (
-              <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 999, minWidth: 160, overflow: 'hidden' }}
+              <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 999, minWidth: 170, overflow: 'hidden' }}
                 onClick={e => e.stopPropagation()}>
                 <button onClick={handleExportPDF}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', textAlign: 'left' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                  <FileText size={13} style={{ color: '#ef4444' }} /> Export as PDF
+                  <FileText size={13} style={{ color: '#ef4444' }} /> Export PDF
                 </button>
                 <button onClick={handleExportDOCX}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', textAlign: 'left' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                  <FileText size={13} style={{ color: '#2563eb' }} /> Export as DOCX (.doc)
+                  <FileText size={13} style={{ color: '#2563eb' }} /> Export DOCX (.doc)
                 </button>
                 <div style={{ height: 1, background: 'var(--border-color)', margin: '2px 0' }} />
                 <button onClick={handlePrint}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', textAlign: 'left' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                  <Printer size={13} style={{ color: '#374151' }} /> Print
+                  <Printer size={13} /> Print
                 </button>
               </div>
             )}
           </div>
 
-          <button onClick={() => handleSave()} disabled={saving}
-            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 13px', borderRadius: 7, border: 'none', background: 'var(--accent-blue)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-            <Save size={12} /> {saving ? 'Saving…' : 'Save'}
+          {/* ── SAVE BUTTON — always visible, always right-most ──────────── */}
+          <button
+            onClick={() => handleSave()}
+            disabled={saving}
+            title="Save template (Ctrl+S)"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '6px 16px', borderRadius: 8,
+              border: 'none',
+              background: saveState === 'unsaved' ? '#2563eb' : saveState === 'saving' ? '#3b82f6' : '#2563eb',
+              color: '#fff', fontSize: 13, fontWeight: 700,
+              cursor: saving ? 'default' : 'pointer',
+              opacity: saving ? 0.75 : 1,
+              boxShadow: '0 2px 8px rgba(37,99,235,0.35)',
+              transition: 'all 0.15s',
+              minWidth: 72,
+              justifyContent: 'center',
+            }}
+            onMouseEnter={e => { if (!saving) e.currentTarget.style.background = '#1d4ed8' }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#2563eb' }}
+          >
+            {saving
+              ? <><span className="eb-spinner" style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', flexShrink: 0 }} /> Saving</>
+              : <><Save size={13} /> Save</>
+            }
           </button>
+
+          {/* Save status dot (compact — beside the Save button) */}
+          <div title={saveState === 'saved' ? 'All changes saved' : saveState === 'saving' ? 'Saving…' : 'Unsaved changes — click Save or Ctrl+S'}
+            style={{
+              width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+              background: saveState === 'saved' ? '#10b981' : saveState === 'saving' ? '#f59e0b' : '#ef4444',
+              boxShadow: saveState === 'unsaved' ? '0 0 0 2px rgba(239,68,68,0.25)' : 'none',
+            }}
+          />
         </div>
       </div>
 
