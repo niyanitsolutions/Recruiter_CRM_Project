@@ -622,6 +622,55 @@ class AttendanceService:
         cursor = self.col.find(query).sort([("date", 1), ("employee_name", 1)])
         return [self._serialize(d) async for d in cursor]
 
+    async def get_range_stats(self, company_id: str, start_date: datetime, end_date: datetime) -> dict:
+        """Aggregated attendance counters + daily trend for a date range."""
+        end_inclusive = end_date + timedelta(days=1)
+        match: dict = {"company_id": company_id, "date": {"$gte": start_date, "$lt": end_inclusive}}
+
+        pipeline_totals = [
+            {"$match": match},
+            {"$group": {
+                "_id": None,
+                "total_records":         {"$sum": 1},
+                "present":               {"$sum": {"$cond": [{"$eq": ["$status", "present"]},  1, 0]}},
+                "late":                  {"$sum": {"$cond": [{"$eq": ["$status", "late"]},     1, 0]}},
+                "absent":                {"$sum": {"$cond": [{"$eq": ["$status", "absent"]},   1, 0]}},
+                "half_day":              {"$sum": {"$cond": [{"$eq": ["$status", "half_day"]}, 1, 0]}},
+                "on_leave":              {"$sum": {"$cond": [{"$eq": ["$status", "on_leave"]}, 1, 0]}},
+                "wfh":                   {"$sum": {"$cond": [{"$eq": ["$status", "wfh"]},      1, 0]}},
+                "holiday":               {"$sum": {"$cond": [{"$eq": ["$status", "holiday"]},  1, 0]}},
+                "weekend":               {"$sum": {"$cond": [{"$eq": ["$status", "weekend"]},  1, 0]}},
+                "total_work_hours":      {"$sum": {"$ifNull": ["$work_hours",      0]}},
+                "total_overtime_hours":  {"$sum": {"$ifNull": ["$overtime_hours",  0]}},
+            }},
+        ]
+
+        pipeline_trend = [
+            {"$match": match},
+            {"$group": {
+                "_id": "$date",
+                "present": {"$sum": {"$cond": [{"$in": ["$status", ["present", "wfh"]]}, 1, 0]}},
+                "absent":  {"$sum": {"$cond": [{"$eq":  ["$status", "absent"]},   1, 0]}},
+                "late":    {"$sum": {"$cond": [{"$eq":  ["$status", "late"]},     1, 0]}},
+            }},
+            {"$sort": {"_id": 1}},
+        ]
+
+        totals_res, trend_res = await asyncio.gather(
+            self.col.aggregate(pipeline_totals).to_list(1),
+            self.col.aggregate(pipeline_trend).to_list(400),
+        )
+
+        totals = {k: v for k, v in (totals_res[0] if totals_res else {}).items() if k != "_id"}
+
+        trend = []
+        for t in trend_res:
+            d_val = t["_id"]
+            date_str = d_val.strftime("%Y-%m-%d") if isinstance(d_val, datetime) else str(d_val)[:10]
+            trend.append({"date": date_str, "present": t["present"], "absent": t["absent"], "late": t["late"]})
+
+        return {**totals, "trend": trend}
+
     async def get_today_stats(self, company_id: str) -> dict:
         """All today's attendance counters in parallel for efficiency."""
         today = _today_dt()

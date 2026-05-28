@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, Coffee,
   Users, Wifi, Activity, Settings, Save, Loader2, LogOut,
   CalendarDays, FileText, Shield, SlidersHorizontal,
-  History, Download, Search, ChevronLeft, ChevronRight, Filter,
+  Download, Search, ChevronLeft, ChevronRight, TrendingUp,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -231,224 +231,7 @@ function SettingsTab() {
   )
 }
 
-// ── Today's attendance tab ─────────────────────────────────────────────────────
-
-function TodayTab() {
-  const [records,  setRecords]  = useState([])
-  const [stats,    setStats]    = useState(null)
-  const [loading,  setLoading]  = useState(true)
-  const [checking, setChecking] = useState(null)
-  const { has } = usePermissions()
-  const canManage = has('hrm:attendance:manage')
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [recRes, statsRes] = await Promise.allSettled([
-        hrmService.getTeamToday(),
-        hrmService.getAttendanceTodayStats(),
-      ])
-      setRecords(recRes.status === 'fulfilled' ? (recRes.value.data || []) : [])
-      setStats(statsRes.status === 'fulfilled' ? statsRes.value.data : null)
-    } catch {}
-    setLoading(false)
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const handleCheckIn = async (empId) => {
-    setChecking(empId + '_in')
-    try { await hrmService.checkIn({ employee_id: empId }); load() } catch {}
-    setChecking(null)
-  }
-
-  const handleCheckOut = async (empId) => {
-    setChecking(empId + '_out')
-    try { await hrmService.checkOut({ employee_id: empId }); load() } catch {}
-    setChecking(null)
-  }
-
-  const handleBreakStart = async (empId) => {
-    setChecking(empId + '_brk_start')
-    try {
-      await hrmService.startBreak({ employee_id: empId })
-      toast.success('Break started')
-      load()
-    } catch { toast.error('Failed to start break') }
-    setChecking(null)
-  }
-
-  const handleBreakEnd = async (empId) => {
-    setChecking(empId + '_brk_end')
-    try {
-      await hrmService.endBreak({ employee_id: empId })
-      toast.success('Break ended')
-      load()
-    } catch { toast.error('Failed to end break') }
-    setChecking(null)
-  }
-
-  const fmt = (dt) => dt
-    ? new Date(dt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : '—'
-
-  const isOnBreak = (rec) => {
-    const breaks = rec.breaks || []
-    return breaks.length > 0 && !breaks[breaks.length - 1].end
-  }
-
-  // ── Summary cards — sourced from stats endpoint when available,
-  //    fall back to computing from records array for non-managers.
-  const S = stats || {}
-  const totalEmp = S.total_employees ?? '—'
-  const present  = S.present            ?? records.filter(r => r.check_in).length
-  const absent   = S.absent             ?? '—'
-  const curWork  = S.currently_working  ?? records.filter(r => r.check_in && !r.check_out).length
-  const onBreak  = S.on_break           ?? records.filter(r => isOnBreak(r)).length
-  const lateCount = S.late             ?? records.filter(r => r.is_late).length
-  const halfDay  = S.half_day           ?? records.filter(r => r.is_half_day).length
-  const onLeave  = S.on_leave           ?? records.filter(r => r.status === 'on_leave').length
-
-  const CARDS = [
-    { label: 'Total Employees',   value: totalEmp, icon: Users,        iconColor: 'text-blue-500' },
-    { label: 'Present Today',     value: present,  icon: CheckCircle,  iconColor: 'text-green-500' },
-    { label: 'Absent Today',      value: absent,   icon: XCircle,      iconColor: 'text-red-500' },
-    { label: 'Currently Working', value: curWork,  icon: Activity,     iconColor: 'text-emerald-500' },
-    { label: 'On Break',          value: onBreak,  icon: Coffee,       iconColor: 'text-yellow-500' },
-    { label: 'Late Today',        value: lateCount, icon: AlertCircle, iconColor: 'text-orange-500' },
-    { label: 'Half Day',          value: halfDay,  icon: Clock,        iconColor: 'text-purple-500' },
-    { label: 'On Leave',          value: onLeave,  icon: Wifi,         iconColor: 'text-indigo-500' },
-  ]
-
-  return (
-    <div className="p-6 space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-        </p>
-        <button onClick={load} className="btn-secondary flex items-center gap-2 text-sm">
-          <RefreshCw className="w-4 h-4" /> Refresh
-        </button>
-      </div>
-
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {CARDS.map(c => (
-          <StatCard key={c.label} icon={c.icon} label={c.label} value={c.value} iconColor={c.iconColor} />
-        ))}
-      </div>
-
-      {/* Records table */}
-      <div className="rounded-xl overflow-hidden"
-           style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-        <TableScroll>
-          <table className="w-full text-sm">
-            <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
-              <tr>
-                {['Employee', 'Status', 'Check In', 'Check Out', 'Break', 'Worked', ...(canManage ? ['Actions'] : [])].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide"
-                      style={{ color: 'var(--text-muted)' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                [...Array(4)].map((_, i) => (
-                  <tr key={i}><td colSpan={canManage ? 7 : 6} className="px-4 py-3">
-                    <div className="h-4 rounded animate-pulse" style={{ background: 'var(--bg-card-alt)' }} />
-                  </td></tr>
-                ))
-              ) : records.length === 0 ? (
-                <tr><td colSpan={canManage ? 7 : 6} className="px-4 py-10 text-center"
-                        style={{ color: 'var(--text-muted)' }}>No attendance records for today</td></tr>
-              ) : records.map(rec => {
-                const onBrk = isOnBreak(rec)
-                return (
-                  <tr key={rec.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td className="px-4 py-3 font-medium" style={{ color: 'var(--text-heading)' }}>
-                      {rec.employee_name}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 rounded-full text-xs font-medium"
-                            style={STATUS_STYLE[rec.status] ?? { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' }}>
-                        {STATUS_LABEL[rec.status] ?? rec.status}
-                        {rec.is_late && rec.late_by_minutes > 0 && ` (+${rec.late_by_minutes}m late)`}
-                      </span>
-                      {onBrk && (
-                        <span className="ml-1.5 px-1.5 py-0.5 rounded text-xs font-medium"
-                              style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>
-                          On Break
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{fmt(rec.check_in)}</td>
-                    <td className="px-4 py-3" style={{ color: 'var(--text-secondary)' }}>{fmt(rec.check_out)}</td>
-                    <td className="px-4 py-3" style={{ color: 'var(--text-muted)' }}>
-                      {rec.total_break_minutes > 0 ? formatMinutes(rec.total_break_minutes) : '—'}
-                      {rec.breaks && rec.breaks.length > 1
-                        ? <span className="ml-1 text-xs opacity-60">({rec.breaks.length}x)</span>
-                        : null}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      {rec.check_out
-                        ? <span className="font-semibold">{formatHours(rec.work_hours)}</span>
-                        : rec.check_in
-                        ? <span style={{ color: 'var(--text-success)' }}>Live</span>
-                        : '—'}
-                    </td>
-                    {canManage && (
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1.5 flex-wrap">
-                          {!rec.check_in && (
-                            <button disabled={checking === rec.employee_id + '_in'}
-                              onClick={() => handleCheckIn(rec.employee_id)}
-                              className="px-2 py-1 rounded text-xs font-medium text-white"
-                              style={{ background: 'var(--bg-success)' }}>
-                              Check In
-                            </button>
-                          )}
-                          {rec.check_in && !rec.check_out && !onBrk && (
-                            <button disabled={checking === rec.employee_id + '_brk_start'}
-                              onClick={() => handleBreakStart(rec.employee_id)}
-                              className="px-2 py-1 rounded text-xs font-medium"
-                              style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>
-                              Break
-                            </button>
-                          )}
-                          {rec.check_in && !rec.check_out && onBrk && (
-                            <button disabled={checking === rec.employee_id + '_brk_end'}
-                              onClick={() => handleBreakEnd(rec.employee_id)}
-                              className="px-2 py-1 rounded text-xs font-medium"
-                              style={{ background: 'var(--bg-success)', color: 'var(--text-success)' }}>
-                              End Break
-                            </button>
-                          )}
-                          {rec.check_in && !rec.check_out && (
-                            <button disabled={checking === rec.employee_id + '_out'}
-                              onClick={() => handleCheckOut(rec.employee_id)}
-                              className="px-2 py-1 rounded text-xs font-medium"
-                              style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
-                              <span className="flex items-center gap-1">
-                                <LogOut className="w-3 h-3" /> Out
-                              </span>
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </TableScroll>
-      </div>
-    </div>
-  )
-}
-
-// ── Date-range utilities ──────────────────────────────────────────────────────
+// ── Date-range utilities (shared) ──────────────────────────────────────────────
 
 const fmt = (d) => {
   const y = d.getFullYear()
@@ -486,9 +269,7 @@ function calcPreset(key) {
     }
     case 'this_month':   return { start: new Date(y, mo, 1),     end: today }
     case 'last_month':   return { start: new Date(y, mo - 1, 1), end: new Date(y, mo, 0) }
-    case 'this_quarter': {
-      const q = Math.floor(mo / 3); return { start: new Date(y, q * 3, 1), end: today }
-    }
+    case 'this_quarter': { const q = Math.floor(mo / 3); return { start: new Date(y, q * 3, 1), end: today } }
     case 'last_quarter': {
       const q = Math.floor(mo / 3) - 1
       const qy = q < 0 ? y - 1 : y, aq = ((q % 4) + 4) % 4
@@ -501,130 +282,237 @@ function calcPreset(key) {
   }
 }
 
-// ── History Tab ───────────────────────────────────────────────────────────────
+// ── Trend Chart ────────────────────────────────────────────────────────────────
 
-function HistoryTab() {
-  const [preset,      setPreset]      = useState('this_month')
-  const [customStart, setCustomStart] = useState('')
-  const [customEnd,   setCustomEnd]   = useState('')
-  const [search,      setSearch]      = useState('')
-  const [statusFilter,setStatusFilter]= useState('')
-  const [modeFilter,  setModeFilter]  = useState('')
-  const [records,     setRecords]     = useState([])
+function TrendChart({ data }) {
+  if (!data || data.length < 2) return null
+  const maxVal = Math.max(...data.map(d => d.present + d.absent + d.late), 1)
+  const H = 72
+  const bw = data.length > 180 ? 3 : data.length > 60 ? 5 : 8
+  const gap = data.length > 180 ? 1 : 2
+  const totalW = Math.max(data.length * (bw + gap), 400)
+
+  return (
+    <div className="rounded-xl border p-4"
+         style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+          Daily Trend · {data.length} days
+        </p>
+        <div className="flex items-center gap-4">
+          {[['#43E97B','Present'],['#FF4757','Absent'],['#F59E0B','Late']].map(([color, label]) => (
+            <span key={label} className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+              <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: color, opacity: 0.85 }} />
+              {label}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <svg width={totalW} height={H + 18} style={{ display: 'block', minWidth: '100%' }}>
+          {data.map((d, i) => {
+            const x = i * (bw + gap) + 1
+            const pH = (d.present / maxVal) * H
+            const aH = (d.absent  / maxVal) * H
+            const lH = (d.late    / maxVal) * H
+            const bottom = H
+            return (
+              <g key={d.date}>
+                <rect x={x} y={bottom - pH}          width={bw} height={pH} fill="#43E97B" opacity={0.85} rx="1" />
+                <rect x={x} y={bottom - pH - lH}     width={bw} height={lH} fill="#F59E0B" opacity={0.85} rx="1" />
+                <rect x={x} y={bottom - pH - lH - aH} width={bw} height={aH} fill="#FF4757" opacity={0.75} rx="1" />
+                {data.length <= 31 && (
+                  <text x={x + bw / 2} y={H + 13} textAnchor="middle" fontSize="8" fill="var(--text-disabled)">
+                    {new Date(d.date + 'T12:00:00').getDate()}
+                  </text>
+                )}
+              </g>
+            )
+          })}
+          <line x1="0" y1={H} x2={totalW} y2={H} stroke="var(--border-subtle)" strokeWidth="1" />
+        </svg>
+      </div>
+    </div>
+  )
+}
+
+// ── Unified Dashboard + History Tab ───────────────────────────────────────────
+
+function DashboardTab() {
+  const { has } = usePermissions()
+  const canManage = has('hrm:attendance:manage')
+
+  // ── Filters ────────────────────────────────────────────────────────────────
+  const [preset,       setPreset]       = useState('today')
+  const [customStart,  setCustomStart]  = useState('')
+  const [customEnd,    setCustomEnd]    = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [modeFilter,   setModeFilter]   = useState('')
+  const [search,       setSearch]       = useState('')
+  const [page,         setPage]         = useState(1)
+  const PAGE_SIZE = 50
+
+  // ── Data ───────────────────────────────────────────────────────────────────
+  const [liveRecords, setLiveRecords] = useState([])
+  const [histRecords, setHistRecords] = useState([])
+  const [stats,       setStats]       = useState(null)
+  const [trend,       setTrend]       = useState([])
   const [total,       setTotal]       = useState(0)
   const [pages,       setPages]       = useState(1)
-  const [page,        setPage]        = useState(1)
-  const [loading,     setLoading]     = useState(false)
+  const [loading,     setLoading]     = useState(true)
   const [exporting,   setExporting]   = useState(false)
+  const [checking,    setChecking]    = useState(null)
   const [error,       setError]       = useState(null)
-  const pageSize = 50
 
-  const getRange = useCallback(() => {
+  const isToday = preset === 'today'
+
+  const range = useMemo(() => {
     if (preset === 'custom') {
-      if (!customStart || !customEnd) return null
-      return { start: customStart, end: customEnd }
+      return customStart && customEnd ? { start: customStart, end: customEnd } : null
     }
     const r = calcPreset(preset)
-    return { start: fmt(r.start), end: fmt(r.end) }
+    return r ? { start: fmt(r.start), end: fmt(r.end) } : null
   }, [preset, customStart, customEnd])
 
+  const rangeLabel = range
+    ? range.start === range.end ? range.start : `${range.start} → ${range.end}`
+    : ''
+
+  // ── Load ───────────────────────────────────────────────────────────────────
   const load = useCallback(async (pg = 1) => {
-    const range = getRange()
     if (!range) return
     setLoading(true); setError(null)
     try {
-      const params = {
-        start_date: range.start, end_date: range.end,
-        page: pg, page_size: pageSize,
+      if (isToday) {
+        const [recRes, statsRes] = await Promise.allSettled([
+          hrmService.getTeamToday(),
+          hrmService.getAttendanceTodayStats(),
+        ])
+        let recs = recRes.status === 'fulfilled' ? (recRes.value.data || []) : []
+        if (statusFilter) recs = recs.filter(r => r.status === statusFilter)
+        if (modeFilter)   recs = recs.filter(r => r.work_mode === modeFilter)
+        if (search)       recs = recs.filter(r => (r.employee_name || '').toLowerCase().includes(search.toLowerCase()))
+        setLiveRecords(recs)
+        if (statsRes.status === 'fulfilled') setStats(statsRes.value.data)
+        setTrend([])
+      } else {
+        const params = { start_date: range.start, end_date: range.end, page: pg, page_size: PAGE_SIZE }
+        if (search)       params.search    = search
+        if (statusFilter) params.status    = statusFilter
+        if (modeFilter)   params.work_mode = modeFilter
+        const [histRes, statsRes] = await Promise.allSettled([
+          hrmService.getTeamAttendanceHistory(params),
+          hrmService.getAttendanceRangeStats({ start_date: range.start, end_date: range.end }),
+        ])
+        if (histRes.status === 'fulfilled') {
+          setHistRecords(histRes.value.data?.items || [])
+          setTotal(histRes.value.data?.total  || 0)
+          setPages(histRes.value.data?.pages  || 1)
+          setPage(pg)
+        } else {
+          setError(histRes.reason?.response?.data?.detail || 'Failed to load records')
+        }
+        if (statsRes.status === 'fulfilled') {
+          const d = statsRes.value.data
+          setStats(d); setTrend(d.trend || [])
+        }
       }
-      if (search)       params.search = search
-      if (statusFilter) params.status = statusFilter
-      if (modeFilter)   params.work_mode = modeFilter
-      const r = await hrmService.getTeamAttendanceHistory(params)
-      setRecords(r.data?.items || [])
-      setTotal(r.data?.total  || 0)
-      setPages(r.data?.pages  || 1)
-      setPage(pg)
-    } catch (e) {
-      setError(e.response?.data?.detail || 'Failed to load records')
-    } finally {
-      setLoading(false)
+    } catch {
+      setError('Failed to load attendance data')
     }
-  }, [getRange, search, statusFilter, modeFilter])
+    setLoading(false)
+  }, [range?.start, range?.end, isToday, statusFilter, modeFilter, search])
 
-  useEffect(() => { load(1) }, [preset, customStart, customEnd, statusFilter, modeFilter])
+  useEffect(() => { load(1) }, [load])
 
+  // Auto-refresh when viewing today
+  useEffect(() => {
+    if (!isToday) return
+    const id = setInterval(() => load(1), 60_000)
+    return () => clearInterval(id)
+  }, [isToday, load])
+
+  // ── Today actions ──────────────────────────────────────────────────────────
+  const isOnBreak = (rec) => {
+    const b = rec.breaks || []; return b.length > 0 && !b[b.length - 1].end
+  }
+  const fmtTime = (dt) => {
+    if (!dt) return '—'
+    return new Date(dt.endsWith('Z') ? dt : dt + 'Z').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const handleCheckIn    = async (empId) => { setChecking(empId+'_in');    try { await hrmService.checkIn({ employee_id: empId });    load(1) } catch { toast.error('Check-in failed') }    setChecking(null) }
+  const handleCheckOut   = async (empId) => { setChecking(empId+'_out');   try { await hrmService.checkOut({ employee_id: empId });   load(1) } catch { toast.error('Check-out failed') }   setChecking(null) }
+  const handleBreakStart = async (empId) => { setChecking(empId+'_bs');    try { await hrmService.startBreak({ employee_id: empId }); toast.success('Break started'); load(1) } catch { toast.error('Failed') } setChecking(null) }
+  const handleBreakEnd   = async (empId) => { setChecking(empId+'_be');    try { await hrmService.endBreak({ employee_id: empId });   toast.success('Break ended');   load(1) } catch { toast.error('Failed') } setChecking(null) }
+
+  // ── Export ─────────────────────────────────────────────────────────────────
   const handleExport = async () => {
-    const range = getRange(); if (!range) return
+    if (!range) return
     setExporting(true)
     try {
       const params = { start_date: range.start, end_date: range.end }
       if (statusFilter) params.status = statusFilter
-      const res = await hrmService.exportTeamAttendanceCsv(params)
-      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }))
-      const a = document.createElement('a')
-      a.href = url; a.download = `attendance_${range.start}_${range.end}.csv`; a.click()
-      URL.revokeObjectURL(url)
-      toast.success('CSV downloaded')
+      const r = await hrmService.exportTeamAttendanceCsv(params)
+      const url = URL.createObjectURL(r.data)
+      const a = document.createElement('a'); a.href = url
+      a.download = `attendance-${range.start}-to-${range.end}.csv`
+      a.click(); URL.revokeObjectURL(url)
     } catch { toast.error('Export failed') }
-    finally { setExporting(false) }
+    setExporting(false)
   }
 
-  const range = getRange()
-  const rangeLabel = range ? `${range.start}  →  ${range.end}` : 'Select date range'
+  // ── Dynamic cards ──────────────────────────────────────────────────────────
+  const S = stats || {}
+  const CARDS = isToday ? [
+    { label: 'Total Employees',   value: S.total_employees   ?? '—', icon: Users,        iconColor: 'text-blue-500' },
+    { label: 'Present Today',     value: S.present           ?? '—', icon: CheckCircle,  iconColor: 'text-green-500' },
+    { label: 'Absent Today',      value: S.absent            ?? '—', icon: XCircle,      iconColor: 'text-red-500' },
+    { label: 'Working Now',       value: S.currently_working ?? '—', icon: Activity,     iconColor: 'text-emerald-500' },
+    { label: 'On Break',          value: S.on_break          ?? '—', icon: Coffee,       iconColor: 'text-yellow-500' },
+    { label: 'Late Arrivals',     value: S.late              ?? '—', icon: AlertCircle,  iconColor: 'text-orange-500' },
+    { label: 'Half Day',          value: S.half_day          ?? '—', icon: Clock,        iconColor: 'text-purple-500' },
+    { label: 'On Leave',          value: S.on_leave          ?? '—', icon: Wifi,         iconColor: 'text-indigo-500' },
+  ] : [
+    { label: 'Present',          value: (S.present||0)+(S.wfh||0)+(S.late||0), icon: CheckCircle,  iconColor: 'text-green-500' },
+    { label: 'Absent',           value: S.absent     ?? '—',                    icon: XCircle,      iconColor: 'text-red-500' },
+    { label: 'Late',             value: S.late       ?? '—',                    icon: AlertCircle,  iconColor: 'text-orange-500' },
+    { label: 'Half Day',         value: S.half_day   ?? '—',                    icon: Clock,        iconColor: 'text-purple-500' },
+    { label: 'On Leave',         value: S.on_leave   ?? '—',                    icon: Wifi,         iconColor: 'text-indigo-500' },
+    { label: 'WFH',              value: S.wfh        ?? '—',                    icon: Users,        iconColor: 'text-blue-500' },
+    { label: 'Total Work Hrs',   value: S.total_work_hours > 0 ? formatHours(S.total_work_hours) : '—', icon: Activity, iconColor: 'text-emerald-500' },
+    { label: 'Overtime Hrs',     value: S.total_overtime_hours > 0 ? formatHours(S.total_overtime_hours) : '—', icon: TrendingUp, iconColor: 'text-yellow-500' },
+  ]
+
+  const presetLabel = PRESETS.find(p => p.key === preset)?.label || preset
+  const records = isToday ? liveRecords : histRecords
+  const working  = isToday ? (S.currently_working ?? 0) : 0
+  const onBreakCnt = isToday ? (S.on_break ?? 0) : 0
+
+  const colSpan = isToday && canManage ? 9 : 8
 
   return (
-    <div className="flex flex-col gap-4 p-4 h-full">
+    <div className="p-6 space-y-4">
 
       {/* ── Filter bar ── */}
-      <div className="rounded-xl border p-3 flex flex-wrap items-center gap-3"
+      <div className="rounded-xl border p-3 flex flex-wrap items-center gap-2"
            style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
 
-        {/* Preset selector */}
-        <select
-          className="input text-sm h-9 pr-8"
-          value={preset}
-          onChange={e => { setPreset(e.target.value); setPage(1) }}
-          style={{ minWidth: 140 }}
-        >
+        <select className="input text-sm h-9" value={preset}
+          onChange={e => { setPreset(e.target.value); setPage(1) }} style={{ minWidth: 150 }}>
           {PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
         </select>
 
-        {/* Custom date inputs */}
         {preset === 'custom' && (
           <>
             <input type="date" className="input text-sm h-9" value={customStart}
               onChange={e => { setCustomStart(e.target.value); setPage(1) }} />
-            <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>to</span>
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>–</span>
             <input type="date" className="input text-sm h-9" value={customEnd}
               onChange={e => { setCustomEnd(e.target.value); setPage(1) }} />
           </>
         )}
 
-        {/* Range label */}
-        {preset !== 'custom' && range && (
-          <span className="text-xs px-2 py-1 rounded-lg"
-                style={{ background: 'var(--bg-info)', color: 'var(--text-info)' }}>
-            {rangeLabel}
-          </span>
-        )}
-
-        <div className="flex-1" />
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5" style={{ color: 'var(--text-disabled)' }} />
-          <input
-            className="input text-sm h-9 pl-8"
-            placeholder="Employee name…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && load(1)}
-            style={{ minWidth: 160 }}
-          />
-        </div>
-
-        {/* Status filter */}
         <select className="input text-sm h-9" value={statusFilter}
           onChange={e => { setStatusFilter(e.target.value); setPage(1) }}>
           <option value="">All Statuses</option>
@@ -633,7 +521,6 @@ function HistoryTab() {
           ))}
         </select>
 
-        {/* Work mode filter */}
         <select className="input text-sm h-9" value={modeFilter}
           onChange={e => { setModeFilter(e.target.value); setPage(1) }}>
           <option value="">All Modes</option>
@@ -642,27 +529,61 @@ function HistoryTab() {
           ))}
         </select>
 
-        {/* Refresh */}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5" style={{ color: 'var(--text-disabled)' }} />
+          <input className="input text-sm h-9 pl-8" placeholder="Search employee…"
+            value={search} onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && load(1)}
+            style={{ minWidth: 180 }} />
+        </div>
+
+        <div className="flex-1" />
+
+        {rangeLabel && preset !== 'custom' && (
+          <span className="text-xs px-2 py-1 rounded-lg hidden md:flex items-center"
+                style={{ background: 'var(--bg-info)', color: 'var(--text-info)' }}>
+            {rangeLabel}
+          </span>
+        )}
+
+        {(statusFilter || modeFilter || search) && (
+          <button onClick={() => { setStatusFilter(''); setModeFilter(''); setSearch('') }}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium"
+            style={{ background: 'var(--bg-alt)', color: 'var(--text-muted)' }}>
+            Reset
+          </button>
+        )}
+
         <button onClick={() => load(page)} title="Refresh"
           className="p-2 rounded-lg" style={{ background: 'var(--bg-alt)' }}>
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} style={{ color: 'var(--text-muted)' }} />
         </button>
 
-        {/* Export */}
         <button onClick={handleExport} disabled={exporting || !range}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
-          style={{ background: 'var(--bg-success)', color: 'var(--text-success)', opacity: exporting ? 0.6 : 1 }}>
+          style={{ background: 'var(--bg-success)', color: 'var(--text-success)', opacity: (exporting || !range) ? 0.5 : 1 }}>
           {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
           Export CSV
         </button>
       </div>
 
-      {/* ── Summary counts ── */}
-      {!loading && total > 0 && (
-        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-          {total} record{total !== 1 ? 's' : ''} found
-          {range ? ` · ${range.start} to ${range.end}` : ''}
-        </p>
+      {/* ── Live banner ── */}
+      {isToday && !loading && (working > 0 || onBreakCnt > 0) && (
+        <div className="flex items-center gap-4 px-4 py-2.5 rounded-xl flex-wrap"
+             style={{ background: 'rgba(67,233,123,0.08)', border: '1px solid rgba(67,233,123,0.2)' }}>
+          <span className="flex items-center gap-1.5 text-sm font-medium" style={{ color: '#43E97B' }}>
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
+            {working} currently working
+          </span>
+          {onBreakCnt > 0 && (
+            <span className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--text-warning)' }}>
+              <Coffee className="w-4 h-4" /> {onBreakCnt} on break
+            </span>
+          )}
+          <span className="ml-auto text-xs" style={{ color: 'var(--text-muted)' }}>
+            Auto-refreshes every 60s
+          </span>
+        </div>
       )}
 
       {/* ── Error ── */}
@@ -673,130 +594,182 @@ function HistoryTab() {
         </div>
       )}
 
-      {/* ── Table ── */}
-      <div className="rounded-xl border flex-1 overflow-hidden flex flex-col"
-           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center gap-2" style={{ color: 'var(--text-muted)' }}>
-            <Loader2 className="w-5 h-5 animate-spin" /> Loading records…
-          </div>
-        ) : records.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-2" style={{ color: 'var(--text-muted)' }}>
-            <History className="w-10 h-10 opacity-30" />
-            <p className="text-sm">No attendance records for this period</p>
-            {preset === 'custom' && (!customStart || !customEnd) && (
-              <p className="text-xs opacity-60">Select a start and end date above</p>
-            )}
-          </div>
-        ) : (
-          <>
-            <TableScroll>
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                    {['Date','Employee','Status','Check In','Check Out','Worked','Break','OT','Mode'].map(h => (
-                      <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide"
-                          style={{ color: 'var(--text-disabled)', background: 'var(--bg-alt)', whiteSpace: 'nowrap' }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {records.map((rec, i) => {
-                    const isEven = i % 2 === 0
-                    const st = STATUS_STYLE[rec.status] || {}
-                    const checkIn  = rec.check_in  ? new Date(rec.check_in).toLocaleTimeString('en-IN',  { hour: '2-digit', minute: '2-digit' }) : '—'
-                    const checkOut = rec.check_out ? new Date(rec.check_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
-                    const dateLabel = rec.date ? new Date(rec.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short' }) : '—'
-                    return (
-                      <tr key={rec.id || i}
-                          style={{ background: isEven ? 'transparent' : 'var(--bg-row-alt)', borderBottom: '1px solid var(--border-subtle)' }}>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-body)' }}>{dateLabel}</td>
-                        <td className="px-3 py-2 font-medium" style={{ color: 'var(--text-heading)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {rec.employee_name || '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={st}>
-                            {STATUS_LABEL[rec.status] || rec.status || '—'}
-                            {rec.is_late && rec.late_by_minutes > 0 ? ` +${rec.late_by_minutes}m` : ''}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-body)' }}>{checkIn}</td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-body)' }}>{checkOut}</td>
-                        <td className="px-3 py-2 whitespace-nowrap font-medium" style={{ color: 'var(--text-heading)' }}>
-                          {rec.work_hours ? formatHours(rec.work_hours) : '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
-                          {rec.total_break_minutes ? formatMinutes(rec.total_break_minutes) : '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: rec.overtime_hours > 0 ? 'var(--text-warning)' : 'var(--text-muted)' }}>
-                          {rec.overtime_hours > 0 ? formatHours(rec.overtime_hours) : '—'}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
-                          {rec.work_mode || '—'}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </TableScroll>
+      {/* ── Cards ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {CARDS.map(c => (
+          <StatCard key={c.label} icon={c.icon} label={c.label} value={c.value} iconColor={c.iconColor} />
+        ))}
+      </div>
 
-            {/* Pagination */}
-            {pages > 1 && (
-              <div className="flex items-center justify-between px-4 py-2 border-t"
-                   style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
-                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  Page {page} of {pages} · {total} records
-                </span>
-                <div className="flex gap-1">
-                  <button onClick={() => load(page - 1)} disabled={page <= 1}
-                    className="p-1.5 rounded" style={{ opacity: page <= 1 ? 0.4 : 1 }}>
-                    <ChevronLeft className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+      {/* ── Trend chart (multi-day only) ── */}
+      {!isToday && trend.length > 1 && <TrendChart data={trend} />}
+
+      {/* ── Table ── */}
+      <div className="rounded-xl border overflow-hidden"
+           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+        <div className="flex items-center justify-between px-4 py-2.5 border-b"
+             style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
+          <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-disabled)' }}>
+            {isToday ? "Today's Attendance" : `${presetLabel} · ${total} records`}
+          </span>
+          {!isToday && total > 0 && (
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              Page {page} of {pages}
+            </span>
+          )}
+        </div>
+
+        <TableScroll>
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-alt)' }}>
+                {['Employee','Date','Status','Check In','Check Out','Worked','Break','OT',
+                  ...(isToday && canManage ? ['Actions'] : [])].map(h => (
+                  <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
+                      style={{ color: 'var(--text-disabled)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                [...Array(5)].map((_, i) => (
+                  <tr key={i}><td colSpan={colSpan} className="px-3 py-2.5">
+                    <div className="h-4 rounded animate-pulse" style={{ background: 'var(--bg-card-alt)' }} />
+                  </td></tr>
+                ))
+              ) : records.length === 0 ? (
+                <tr><td colSpan={colSpan} className="px-4 py-12 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                  No attendance records for {isToday ? 'today' : 'this period'}
+                  {preset === 'custom' && (!customStart || !customEnd) && (
+                    <span className="block text-xs opacity-60 mt-1">Select start and end dates above</span>
+                  )}
+                </td></tr>
+              ) : records.map((rec, idx) => {
+                const onBrk = isToday ? isOnBreak(rec) : false
+                const st = STATUS_STYLE[rec.status] || {}
+                const dateLabel = rec.date
+                  ? new Date(rec.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short' })
+                  : isToday
+                  ? new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short' })
+                  : '—'
+                return (
+                  <tr key={rec.id || idx}
+                      style={{ background: idx % 2 === 0 ? 'transparent' : 'var(--bg-row-alt)', borderBottom: '1px solid var(--border-subtle)' }}>
+                    <td className="px-3 py-2.5 font-medium" style={{ color: 'var(--text-heading)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {rec.employee_name || '—'}
+                    </td>
+                    <td className="px-3 py-2 text-xs whitespace-nowrap" style={{ color: 'var(--text-body)' }}>{dateLabel}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={st}>
+                        {STATUS_LABEL[rec.status] || rec.status || '—'}
+                        {rec.is_late && rec.late_by_minutes > 0 ? ` +${rec.late_by_minutes}m` : ''}
+                      </span>
+                      {onBrk && (
+                        <span className="ml-1.5 px-1.5 py-0.5 rounded text-xs font-medium"
+                              style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>Break</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{fmtTime(rec.check_in)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{fmtTime(rec.check_out)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap font-medium text-xs"
+                        style={{ color: rec.check_in && !rec.check_out && isToday ? 'var(--text-success)' : 'var(--text-heading)' }}>
+                      {rec.check_out ? formatHours(rec.work_hours) : rec.check_in && isToday ? 'Live' : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {rec.total_break_minutes > 0 ? formatMinutes(rec.total_break_minutes) : '—'}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap text-xs"
+                        style={{ color: rec.overtime_hours > 0 ? 'var(--text-warning)' : 'var(--text-muted)' }}>
+                      {rec.overtime_hours > 0 ? formatHours(rec.overtime_hours) : '—'}
+                    </td>
+                    {isToday && canManage && (
+                      <td className="px-3 py-2">
+                        <div className="flex gap-1 flex-wrap">
+                          {!rec.check_in && (
+                            <button disabled={checking === rec.employee_id+'_in'}
+                              onClick={() => handleCheckIn(rec.employee_id)}
+                              className="px-2 py-1 rounded text-xs font-medium text-white"
+                              style={{ background: 'var(--accent)' }}>In</button>
+                          )}
+                          {rec.check_in && !rec.check_out && !onBrk && (
+                            <button disabled={checking === rec.employee_id+'_bs'}
+                              onClick={() => handleBreakStart(rec.employee_id)}
+                              className="px-2 py-1 rounded text-xs font-medium"
+                              style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>Brk</button>
+                          )}
+                          {rec.check_in && !rec.check_out && onBrk && (
+                            <button disabled={checking === rec.employee_id+'_be'}
+                              onClick={() => handleBreakEnd(rec.employee_id)}
+                              className="px-2 py-1 rounded text-xs font-medium"
+                              style={{ background: 'var(--bg-success)', color: 'var(--text-success)' }}>End</button>
+                          )}
+                          {rec.check_in && !rec.check_out && (
+                            <button disabled={checking === rec.employee_id+'_out'}
+                              onClick={() => handleCheckOut(rec.employee_id)}
+                              className="px-2 py-1 rounded text-xs font-medium"
+                              style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
+                              <LogOut className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </TableScroll>
+
+        {/* Pagination (historical) */}
+        {!isToday && pages > 1 && (
+          <div className="flex items-center justify-between px-4 py-2 border-t"
+               style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              Page {page} of {pages} · {total} records
+            </span>
+            <div className="flex gap-1">
+              <button onClick={() => load(page - 1)} disabled={page <= 1}
+                className="p-1.5 rounded" style={{ opacity: page <= 1 ? 0.4 : 1 }}>
+                <ChevronLeft className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+              </button>
+              {Array.from({ length: Math.min(pages, 7) }, (_, i) => {
+                let pg = i + 1
+                if (pages > 7) {
+                  if (page <= 4)             pg = i + 1
+                  else if (page >= pages - 3) pg = pages - 6 + i
+                  else                        pg = page - 3 + i
+                }
+                return (
+                  <button key={pg} onClick={() => load(pg)}
+                    className="w-7 h-7 rounded text-xs font-medium"
+                    style={{ background: pg === page ? 'var(--bg-info)' : 'transparent', color: pg === page ? 'var(--text-info)' : 'var(--text-muted)' }}>
+                    {pg}
                   </button>
-                  {Array.from({ length: Math.min(pages, 7) }, (_, i) => {
-                    let pg = i + 1
-                    if (pages > 7) {
-                      if (page <= 4)        pg = i + 1
-                      else if (page >= pages - 3) pg = pages - 6 + i
-                      else                  pg = page - 3 + i
-                    }
-                    return (
-                      <button key={pg} onClick={() => load(pg)}
-                        className="w-7 h-7 rounded text-xs font-medium"
-                        style={{
-                          background: pg === page ? 'var(--bg-info)' : 'transparent',
-                          color: pg === page ? 'var(--text-info)' : 'var(--text-muted)',
-                        }}>
-                        {pg}
-                      </button>
-                    )
-                  })}
-                  <button onClick={() => load(page + 1)} disabled={page >= pages}
-                    className="p-1.5 rounded" style={{ opacity: page >= pages ? 0.4 : 1 }}>
-                    <ChevronRight className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
+                )
+              })}
+              <button onClick={() => load(page + 1)} disabled={page >= pages}
+                className="p-1.5 rounded" style={{ opacity: page >= pages ? 0.4 : 1 }}>
+                <ChevronRight className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>
   )
 }
 
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: 'dashboard',     label: 'Dashboard',            icon: Activity },
-  { key: 'history',       label: 'History',              icon: History,            perm: 'hrm:attendance:team' },
-  { key: 'holidays',      label: 'Holiday Management',   icon: CalendarDays,       perm: 'hrm:attendance:team' },
-  { key: 'leave_policy',  label: 'Leave Policies',       icon: FileText,           perm: 'hrm:attendance:team' },
-  { key: 'shifts',        label: 'Shift Management',     icon: Clock,              perm: 'hrm:attendance:team' },
-  { key: 'geo_fence',     label: 'Geo Fence',            icon: Shield,             perm: 'hrm:attendance:manage' },
-  { key: 'settings',      label: 'Attendance Rules',     icon: SlidersHorizontal,  perm: 'hrm:attendance:manage' },
+  { key: 'dashboard',    label: 'Dashboard',           icon: Activity },
+  { key: 'holidays',     label: 'Holiday Management',  icon: CalendarDays,      perm: 'hrm:attendance:team' },
+  { key: 'leave_policy', label: 'Leave Policies',      icon: FileText,          perm: 'hrm:attendance:team' },
+  { key: 'shifts',       label: 'Shift Management',    icon: Clock,             perm: 'hrm:attendance:team' },
+  { key: 'geo_fence',    label: 'Geo Fence',           icon: Shield,            perm: 'hrm:attendance:manage' },
+  { key: 'settings',     label: 'Attendance Rules',    icon: SlidersHorizontal, perm: 'hrm:attendance:manage' },
 ]
 
 function GeoFenceTab() {
@@ -942,8 +915,7 @@ export default function Attendance() {
       </div>
 
       <div className="flex-1 overflow-auto">
-        {activeTab === 'dashboard'    && <TodayTab />}
-        {activeTab === 'history'      && <HistoryTab />}
+        {activeTab === 'dashboard'    && <DashboardTab />}
         {activeTab === 'holidays'     && <HolidayManagement />}
         {activeTab === 'leave_policy' && <LeavePolicyManagement />}
         {activeTab === 'shifts'       && <ShiftManagement />}

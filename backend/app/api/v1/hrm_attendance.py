@@ -388,6 +388,27 @@ def _flatten_row(r: dict, include_employee: bool = True) -> dict:
     return row
 
 
+# ── Aggregated stats for any date range ──────────────────────────────────────
+
+@router.get("/stats/range")
+async def get_stats_range(
+    start_date: str,
+    end_date:   str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:attendance:team"])),
+):
+    """Return aggregated attendance counters + daily trend for any date range."""
+    try:
+        sd = _parse_date_param(start_date)
+        ed = _parse_date_param(end_date)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
+    if (ed - sd).days > 366:
+        raise HTTPException(status_code=422, detail="Date range cannot exceed 366 days.")
+    return await AttendanceService(db).get_range_stats(cu["company_id"], sd, ed)
+
+
 # ── Historical range — team view ──────────────────────────────────────────────
 
 @router.get("/history")

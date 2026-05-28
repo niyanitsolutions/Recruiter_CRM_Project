@@ -47,7 +47,9 @@
       "PowerShell(python -c \"import fastapi; print\\('fastapi:', fastapi.__version__\\)\" 2>&1)",
       "PowerShell(python -c \"import motor; print\\('motor ok'\\)\" 2>&1)",
       "PowerShell(python -c \"import reportlab\" 2>&1)",
-      "PowerShell(python -c \"import docx\" 2>&1)"
+      "PowerShell(python -c \"import docx\" 2>&1)",
+      "Bash(cd /mnt/d/crm-project/frontend && npx vite build --mode development 2>&1 | head -80)",
+      "Read(//mnt/d/crm-project/**)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

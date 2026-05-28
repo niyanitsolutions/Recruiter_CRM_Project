@@ -15,10 +15,11 @@ const deleteEmployee = (id) => api.delete(`${BASE}/employees/${id}`)
 
 // ── Attendance ─────────────────────────────────────────────────────────────
 // History & export — date strings must be YYYY-MM-DD
-const getTeamAttendanceHistory  = (params) => api.get(`${BASE}/attendance/history`,    { params })
-const getMyAttendanceHistory    = (params) => api.get(`${BASE}/attendance/me/history`, { params })
-const exportTeamAttendanceCsv   = (params) => api.get(`${BASE}/attendance/export/csv`,    { params, responseType: 'blob' })
-const exportMyAttendanceCsv     = (params) => api.get(`${BASE}/attendance/me/export/csv`, { params, responseType: 'blob' })
+const getTeamAttendanceHistory  = (params) => api.get(`${BASE}/attendance/history`,        { params })
+const getMyAttendanceHistory    = (params) => api.get(`${BASE}/attendance/me/history`,     { params })
+const getAttendanceRangeStats   = (params) => api.get(`${BASE}/attendance/stats/range`,    { params })
+const exportTeamAttendanceCsv   = (params) => api.get(`${BASE}/attendance/export/csv`,     { params, responseType: 'blob' })
+const exportMyAttendanceCsv     = (params) => api.get(`${BASE}/attendance/me/export/csv`,  { params, responseType: 'blob' })
 
 const checkIn = (data) => api.post(`${BASE}/attendance/check-in`, data)
 const checkOut = (data) => api.post(`${BASE}/attendance/check-out`, data)
@@ -225,7 +226,7 @@ const getAnnouncements = listAnnouncements
 const hrmService = {
   getDashboardStats, getAttendanceTrend,
   listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee,
-  getTeamAttendanceHistory, getMyAttendanceHistory, exportTeamAttendanceCsv, exportMyAttendanceCsv,
+  getTeamAttendanceHistory, getMyAttendanceHistory, getAttendanceRangeStats, exportTeamAttendanceCsv, exportMyAttendanceCsv,
   checkIn, checkOut, startBreak, endBreak, getMyTodayAttendance, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance,
   getAttendanceTodayStats, getAttendanceSettings, updateAttendanceSettings,
   applyLeave, listLeaves, getLeave, leaveAction, getLeaveBalance,
