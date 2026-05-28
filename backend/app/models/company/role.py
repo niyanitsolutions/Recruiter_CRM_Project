@@ -173,6 +173,10 @@ class Permission(str, Enum):
     # Offer Templates
     HRM_OFFER_TEMPLATES_VIEW   = "hrm:offer_templates:view"
     HRM_OFFER_TEMPLATES_MANAGE = "hrm:offer_templates:manage"
+    # Document Templates (Enterprise Builder)
+    HRM_DOC_TEMPLATES_VIEW     = "hrm:doc_templates:view"
+    HRM_DOC_TEMPLATES_MANAGE   = "hrm:doc_templates:manage"
+    HRM_DOC_TEMPLATES_GENERATE = "hrm:doc_templates:generate"
     # Documents
     HRM_DOCUMENTS_MANAGE     = "hrm:documents:manage"
     # Assets

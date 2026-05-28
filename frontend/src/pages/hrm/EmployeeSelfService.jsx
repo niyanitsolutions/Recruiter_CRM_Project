@@ -267,19 +267,32 @@ function PayslipsTab() {
 
 // ── Leave Tab ─────────────────────────────────────────────────────────────────
 
+const LEAVE_TYPES = [
+  { value: 'casual',       label: 'Casual Leave' },
+  { value: 'sick',         label: 'Sick Leave' },
+  { value: 'earned',       label: 'Earned Leave' },
+  { value: 'maternity',    label: 'Maternity Leave' },
+  { value: 'paternity',    label: 'Paternity Leave' },
+  { value: 'compensatory', label: 'Compensatory Off' },
+  { value: 'unpaid',       label: 'Unpaid Leave' },
+]
+
+const EMPTY_FORM = { leave_type: 'casual', duration: 'full_day', from_date: '', to_date: '', reason: '' }
+
 function LeaveTab({ employeeId }) {
   const [leaves, setLeaves]       = useState([])
   const [total, setTotal]         = useState(0)
   const [loading, setLoading]     = useState(true)
   const [showApply, setShowApply] = useState(false)
-  const [form, setForm]           = useState({ leave_type: 'casual', from_date: '', to_date: '', reason: '' })
+  const [form, setForm]           = useState(EMPTY_FORM)
+  const [formError, setFormError] = useState('')
   const [saving, setSaving]       = useState(false)
 
   const load = useCallback(async () => {
     if (!employeeId) { setLoading(false); return }
     setLoading(true)
     try {
-      const res = await hrmService.listLeaves({ employee_id: employeeId, page_size: 20 })
+      const res = await hrmService.listLeaves({ employee_id: employeeId, page_size: 50 })
       setLeaves(res.data?.items || [])
       setTotal(res.data?.total || 0)
     } catch {/* silent */}
@@ -288,23 +301,51 @@ function LeaveTab({ employeeId }) {
 
   useEffect(() => { load() }, [load])
 
+  const openApply = () => { setForm(EMPTY_FORM); setFormError(''); setShowApply(true) }
+  const closeApply = () => { setShowApply(false); setFormError('') }
+
   const handleApply = async (e) => {
     e.preventDefault()
+    setFormError('')
+
+    // ── Client-side validation ──
+    if (!form.from_date || !form.to_date) {
+      setFormError('Please select both From and To dates.')
+      return
+    }
+    if (form.from_date > form.to_date) {
+      setFormError('From date cannot be after To date.')
+      return
+    }
+    if (!form.reason || form.reason.trim().length < 5) {
+      setFormError('Reason must be at least 5 characters.')
+      return
+    }
+
     setSaving(true)
     try {
       await hrmService.applyLeave({ ...form, employee_id: employeeId })
-      toast.success('Leave application submitted')
-      setShowApply(false)
+      toast.success('Leave application submitted successfully')
+      closeApply()
       load()
-    } catch { toast.error('Failed to apply') }
+    } catch (err) {
+      const detail = err?.response?.data?.detail
+      const msg = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map(d => d?.msg || String(d)).join('; ')
+          : 'Failed to submit leave application. Please try again.'
+      setFormError(msg)
+      toast.error(msg)
+    }
     setSaving(false)
   }
 
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{total} leave applications</p>
-        <button onClick={() => setShowApply(true)} className="btn-primary flex items-center gap-2 text-sm">
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{total} leave application{total !== 1 ? 's' : ''}</p>
+        <button onClick={openApply} className="btn-primary flex items-center gap-2 text-sm">
           <Plus className="w-4 h-4" /> Apply Leave
         </button>
       </div>
@@ -317,54 +358,86 @@ function LeaveTab({ employeeId }) {
             style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
           >
             <h2 className="text-lg font-semibold" style={{ color: 'var(--text-heading)' }}>Apply for Leave</h2>
-            <div>
-              <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Leave Type</label>
-              <select
-                className="input w-full mt-1"
-                value={form.leave_type}
-                onChange={e => setForm(f => ({ ...f, leave_type: e.target.value }))}
-              >
-                {['casual', 'sick', 'earned', 'maternity', 'paternity', 'unpaid', 'compensatory'].map(t => (
-                  <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-                ))}
-              </select>
-            </div>
+
+            {/* Inline error banner */}
+            {formError && (
+              <div className="text-sm px-3 py-2 rounded-lg"
+                   style={{ background: 'var(--bg-danger, rgba(255,71,87,0.10))', color: 'var(--text-danger, #ef4444)' }}>
+                {formError}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>From</label>
+                <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Leave Type</label>
+                <select
+                  className="input w-full mt-1"
+                  value={form.leave_type}
+                  onChange={e => setForm(f => ({ ...f, leave_type: e.target.value }))}
+                >
+                  {LEAVE_TYPES.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Duration</label>
+                <select
+                  className="input w-full mt-1"
+                  value={form.duration}
+                  onChange={e => setForm(f => ({ ...f, duration: e.target.value }))}
+                >
+                  <option value="full_day">Full Day</option>
+                  <option value="half_day_morning">Half Day – Morning</option>
+                  <option value="half_day_afternoon">Half Day – Afternoon</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>From Date</label>
                 <input
                   type="date"
                   className="input w-full mt-1"
                   value={form.from_date}
                   onChange={e => setForm(f => ({ ...f, from_date: e.target.value }))}
-                  required
                 />
               </div>
               <div>
-                <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>To</label>
+                <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>To Date</label>
                 <input
                   type="date"
                   className="input w-full mt-1"
                   value={form.to_date}
+                  min={form.from_date || undefined}
                   onChange={e => setForm(f => ({ ...f, to_date: e.target.value }))}
-                  required
                 />
               </div>
             </div>
+
             <div>
-              <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Reason</label>
+              <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                Reason <span style={{ color: 'var(--text-muted)' }}>(min 5 chars)</span>
+              </label>
               <textarea
                 className="input w-full mt-1 resize-none"
                 rows={3}
+                placeholder="Briefly describe the reason for your leave…"
                 value={form.reason}
                 onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}
-                required
               />
             </div>
+
             <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setShowApply(false)} className="btn-secondary">Cancel</button>
-              <button type="submit" disabled={saving} className="btn-primary">
-                {saving ? 'Submitting…' : 'Submit'}
+              <button type="button" onClick={closeApply} className="btn-secondary">Cancel</button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="btn-primary flex items-center gap-2"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {saving ? 'Submitting…' : 'Submit Application'}
               </button>
             </div>
           </form>

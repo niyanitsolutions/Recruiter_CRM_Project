@@ -59,6 +59,8 @@ from app.api.v1 import (
     hrm_performance, hrm_announcements, hrm_dashboard, hrm_hiring,
     hrm_offer_templates, hrm_documents, hrm_sync,
     hrm_assets, hrm_exit,
+    hrm_holidays, hrm_leave_policies, hrm_shifts,
+    hrm_document_templates,
 )
 
 # ============== Company Settings ==============
@@ -338,6 +340,10 @@ app.include_router(hrm_documents.router,        prefix=API_V1_PREFIX, tags=["HRM
 app.include_router(hrm_sync.router,             prefix=API_V1_PREFIX, tags=["HRM - Sync"])
 app.include_router(hrm_assets.router,           prefix=API_V1_PREFIX, tags=["HRM - Assets"])
 app.include_router(hrm_exit.router,             prefix=API_V1_PREFIX, tags=["HRM - Exit Management"])
+app.include_router(hrm_holidays.router,           prefix=API_V1_PREFIX, tags=["HRM - Holidays"])
+app.include_router(hrm_leave_policies.router,    prefix=API_V1_PREFIX, tags=["HRM - Leave Policies"])
+app.include_router(hrm_shifts.router,            prefix=API_V1_PREFIX, tags=["HRM - Shifts"])
+app.include_router(hrm_document_templates.router, prefix=API_V1_PREFIX, tags=["HRM - Document Templates"])
 
 
 # Serve uploaded files (resumes, etc.)

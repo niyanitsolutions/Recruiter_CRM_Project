@@ -32,7 +32,12 @@
       "Bash(Select-String -Pattern \"attendance\")",
       "Bash(Get-Content \"d:\\\\crm-project\\\\backend\\\\app\\\\main.py\")",
       "Bash(Select-String -Pattern \"attendance|auto_checkout\" -Context 3)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\\\\api\\\\v1\" -Name | Where-Object { $_ -match \"hrm\" })",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\\\\models\\\\company\" -Name | Where-Object { $_ -match \"holiday|shift|geo\" })",
+      "PowerShell(\\(Get-Content \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\\\\hrm\\\\Attendance.jsx\" | Measure-Object -Line\\).Lines)",
+      "PowerShell(Get-ChildItem \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\" -Recurse | Where-Object { $_.Name -match \"portal|ess|myportal|self.service|employee.portal\" -and !$_.PSIsContainer } | Select-Object FullName)",
+      "Bash(Get-ChildItem -Path d:\\\\crm-project -Directory)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

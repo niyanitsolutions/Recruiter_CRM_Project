@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import {
   Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, Coffee,
   Users, Wifi, Activity, Settings, Save, Loader2, LogOut,
+  CalendarDays, FileText, Shield, SlidersHorizontal,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -9,6 +10,9 @@ import { selectUser } from '../../store/authSlice'
 import { usePermissions } from '../../hooks/usePermissions'
 import hrmService from '../../services/hrmService'
 import TableScroll from '../../components/common/TableScroll'
+import HolidayManagement from './HolidayManagement'
+import LeavePolicyManagement from './LeavePolicyManagement'
+import ShiftManagement from './ShiftManagement'
 
 // ── Formatting helpers ─────────────────────────────────────────────────────────
 
@@ -446,14 +450,123 @@ function TodayTab() {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: 'today',    label: "Today's Attendance" },
-  { key: 'settings', label: 'Settings', perm: 'hrm:attendance:manage' },
+  { key: 'dashboard',     label: 'Dashboard',            icon: Activity },
+  { key: 'holidays',      label: 'Holiday Management',   icon: CalendarDays,       perm: 'hrm:attendance:team' },
+  { key: 'leave_policy',  label: 'Leave Policies',       icon: FileText,           perm: 'hrm:attendance:team' },
+  { key: 'shifts',        label: 'Shift Management',     icon: Clock,              perm: 'hrm:attendance:team' },
+  { key: 'geo_fence',     label: 'Geo Fence',            icon: Shield,             perm: 'hrm:attendance:manage' },
+  { key: 'settings',      label: 'Attendance Rules',     icon: SlidersHorizontal,  perm: 'hrm:attendance:manage' },
 ]
+
+function GeoFenceTab() {
+  const [cfg, setCfg] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(async () => {
+    try { const r = await hrmService.getAttendanceSettings(); setCfg(r.data) }
+    catch { toast.error('Failed to load geo fence settings') }
+    setLoading(false)
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const save = async () => {
+    setSaving(true)
+    try { await hrmService.updateAttendanceSettings(cfg); toast.success('Geo fence settings saved') }
+    catch { toast.error('Failed to save') }
+    setSaving(false)
+  }
+  const set = (k, v) => setCfg(p => ({ ...p, [k]: v }))
+
+  if (loading || !cfg) return (
+    <div className="p-6"><div className="h-6 w-48 rounded animate-pulse" style={{ background: 'var(--bg-card-alt)' }} /></div>
+  )
+
+  return (
+    <div className="p-6 max-w-2xl space-y-6">
+      <h2 className="text-lg font-semibold" style={{ color: 'var(--text-heading)' }}>Geo Fence Settings</h2>
+
+      <div className="rounded-xl border p-5 space-y-4"
+           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input type="checkbox" checked={cfg.geo_fence_enabled}
+                 onChange={e => set('geo_fence_enabled', e.target.checked)} className="w-4 h-4 rounded" />
+          <span className="text-sm font-medium" style={{ color: 'var(--text-body)' }}>
+            Enable Geo Fence for Office Check-In
+          </span>
+        </label>
+        {cfg.geo_fence_enabled && (
+          <div className="grid grid-cols-2 gap-4 pt-2">
+            <label className="space-y-1 col-span-2">
+              <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                Radius (meters) — employees must be within this distance to check in
+              </span>
+              <input type="number" min={10} max={10000} value={cfg.geo_fence_radius_meters}
+                     onChange={e => set('geo_fence_radius_meters', parseInt(e.target.value) || 100)}
+                     className="w-full rounded-lg px-3 py-2 text-sm"
+                     style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)' }} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Office Latitude</span>
+              <input type="number" step="0.000001" value={cfg.geo_fence_latitude || ''}
+                     onChange={e => set('geo_fence_latitude', parseFloat(e.target.value) || null)}
+                     placeholder="e.g. 12.9716"
+                     className="w-full rounded-lg px-3 py-2 text-sm"
+                     style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)' }} />
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Office Longitude</span>
+              <input type="number" step="0.000001" value={cfg.geo_fence_longitude || ''}
+                     onChange={e => set('geo_fence_longitude', parseFloat(e.target.value) || null)}
+                     placeholder="e.g. 77.5946"
+                     className="w-full rounded-lg px-3 py-2 text-sm"
+                     style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)' }} />
+            </label>
+          </div>
+        )}
+      </div>
+
+      {/* IP Restriction */}
+      <div className="rounded-xl border p-5 space-y-4"
+           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>IP Restriction</h3>
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input type="checkbox" checked={cfg.ip_restriction_enabled}
+                 onChange={e => set('ip_restriction_enabled', e.target.checked)} className="w-4 h-4 rounded" />
+          <span className="text-sm" style={{ color: 'var(--text-body)' }}>
+            Restrict office check-in to approved IP addresses
+          </span>
+        </label>
+        {cfg.ip_restriction_enabled && (
+          <label className="space-y-1">
+            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+              Approved IPs (one per line, CIDR notation supported)
+            </span>
+            <textarea rows={4}
+              value={(cfg.approved_ips || []).join('\n')}
+              onChange={e => set('approved_ips', e.target.value.split('\n').map(s => s.trim()).filter(Boolean))}
+              placeholder="192.168.1.0/24&#10;10.0.0.1"
+              className="w-full rounded-lg px-3 py-2 text-sm font-mono"
+              style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)', resize: 'vertical' }}
+            />
+          </label>
+        )}
+      </div>
+
+      <button onClick={save} disabled={saving}
+        className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
+        style={{ background: 'var(--accent)' }}>
+        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {saving ? 'Saving…' : 'Save Geo Fence Settings'}
+      </button>
+    </div>
+  )
+}
 
 export default function Attendance() {
   const { has } = usePermissions()
   const visibleTabs = TABS.filter(t => !t.perm || has(t.perm))
-  const [activeTab, setActiveTab] = useState('today')
+  const [activeTab, setActiveTab] = useState('dashboard')
 
   return (
     <div className="flex flex-col h-full">
@@ -461,29 +574,39 @@ export default function Attendance() {
       <div className="px-6 pt-6 pb-0" style={{ background: 'var(--bg-page)' }}>
         <div className="mb-4">
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Attendance</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            Manage attendance, holidays, leave policies and shifts
+          </p>
         </div>
-        <div className="flex gap-1 border-b" style={{ borderColor: 'var(--border)' }}>
-          {visibleTabs.map(tab => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-              className="px-4 py-2.5 text-sm font-medium transition-colors relative"
-              style={{
-                color:      activeTab === tab.key ? 'var(--text-link)' : 'var(--text-muted)',
-                background: 'transparent', border: 'none', cursor: 'pointer',
-              }}>
-              {tab.key === 'settings' && <Settings className="inline w-3.5 h-3.5 mr-1.5 -mt-0.5" />}
-              {tab.label}
-              {activeTab === tab.key && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t"
-                      style={{ background: 'var(--text-link)' }} />
-              )}
-            </button>
-          ))}
+        <div className="flex gap-1 border-b overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
+          {visibleTabs.map(tab => {
+            const Icon = tab.icon
+            return (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                className="px-4 py-2.5 text-sm font-medium transition-colors relative flex items-center gap-1.5 whitespace-nowrap"
+                style={{
+                  color:      activeTab === tab.key ? 'var(--text-link)' : 'var(--text-muted)',
+                  background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0,
+                }}>
+                <Icon className="w-3.5 h-3.5" />
+                {tab.label}
+                {activeTab === tab.key && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t"
+                        style={{ background: 'var(--text-link)' }} />
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
 
       <div className="flex-1 overflow-auto">
-        {activeTab === 'today'    && <TodayTab />}
-        {activeTab === 'settings' && <SettingsTab />}
+        {activeTab === 'dashboard'    && <TodayTab />}
+        {activeTab === 'holidays'     && <HolidayManagement />}
+        {activeTab === 'leave_policy' && <LeavePolicyManagement />}
+        {activeTab === 'shifts'       && <ShiftManagement />}
+        {activeTab === 'geo_fence'    && <GeoFenceTab />}
+        {activeTab === 'settings'     && <SettingsTab />}
       </div>
     </div>
   )

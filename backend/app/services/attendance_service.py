@@ -1,6 +1,7 @@
 """HRM — Attendance Service"""
 import asyncio
 import ipaddress
+import math
 from datetime import datetime, date, timezone, timedelta
 from typing import Optional, List
 from bson import ObjectId
@@ -58,7 +59,39 @@ class AttendanceService:
             "max_breaks":           int(doc.get("attendance_max_breaks",        _DEFAULT_MAX_BREAKS)),
             "ip_restriction":       bool(doc.get("attendance_ip_restriction_enabled", False)),
             "approved_ips":         doc.get("approved_office_ips", []),
+            # Geo-fence
+            "geo_fence_enabled":    bool(doc.get("attendance_geo_fence_enabled", False)),
+            "geo_fence_radius":     int(doc.get("attendance_geo_fence_radius_meters", 100)),
+            "geo_fence_lat":        doc.get("attendance_geo_fence_latitude"),
+            "geo_fence_lon":        doc.get("attendance_geo_fence_longitude"),
         }
+
+    async def _check_today_holiday(self, company_id: str, department: Optional[str] = None) -> Optional[str]:
+        """Return holiday name if today is a company holiday, else None."""
+        today_str = date.today().isoformat()
+        query: dict = {
+            "company_id": company_id,
+            "date": today_str,
+            "is_active": True,
+            "is_deleted": False,
+        }
+        if department:
+            query["$or"] = [
+                {"applicable_departments": []},
+                {"applicable_departments": department},
+            ]
+        doc = await self.db["hrm_holidays"].find_one(query)
+        return doc["name"] if doc else None
+
+    @staticmethod
+    def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """Haversine great-circle distance in metres between two WGS-84 points."""
+        R = 6_371_000  # Earth radius in metres
+        phi1, phi2 = math.radians(lat1), math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlam = math.radians(lon2 - lon1)
+        a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+        return 2 * R * math.asin(math.sqrt(a))
 
     @staticmethod
     def _is_ip_allowed(client_ip: str, approved_ips: List[str]) -> bool:
@@ -147,7 +180,32 @@ class AttendanceService:
                     f"Check-in blocked: your IP ({client_ip}) is not in the list of approved office IPs."
                 )
 
+        # ── Geo-fence enforcement: office mode only ───────────────────────────
+        if (work_mode == "office"
+                and settings["geo_fence_enabled"]
+                and settings["geo_fence_lat"] is not None
+                and settings["geo_fence_lon"] is not None):
+            if latitude is None or longitude is None:
+                raise ValueError(
+                    "Location required for office check-in. Please enable location access."
+                )
+            distance = self._haversine_meters(
+                latitude, longitude,
+                settings["geo_fence_lat"], settings["geo_fence_lon"],
+            )
+            radius = settings["geo_fence_radius"]
+            if distance > radius:
+                raise ValueError(
+                    f"Check-in blocked: you are {int(distance)}m from office "
+                    f"(allowed radius: {radius}m). Please be in the office to check in."
+                )
+
         emp = await self._get_employee(employee_id, company_id)
+        dept = emp.get("department") if emp else None
+
+        # ── Holiday check ─────────────────────────────────────────────────────
+        holiday_name = await self._check_today_holiday(company_id, dept)
+
         # Employee's personal shift overrides company default
         shift_start = (emp.get("shift_start_time") or settings["office_start"]) if emp else settings["office_start"]
         grace = settings["grace_minutes"]
@@ -158,9 +216,10 @@ class AttendanceService:
         late_by = max(0, int((now - late_threshold).total_seconds() / 60)) if is_late else 0
 
         # ── Status determination ─────────────────────────────────────────────
-        # WFH takes priority over late; a WFH employee who clocks in late can
-        # be seen in the WFH bucket and the is_late flag still records the fact.
-        if work_mode == "wfh":
+        # Priority: holiday_worked > wfh > late > present
+        if holiday_name:
+            initial_status = AttendanceStatus.HOLIDAY  # "holiday_worked" logically
+        elif work_mode == "wfh":
             initial_status = AttendanceStatus.WORK_FROM_HOME
         elif is_late:
             initial_status = AttendanceStatus.LATE
@@ -182,6 +241,8 @@ class AttendanceService:
             "status": initial_status,
             "is_late": is_late,
             "late_by_minutes": late_by,
+            "is_holiday_worked": bool(holiday_name),
+            "holiday_name": holiday_name,
             "work_mode": work_mode,
             "check_in_ip": client_ip,
             "check_in_geo": geo,
@@ -203,7 +264,8 @@ class AttendanceService:
         if crm_user_id:
             try:
                 from app.services.notification_service import NotificationService
-                check_in_str = now.strftime("%I:%M %p")
+                _IST = timedelta(hours=5, minutes=30)
+                check_in_str = (now + _IST).strftime("%I:%M %p")
                 await NotificationService(self.db).notify_punch_in(
                     company_id=company_id,
                     user_id=crm_user_id,

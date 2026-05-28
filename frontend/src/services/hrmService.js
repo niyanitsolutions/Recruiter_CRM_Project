@@ -138,6 +138,32 @@ const syncUserToEmployee = (userId, data = null) => api.post(`${BASE}/sync/user-
 const linkUserEmployee = (userId, employeeId) => api.post(`${BASE}/sync/link`, null, { params: { user_id: userId, employee_id: employeeId } })
 const unlinkUserEmployee = (userId) => api.delete(`${BASE}/sync/unlink/${userId}`)
 
+// ── Holidays ───────────────────────────────────────────────────────────────
+const listHolidays = (params) => api.get(`${BASE}/holidays`, { params })
+const createHoliday = (data) => api.post(`${BASE}/holidays`, data)
+const updateHoliday = (id, data) => api.put(`${BASE}/holidays/${id}`, data)
+const deleteHoliday = (id) => api.delete(`${BASE}/holidays/${id}`)
+const checkHoliday = (dt, dept) => api.get(`${BASE}/holidays/check/${dt}`, { params: { department: dept } })
+const exportHolidaysCsv = (year) => api.get(`${BASE}/holidays/export/csv`, { params: { year }, responseType: 'blob' })
+const copyHolidaysToNextYear = () => api.post(`${BASE}/holidays/copy-next-year`)
+const importHolidaysCsv = (formData) => api.post(`${BASE}/holidays/import`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+
+// ── Leave Policies ─────────────────────────────────────────────────────────
+const listLeavePolicies = (params) => api.get(`${BASE}/leave-policies`, { params })
+const createLeavePolicy = (data) => api.post(`${BASE}/leave-policies`, data)
+const getLeavePolicy = (id) => api.get(`${BASE}/leave-policies/${id}`)
+const updateLeavePolicy = (id, data) => api.put(`${BASE}/leave-policies/${id}`, data)
+const deleteLeavePolicy = (id) => api.delete(`${BASE}/leave-policies/${id}`)
+const seedDefaultLeavePolicies = () => api.post(`${BASE}/leave-policies/seed-defaults`)
+
+// ── Shifts ─────────────────────────────────────────────────────────────────
+const listShifts = (params) => api.get(`${BASE}/shifts`, { params })
+const createShift = (data) => api.post(`${BASE}/shifts`, data)
+const updateShift = (id, data) => api.put(`${BASE}/shifts/${id}`, data)
+const deleteShift = (id) => api.delete(`${BASE}/shifts/${id}`)
+const seedDefaultShifts = () => api.post(`${BASE}/shifts/seed-defaults`)
+const assignShift = (data) => api.post(`${BASE}/shifts/assign`, data)
+
 // ── Offer Templates ────────────────────────────────────────────────────────
 const createTemplate = (data) => api.post(`${BASE}/offer-templates`, data)
 const listTemplates = (params) => api.get(`${BASE}/offer-templates`, { params })
@@ -145,6 +171,48 @@ const getTemplate = (id) => api.get(`${BASE}/offer-templates/${id}`)
 const updateTemplate = (id, data) => api.put(`${BASE}/offer-templates/${id}`, data)
 const deleteTemplate = (id) => api.delete(`${BASE}/offer-templates/${id}`)
 const generateFromTemplate = (id, data) => api.post(`${BASE}/offer-templates/${id}/generate`, data)
+
+// ── Document Templates ─────────────────────────────────────────────────────
+const DOC_TMPL = `${BASE}/document-templates`
+
+const listDocumentTemplates   = (params) => api.get(DOC_TMPL, { params })
+const createDocumentTemplate  = (data) => api.post(DOC_TMPL, data)
+const getDocumentTemplate     = (id) => api.get(`${DOC_TMPL}/${id}`)
+const updateDocumentTemplate  = (id, data) => api.put(`${DOC_TMPL}/${id}`, data)
+const deleteDocumentTemplate  = (id) => api.delete(`${DOC_TMPL}/${id}`)
+const cloneDocumentTemplate   = (id, data) => api.post(`${DOC_TMPL}/${id}/clone`, data)
+
+const getDocumentTemplateFormFields  = (docType) =>
+  api.get(`${DOC_TMPL}/schema/fields`, { params: { doc_type: docType } })
+const getDocumentTemplatePlaceholders = () => api.get(`${DOC_TMPL}/schema/placeholders`)
+const getDocumentTypeLabels           = () => api.get(`${DOC_TMPL}/schema/doc-types`)
+const getDocumentTemplateSchema       = () => api.get(`${DOC_TMPL}/schema/all`)
+
+// Generation
+const generateFromDocumentTemplate = (id, req) => api.post(`${DOC_TMPL}/${id}/generate`, req)
+const exportDocumentTemplatePDF  = (id, req) =>
+  api.post(`${DOC_TMPL}/${id}/export/pdf`, req, { responseType: 'blob' })
+const exportDocumentTemplateDOCX = (id, req) =>
+  api.post(`${DOC_TMPL}/${id}/export/docx`, req, { responseType: 'blob' })
+
+// Auto-fill (template-agnostic — derives fields from employee/candidate record)
+const autoFillFromEmployee  = (employeeId) =>
+  api.get(`${DOC_TMPL}/auto-fill/employee/${employeeId}`)
+const autoFillFromCandidate = (candidateId) =>
+  api.get(`${DOC_TMPL}/auto-fill/candidate/${candidateId}`)
+
+// Version control
+const getDocumentTemplateVersions       = (id) => api.get(`${DOC_TMPL}/${id}/versions`)
+const restoreDocumentTemplateVersion    = (id, req) => api.post(`${DOC_TMPL}/${id}/versions/restore`, req)
+
+// Generation history
+const listDocumentGenerations = (params) => api.get(`${DOC_TMPL}/generations/history`, { params })
+const getDocumentGeneration   = (genId) => api.get(`${DOC_TMPL}/generations/${genId}`)
+
+// Content blocks
+const listContentBlocks   = (category) => api.get(`${DOC_TMPL}/content-blocks`, { params: { category } })
+const createContentBlock  = (data) => api.post(`${DOC_TMPL}/content-blocks`, data)
+const deleteContentBlock  = (blockId) => api.delete(`${DOC_TMPL}/content-blocks/${blockId}`)
 
 const getAnnouncements = listAnnouncements
 
@@ -172,6 +240,18 @@ const hrmService = {
   createAsset, getMyAssets, listAssets, getAsset, updateAsset, deleteAsset, assignAsset, returnAsset,
   createExitRequest, listExitRequests, getExitRequest, updateExitRequest, updateExitStatus,
   toggleChecklistItem, cancelExitRequest,
+  listHolidays, createHoliday, updateHoliday, deleteHoliday,
+  checkHoliday, exportHolidaysCsv, copyHolidaysToNextYear, importHolidaysCsv,
+  listLeavePolicies, createLeavePolicy, getLeavePolicy, updateLeavePolicy, deleteLeavePolicy, seedDefaultLeavePolicies,
+  listShifts, createShift, updateShift, deleteShift, seedDefaultShifts, assignShift,
+  listDocumentTemplates, createDocumentTemplate, getDocumentTemplate, updateDocumentTemplate,
+  deleteDocumentTemplate, cloneDocumentTemplate,
+  getDocumentTemplateFormFields, getDocumentTemplatePlaceholders, getDocumentTypeLabels, getDocumentTemplateSchema,
+  generateFromDocumentTemplate, exportDocumentTemplatePDF, exportDocumentTemplateDOCX,
+  autoFillFromEmployee, autoFillFromCandidate,
+  getDocumentTemplateVersions, restoreDocumentTemplateVersion,
+  listDocumentGenerations, getDocumentGeneration,
+  listContentBlocks, createContentBlock, deleteContentBlock,
 }
 
 export default hrmService

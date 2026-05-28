@@ -1,4 +1,5 @@
 """HRM — Leave API Routes"""
+import re as _re
 from typing import Optional
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,74 @@ from app.services.leave_service import LeaveService
 router = APIRouter(prefix="/hrm/leaves", tags=["HRM - Leaves"])
 
 
+# ── Employee ID resolution ────────────────────────────────────────────────────
+
+async def _resolve_hrm_employee_id(cu: dict, db) -> str:
+    """
+    Resolve the HRM employee _id for the calling user.
+
+    Priority:
+      1. hrm_employee_id in JWT  (fast path — cached in token)
+      2. hrm_employee_id in users collection  (stale JWT after linking)
+      3. Email match against hrm_employees  (not-yet-linked accounts)
+
+    On paths 2-3 the bidirectional link is backfilled so future calls
+    hit path 1 without a DB round-trip.
+
+    Raises HTTPException(422) when no employee profile can be found.
+    """
+    # 1. JWT fast path
+    emp_id = cu.get("hrm_employee_id")
+    if emp_id:
+        return emp_id
+
+    # 2. DB lookup (handles stale JWT after admin links the account)
+    user_doc = await db["users"].find_one(
+        {"_id": cu["id"]},
+        {"hrm_employee_id": 1, "email": 1},
+    )
+    if user_doc:
+        emp_id = user_doc.get("hrm_employee_id")
+        if emp_id:
+            return emp_id
+
+        # 3. Email-based match (accounts never linked via sync panel)
+        email = (user_doc.get("email") or "").strip()
+        if email:
+            emp_doc = await db["hrm_employees"].find_one(
+                {
+                    "email": _re.compile(
+                        f"^{_re.escape(email)}$", _re.IGNORECASE
+                    ),
+                    "company_id": cu["company_id"],
+                    "is_deleted": False,
+                },
+                {"_id": 1},
+            )
+            if emp_doc:
+                emp_id = str(emp_doc["_id"])
+                # Backfill the bidirectional link
+                await db["users"].update_one(
+                    {"_id": cu["id"]},
+                    {"$set": {"hrm_employee_id": emp_id}},
+                )
+                await db["hrm_employees"].update_one(
+                    {"_id": emp_id},
+                    {"$set": {"crm_user_id": cu["id"]}},
+                )
+                return emp_id
+
+    raise HTTPException(
+        status_code=422,
+        detail=(
+            "Employee profile not found. "
+            "Please contact HR to link your account to an employee profile."
+        ),
+    )
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
 @router.post("", status_code=201)
 async def apply_leave(
     data: LeaveApply,
@@ -17,14 +86,24 @@ async def apply_leave(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:leave:apply"])),
 ):
+    # Resolve HRM employee ID — never use the user's auth _id here
+    emp_id = await _resolve_hrm_employee_id(cu, db)
+
     employee_name = cu.get("full_name") or cu.get("username", "")
-    result = await LeaveService(db).apply(data.model_dump(), cu["id"], employee_name, cu["company_id"])
+
+    try:
+        result = await LeaveService(db).apply(
+            data.model_dump(), emp_id, employee_name, cu["company_id"]
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     try:
         from app.services.notification_service import NotificationService
         await NotificationService(db).notify_leave_applied(
             company_id=cu["company_id"],
             employee_user_id=cu["id"],
-            employee_hrm_id=cu.get("hrm_employee_id"),
+            employee_hrm_id=emp_id,
             employee_name=employee_name,
             leave_type=data.leave_type.value if hasattr(data.leave_type, "value") else str(data.leave_type),
             from_date=str(data.from_date),
@@ -33,6 +112,7 @@ async def apply_leave(
         )
     except Exception:
         pass
+
     return result
 
 
@@ -81,12 +161,17 @@ async def approve_reject(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:leave:team_approve"])),
 ):
-    result = await LeaveService(db).approve_reject(
-        leave_id, data.action, cu["id"], cu.get("username", ""),
-        cu["company_id"], data.rejection_reason
-    )
+    try:
+        result = await LeaveService(db).approve_reject(
+            leave_id, data.action, cu["id"], cu.get("username", ""),
+            cu["company_id"], data.rejection_reason
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     if not result:
         raise HTTPException(status_code=404, detail="Leave not found")
+
     try:
         from app.services.notification_service import NotificationService
         leave_type = result.get("leave_type", "")
@@ -103,4 +188,5 @@ async def approve_reject(
         )
     except Exception:
         pass
+
     return result

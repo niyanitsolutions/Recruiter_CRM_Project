@@ -69,7 +69,8 @@ const TYPE_COLORS = {
 }
 
 const formatRelative = (iso) => {
-  const diff = Date.now() - new Date(iso).getTime()
+  const utcIso = iso && !iso.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(iso) ? iso + 'Z' : iso
+  const diff = Date.now() - new Date(utcIso).getTime()
   const m = Math.floor(diff / 60000)
   if (m < 1)  return 'just now'
   if (m < 60) return `${m}m ago`
