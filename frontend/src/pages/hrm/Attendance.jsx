@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, Coffee,
   Users, Wifi, Activity, Settings, Save, Loader2, LogOut,
   CalendarDays, FileText, Shield, SlidersHorizontal,
+  History, Download, Search, ChevronLeft, ChevronRight, Filter,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -447,10 +448,350 @@ function TodayTab() {
   )
 }
 
+// ── Date-range utilities ──────────────────────────────────────────────────────
+
+const fmt = (d) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const PRESETS = [
+  { key: 'today',         label: 'Today' },
+  { key: 'yesterday',     label: 'Yesterday' },
+  { key: 'this_week',     label: 'This Week' },
+  { key: 'last_week',     label: 'Last Week' },
+  { key: 'this_month',    label: 'This Month' },
+  { key: 'last_month',    label: 'Last Month' },
+  { key: 'this_quarter',  label: 'This Quarter' },
+  { key: 'last_quarter',  label: 'Last Quarter' },
+  { key: 'last_6_months', label: 'Last 6 Months' },
+  { key: 'this_year',     label: 'This Year' },
+  { key: 'last_year',     label: 'Last Year' },
+  { key: 'custom',        label: 'Custom Range' },
+]
+
+function calcPreset(key) {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const y = today.getFullYear(), mo = today.getMonth()
+  switch (key) {
+    case 'today':         return { start: today, end: today }
+    case 'yesterday': {   const d = new Date(today); d.setDate(d.getDate() - 1); return { start: d, end: d } }
+    case 'this_week': {   const d = new Date(today); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return { start: d, end: today } }
+    case 'last_week': {
+      const mon = new Date(today); mon.setDate(today.getDate() - ((today.getDay() + 6) % 7) - 7)
+      const sun = new Date(mon);   sun.setDate(mon.getDate() + 6)
+      return { start: mon, end: sun }
+    }
+    case 'this_month':   return { start: new Date(y, mo, 1),     end: today }
+    case 'last_month':   return { start: new Date(y, mo - 1, 1), end: new Date(y, mo, 0) }
+    case 'this_quarter': {
+      const q = Math.floor(mo / 3); return { start: new Date(y, q * 3, 1), end: today }
+    }
+    case 'last_quarter': {
+      const q = Math.floor(mo / 3) - 1
+      const qy = q < 0 ? y - 1 : y, aq = ((q % 4) + 4) % 4
+      return { start: new Date(qy, aq * 3, 1), end: new Date(qy, aq * 3 + 3, 0) }
+    }
+    case 'last_6_months': { const d = new Date(today); d.setDate(d.getDate() - 180); return { start: d, end: today } }
+    case 'this_year':     return { start: new Date(y, 0, 1), end: today }
+    case 'last_year':     return { start: new Date(y - 1, 0, 1), end: new Date(y - 1, 11, 31) }
+    default:              return { start: today, end: today }
+  }
+}
+
+// ── History Tab ───────────────────────────────────────────────────────────────
+
+function HistoryTab() {
+  const [preset,      setPreset]      = useState('this_month')
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd,   setCustomEnd]   = useState('')
+  const [search,      setSearch]      = useState('')
+  const [statusFilter,setStatusFilter]= useState('')
+  const [modeFilter,  setModeFilter]  = useState('')
+  const [records,     setRecords]     = useState([])
+  const [total,       setTotal]       = useState(0)
+  const [pages,       setPages]       = useState(1)
+  const [page,        setPage]        = useState(1)
+  const [loading,     setLoading]     = useState(false)
+  const [exporting,   setExporting]   = useState(false)
+  const [error,       setError]       = useState(null)
+  const pageSize = 50
+
+  const getRange = useCallback(() => {
+    if (preset === 'custom') {
+      if (!customStart || !customEnd) return null
+      return { start: customStart, end: customEnd }
+    }
+    const r = calcPreset(preset)
+    return { start: fmt(r.start), end: fmt(r.end) }
+  }, [preset, customStart, customEnd])
+
+  const load = useCallback(async (pg = 1) => {
+    const range = getRange()
+    if (!range) return
+    setLoading(true); setError(null)
+    try {
+      const params = {
+        start_date: range.start, end_date: range.end,
+        page: pg, page_size: pageSize,
+      }
+      if (search)       params.search = search
+      if (statusFilter) params.status = statusFilter
+      if (modeFilter)   params.work_mode = modeFilter
+      const r = await hrmService.getTeamAttendanceHistory(params)
+      setRecords(r.data?.items || [])
+      setTotal(r.data?.total  || 0)
+      setPages(r.data?.pages  || 1)
+      setPage(pg)
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Failed to load records')
+    } finally {
+      setLoading(false)
+    }
+  }, [getRange, search, statusFilter, modeFilter])
+
+  useEffect(() => { load(1) }, [preset, customStart, customEnd, statusFilter, modeFilter])
+
+  const handleExport = async () => {
+    const range = getRange(); if (!range) return
+    setExporting(true)
+    try {
+      const params = { start_date: range.start, end_date: range.end }
+      if (statusFilter) params.status = statusFilter
+      const res = await hrmService.exportTeamAttendanceCsv(params)
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }))
+      const a = document.createElement('a')
+      a.href = url; a.download = `attendance_${range.start}_${range.end}.csv`; a.click()
+      URL.revokeObjectURL(url)
+      toast.success('CSV downloaded')
+    } catch { toast.error('Export failed') }
+    finally { setExporting(false) }
+  }
+
+  const range = getRange()
+  const rangeLabel = range ? `${range.start}  →  ${range.end}` : 'Select date range'
+
+  return (
+    <div className="flex flex-col gap-4 p-4 h-full">
+
+      {/* ── Filter bar ── */}
+      <div className="rounded-xl border p-3 flex flex-wrap items-center gap-3"
+           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+
+        {/* Preset selector */}
+        <select
+          className="input text-sm h-9 pr-8"
+          value={preset}
+          onChange={e => { setPreset(e.target.value); setPage(1) }}
+          style={{ minWidth: 140 }}
+        >
+          {PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+        </select>
+
+        {/* Custom date inputs */}
+        {preset === 'custom' && (
+          <>
+            <input type="date" className="input text-sm h-9" value={customStart}
+              onChange={e => { setCustomStart(e.target.value); setPage(1) }} />
+            <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>to</span>
+            <input type="date" className="input text-sm h-9" value={customEnd}
+              onChange={e => { setCustomEnd(e.target.value); setPage(1) }} />
+          </>
+        )}
+
+        {/* Range label */}
+        {preset !== 'custom' && range && (
+          <span className="text-xs px-2 py-1 rounded-lg"
+                style={{ background: 'var(--bg-info)', color: 'var(--text-info)' }}>
+            {rangeLabel}
+          </span>
+        )}
+
+        <div className="flex-1" />
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5" style={{ color: 'var(--text-disabled)' }} />
+          <input
+            className="input text-sm h-9 pl-8"
+            placeholder="Employee name…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && load(1)}
+            style={{ minWidth: 160 }}
+          />
+        </div>
+
+        {/* Status filter */}
+        <select className="input text-sm h-9" value={statusFilter}
+          onChange={e => { setStatusFilter(e.target.value); setPage(1) }}>
+          <option value="">All Statuses</option>
+          {['present','late','absent','half_day','on_leave','wfh','holiday','weekend'].map(s => (
+            <option key={s} value={s}>{s.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
+          ))}
+        </select>
+
+        {/* Work mode filter */}
+        <select className="input text-sm h-9" value={modeFilter}
+          onChange={e => { setModeFilter(e.target.value); setPage(1) }}>
+          <option value="">All Modes</option>
+          {['office','wfh','hybrid','field'].map(m => (
+            <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>
+          ))}
+        </select>
+
+        {/* Refresh */}
+        <button onClick={() => load(page)} title="Refresh"
+          className="p-2 rounded-lg" style={{ background: 'var(--bg-alt)' }}>
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} style={{ color: 'var(--text-muted)' }} />
+        </button>
+
+        {/* Export */}
+        <button onClick={handleExport} disabled={exporting || !range}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
+          style={{ background: 'var(--bg-success)', color: 'var(--text-success)', opacity: exporting ? 0.6 : 1 }}>
+          {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          Export CSV
+        </button>
+      </div>
+
+      {/* ── Summary counts ── */}
+      {!loading && total > 0 && (
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          {total} record{total !== 1 ? 's' : ''} found
+          {range ? ` · ${range.start} to ${range.end}` : ''}
+        </p>
+      )}
+
+      {/* ── Error ── */}
+      {error && (
+        <div className="px-3 py-2 rounded-lg text-sm flex items-center gap-2"
+             style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
+          <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
+        </div>
+      )}
+
+      {/* ── Table ── */}
+      <div className="rounded-xl border flex-1 overflow-hidden flex flex-col"
+           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center gap-2" style={{ color: 'var(--text-muted)' }}>
+            <Loader2 className="w-5 h-5 animate-spin" /> Loading records…
+          </div>
+        ) : records.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-2" style={{ color: 'var(--text-muted)' }}>
+            <History className="w-10 h-10 opacity-30" />
+            <p className="text-sm">No attendance records for this period</p>
+            {preset === 'custom' && (!customStart || !customEnd) && (
+              <p className="text-xs opacity-60">Select a start and end date above</p>
+            )}
+          </div>
+        ) : (
+          <>
+            <TableScroll>
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                    {['Date','Employee','Status','Check In','Check Out','Worked','Break','OT','Mode'].map(h => (
+                      <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide"
+                          style={{ color: 'var(--text-disabled)', background: 'var(--bg-alt)', whiteSpace: 'nowrap' }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((rec, i) => {
+                    const isEven = i % 2 === 0
+                    const st = STATUS_STYLE[rec.status] || {}
+                    const checkIn  = rec.check_in  ? new Date(rec.check_in).toLocaleTimeString('en-IN',  { hour: '2-digit', minute: '2-digit' }) : '—'
+                    const checkOut = rec.check_out ? new Date(rec.check_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
+                    const dateLabel = rec.date ? new Date(rec.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short' }) : '—'
+                    return (
+                      <tr key={rec.id || i}
+                          style={{ background: isEven ? 'transparent' : 'var(--bg-row-alt)', borderBottom: '1px solid var(--border-subtle)' }}>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-body)' }}>{dateLabel}</td>
+                        <td className="px-3 py-2 font-medium" style={{ color: 'var(--text-heading)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {rec.employee_name || '—'}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={st}>
+                            {STATUS_LABEL[rec.status] || rec.status || '—'}
+                            {rec.is_late && rec.late_by_minutes > 0 ? ` +${rec.late_by_minutes}m` : ''}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-body)' }}>{checkIn}</td>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-body)' }}>{checkOut}</td>
+                        <td className="px-3 py-2 whitespace-nowrap font-medium" style={{ color: 'var(--text-heading)' }}>
+                          {rec.work_hours ? formatHours(rec.work_hours) : '—'}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
+                          {rec.total_break_minutes ? formatMinutes(rec.total_break_minutes) : '—'}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: rec.overtime_hours > 0 ? 'var(--text-warning)' : 'var(--text-muted)' }}>
+                          {rec.overtime_hours > 0 ? formatHours(rec.overtime_hours) : '—'}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
+                          {rec.work_mode || '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </TableScroll>
+
+            {/* Pagination */}
+            {pages > 1 && (
+              <div className="flex items-center justify-between px-4 py-2 border-t"
+                   style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Page {page} of {pages} · {total} records
+                </span>
+                <div className="flex gap-1">
+                  <button onClick={() => load(page - 1)} disabled={page <= 1}
+                    className="p-1.5 rounded" style={{ opacity: page <= 1 ? 0.4 : 1 }}>
+                    <ChevronLeft className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                  </button>
+                  {Array.from({ length: Math.min(pages, 7) }, (_, i) => {
+                    let pg = i + 1
+                    if (pages > 7) {
+                      if (page <= 4)        pg = i + 1
+                      else if (page >= pages - 3) pg = pages - 6 + i
+                      else                  pg = page - 3 + i
+                    }
+                    return (
+                      <button key={pg} onClick={() => load(pg)}
+                        className="w-7 h-7 rounded text-xs font-medium"
+                        style={{
+                          background: pg === page ? 'var(--bg-info)' : 'transparent',
+                          color: pg === page ? 'var(--text-info)' : 'var(--text-muted)',
+                        }}>
+                        {pg}
+                      </button>
+                    )
+                  })}
+                  <button onClick={() => load(page + 1)} disabled={page >= pages}
+                    className="p-1.5 rounded" style={{ opacity: page >= pages ? 0.4 : 1 }}>
+                    <ChevronRight className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 const TABS = [
   { key: 'dashboard',     label: 'Dashboard',            icon: Activity },
+  { key: 'history',       label: 'History',              icon: History,            perm: 'hrm:attendance:team' },
   { key: 'holidays',      label: 'Holiday Management',   icon: CalendarDays,       perm: 'hrm:attendance:team' },
   { key: 'leave_policy',  label: 'Leave Policies',       icon: FileText,           perm: 'hrm:attendance:team' },
   { key: 'shifts',        label: 'Shift Management',     icon: Clock,              perm: 'hrm:attendance:team' },
@@ -602,6 +943,7 @@ export default function Attendance() {
 
       <div className="flex-1 overflow-auto">
         {activeTab === 'dashboard'    && <TodayTab />}
+        {activeTab === 'history'      && <HistoryTab />}
         {activeTab === 'holidays'     && <HolidayManagement />}
         {activeTab === 'leave_policy' && <LeavePolicyManagement />}
         {activeTab === 'shifts'       && <ShiftManagement />}

@@ -9,6 +9,7 @@ import { selectUser } from '../../store/authSlice'
 import {
   User, Clock, Calendar, Banknote, Plus, UserX,
   Loader2, FolderOpen, Package, FileText, Download,
+  ChevronLeft, ChevronRight, History,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
@@ -135,88 +136,303 @@ function ProfileTab({ employeeId }) {
 
 // ── Attendance Tab ────────────────────────────────────────────────────────────
 
-function AttendanceTab({ employeeId }) {
+// ── Attendance helpers ─────────────────────────────────────────────────────────
+
+function fmtDate(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const ATT_PRESETS = [
+  { key: 'today',       label: 'Today' },
+  { key: 'yesterday',   label: 'Yesterday' },
+  { key: 'this_week',   label: 'This Week' },
+  { key: 'this_month',  label: 'This Month' },
+  { key: 'last_month',  label: 'Last Month' },
+  { key: 'last_3m',     label: 'Last 3 Months' },
+  { key: 'custom',      label: 'Custom Range' },
+]
+
+function calcAttPreset(key) {
   const now = new Date()
-  const [year, setYear]     = useState(now.getFullYear())
-  const [month, setMonth]   = useState(now.getMonth() + 1)
-  const [records, setRecords] = useState([])
-  const [loading, setLoading] = useState(true)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  switch (key) {
+    case 'today':      return { start: today, end: today }
+    case 'yesterday': { const y = new Date(today); y.setDate(y.getDate() - 1); return { start: y, end: y } }
+    case 'this_week': {
+      const dow = today.getDay(); const sun = new Date(today); sun.setDate(today.getDate() - dow)
+      const sat = new Date(sun); sat.setDate(sun.getDate() + 6); return { start: sun, end: sat }
+    }
+    case 'this_month':  return { start: new Date(today.getFullYear(), today.getMonth(), 1), end: today }
+    case 'last_month': {
+      const f = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+      const l = new Date(today.getFullYear(), today.getMonth(), 0)
+      return { start: f, end: l }
+    }
+    case 'last_3m': {
+      const s = new Date(today); s.setMonth(s.getMonth() - 3); return { start: s, end: today }
+    }
+    default: return null
+  }
+}
 
-  const load = useCallback(() => {
-    if (!employeeId) { setLoading(false); return }
-    setLoading(true)
-    hrmService.getMonthlyAttendance(employeeId, year, month)
-      .then(r => setRecords(Array.isArray(r.data) ? r.data : []))
+function AttendanceTab() {
+  const [preset, setPreset]         = useState('this_month')
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd]   = useState('')
+  const [records, setRecords]       = useState([])
+  const [total, setTotal]           = useState(0)
+  const [pages, setPages]           = useState(1)
+  const [page, setPage]             = useState(1)
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState('')
+  const [exporting, setExporting]   = useState(false)
+
+  // Live timer for active session
+  const [activeSession, setActiveSession] = useState(null)
+  const [elapsed, setElapsed]             = useState(0)
+
+  // Load today's active session
+  useEffect(() => {
+    hrmService.getMyTodayAttendance()
+      .then(r => {
+        const data = r.data
+        if (data?.check_in && !data?.check_out) {
+          setActiveSession(data)
+        }
+      })
       .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [year, month, employeeId])
+  }, [])
 
-  useEffect(() => { load() }, [load])
+  // Tick every second when active session exists
+  useEffect(() => {
+    if (!activeSession?.check_in) return
+    const tick = () => {
+      const checkedIn = new Date(activeSession.check_in.endsWith('Z') ? activeSession.check_in : activeSession.check_in + 'Z')
+      const breakSecs = (activeSession.total_break_minutes || 0) * 60
+      setElapsed(Math.floor((Date.now() - checkedIn.getTime()) / 1000) - breakSecs)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [activeSession])
 
-  const summary = records.reduce((acc, r) => {
-    acc[r.status] = (acc[r.status] || 0) + 1
-    return acc
-  }, {})
+  const range = preset === 'custom'
+    ? (customStart && customEnd ? { start: customStart, end: customEnd } : null)
+    : (() => { const r = calcAttPreset(preset); return r ? { start: fmtDate(r.start), end: fmtDate(r.end) } : null })()
+
+  const load = useCallback(async (pg = 1) => {
+    if (!range) return
+    setLoading(true); setError('')
+    try {
+      const r = await hrmService.getMyAttendanceHistory({
+        start_date: range.start, end_date: range.end, page: pg, page_size: 31,
+      })
+      const data = r.data
+      setRecords(data.items || [])
+      setTotal(data.total || 0)
+      setPages(data.pages || 1)
+      setPage(pg)
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Failed to load attendance records')
+      setRecords([])
+    }
+    setLoading(false)
+  }, [range?.start, range?.end])
+
+  useEffect(() => { if (range) load(1) }, [load])
+
+  const handleExport = async () => {
+    if (!range) return
+    setExporting(true)
+    try {
+      const r = await hrmService.exportMyAttendanceCsv({ start_date: range.start, end_date: range.end })
+      const url = URL.createObjectURL(r.data)
+      const a = document.createElement('a'); a.href = url
+      a.download = `my-attendance-${range.start}-to-${range.end}.csv`
+      a.click(); URL.revokeObjectURL(url)
+    } catch { toast.error('Export failed') }
+    setExporting(false)
+  }
+
+  const fmtSecs = s => {
+    const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const sec = s % 60
+    return h > 0 ? `${h}h ${String(m).padStart(2,'0')}m` : `${m}m ${String(sec).padStart(2,'0')}s`
+  }
+
+  const summary = records.reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {})
 
   return (
     <div className="p-6 space-y-4">
-      <div className="flex items-center gap-3 flex-wrap">
-        <select
-          className="input w-40"
-          value={month}
-          onChange={e => setMonth(Number(e.target.value))}
-        >
-          {[...Array(12)].map((_, i) => (
-            <option key={i + 1} value={i + 1}>
-              {new Date(2000, i).toLocaleString('default', { month: 'long' })}
-            </option>
-          ))}
-        </select>
-        <select
-          className="input w-24"
-          value={year}
-          onChange={e => setYear(Number(e.target.value))}
-        >
-          {[2024, 2025, 2026].map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
-      </div>
 
-      {Object.entries(summary).length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(summary).map(([status, count]) => (
-            <StatusBadge key={status} status={`${status}: ${count}`} />
-          ))}
+      {/* Live session banner */}
+      {activeSession && elapsed > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
+             style={{ background: 'rgba(67,233,123,0.12)', border: '1px solid rgba(67,233,123,0.25)' }}>
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
+          <span className="text-sm font-medium" style={{ color: '#43E97B' }}>
+            Active session — {fmtSecs(elapsed)}
+          </span>
+          <span className="text-xs ml-auto" style={{ color: 'var(--text-muted)' }}>
+            Checked in at {new Date(activeSession.check_in.endsWith('Z') ? activeSession.check_in : activeSession.check_in + 'Z')
+              .toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+          </span>
         </div>
       )}
 
+      {/* Filter bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <select className="input text-sm h-9" value={preset}
+          onChange={e => { setPreset(e.target.value); setPage(1) }} style={{ minWidth: 140 }}>
+          {ATT_PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+        </select>
+        {preset === 'custom' && (
+          <>
+            <input type="date" className="input text-sm h-9" value={customStart}
+              onChange={e => { setCustomStart(e.target.value); setPage(1) }} />
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>to</span>
+            <input type="date" className="input text-sm h-9" value={customEnd}
+              onChange={e => { setCustomEnd(e.target.value); setPage(1) }} />
+          </>
+        )}
+        <div className="flex-1" />
+        <button onClick={handleExport} disabled={exporting || !range}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
+          style={{ background: 'var(--bg-success)', color: 'var(--text-success)', opacity: (exporting || !range) ? 0.5 : 1 }}>
+          {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          CSV
+        </button>
+      </div>
+
+      {/* Summary badges */}
+      {Object.keys(summary).length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {Object.entries(summary).map(([st, cnt]) => {
+            const cfg = STATUS_COLORS[st] || { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' }
+            return (
+              <span key={st} className="px-2.5 py-0.5 rounded-full text-xs font-medium"
+                    style={{ background: cfg.bg, color: cfg.color }}>
+                {st.replace(/_/g,' ')} · {cnt}
+              </span>
+            )
+          })}
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium ml-1"
+                style={{ background: 'var(--bg-alt)', color: 'var(--text-muted)' }}>
+            Total {total}
+          </span>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
+          {error}
+        </div>
+      )}
+
+      {/* Table */}
       {loading ? (
-        <div className="py-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading…</div>
+        <div className="py-10 flex items-center justify-center gap-2" style={{ color: 'var(--text-muted)' }}>
+          <Loader2 className="w-5 h-5 animate-spin" /> Loading…
+        </div>
       ) : records.length === 0 ? (
-        <div className="py-8 text-center" style={{ color: 'var(--text-muted)' }}>No records for this month</div>
+        <div className="py-10 flex flex-col items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+          <History className="w-10 h-10 opacity-30" />
+          <p className="text-sm">No attendance records for this period</p>
+          {preset === 'custom' && (!customStart || !customEnd) && (
+            <p className="text-xs opacity-60">Select a start and end date above</p>
+          )}
+        </div>
       ) : (
-        <div className="space-y-0">
-          {records.map(r => (
-            <div
-              key={r.id || r.date}
-              className="flex items-center justify-between py-2.5 text-sm"
-              style={{ borderBottom: '1px solid var(--border-subtle)' }}
-            >
-              <span className="w-32" style={{ color: 'var(--text-body)' }}>
-                {new Date(r.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', weekday: 'short' })}
+        <div className="rounded-xl border overflow-hidden"
+             style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-alt)' }}>
+                  {['Date','Status','Check In','Check Out','Worked','Break','OT','Late'].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
+                        style={{ color: 'var(--text-disabled)' }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {records.map((rec, i) => {
+                  const cfg = STATUS_COLORS[rec.status] || { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' }
+                  const checkIn  = rec.check_in  ? new Date(rec.check_in.endsWith('Z')  ? rec.check_in  : rec.check_in  + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
+                  const checkOut = rec.check_out ? new Date(rec.check_out.endsWith('Z') ? rec.check_out : rec.check_out + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
+                  const dateStr  = rec.date ? new Date(rec.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short' }) : '—'
+                  return (
+                    <tr key={rec.id || i}
+                        style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-row-alt)', borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{dateStr}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium capitalize"
+                              style={{ background: cfg.bg, color: cfg.color }}>
+                          {rec.status?.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{checkIn}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{checkOut}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs font-medium" style={{ color: 'var(--text-heading)' }}>
+                        {rec.work_hours ? fmtHours(rec.work_hours) : '—'}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {rec.total_break_minutes ? fmtHours(rec.total_break_minutes / 60) : '—'}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs"
+                          style={{ color: rec.overtime_hours > 0 ? 'var(--text-warning)' : 'var(--text-muted)' }}>
+                        {rec.overtime_hours > 0 ? fmtHours(rec.overtime_hours) : '—'}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs"
+                          style={{ color: rec.is_late ? 'var(--text-warning)' : 'var(--text-muted)' }}>
+                        {rec.is_late && rec.late_by_minutes > 0 ? `+${rec.late_by_minutes}m` : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {pages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2 border-t"
+                 style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                Page {page} of {pages} · {total} records
               </span>
-              <div className="w-28 text-center">
-                <StatusBadge status={r.status} />
+              <div className="flex gap-1">
+                <button onClick={() => load(page - 1)} disabled={page <= 1}
+                  className="p-1.5 rounded" style={{ opacity: page <= 1 ? 0.4 : 1 }}>
+                  <ChevronLeft className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                </button>
+                {Array.from({ length: Math.min(pages, 5) }, (_, i) => {
+                  let pg = i + 1
+                  if (pages > 5) {
+                    if (page <= 3)        pg = i + 1
+                    else if (page >= pages - 2) pg = pages - 4 + i
+                    else                  pg = page - 2 + i
+                  }
+                  return (
+                    <button key={pg} onClick={() => load(pg)}
+                      className="w-7 h-7 rounded text-xs font-medium"
+                      style={{ background: pg === page ? 'var(--bg-info)' : 'transparent', color: pg === page ? 'var(--text-info)' : 'var(--text-muted)' }}>
+                      {pg}
+                    </button>
+                  )
+                })}
+                <button onClick={() => load(page + 1)} disabled={page >= pages}
+                  className="p-1.5 rounded" style={{ opacity: page >= pages ? 0.4 : 1 }}>
+                  <ChevronRight className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                </button>
               </div>
-              <span className="w-28 text-center" style={{ color: 'var(--text-muted)' }}>
-                {r.check_in ? new Date(r.check_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                {' – '}
-                {r.check_out ? new Date(r.check_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}
-              </span>
-              <span className="w-16 text-right" style={{ color: 'var(--text-secondary)' }}>
-                {r.work_hours ? fmtHours(r.work_hours) : ''}
-              </span>
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>

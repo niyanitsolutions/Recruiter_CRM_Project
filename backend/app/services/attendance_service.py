@@ -526,6 +526,102 @@ class AttendanceService:
             "check_in": {"$ne": None},
         })
 
+    # ── Historical range queries ──────────────────────────────────────────────
+
+    async def get_history(
+        self,
+        company_id: str,
+        start_date: datetime,
+        end_date: datetime,
+        employee_id: Optional[str] = None,
+        status: Optional[str] = None,
+        work_mode: Optional[str] = None,
+        search: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 50,
+    ) -> dict:
+        """Paginated attendance records across a date range for HR/team view."""
+        end_inclusive = end_date + timedelta(days=1)
+        query: dict = {
+            "company_id": company_id,
+            "date": {"$gte": start_date, "$lt": end_inclusive},
+        }
+        if employee_id:
+            query["employee_id"] = employee_id
+        if status:
+            query["status"] = status
+        if work_mode:
+            query["work_mode"] = work_mode
+        if search:
+            import re as _re
+            query["employee_name"] = {"$regex": _re.escape(search), "$options": "i"}
+
+        total = await self.col.count_documents(query)
+        skip = (page - 1) * page_size
+        cursor = (
+            self.col.find(query)
+            .sort([("date", -1), ("employee_name", 1)])
+            .skip(skip)
+            .limit(page_size)
+        )
+        items = [self._serialize(d) async for d in cursor]
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": max(1, (total + page_size - 1) // page_size),
+        }
+
+    async def get_my_history(
+        self,
+        employee_id: str,
+        company_id: str,
+        start_date: datetime,
+        end_date: datetime,
+        page: int = 1,
+        page_size: int = 62,
+    ) -> dict:
+        """Paginated attendance records for a single employee across a date range."""
+        end_inclusive = end_date + timedelta(days=1)
+        query = {
+            "employee_id": employee_id,
+            "company_id": company_id,
+            "date": {"$gte": start_date, "$lt": end_inclusive},
+        }
+        total = await self.col.count_documents(query)
+        skip = (page - 1) * page_size
+        cursor = self.col.find(query).sort("date", -1).skip(skip).limit(page_size)
+        items = [self._serialize(d) async for d in cursor]
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": max(1, (total + page_size - 1) // page_size),
+        }
+
+    async def export_data(
+        self,
+        company_id: str,
+        start_date: datetime,
+        end_date: datetime,
+        employee_id: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[dict]:
+        """Return all rows in a date range (no pagination) for CSV export."""
+        end_inclusive = end_date + timedelta(days=1)
+        query: dict = {
+            "company_id": company_id,
+            "date": {"$gte": start_date, "$lt": end_inclusive},
+        }
+        if employee_id:
+            query["employee_id"] = employee_id
+        if status:
+            query["status"] = status
+        cursor = self.col.find(query).sort([("date", 1), ("employee_name", 1)])
+        return [self._serialize(d) async for d in cursor]
+
     async def get_today_stats(self, company_id: str) -> dict:
         """All today's attendance counters in parallel for efficiency."""
         today = _today_dt()

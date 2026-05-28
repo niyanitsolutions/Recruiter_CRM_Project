@@ -1,9 +1,12 @@
 """HRM — Attendance API Routes"""
+import csv
+import io
 import logging
 import re as _re
 from datetime import datetime, date, timezone
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from bson import ObjectId
 
@@ -342,6 +345,157 @@ async def get_stats_today(
         "absent":            absent,
         **stats,
     }
+
+
+# ── Date-range helpers ────────────────────────────────────────────────────────
+
+def _parse_date_param(s: str) -> datetime:
+    """Parse YYYY-MM-DD string → naive midnight datetime for MongoDB queries."""
+    d = date.fromisoformat(s)
+    return datetime(d.year, d.month, d.day)
+
+
+def _csv_response(rows: list, fieldnames: list, filename: str) -> StreamingResponse:
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _flatten_row(r: dict, include_employee: bool = True) -> dict:
+    row = {
+        "Date":              r.get("date", ""),
+        "Status":            (r.get("status") or "").replace("_", " ").title(),
+        "Check In":          r.get("check_in", ""),
+        "Check Out":         r.get("check_out", ""),
+        "Work Hours":        r.get("work_hours", ""),
+        "Break (min)":       round(r.get("total_break_minutes") or 0),
+        "Overtime (h)":      r.get("overtime_hours", ""),
+        "Late By (min)":     r.get("late_by_minutes", 0),
+        "Is Half Day":       "Yes" if r.get("is_half_day") else "No",
+        "Work Mode":         (r.get("work_mode") or "").title(),
+        "Auto Checkout":     "Yes" if r.get("auto_punched_out") else "No",
+        "Notes":             r.get("notes", ""),
+    }
+    if include_employee:
+        row = {"Employee": r.get("employee_name", ""), **row}
+    return row
+
+
+# ── Historical range — team view ──────────────────────────────────────────────
+
+@router.get("/history")
+async def get_history(
+    start_date: str,
+    end_date:   str,
+    employee_id: Optional[str] = None,
+    status:      Optional[str] = None,
+    work_mode:   Optional[str] = None,
+    search:      Optional[str] = None,
+    page:      int = Query(1,  ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:attendance:team"])),
+):
+    """Return paginated team attendance records for a date range."""
+    try:
+        sd = _parse_date_param(start_date)
+        ed = _parse_date_param(end_date)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
+    if (ed - sd).days > 366:
+        raise HTTPException(status_code=422, detail="Date range cannot exceed 366 days.")
+    return await AttendanceService(db).get_history(
+        cu["company_id"], sd, ed, employee_id, status, work_mode, search, page, page_size,
+    )
+
+
+# ── Historical range — personal (self-service) ────────────────────────────────
+
+@router.get("/me/history")
+async def get_my_history(
+    start_date: str,
+    end_date:   str,
+    page:      int = Query(1,  ge=1),
+    page_size: int = Query(62, ge=1, le=200),
+    cu: dict = Depends(require_non_partner),
+    db=Depends(get_company_db),
+):
+    """Return paginated attendance history for the calling user."""
+    emp_id = await _resolve_emp_id_optional(cu, db)
+    if not emp_id:
+        return {"items": [], "total": 0, "page": page, "page_size": page_size, "pages": 1}
+    try:
+        sd = _parse_date_param(start_date)
+        ed = _parse_date_param(end_date)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
+    return await AttendanceService(db).get_my_history(
+        emp_id, cu["company_id"], sd, ed, page, page_size,
+    )
+
+
+# ── CSV exports ───────────────────────────────────────────────────────────────
+
+_TEAM_FIELDS = [
+    "Employee", "Date", "Status", "Check In", "Check Out",
+    "Work Hours", "Break (min)", "Overtime (h)", "Late By (min)",
+    "Is Half Day", "Work Mode", "Auto Checkout", "Notes",
+]
+_MY_FIELDS = [
+    "Date", "Status", "Check In", "Check Out",
+    "Work Hours", "Break (min)", "Overtime (h)", "Late By (min)",
+    "Is Half Day", "Work Mode", "Notes",
+]
+
+
+@router.get("/export/csv")
+async def export_team_csv(
+    start_date: str,
+    end_date:   str,
+    employee_id: Optional[str] = None,
+    status:      Optional[str] = None,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:attendance:team"])),
+):
+    """Download team attendance as CSV for the specified date range."""
+    try:
+        sd = _parse_date_param(start_date)
+        ed = _parse_date_param(end_date)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="Invalid date format.")
+    rows = await AttendanceService(db).export_data(cu["company_id"], sd, ed, employee_id, status)
+    flat = [_flatten_row(r, include_employee=True) for r in rows]
+    return _csv_response(flat, _TEAM_FIELDS, f"attendance_{start_date}_{end_date}.csv")
+
+
+@router.get("/me/export/csv")
+async def export_my_csv(
+    start_date: str,
+    end_date:   str,
+    cu: dict = Depends(require_non_partner),
+    db=Depends(get_company_db),
+):
+    """Download personal attendance as CSV for the specified date range."""
+    emp_id = await _resolve_emp_id_optional(cu, db)
+    if not emp_id:
+        raise HTTPException(status_code=404, detail="No employee profile found.")
+    try:
+        sd = _parse_date_param(start_date)
+        ed = _parse_date_param(end_date)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="Invalid date format.")
+    rows = await AttendanceService(db).export_data(cu["company_id"], sd, ed, emp_id)
+    flat = [_flatten_row(r, include_employee=False) for r in rows]
+    return _csv_response(flat, _MY_FIELDS, f"my_attendance_{start_date}_{end_date}.csv")
 
 
 # ── Manual update ─────────────────────────────────────────────────────────────
