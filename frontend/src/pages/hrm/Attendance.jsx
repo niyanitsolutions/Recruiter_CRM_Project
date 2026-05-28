@@ -499,94 +499,154 @@ function DashboardTab() {
   return (
     <div className="flex flex-col" style={{ minHeight: 0 }}>
 
-      {/* ── Compact single-line filter bar (sticky) ── */}
+      {/* ── Filter bar (sticky, single horizontal row) ── */}
       <div className="sticky top-0 z-20 px-4 pt-3 pb-2"
            style={{ background: 'var(--bg-main)' }}>
-        <div className="rounded-xl border px-3 py-2 flex items-center gap-2 flex-wrap"
-             style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+        <div className="rounded-xl border px-3 py-2"
+             style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
 
-          {/* ── Date group ── */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <select className="input text-xs h-8" value={preset}
-              onChange={e => { setPreset(e.target.value); setPage(1) }}
-              style={{ minWidth: 118, paddingRight: '1.5rem' }}>
-              {PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-            </select>
-            {preset === 'custom' ? (
-              <>
-                <input type="date" className="input text-xs h-8" value={customStart}
-                  onChange={e => { setCustomStart(e.target.value); setPage(1) }}
-                  style={{ width: 128 }} />
-                <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-muted)' }}>–</span>
-                <input type="date" className="input text-xs h-8" value={customEnd}
-                  onChange={e => { setCustomEnd(e.target.value); setPage(1) }}
-                  style={{ width: 128 }} />
-              </>
-            ) : rangeLabel ? (
-              <span className="text-xs px-1.5 py-0.5 rounded flex-shrink-0 whitespace-nowrap"
-                    style={{ background: 'var(--bg-info)', color: 'var(--text-info)' }}>
-                {rangeLabel}
-              </span>
-            ) : null}
-          </div>
+          {/* ── Date preset ── */}
+          <select
+            value={preset}
+            onChange={e => { setPreset(e.target.value); setPage(1) }}
+            style={{
+              width: 180, height: 32, flexShrink: 0,
+              background: 'var(--bg-input)', border: '1px solid var(--border)',
+              borderRadius: 8, color: 'var(--text-body)', fontSize: '0.75rem',
+              padding: '0 8px', outline: 'none', cursor: 'pointer',
+            }}>
+            {PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+          </select>
+
+          {/* Custom date range pickers (only when custom selected) */}
+          {preset === 'custom' && (
+            <>
+              <input
+                type="date"
+                value={customStart}
+                onChange={e => { setCustomStart(e.target.value); setPage(1) }}
+                style={{
+                  width: 136, height: 32, flexShrink: 0,
+                  background: 'var(--bg-input)', border: '1px solid var(--border)',
+                  borderRadius: 8, color: 'var(--text-body)', fontSize: '0.75rem',
+                  padding: '0 8px', outline: 'none',
+                }}
+              />
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', flexShrink: 0 }}>–</span>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={e => { setCustomEnd(e.target.value); setPage(1) }}
+                style={{
+                  width: 136, height: 32, flexShrink: 0,
+                  background: 'var(--bg-input)', border: '1px solid var(--border)',
+                  borderRadius: 8, color: 'var(--text-body)', fontSize: '0.75rem',
+                  padding: '0 8px', outline: 'none',
+                }}
+              />
+            </>
+          )}
+
+          {/* Range badge (non-custom presets) */}
+          {preset !== 'custom' && rangeLabel && (
+            <span style={{
+              fontSize: '0.7rem', padding: '2px 8px', borderRadius: 6, flexShrink: 0, whiteSpace: 'nowrap',
+              background: 'var(--bg-info)', color: 'var(--text-info)',
+            }}>
+              {rangeLabel}
+            </span>
+          )}
 
           {/* ── Divider ── */}
-          <div className="w-px h-5 flex-shrink-0 hidden sm:block"
-               style={{ background: 'var(--border-subtle)' }} />
+          <div style={{ width: 1, height: 20, background: 'var(--border-subtle)', flexShrink: 0 }} />
 
-          {/* ── Status & mode ── */}
-          <select className="input text-xs h-8 flex-shrink-0" value={statusFilter}
+          {/* ── Status filter ── */}
+          <select
+            value={statusFilter}
             onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
-            style={{ minWidth: 108, paddingRight: '1.5rem' }}>
+            style={{
+              width: 180, height: 32, flexShrink: 0,
+              background: 'var(--bg-input)', border: '1px solid var(--border)',
+              borderRadius: 8, color: 'var(--text-body)', fontSize: '0.75rem',
+              padding: '0 8px', outline: 'none', cursor: 'pointer',
+            }}>
             <option value="">All Statuses</option>
             {['present','late','absent','half_day','on_leave','wfh','holiday','weekend'].map(s => (
               <option key={s} value={s}>{s.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
             ))}
           </select>
 
-          <select className="input text-xs h-8 flex-shrink-0" value={modeFilter}
+          {/* ── Mode filter ── */}
+          <select
+            value={modeFilter}
             onChange={e => { setModeFilter(e.target.value); setPage(1) }}
-            style={{ minWidth: 86, paddingRight: '1.5rem' }}>
+            style={{
+              width: 180, height: 32, flexShrink: 0,
+              background: 'var(--bg-input)', border: '1px solid var(--border)',
+              borderRadius: 8, color: 'var(--text-body)', fontSize: '0.75rem',
+              padding: '0 8px', outline: 'none', cursor: 'pointer',
+            }}>
             <option value="">All Modes</option>
             {['office','wfh','hybrid','field'].map(m => (
               <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>
             ))}
           </select>
 
-          {/* ── Search (fluid) ── */}
-          <div className="relative flex-1" style={{ minWidth: 130, maxWidth: 220 }}>
-            <Search className="absolute left-2 top-2 w-3.5 h-3.5 pointer-events-none"
-                    style={{ color: 'var(--text-disabled)' }} />
-            <input className="input text-xs h-8 pl-7 w-full" placeholder="Employee…"
-              value={search} onChange={e => setSearch(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && load(1)} />
+          {/* ── Employee search (fluid) ── */}
+          <div style={{ position: 'relative', flex: '1 1 auto', minWidth: 220 }}>
+            <Search style={{ position: 'absolute', left: 8, top: 8, width: 14, height: 14, pointerEvents: 'none', color: 'var(--text-disabled)' }} />
+            <input
+              placeholder="Search employee…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && load(1)}
+              style={{
+                width: '100%', height: 32,
+                background: 'var(--bg-input)', border: '1px solid var(--border)',
+                borderRadius: 8, color: 'var(--text-body)', fontSize: '0.75rem',
+                padding: '0 8px 0 28px', outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
           </div>
 
-          {/* ── Right spacer ── */}
-          <div className="flex-1 hidden md:block" />
-
-          {/* ── Action group ── */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {hasFilters && (
-              <button onClick={resetFilters} title="Reset filters"
-                className="px-2 h-8 rounded-lg text-xs font-medium"
-                style={{ background: 'var(--bg-alt)', color: 'var(--text-muted)' }}>
-                Reset
-              </button>
-            )}
-            <button onClick={() => load(page)} title="Refresh"
-              className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0"
-              style={{ background: 'var(--bg-alt)' }}>
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`}
-                         style={{ color: 'var(--text-muted)' }} />
+          {/* ── Action buttons ── */}
+          {hasFilters && (
+            <button
+              onClick={resetFilters}
+              style={{
+                height: 32, padding: '0 10px', borderRadius: 8, flexShrink: 0,
+                background: 'var(--bg-alt)', color: 'var(--text-muted)',
+                fontSize: '0.75rem', fontWeight: 500, border: 'none', cursor: 'pointer',
+              }}>
+              Reset
             </button>
-            <button onClick={handleExport} disabled={exporting || !range}
-              className="flex items-center gap-1 px-2.5 h-8 rounded-lg text-xs font-medium flex-shrink-0 whitespace-nowrap"
-              style={{ background: 'var(--bg-success)', color: 'var(--text-success)', opacity: (exporting || !range) ? 0.5 : 1 }}>
-              {exporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
-              Export
-            </button>
-          </div>
+          )}
+          <button
+            onClick={() => load(page)}
+            title="Refresh"
+            style={{
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+              background: 'var(--bg-alt)', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+            <RefreshCw style={{ width: 14, height: 14, color: 'var(--text-muted)' }}
+                       className={loading ? 'animate-spin' : ''} />
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={exporting || !range}
+            style={{
+              height: 32, padding: '0 12px', borderRadius: 8, flexShrink: 0,
+              background: 'var(--bg-success)', color: 'var(--text-success)',
+              fontSize: '0.75rem', fontWeight: 500, border: 'none',
+              cursor: exporting || !range ? 'not-allowed' : 'pointer',
+              opacity: exporting || !range ? 0.5 : 1,
+              display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
+            }}>
+            {exporting ? <Loader2 style={{ width: 12, height: 12 }} className="animate-spin" /> : <Download style={{ width: 12, height: 12 }} />}
+            Export
+          </button>
         </div>
       </div>
 
