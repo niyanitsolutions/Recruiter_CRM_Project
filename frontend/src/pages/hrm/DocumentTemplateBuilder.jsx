@@ -131,6 +131,13 @@ const ENTERPRISE_CSS = `
   /* Block drag-handle hover */
   .eb-block-row:hover .eb-drag-handle { opacity: 1 !important; }
 
+  /* Header canvas inline editing placeholder */
+  [data-placeholder]:empty::before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; }
+
+  /* Resize cursor during drag */
+  body.resizing-h * { cursor: col-resize !important; user-select: none !important; }
+  body.resizing-v * { cursor: row-resize !important; user-select: none !important; }
+
   /* Spin animation */
   @keyframes eb-spin { to { transform: rotate(360deg); } }
   .eb-spinner { animation: eb-spin 0.8s linear infinite; }
@@ -1335,6 +1342,245 @@ function FooterDesigner({ footer, onChange }) {
   )
 }
 
+// ─── Interactive Header Canvas ────────────────────────────────────────────────
+
+const HEADER_PRESETS = [
+  { id: 'text-left-logo-right', label: '⬛→',  logo_align: 'right',  name_side: 'left'   },
+  { id: 'logo-left-text-right', label: '←⬛',  logo_align: 'left',   name_side: 'right'  },
+  { id: 'centered',             label: '↕',    logo_align: 'center', name_side: 'center' },
+  { id: 'text-only',            label: 'T',    logo_align: 'none',   name_side: 'left'   },
+]
+
+function InteractiveHeaderCanvas({ header, onChange, branding }) {
+  const [logoSel, setLogoSel] = useState(false)
+  const [hoverBar, setHoverBar] = useState(false)
+  const headerRef = useRef(null)
+  const primary = header.border_color || branding?.primary_color || '#1e3a5f'
+  const logoAlign = header.logo_align || 'right'
+  const nameSide  = header.name_side  || 'left'
+
+  const startLogoDrag = useCallback((e) => {
+    e.preventDefault(); e.stopPropagation()
+    const rect = headerRef.current.getBoundingClientRect()
+    const startX = e.clientX - (header.logo_x || 0)
+    const startY = e.clientY - (header.logo_y || 0)
+    const onMove = (ev) => {
+      const x = Math.max(0, Math.min(ev.clientX - startX, rect.width - (header.logo_width || 120)))
+      const y = Math.max(0, Math.min(ev.clientY - startY, (header.height || 80) - (header.logo_height || 48)))
+      onChange({ ...header, logo_x: Math.round(x), logo_y: Math.round(y), logo_free: true })
+    }
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [header, onChange])
+
+  const startLogoResize = useCallback((dir, e) => {
+    e.preventDefault(); e.stopPropagation()
+    const sw = header.logo_width || 120, sh = header.logo_height || 48
+    const sx = e.clientX, sy = e.clientY
+    const aspect = sw / sh
+    const onMove = (ev) => {
+      const dx = ev.clientX - sx, dy = ev.clientY - sy
+      let nw = sw, nh = sh
+      if (dir.includes('e')) nw = Math.max(20, sw + dx)
+      if (dir.includes('w')) nw = Math.max(20, sw - dx)
+      if (dir.includes('s')) nh = Math.max(10, sh + dy)
+      if (dir.includes('n')) nh = Math.max(10, sh - dy)
+      if (header.logo_lock_aspect !== false) {
+        if (dir.includes('e') || dir.includes('w')) nh = nw / aspect
+        else nw = nh * aspect
+      }
+      onChange({ ...header, logo_width: Math.round(nw), logo_height: Math.round(nh) })
+    }
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [header, onChange])
+
+  const logoPositionStyle = () => {
+    const w = header.logo_width || 120, h = header.logo_height || 48
+    if (header.logo_free) return { position: 'absolute', left: header.logo_x || 0, top: header.logo_y || 0, width: w, height: h }
+    if (logoAlign === 'left')   return { position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', width: w, height: h }
+    if (logoAlign === 'center') return { position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: w, height: h }
+    if (logoAlign === 'right')  return { position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', width: w, height: h }
+    return { position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', width: w, height: h }
+  }
+
+  const textBlockStyle = () => {
+    const hasLogo = !!header.logo && logoAlign !== 'none'
+    const lw = (header.logo_width || 120) + 12
+    if (nameSide === 'center') return { position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center', width: hasLogo ? `calc(100% - ${lw}px)` : '100%' }
+    if (nameSide === 'right')  return { position: 'absolute', right: hasLogo && logoAlign === 'left' ? lw : 0, top: 0, textAlign: 'right', maxWidth: `calc(100% - ${hasLogo ? lw : 0}px)` }
+    return { position: 'absolute', left: hasLogo && logoAlign === 'left' ? lw : 0, top: 0, maxWidth: `calc(100% - ${hasLogo ? lw : 0}px)` }
+  }
+
+  return (
+    <div
+      ref={headerRef}
+      className="header-canvas"
+      style={{ position: 'relative', minHeight: header.height || 80, marginBottom: 16, paddingBottom: 8, borderBottom: header.border_bottom !== false ? `2px solid ${primary}` : 'none', overflow: 'visible' }}
+      onClick={() => setLogoSel(false)}
+      onMouseEnter={() => setHoverBar(true)}
+      onMouseLeave={() => setHoverBar(false)}
+    >
+      {/* Layout preset bar */}
+      {hoverBar && (
+        <div style={{ position: 'absolute', top: 0, right: 0, display: 'flex', gap: 2, zIndex: 30, background: 'rgba(255,255,255,0.95)', borderRadius: 6, padding: '3px 5px', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', backdropFilter: 'blur(4px)' }}
+          onClick={e => e.stopPropagation()}>
+          <span style={{ fontSize: 9, color: '#94a3b8', display: 'flex', alignItems: 'center', paddingRight: 4 }}>Layout:</span>
+          {HEADER_PRESETS.map(p => (
+            <button key={p.id}
+              onClick={() => onChange({ ...header, logo_align: p.logo_align, name_side: p.name_side, logo_free: false })}
+              title={p.id.replace(/-/g, ' ')}
+              style={{ width: 26, height: 22, border: `1px solid ${(header.logo_align === p.logo_align && header.name_side === p.name_side) ? primary : '#e2e8f0'}`, borderRadius: 4, background: (header.logo_align === p.logo_align && header.name_side === p.name_side) ? primary : 'white', cursor: 'pointer', fontSize: 9, color: (header.logo_align === p.logo_align && header.name_side === p.name_side) ? 'white' : '#374151', fontWeight: 700 }}>
+              {p.label}
+            </button>
+          ))}
+          <div style={{ width: 1, background: '#e2e8f0', margin: '2px 4px' }} />
+          <label title="Upload logo" style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '2px 5px', borderRadius: 4, border: '1px solid #e2e8f0', fontSize: 10, color: '#374151', background: 'white', gap: 3 }}>
+            <Upload size={10} /> Logo
+            <input type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = ev => onChange({ ...header, logo: ev.target.result }); r.readAsDataURL(f) }} />
+          </label>
+        </div>
+      )}
+
+      {/* Text block */}
+      {nameSide !== 'none' && (
+        <div style={textBlockStyle()}>
+          <div
+            contentEditable
+            suppressContentEditableWarning
+            style={{ fontSize: `${header.name_font_size || 14}pt`, fontWeight: header.name_font_weight || 'bold', color: header.name_color || primary, fontFamily: branding?.font_family || 'Arial', outline: 'none', cursor: 'text', minWidth: 40, display: 'inline-block' }}
+            onBlur={e => onChange({ ...header, company_name: e.currentTarget.innerText })}
+            dangerouslySetInnerHTML={{ __html: header.company_name || 'Company Name' }}
+          />
+          {header.company_address !== undefined && (
+            <div
+              contentEditable
+              suppressContentEditableWarning
+              style={{ fontSize: '9pt', color: '#555', outline: 'none', cursor: 'text', display: 'block', marginTop: 1 }}
+              onBlur={e => onChange({ ...header, company_address: e.currentTarget.innerText })}
+              dangerouslySetInnerHTML={{ __html: header.company_address || '' }}
+              data-placeholder="Address line (click to edit)"
+            />
+          )}
+          {header.company_contact !== undefined && (
+            <div
+              contentEditable
+              suppressContentEditableWarning
+              style={{ fontSize: '9pt', color: '#555', outline: 'none', cursor: 'text', display: 'block' }}
+              onBlur={e => onChange({ ...header, company_contact: e.currentTarget.innerText })}
+              dangerouslySetInnerHTML={{ __html: header.company_contact || '' }}
+              data-placeholder="Phone | Email (click to edit)"
+            />
+          )}
+        </div>
+      )}
+
+      {/* Logo */}
+      {header.logo && logoAlign !== 'none' ? (
+        <div
+          style={{ ...logoPositionStyle(), cursor: logoSel ? 'move' : 'pointer', outline: logoSel ? '2px solid #3b82f6' : '2px solid transparent', outlineOffset: 2, zIndex: logoSel ? 20 : 3, borderRadius: 2, userSelect: 'none' }}
+          onClick={e => { e.stopPropagation(); setLogoSel(s => !s) }}
+          onMouseDown={logoSel ? startLogoDrag : undefined}
+        >
+          <img
+            src={header.logo} alt="logo"
+            style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: header.logo_opacity ?? 1, borderRadius: header.logo_border_radius || 0, transform: `rotate(${header.logo_rotation || 0}deg)`, pointerEvents: 'none', display: 'block' }}
+            draggable={false}
+          />
+          {/* Corner resize handles */}
+          {logoSel && ['nw','ne','sw','se'].map(dir => (
+            <div key={dir}
+              style={{ position: 'absolute', ...(dir.includes('n') ? { top: -5 } : { bottom: -5 }), ...(dir.includes('w') ? { left: -5 } : { right: -5 }), width: 9, height: 9, background: '#fff', border: '2px solid #3b82f6', borderRadius: 2, zIndex: 50, cursor: `${dir}-resize` }}
+              onMouseDown={e => startLogoResize(dir, e)}
+            />
+          ))}
+          {/* Quick actions toolbar */}
+          {logoSel && (
+            <div style={{ position: 'absolute', top: -38, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 1, background: '#1e293b', borderRadius: 7, padding: '4px 8px', zIndex: 60, whiteSpace: 'nowrap', boxShadow: '0 4px 16px rgba(0,0,0,0.35)', pointerEvents: 'all' }}
+              onClick={e => e.stopPropagation()}>
+              {[['L', 'left'], ['C', 'center'], ['R', 'right']].map(([l, a]) => (
+                <button key={a} onClick={() => onChange({ ...header, logo_align: a, logo_free: false })}
+                  style={{ color: logoAlign === a ? '#60a5fa' : '#e2e8f0', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 5px', fontSize: 11, fontWeight: 700, borderRadius: 3 }}>
+                  {l}
+                </button>
+              ))}
+              <div style={{ width: 1, height: 14, background: '#475569', margin: '0 3px' }} />
+              <button onClick={() => { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.onchange = ev => { const f = ev.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = ev2 => onChange({ ...header, logo: ev2.target.result }); r.readAsDataURL(f) }; inp.click() }}
+                style={{ color: '#93c5fd', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 5px', fontSize: 10, borderRadius: 3 }}>
+                Replace
+              </button>
+              <button onClick={() => { onChange({ ...header, logo: '' }); setLogoSel(false) }}
+                style={{ color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 5px', fontSize: 10, borderRadius: 3 }}>
+                Del
+              </button>
+            </div>
+          )}
+        </div>
+      ) : !header.logo && hoverBar ? (
+        <label
+          style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 90, height: 44, border: '1.5px dashed #94a3b8', borderRadius: 5, zIndex: 5 }}>
+          <div style={{ textAlign: 'center', fontSize: 9, color: '#94a3b8', lineHeight: 1.4 }}>
+            <Upload size={13} style={{ display: 'block', margin: '0 auto 2px', opacity: 0.6 }} />
+            Drop logo here
+          </div>
+          <input type="file" accept="image/*" style={{ display: 'none' }}
+            onChange={e => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = ev => onChange({ ...header, logo: ev.target.result }); r.readAsDataURL(f) }} />
+        </label>
+      ) : null}
+    </div>
+  )
+}
+
+// ─── Auto-Pagination Overlay ──────────────────────────────────────────────────
+
+function PaginationOverlay({ contentRef, headerH, footerH, margins, pageConfig }) {
+  const [breakY, setBreakY] = useState([])
+
+  useEffect(() => {
+    if (!contentRef?.current) return
+    // A4: 297mm, Letter: 279.4mm, Legal: 355.6mm
+    const sizes = { A4: 297, LETTER: 279.4, LEGAL: 355.6, A3: 420, A5: 210 }
+    const mmH    = sizes[pageConfig?.size || 'A4']
+    const pxH    = mmH / 25.4 * 96
+    const mTop   = (margins?.top  || 20) / 25.4 * 96
+    const mBot   = (margins?.bottom || 20) / 25.4 * 96
+    const hH     = headerH > 0 ? headerH + 24 : 0 // header + marginBottom
+    const fH     = footerH > 0 ? footerH + 24 : 0
+    const usable = pxH - mTop - mBot - hH - fH
+
+    const recalc = () => {
+      if (!contentRef.current) return
+      const totalH = contentRef.current.scrollHeight
+      const pts = []
+      let y = usable
+      while (y < totalH) { pts.push(y); y += usable }
+      setBreakY(pts)
+    }
+    const ro = new ResizeObserver(recalc)
+    ro.observe(contentRef.current)
+    recalc()
+    return () => ro.disconnect()
+  }, [contentRef, headerH, footerH, margins, pageConfig])
+
+  if (!breakY.length) return null
+  return (
+    <>
+      {breakY.map((y, i) => (
+        <div key={i} style={{ position: 'absolute', left: -40, right: -40, top: y, zIndex: 50, pointerEvents: 'none' }}>
+          <div style={{ height: 24, background: '#e8edf2', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid #c4cdd6', borderBottom: '1px solid #c4cdd6' }}>
+            <span style={{ fontSize: 10, color: '#6b7280', fontWeight: 500, userSelect: 'none' }}>
+              ── Page {i + 2} ──
+            </span>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
 // ─── Main Builder ─────────────────────────────────────────────────────────────
 
 export default function DocumentTemplateBuilder() {
@@ -1351,10 +1597,23 @@ export default function DocumentTemplateBuilder() {
   const [editingId, setEditingId]   = useState(null)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [zoomMenuOpen, setZoomMenuOpen]     = useState(false)
+  const [saveState, setSaveState]           = useState('saved') // 'saved' | 'unsaved' | 'saving'
+  const contentRef = useRef(null) // for pagination overlay
 
   const [meta, setMeta] = useState({ name: 'Untitled Template', description: '', doc_type: 'custom', category: 'hr', is_active: true })
   const [branding, setBranding] = useState({ primary_color: '#1e3a5f', secondary_color: '#4a90d9', font_family: 'Arial', font_size: 11, text_color: '#1a1a1a', heading_color: '#1e3a5f' })
-  const [header, setHeader]   = useState({ enabled: true, company_name: '', company_address: '', company_contact: '', logo: '', logo_position: 'right', border_bottom: true })
+  const [header, setHeader]   = useState({
+    enabled: true,
+    height: 80,
+    // Logo
+    logo: '', logo_align: 'right', logo_free: false,
+    logo_x: 0, logo_y: 0, logo_width: 120, logo_height: 48,
+    logo_opacity: 1, logo_border_radius: 0, logo_rotation: 0, logo_lock_aspect: true,
+    // Text
+    company_name: '', company_address: '', company_contact: '',
+    name_side: 'left', name_font_size: 14, name_font_weight: 'bold', name_color: '',
+    border_bottom: true, border_color: '',
+  })
   const [footer, setFooter]   = useState({ enabled: true, show_page_numbers: true, show_generated_date: true, disclaimer: '', border_top: true })
   const [watermark, setWatermark] = useState({ enabled: false, type: 'text', text: 'CONFIDENTIAL', opacity: 0.10, rotation: -45, font_size: 60 })
   const [pageConfig, setPageConfig] = useState({ size: 'A4', orientation: 'portrait', margin_top: 20, margin_right: 20, margin_bottom: 20, margin_left: 20 })
@@ -1456,14 +1715,38 @@ export default function DocumentTemplateBuilder() {
     if (typeParam) setMeta(m => ({ ...m, doc_type: typeParam }))
   }, [isNew, params])
 
-  // ── Auto-save draft ────────────────────────────────────────────────────────
+  // ── Mark dirty on any content change ─────────────────────────────────────
+  const firstMount = useRef(true)
+  useEffect(() => {
+    if (firstMount.current) { firstMount.current = false; return }
+    setSaveState('unsaved')
+  }, [blocks, branding, header, footer, watermark, pageConfig, meta])
+
+  // ── Prevent close with unsaved changes ───────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if (saveState === 'unsaved') { e.preventDefault(); e.returnValue = '' }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [saveState])
+
+  // ── Auto-save draft every 30s + auto-save to DB if not new ───────────────
   useEffect(() => {
     if (isNew) return
     const interval = setInterval(() => {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({ blocks, branding, header, footer, watermark, pageConfig, meta, savedAt: Date.now() }))
+      // Auto-save to server silently if unsaved
+      if (saveState === 'unsaved') {
+        setSaveState('saving')
+        const payload = { ...meta, branding, header, footer, watermark, page_config: pageConfig, blocks: blocks.map((b, i) => ({ ...b, order: i })), version_note: `Auto-saved ${new Date().toLocaleTimeString()}` }
+        hrmService.updateDocumentTemplate(id, payload)
+          .then(() => setSaveState('saved'))
+          .catch(() => setSaveState('unsaved'))
+      }
     }, 30_000)
     return () => clearInterval(interval)
-  }, [blocks, branding, header, footer, watermark, pageConfig, meta, isNew, DRAFT_KEY])
+  }, [blocks, branding, header, footer, watermark, pageConfig, meta, isNew, DRAFT_KEY, saveState, id])
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -1484,7 +1767,7 @@ export default function DocumentTemplateBuilder() {
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = async (versionNote = '', isActive = meta.is_active) => {
     if (!meta.name.trim()) { toast.error('Template name is required'); return }
-    setSaving(true)
+    setSaving(true); setSaveState('saving')
     try {
       const payload = { ...meta, is_active: isActive, branding, header, footer, watermark, page_config: pageConfig,
         blocks: blocks.map((b, i) => ({ ...b, order: i })),
@@ -1493,15 +1776,18 @@ export default function DocumentTemplateBuilder() {
       if (isNew) {
         const res = await hrmService.createDocumentTemplate(payload)
         localStorage.removeItem(DRAFT_KEY)
+        setSaveState('saved')
         toast.success(isActive ? 'Template created!' : 'Draft saved!')
         navigate(`/hrm/doc-builder/${res.data.id}`, { replace: true })
       } else {
         await hrmService.updateDocumentTemplate(id, payload)
         localStorage.removeItem(DRAFT_KEY)
         setDraftBanner(null)
+        setSaveState('saved')
         toast.success(isActive ? 'Template saved!' : 'Draft saved!')
       }
     } catch (e) {
+      setSaveState('unsaved')
       toast.error(e?.response?.data?.detail || 'Failed to save')
     } finally { setSaving(false) }
   }
@@ -1686,6 +1972,16 @@ export default function DocumentTemplateBuilder() {
           <span style={{ fontSize: 11, color: 'var(--text-disabled)', flexShrink: 0, padding: '0 4px' }}>
             {pageCount} page{pageCount !== 1 ? 's' : ''}
           </span>
+
+          {/* Save status indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 99, fontSize: 10, fontWeight: 500, flexShrink: 0,
+            background: saveState === 'saved' ? 'rgba(16,185,129,0.1)' : saveState === 'saving' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+            color: saveState === 'saved' ? '#10b981' : saveState === 'saving' ? '#d97706' : '#ef4444',
+          }}>
+            {saveState === 'saved'   && <><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} /> Saved</>}
+            {saveState === 'saving'  && <><span className="eb-spinner" style={{ width: 8, height: 8, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', flexShrink: 0 }} /> Saving…</>}
+            {saveState === 'unsaved' && <><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} /> Unsaved changes</>}
+          </div>
         </div>
 
         {/* Right actions */}
@@ -1893,41 +2189,32 @@ export default function DocumentTemplateBuilder() {
                 </div>
               )}
 
-              {/* Header */}
+              {/* Interactive Header */}
               {header.enabled && (
-                <div style={{ paddingBottom: 12, marginBottom: 16, borderBottom: header.border_bottom ? `2px solid ${branding.primary_color}` : 'none', position: 'relative', zIndex: 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ fontSize: '14pt', fontWeight: 700, color: branding.primary_color, fontFamily: branding.font_family }}>
-                        {header.company_name || 'Company Name'}
-                      </div>
-                      {header.company_address && (
-                        <div style={{ fontSize: '9pt', color: '#555', marginTop: 2 }}>{header.company_address}</div>
-                      )}
-                      {header.company_contact && (
-                        <div style={{ fontSize: '9pt', color: '#555' }}>{header.company_contact}</div>
-                      )}
-                    </div>
-                    {header.logo
-                      ? <img src={header.logo} alt="logo" style={{ maxHeight: 48, maxWidth: 140, objectFit: 'contain' }} />
-                      : <div style={{ width: 80, height: 40, background: '#f1f5f9', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: '#94a3b8' }}>Logo</div>
-                    }
-                  </div>
-                </div>
+                <InteractiveHeaderCanvas header={header} onChange={setHeader} branding={branding} />
               )}
 
               {/* Floating rich-text toolbar */}
               <RichTextToolbar containerRef={canvasRef} />
 
-              {/* Blocks */}
-              <div style={{ position: 'relative', zIndex: 1 }}>
+              {/* Blocks + Auto-pagination overlay */}
+              <div ref={contentRef} style={{ position: 'relative', zIndex: 1 }}>
+                {/* Auto-pagination visual breaks */}
+                <PaginationOverlay
+                  contentRef={contentRef}
+                  headerH={header.enabled ? (header.height || 80) : 0}
+                  footerH={footer.enabled ? 50 : 0}
+                  margins={{ top: pageConfig.margin_top, bottom: pageConfig.margin_bottom }}
+                  pageConfig={pageConfig}
+                />
+
                 {blocks.length === 0 && (
                   <div
                     onDragOver={e => e.preventDefault()}
                     style={{ textAlign: 'center', padding: '60px 20px', color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: 8 }}>
                     <Layers size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
                     <p style={{ fontSize: 14, marginBottom: 6 }}>Canvas is empty</p>
-                    <p style={{ fontSize: 12 }}>Click a block in the left panel, or drag it here</p>
+                    <p style={{ fontSize: 12 }}>Click a block from the left panel, or drag it here</p>
                   </div>
                 )}
 
