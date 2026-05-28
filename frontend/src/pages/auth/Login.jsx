@@ -523,23 +523,33 @@ const Login = () => {
   // SCREEN: Account not found
   // ─────────────────────────────────────────────────────────────────────────
   if (loginFailed) {
+    const isServerError = loginFailed.includes('server') || loginFailed.includes('connect') || loginFailed.includes('unavailable')
     return (
       <div style={{ animation: 'slideUp 0.35s cubic-bezier(0.16,1,0.3,1) both' }}>
         <ScreenHead
-          icon={<UserX size={22} color="#f87171" />}
-          iconBg="rgba(239,68,68,0.11)" iconBorder="rgba(239,68,68,0.26)"
-          title="Account Not Found"
-          subtitle="We couldn't find an account matching your details."
+          icon={isServerError
+            ? <AlertCircle size={22} color="#fbbf24" />
+            : <UserX size={22} color="#f87171" />}
+          iconBg={isServerError ? 'rgba(245,158,11,0.11)' : 'rgba(239,68,68,0.11)'}
+          iconBorder={isServerError ? 'rgba(245,158,11,0.26)' : 'rgba(239,68,68,0.26)'}
+          title={isServerError ? 'Connection Problem' : 'Login Failed'}
+          subtitle={isServerError
+            ? 'Could not reach the server. Please try again.'
+            : 'We couldn\'t find an account matching your details.'}
         />
-        <div className="glass-alert glass-alert-red" style={{ marginBottom: 18 }}>
-          <p style={{ color: '#fca5a5', fontWeight: '600', fontSize: '13px', margin: '0 0 5px' }}>{loginFailed}</p>
-          <p style={{ color: 'rgba(252,165,165,0.70)', fontSize: '12px', margin: 0 }}>
-            Double-check your email / mobile number and password, or create a new account.
-          </p>
+        <div className={`glass-alert ${isServerError ? 'glass-alert-amber' : 'glass-alert-red'}`} style={{ marginBottom: 18 }}>
+          <p style={{ color: isServerError ? '#fcd34d' : '#fca5a5', fontWeight: '600', fontSize: '13px', margin: '0 0 5px' }}>{loginFailed}</p>
+          {!isServerError && (
+            <p style={{ color: 'rgba(252,165,165,0.70)', fontSize: '12px', margin: 0 }}>
+              Double-check your email / mobile number and password, or create a new account.
+            </p>
+          )}
         </div>
-        <Link to="/register" style={{ textDecoration: 'none', display: 'block' }}>
-          <button className="glass-btn-primary">Create New Account</button>
-        </Link>
+        {!isServerError && (
+          <Link to="/register" style={{ textDecoration: 'none', display: 'block' }}>
+            <button className="glass-btn-primary">Create New Account</button>
+          </Link>
+        )}
         <div style={{ textAlign: 'center', marginTop: 16 }}>
           <button onClick={() => setLoginFailed(null)} className="glass-btn-ghost">← Back to Login</button>
         </div>

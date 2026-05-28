@@ -114,6 +114,10 @@ export const loginWithTenant = createAsyncThunk(
           companyId:  detail.company_id  || null,
         })
       }
+      if (!error.response)
+        return rejectWithValue('Unable to connect to the server. Please check your connection and try again.')
+      if (error.response.status >= 500)
+        return rejectWithValue('The server is temporarily unavailable. Please try again in a moment.')
       const detail = error.response?.data?.detail || 'Login failed. Please try again.'
       return rejectWithValue(typeof detail === 'string' ? detail : 'Login failed. Please try again.')
     }
@@ -182,8 +186,19 @@ export const login = createAsyncThunk(
           companyId:  detail.company_id  || null,
         })
       }
+      // No response at all — backend not reachable / no internet
+      if (!error.response) {
+        console.error('[AUTH] LOGIN THUNK CATCH → No response:', error.message)
+        return rejectWithValue('Unable to connect to the server. Please check your internet connection and try again.')
+      }
+
+      // 5xx — backend crashed or proxy (nginx) couldn't reach upstream
+      if (error.response.status >= 500) {
+        console.error('[AUTH] LOGIN THUNK CATCH → Server error:', error.response.status)
+        return rejectWithValue('The server is temporarily unavailable. Please try again in a moment.')
+      }
+
       // FastAPI validation errors (422): detail is an array of field errors.
-      // Extract human-readable message instead of swallowing it.
       const detail = error.response?.data?.detail
       if (Array.isArray(detail)) {
         const msg = detail.map(e => {
@@ -194,7 +209,7 @@ export const login = createAsyncThunk(
       }
       console.error('[AUTH] LOGIN THUNK CATCH →', error.message, '| status:', error.response?.status, '| detail:', detail)
       return rejectWithValue(
-        (typeof detail === 'string' ? detail : null) || error.message || 'Login failed. Please try again.'
+        (typeof detail === 'string' ? detail : null) || 'Login failed. Please try again.'
       )
     }
   }

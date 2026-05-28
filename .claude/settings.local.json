@@ -37,7 +37,17 @@
       "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\\\\models\\\\company\" -Name | Where-Object { $_ -match \"holiday|shift|geo\" })",
       "PowerShell(\\(Get-Content \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\\\\hrm\\\\Attendance.jsx\" | Measure-Object -Line\\).Lines)",
       "PowerShell(Get-ChildItem \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\" -Recurse | Where-Object { $_.Name -match \"portal|ess|myportal|self.service|employee.portal\" -and !$_.PSIsContainer } | Select-Object FullName)",
-      "Bash(Get-ChildItem -Path d:\\\\crm-project -Directory)"
+      "Bash(Get-ChildItem -Path d:\\\\crm-project -Directory)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":8000\\\\|:5173\\\\|:3000\\\\|:80\\\\|:443\\\\|:8080\")",
+      "PowerShell(Get-Process python, node, uvicorn -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Service -Name \"MongoDB\" -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Process mongod -ErrorAction SilentlyContinue)",
+      "PowerShell(python -c \"import uvicorn; print\\('uvicorn:', uvicorn.__version__\\)\" 2>&1)",
+      "PowerShell(python -c \"import fastapi; print\\('fastapi:', fastapi.__version__\\)\" 2>&1)",
+      "PowerShell(python -c \"import motor; print\\('motor ok'\\)\" 2>&1)",
+      "PowerShell(python -c \"import reportlab\" 2>&1)",
+      "PowerShell(python -c \"import docx\" 2>&1)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

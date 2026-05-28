@@ -10,7 +10,8 @@ from typing import Optional
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, LETTER, LEGAL, A3, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import mm, pt
+from reportlab.lib.units import mm
+pt = 1  # reportlab uses points as native unit; 1 pt == 1 unit
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
