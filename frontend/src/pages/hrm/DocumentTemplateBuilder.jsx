@@ -1,16 +1,18 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import QRCode from 'qrcode'
 import {
   Save, ArrowLeft, Eye, EyeOff, Plus, Trash2, GripVertical,
   Type, Heading, Table, Image, PenTool, Minus, AlignLeft, AlignCenter,
   AlignRight, Bold, Italic, Underline, ChevronDown, ChevronRight, ChevronUp,
   Settings, Code, Layers, Copy, ZoomIn, ZoomOut, X, Lock, Unlock,
   FileText, Hash, DollarSign, Users, Building, RotateCcw, Upload,
-  Clock, Layout, Move, List, Palette
+  Clock, Layout, Move, List, Palette, Download, Printer, Monitor,
+  ChevronLeft, MoreHorizontal, Maximize2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
@@ -110,6 +112,188 @@ const createBlock = (type) => {
     qr_code:   { content: 'https://verify.example.com/{{document_number}}' },
   }
   return { ...base, ...(d[type] || {}), order: Date.now() }
+}
+
+// ─── Enterprise CSS (scrollbars + print + animations) ─────────────────────────
+
+const ENTERPRISE_CSS = `
+  /* Custom thin purple scrollbars */
+  .eb-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+  .eb-scroll::-webkit-scrollbar-track { background: transparent; }
+  .eb-scroll::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.35); border-radius: 99px; }
+  .eb-scroll::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,0.65); }
+  .eb-scroll { scrollbar-width: thin; scrollbar-color: rgba(139,92,246,0.35) transparent; }
+
+  /* Panel resize cursor */
+  .eb-splitter { width: 4px; cursor: col-resize; background: transparent; flex-shrink: 0; transition: background 0.15s; z-index: 10; }
+  .eb-splitter:hover, .eb-splitter.active { background: rgba(139,92,246,0.5); }
+
+  /* Block drag-handle hover */
+  .eb-block-row:hover .eb-drag-handle { opacity: 1 !important; }
+
+  /* Spin animation */
+  @keyframes eb-spin { to { transform: rotate(360deg); } }
+  .eb-spinner { animation: eb-spin 0.8s linear infinite; }
+
+  /* Print styles */
+  @media print {
+    body > * { display: none !important; }
+    #eb-print-frame { display: block !important; position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+  }
+`
+
+// ─── Print / Export Utilities ─────────────────────────────────────────────────
+
+function blockToHTML(block, branding) {
+  const p = block.properties || {}
+  const fam = branding?.font_family || 'Arial'
+  const baseCSS = `font-family:${fam},sans-serif;font-size:${p.font_size || 11}pt;color:${p.color || branding?.text_color || '#1a1a1a'};text-align:${p.text_align || 'left'};margin-top:${p.margin_top || 0}px;margin-bottom:${p.margin_bottom || 0}px;font-weight:${p.font_weight || 'normal'};font-style:${p.font_style || 'normal'};line-height:${p.line_height || 1.5};`
+  const c = block.content
+  switch (block.type) {
+    case 'heading':
+      return `<h2 style="${baseCSS}color:${branding?.heading_color||'#1e3a5f'};font-size:${p.font_size||18}pt;font-weight:bold;">${c||'Heading'}</h2>`
+    case 'text': case 'paragraph':
+      return `<p style="${baseCSS}">${c||''}</p>`
+    case 'list_items': {
+      const items = Array.isArray(c) ? c : [c]
+      return `<ul style="${baseCSS}padding-left:20px;">${items.map(i=>`<li>${i}</li>`).join('')}</ul>`
+    }
+    case 'two_column':
+      return `<table width="100%" style="border-collapse:collapse;"><tr><td style="width:50%;padding:4px 8px;border-left:3px solid ${branding?.primary_color||'#1e3a5f'};">${c?.left||''}</td><td style="width:50%;padding:4px 8px;border-left:3px solid ${branding?.primary_color||'#1e3a5f'};">${c?.right||''}</td></tr></table>`
+    case 'divider':
+      return `<hr style="border:none;border-top:${p.thickness||1}px solid ${p.color||'#e2e8f0'};margin:${p.margin_top||6}px 0 ${p.margin_bottom||6}px;" />`
+    case 'spacer':
+      return `<div style="height:${p.height||'20px'};"></div>`
+    case 'page_break':
+      return `<div style="break-after:page;page-break-after:always;height:1px;"></div>`
+    case 'table': {
+      const hds = c?.headers||[]; const rows = c?.rows||[]
+      return `<table style="width:100%;border-collapse:collapse;font-size:9pt;"><thead><tr>${hds.map(h=>`<th style="background:${c?.header_bg||branding?.primary_color||'#1e3a5f'};color:${c?.header_color||'#fff'};padding:5px 8px;text-align:left;border:1px solid rgba(0,0,0,.1);">${h}</th>`).join('')}</tr></thead><tbody>${rows.map((row,ri)=>`<tr style="background:${c?.stripe_rows?(ri%2===0?'#f8f9fa':'#fff'):'#fff'}">${row.map(cell=>`<td style="padding:4px 8px;border:1px solid #e5e7eb;">${cell}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+    }
+    case 'salary_table': {
+      const earn = c?.earnings||[]; const ded = c?.deductions||[]; const rows = Math.max(earn.length,ded.length)
+      const hdr = `<tr>${['Earnings','Amount','Deductions','Amount'].map(h=>`<th style="background:${branding?.primary_color||'#1e3a5f'};color:#fff;padding:5px 8px;text-align:left;">${h}</th>`).join('')}</tr>`
+      const body = Array.from({length:rows}).map((_,i)=>`<tr><td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;">${earn[i]?.label||''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;">${earn[i]?.value||''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;">${ded[i]?.label||''}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;">${ded[i]?.value||''}</td></tr>`).join('')
+      const net = `<tr style="background:${branding?.primary_color||'#1e3a5f'};color:#fff;font-weight:bold;"><td colspan="2" style="padding:6px 8px;">Net Pay</td><td colspan="2" style="padding:6px 8px;">{{salary_net}}</td></tr>`
+      return `<table style="width:100%;border-collapse:collapse;font-size:9pt;"><thead>${hdr}</thead><tbody>${body}${net}</tbody></table>`
+    }
+    case 'employee_details': case 'company_details':
+      return `<table style="width:100%;border-collapse:collapse;font-size:9pt;"><tbody>${Object.entries(c||{}).map(([k,v])=>`<tr><td style="padding:4px 8px;font-weight:600;color:${branding?.primary_color||'#1e3a5f'};width:35%;border-bottom:1px solid #e5e7eb;">${k}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;">${v}</td></tr>`).join('')}</tbody></table>`
+    case 'image': case 'logo':
+      return c ? `<div style="text-align:${p.text_align||'center'};"><img src="${c}" style="max-width:${p.width||'200px'};max-height:120px;object-fit:contain;" /></div>` : ''
+    case 'signature': {
+      const sigs = Array.isArray(c)?c:[c||{}]
+      return `<div style="display:flex;gap:32px;margin-top:8px;">${sigs.map(s=>`<div style="text-align:center;min-width:120px;">${s?.image?`<img src="${s.image}" style="height:48px;width:120px;object-fit:contain;display:block;margin:0 auto;"/>`:'<div style="height:48px;border-bottom:1px solid #333;width:120px;margin:0 auto;"></div>'}<div style="font-size:9pt;font-weight:bold;margin-top:4px;">${s?.name||''}</div><div style="font-size:8pt;color:#666;">${s?.designation||''}</div></div>`).join('')}</div>`
+    }
+    default: return `<div style="${baseCSS}">${typeof c==='string'?c:JSON.stringify(c)}</div>`
+  }
+}
+
+function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta }) {
+  const primary = branding?.primary_color || '#1e3a5f'
+  const fam = branding?.font_family || 'Arial'
+  const margins = `${pageConfig?.margin_top||20}mm ${pageConfig?.margin_right||20}mm ${pageConfig?.margin_bottom||20}mm ${pageConfig?.margin_left||20}mm`
+
+  const headerHTML = header?.enabled ? `
+    <div style="padding-bottom:12px;margin-bottom:16px;border-bottom:${header.border_bottom!==false?`2px solid ${primary}`:'none'};">
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td>
+            ${header.show_company_name!==false?`<div style="font-size:14pt;font-weight:700;color:${primary};font-family:${fam};">${header.company_name||'{{company_name}}'}</div>`:''}
+            ${header.company_address?`<div style="font-size:9pt;color:#555;">${header.company_address}</div>`:''}
+            ${header.company_contact?`<div style="font-size:9pt;color:#555;">${header.company_contact}</div>`:''}
+          </td>
+          <td style="text-align:right;">
+            ${header.logo?`<img src="${header.logo}" style="max-height:48px;max-width:140px;object-fit:contain;" />`:''}
+          </td>
+        </tr>
+      </table>
+    </div>` : ''
+
+  const footerHTML = footer?.enabled ? `
+    <div style="margin-top:24px;padding-top:10px;border-top:${footer.border_top!==false?`1px solid ${primary}`:'none'};font-size:8pt;color:#888;">
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td>${[footer.show_generated_date&&`Generated: ${new Date().toLocaleDateString('en-IN')}`,footer.disclaimer].filter(Boolean).join(' | ')}</td>
+          ${footer.show_page_numbers?`<td style="text-align:right;">Page <span class="page-num">1</span></td>`:''}
+        </tr>
+      </table>
+    </div>` : ''
+
+  const watermarkHTML = watermark?.enabled ? `
+    <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(${watermark.rotation||-45}deg);font-size:${watermark.font_size||60}px;color:${watermark.color||'#ccc'};opacity:${watermark.opacity||0.1};font-weight:bold;white-space:nowrap;pointer-events:none;z-index:0;">
+      ${watermark.text||'CONFIDENTIAL'}
+    </div>` : ''
+
+  const blocksHTML = (blocks || [])
+    .filter(b => !b.is_hidden)
+    .map(b => blockToHTML(b, branding))
+    .join('\n')
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${meta?.name || 'Document'}</title>
+<style>
+  @page { margin: ${margins}; size: ${pageConfig?.size||'A4'} ${pageConfig?.orientation||'portrait'}; }
+  body { font-family: ${fam}, sans-serif; font-size: ${branding?.font_size||11}pt; color: ${branding?.text_color||'#1a1a1a'}; margin: 0; padding: 20mm; }
+  table { border-collapse: collapse; }
+  img { max-width: 100%; }
+  .page-break { page-break-after: always; break-after: page; }
+</style>
+</head>
+<body>
+  ${watermarkHTML}
+  ${headerHTML}
+  ${blocksHTML}
+  ${footerHTML}
+</body>
+</html>`
+}
+
+function doExportPDF(printData) {
+  const html = buildPrintHTML(printData)
+  const win = window.open('', '_blank')
+  if (!win) { toast.error('Please allow popups for PDF export'); return }
+  win.document.write(html)
+  win.document.close()
+  win.focus()
+  setTimeout(() => win.print(), 400)
+}
+
+function doExportDOCX(printData) {
+  const html = buildPrintHTML(printData)
+  const wordHTML = html.replace('<html>', '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">')
+  const blob = new Blob([wordHTML], { type: 'application/msword' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = `${printData.meta?.name || 'document'}.doc`
+  document.body.appendChild(a); a.click()
+  document.body.removeChild(a); URL.revokeObjectURL(url)
+  toast.success('Exported as .doc — opens in Word / LibreOffice')
+}
+
+// ─── QR Block Renderer (async real QR) ────────────────────────────────────────
+
+function QRBlockRenderer({ content }) {
+  const [dataUrl, setDataUrl] = useState('')
+  useEffect(() => {
+    if (!content) return
+    QRCode.toDataURL(content || 'https://hireflow.app', { width: 120, margin: 1, color: { dark: '#1e3a5f', light: '#ffffff' } })
+      .then(setDataUrl).catch(() => {})
+  }, [content])
+  return (
+    <div style={{ display: 'inline-block', border: '1px solid #e2e8f0', padding: 8, borderRadius: 6, textAlign: 'center' }}>
+      {dataUrl
+        ? <img src={dataUrl} alt="QR" style={{ width: 80, height: 80, display: 'block' }} />
+        : <div style={{ width: 80, height: 80, background: '#f0f0f0', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#94a3b8' }}>QR…</div>
+      }
+      <div style={{ fontSize: '7pt', color: '#666', marginTop: 4, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {(content || '').replace('https://', '')}
+      </div>
+    </div>
+  )
 }
 
 // ─── Floating Rich-Text Toolbar ───────────────────────────────────────────────
@@ -246,7 +430,17 @@ function BlockPreview({ block, selected, editing, onSelect, onStartEdit, onStopE
       case 'spacer':
         return <div style={{ height: props.height || '20px', background: 'repeating-linear-gradient(45deg,#f0f0f0,#f0f0f0 2px,transparent 2px,transparent 8px)' }} />
       case 'page_break':
-        return <div style={{ textAlign: 'center', padding: '8px', background: '#fef3c7', border: '1px dashed #f59e0b', borderRadius: '4px', fontSize: '10px', color: '#92400e' }}>── Page Break ──</div>
+        return (
+          <div style={{ margin: '8px -8px', position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ flex: 1, height: 1, background: '#f59e0b', opacity: 0.4 }} />
+              <div style={{ padding: '3px 10px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 99, fontSize: 10, color: '#92400e', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                ↕ Page Break — next page starts here
+              </div>
+              <div style={{ flex: 1, height: 1, background: '#f59e0b', opacity: 0.4 }} />
+            </div>
+          </div>
+        )
       case 'table': {
         const hds = c?.headers || []
         const rows = c?.rows || []
@@ -342,12 +536,7 @@ function BlockPreview({ block, selected, editing, onSelect, onStartEdit, onStopE
             </label>
           )
       case 'qr_code':
-        return (
-          <div style={{ display: 'inline-block', border: '1px solid #e2e8f0', padding: '8px', borderRadius: '6px' }}>
-            <div style={{ width: '64px', height: '64px', background: `repeating-conic-gradient(#1e3a5f 0%, #1e3a5f 25%, white 0%, white 50%) 0 / 6px 6px`, margin: '0 auto 4px', borderRadius: '3px' }} />
-            <div style={{ textAlign: 'center', fontSize: '7pt', color: '#666' }}>QR • {(c || '').slice(0, 20)}…</div>
-          </div>
-        )
+        return <QRBlockRenderer content={c} />
       default:
         return <div style={baseStyle}>{typeof c === 'string' ? c : JSON.stringify(c)}</div>
     }
@@ -1156,10 +1345,12 @@ export default function DocumentTemplateBuilder() {
 
   const [saving, setSaving]   = useState(false)
   const [loading, setLoading] = useState(!isNew)
-  const [leftTab, setLeftTab] = useState('blocks')  // blocks | placeholders | layers | settings
-  const [rightTab, setRightTab] = useState('props') // props | content
+  const [leftTab, setLeftTab] = useState('blocks')
+  const [rightTab, setRightTab] = useState('props')
   const [selectedId, setSelectedId] = useState(null)
   const [editingId, setEditingId]   = useState(null)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const [zoomMenuOpen, setZoomMenuOpen]     = useState(false)
 
   const [meta, setMeta] = useState({ name: 'Untitled Template', description: '', doc_type: 'custom', category: 'hr', is_active: true })
   const [branding, setBranding] = useState({ primary_color: '#1e3a5f', secondary_color: '#4a90d9', font_family: 'Arial', font_size: 11, text_color: '#1a1a1a', heading_color: '#1e3a5f' })
@@ -1176,7 +1367,33 @@ export default function DocumentTemplateBuilder() {
   const DRAFT_KEY  = `doc_builder_draft_${id}`
   const canvasRef  = useRef(null)
   const handleSaveRef = useRef(null)
-  const rtToolbarRef  = useRef(null)
+
+  // ── Resizable panel widths ─────────────────────────────────────────────────
+  const leftWidthRef  = useRef(224)
+  const rightWidthRef = useRef(224)
+  const [, forceLayout] = useReducer(x => x + 1, 0)
+  const resizingPanel = useRef(null)
+
+  const startPanelResize = useCallback((side, e) => {
+    e.preventDefault()
+    resizingPanel.current = { side, startX: e.clientX, startW: side === 'left' ? leftWidthRef.current : rightWidthRef.current }
+    const onMove = (ev) => {
+      if (!resizingPanel.current) return
+      const { side, startX, startW } = resizingPanel.current
+      const delta = side === 'left' ? ev.clientX - startX : startX - ev.clientX
+      const newW = Math.max(180, Math.min(400, startW + delta))
+      if (side === 'left') leftWidthRef.current = newW
+      else rightWidthRef.current = newW
+      forceLayout()
+    }
+    const onUp = () => {
+      resizingPanel.current = null
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [])
 
   // dnd-kit sensors
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -1291,6 +1508,12 @@ export default function DocumentTemplateBuilder() {
 
   useEffect(() => { handleSaveRef.current = handleSave })
 
+  // ── Export helpers ────────────────────────────────────────────────────────
+  const getPrintData = useCallback(() => ({ blocks, branding, header, footer, watermark, pageConfig, meta }), [blocks, branding, header, footer, watermark, pageConfig, meta])
+  const handleExportPDF  = useCallback(() => { doExportPDF(getPrintData()); setShowExportMenu(false) }, [getPrintData])
+  const handleExportDOCX = useCallback(() => { doExportDOCX(getPrintData()); setShowExportMenu(false) }, [getPrintData])
+  const handlePrint      = useCallback(() => { doExportPDF(getPrintData()); setShowExportMenu(false) }, [getPrintData])
+
   // ── Block ops ──────────────────────────────────────────────────────────────
   const addBlock = useCallback((type, atIndex) => {
     const b = createBlock(type)
@@ -1387,70 +1610,130 @@ export default function DocumentTemplateBuilder() {
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
-      <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid var(--accent-blue)', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+      <div className="eb-spinner" style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid var(--accent-blue)', borderTopColor: 'transparent' }} />
     </div>
   )
 
+  // Compute page count from page_break blocks
+  const pageCount = 1 + blocks.filter(b => b.type === 'page_break').length
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-primary)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-primary)' }}
+      onClick={() => { setShowExportMenu(false); setZoomMenuOpen(false) }}>
+
+      {/* ── Inject enterprise CSS ────────────────────────────────────────── */}
+      <style>{ENTERPRISE_CSS}</style>
 
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', flexShrink: 0, zIndex: 20, gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 10px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', flexShrink: 0, zIndex: 20, gap: 6 }}>
         {/* Left */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
           <button onClick={() => navigate('/hrm/doc-templates')}
-            style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
-            <ArrowLeft size={15} /> Back
+            style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: '3px 6px', borderRadius: 5 }}>
+            <ArrowLeft size={14} /> Back
           </button>
           <div style={{ width: 1, height: 18, background: 'var(--border-color)', flexShrink: 0 }} />
           <input value={meta.name} onChange={e => setMeta(m => ({ ...m, name: e.target.value }))}
-            style={{ fontWeight: 600, fontSize: 13, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', minWidth: 160, maxWidth: 260 }} />
+            style={{ fontWeight: 600, fontSize: 13, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', minWidth: 140, maxWidth: 240 }} />
           {meta.is_active === false && (
             <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: 'var(--bg-warning)', color: 'var(--text-warning)', flexShrink: 0 }}>Draft</span>
           )}
-        </div>
-
-        {/* Center */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <select value={meta.doc_type} onChange={e => setMeta(m => ({ ...m, doc_type: e.target.value }))}
-            style={{ ...inputSm, fontSize: 11 }}>
+            style={{ ...inputSm, fontSize: 11, flexShrink: 0 }}>
             {DOC_TYPES.map(dt => <option key={dt.value} value={dt.value}>{dt.label}</option>)}
           </select>
+        </div>
 
+        {/* Center controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           {/* Undo/Redo */}
           <div style={{ display: 'flex', border: '1px solid var(--border-color)', borderRadius: 6 }}>
             <button onClick={undo} disabled={!undoInfo.canUndo} title="Undo (Ctrl+Z)"
-              style={{ padding: '4px 7px', background: 'none', border: 'none', cursor: undoInfo.canUndo ? 'pointer' : 'default', color: 'var(--text-secondary)', opacity: undoInfo.canUndo ? 1 : 0.3, display: 'flex', alignItems: 'center' }}>
-              <RotateCcw size={13} />
+              style={{ padding: '4px 6px', background: 'none', border: 'none', cursor: undoInfo.canUndo ? 'pointer' : 'default', color: 'var(--text-secondary)', opacity: undoInfo.canUndo ? 1 : 0.3, display: 'flex', alignItems: 'center' }}>
+              <RotateCcw size={12} />
             </button>
             <div style={{ width: 1, background: 'var(--border-color)' }} />
             <button onClick={redo} disabled={!undoInfo.canRedo} title="Redo (Ctrl+Y)"
-              style={{ padding: '4px 7px', background: 'none', border: 'none', cursor: undoInfo.canRedo ? 'pointer' : 'default', color: 'var(--text-secondary)', opacity: undoInfo.canRedo ? 1 : 0.3, display: 'flex', alignItems: 'center', transform: 'scaleX(-1)' }}>
-              <RotateCcw size={13} />
+              style={{ padding: '4px 6px', background: 'none', border: 'none', cursor: undoInfo.canRedo ? 'pointer' : 'default', color: 'var(--text-secondary)', opacity: undoInfo.canRedo ? 1 : 0.3, display: 'flex', alignItems: 'center', transform: 'scaleX(-1)' }}>
+              <RotateCcw size={12} />
             </button>
           </div>
 
-          {/* Zoom */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 2, border: '1px solid var(--border-color)', borderRadius: 6, padding: '2px 4px' }}>
-            <button onClick={() => setZoom(z => Math.max(50, z - 10))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex' }}><ZoomOut size={12} /></button>
-            <span style={{ fontSize: 11, color: 'var(--text-secondary)', width: 32, textAlign: 'center' }}>{zoom}%</span>
-            <button onClick={() => setZoom(z => Math.min(150, z + 10))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex' }}><ZoomIn size={12} /></button>
+          {/* Zoom with presets */}
+          <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 1, border: '1px solid var(--border-color)', borderRadius: 6, padding: '2px 3px' }}>
+              <button onClick={() => setZoom(z => Math.max(50, z - 10))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', padding: '1px 2px' }}><ZoomOut size={11} /></button>
+              <button onClick={e => { e.stopPropagation(); setZoomMenuOpen(z => !z) }}
+                style={{ fontSize: 11, color: 'var(--text-secondary)', width: 36, textAlign: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: '1px 0' }}>
+                {zoom}%
+              </button>
+              <button onClick={() => setZoom(z => Math.min(150, z + 10))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', padding: '1px 2px' }}><ZoomIn size={11} /></button>
+            </div>
+            {zoomMenuOpen && (
+              <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 999, minWidth: 90, overflow: 'hidden' }}
+                onClick={e => e.stopPropagation()}>
+                {[50,75,100,125,150].map(z => (
+                  <button key={z} onClick={() => { setZoom(z); setZoomMenuOpen(false) }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 14px', border: 'none', background: zoom === z ? 'var(--accent-blue)' : 'none', color: zoom === z ? '#fff' : 'var(--text-primary)', cursor: 'pointer', fontSize: 12 }}>
+                    {z}%
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
+          {/* Page counter */}
+          <span style={{ fontSize: 11, color: 'var(--text-disabled)', flexShrink: 0, padding: '0 4px' }}>
+            {pageCount} page{pageCount !== 1 ? 's' : ''}
+          </span>
         </div>
 
-        {/* Right */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        {/* Right actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
           <button onClick={() => navigate(`/hrm/doc-generator?template=${id}&preview=1`)} disabled={isNew}
-            style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 4, opacity: isNew ? 0.4 : 1 }}>
-            <Eye size={12} /> Preview
+            style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 3, opacity: isNew ? 0.4 : 1 }}>
+            <Eye size={11} /> Preview
           </button>
           <button onClick={() => handleSave('Draft', false)} disabled={saving}
-            style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Clock size={12} /> Draft
+            style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 3 }}>
+            <Clock size={11} /> Draft
           </button>
+
+          {/* Export menu */}
+          <div style={{ position: 'relative' }}>
+            <button onClick={e => { e.stopPropagation(); setShowExportMenu(v => !v) }}
+              style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 3 }}>
+              <Download size={11} /> Export
+            </button>
+            {showExportMenu && (
+              <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 999, minWidth: 160, overflow: 'hidden' }}
+                onClick={e => e.stopPropagation()}>
+                <button onClick={handleExportPDF}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', textAlign: 'left' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                  <FileText size={13} style={{ color: '#ef4444' }} /> Export as PDF
+                </button>
+                <button onClick={handleExportDOCX}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', textAlign: 'left' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                  <FileText size={13} style={{ color: '#2563eb' }} /> Export as DOCX (.doc)
+                </button>
+                <div style={{ height: 1, background: 'var(--border-color)', margin: '2px 0' }} />
+                <button onClick={handlePrint}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 14px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-primary)', textAlign: 'left' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                  <Printer size={13} style={{ color: '#374151' }} /> Print
+                </button>
+              </div>
+            )}
+          </div>
+
           <button onClick={() => handleSave()} disabled={saving}
-            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 14px', borderRadius: 7, border: 'none', background: 'var(--accent-blue)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-            <Save size={13} /> {saving ? 'Saving…' : 'Save'}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 13px', borderRadius: 7, border: 'none', background: 'var(--accent-blue)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+            <Save size={12} /> {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
@@ -1475,8 +1758,8 @@ export default function DocumentTemplateBuilder() {
       {/* ── Main layout ──────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
-        {/* ── Left panel ────────────────────────────────────────────────── */}
-        <div style={{ width: 224, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border-color)', background: 'var(--bg-card)', overflow: 'hidden' }}>
+        {/* ── Left panel (resizable) ────────────────────────────────────── */}
+        <div style={{ width: leftWidthRef.current, flexShrink: 0, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border-color)', background: 'var(--bg-card)', overflow: 'hidden' }}>
           {/* Tab bar */}
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', flexShrink: 0 }}>
             {[['blocks', Layers, 'Blocks'], ['placeholders', Code, 'Vars'], ['layers', Palette, 'Layers'], ['settings', Settings, 'Setup']].map(([tab, Icon, label]) => (
@@ -1488,7 +1771,7 @@ export default function DocumentTemplateBuilder() {
             ))}
           </div>
 
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="eb-scroll" style={{ flex: 1, overflowY: 'auto' }}>
             {/* Blocks palette */}
             {leftTab === 'blocks' && (
               <div style={{ padding: 10 }}>
@@ -1574,8 +1857,11 @@ export default function DocumentTemplateBuilder() {
           </div>
         </div>
 
+        {/* ── Left splitter ─────────────────────────────────────────────── */}
+        <div className="eb-splitter" onMouseDown={e => startPanelResize('left', e)} />
+
         {/* ── Canvas ────────────────────────────────────────────────────── */}
-        <div
+        <div className="eb-scroll"
           style={{ flex: 1, overflowY: 'auto', background: '#e8edf2', padding: '24px 16px' }}
           onClick={() => { setSelectedId(null); setEditingId(null) }}
           onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
@@ -1687,8 +1973,11 @@ export default function DocumentTemplateBuilder() {
           </div>
         </div>
 
-        {/* ── Right panel ───────────────────────────────────────────────── */}
-        <div style={{ width: 224, flexShrink: 0, borderLeft: '1px solid var(--border-color)', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* ── Right splitter ────────────────────────────────────────────── */}
+        <div className="eb-splitter" onMouseDown={e => startPanelResize('right', e)} />
+
+        {/* ── Right panel (resizable) ────────────────────────────────────── */}
+        <div style={{ width: rightWidthRef.current, flexShrink: 0, borderLeft: '1px solid var(--border-color)', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', flexShrink: 0 }}>
             {[['props', Settings, 'Style'], ['content', FileText, 'Content']].map(([tab, Icon, label]) => (
               <button key={tab} onClick={() => setRightTab(tab)}
@@ -1699,7 +1988,7 @@ export default function DocumentTemplateBuilder() {
             ))}
           </div>
 
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="eb-scroll" style={{ flex: 1, overflowY: 'auto' }}>
             {rightTab === 'props' && (
               <PropertiesPanel
                 block={selectedBlock}
