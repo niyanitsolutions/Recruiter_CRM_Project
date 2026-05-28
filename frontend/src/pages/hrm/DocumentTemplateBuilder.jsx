@@ -648,36 +648,109 @@ export default function DocumentTemplateBuilder() {
   const [zoom, setZoom]         = useState(100)
 
   // Drag state
-  const dragIdx = useRef(null)
-  const canvasRef = useRef(null)
+  const dragIdx        = useRef(null)
+  const canvasRef      = useRef(null)
   const activeEditorRef = useRef(null)
+
+  // ── Undo / Redo ──────────────────────────────────────────────────────────
+  const histRef     = useRef({ stack: [], idx: -1 })
+  const [undoInfo, setUndoInfo] = useState({ canUndo: false, canRedo: false })
+  const [draftBanner, setDraftBanner] = useState(null) // { savedAt }
+  const DRAFT_KEY = `doc_builder_draft_${id}`
+
+  const recordHistory = useCallback((newBlocks) => {
+    const h = histRef.current
+    h.stack = h.stack.slice(0, h.idx + 1)
+    h.stack.push(JSON.stringify(newBlocks))
+    if (h.stack.length > 40) h.stack.shift()
+    h.idx = h.stack.length - 1
+    setUndoInfo({ canUndo: h.idx > 0, canRedo: false })
+  }, [])
+
+  const undo = useCallback(() => {
+    const h = histRef.current
+    if (h.idx <= 0) return
+    h.idx--
+    setBlocks(JSON.parse(h.stack[h.idx]))
+    setUndoInfo({ canUndo: h.idx > 0, canRedo: true })
+  }, [])
+
+  const redo = useCallback(() => {
+    const h = histRef.current
+    if (h.idx >= h.stack.length - 1) return
+    h.idx++
+    setBlocks(JSON.parse(h.stack[h.idx]))
+    setUndoInfo({ canUndo: h.idx > 0, canRedo: h.idx < h.stack.length - 1 })
+  }, [])
 
   // ── Load existing template ─────────────────────────────────────────────────
   useEffect(() => {
     if (isNew) return
     setLoading(true)
+    // Check for unsaved draft
+    const savedDraft = localStorage.getItem(DRAFT_KEY)
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft)
+        if (Date.now() - parsed.savedAt < 24 * 60 * 60 * 1000) setDraftBanner(parsed)
+      } catch {}
+    }
     hrmService.getDocumentTemplate(id).then(res => {
       const t = res.data
       setMeta({ name: t.name, description: t.description || '', doc_type: t.doc_type, category: t.category, is_active: t.is_active })
-      if (t.branding)   setBranding(t.branding)
-      if (t.header)     setHeader(t.header)
-      if (t.footer)     setFooter(t.footer)
-      if (t.watermark)  setWatermark(t.watermark)
+      if (t.branding)    setBranding(t.branding)
+      if (t.header)      setHeader(t.header)
+      if (t.footer)      setFooter(t.footer)
+      if (t.watermark)   setWatermark(t.watermark)
       if (t.page_config) setPageConfig(t.page_config)
-      setBlocks((t.blocks || []).sort((a, b) => a.order - b.order))
+      const sorted = (t.blocks || []).sort((a, b) => a.order - b.order)
+      setBlocks(sorted)
+      recordHistory(sorted)
     }).catch(() => {
       toast.error('Failed to load template')
       navigate('/hrm/doc-templates')
     }).finally(() => setLoading(false))
   }, [id, isNew])
 
+  // ── Pre-fill doc_type from URL ?type= param (new templates) ───────────────
+  useEffect(() => {
+    if (!isNew) return
+    const typeParam = params.get('type')
+    if (typeParam) setMeta(m => ({ ...m, doc_type: typeParam }))
+  }, [isNew, params])
+
+  // ── Auto-save draft to localStorage every 30s ─────────────────────────────
+  useEffect(() => {
+    if (isNew) return
+    const interval = setInterval(() => {
+      const draft = { blocks, branding, header, footer, watermark, pageConfig, meta, savedAt: Date.now() }
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+    }, 30_000)
+    return () => clearInterval(interval)
+  }, [blocks, branding, header, footer, watermark, pageConfig, meta, isNew, DRAFT_KEY])
+
+  // Ref so keyboard shortcut always calls the latest handleSave without stale closure
+  const handleSaveRef = useRef(null)
+
+  // ── Keyboard shortcuts: Ctrl+Z / Ctrl+Y / Ctrl+S ─────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') { e.preventDefault(); undo() }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo() }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 's') { e.preventDefault(); handleSaveRef.current?.() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [undo, redo])
+
   // ── Save ───────────────────────────────────────────────────────────────────
-  const handleSave = async (versionNote = '') => {
+  const handleSave = async (versionNote = '', isActive = meta.is_active) => {
     if (!meta.name.trim()) { toast.error('Template name is required'); return }
     setSaving(true)
     try {
       const payload = {
         ...meta,
+        is_active: isActive,
         branding, header, footer, watermark,
         page_config: pageConfig,
         blocks: blocks.map((b, i) => ({ ...b, order: i })),
@@ -685,11 +758,14 @@ export default function DocumentTemplateBuilder() {
       }
       if (isNew) {
         const res = await hrmService.createDocumentTemplate(payload)
-        toast.success('Template created!')
+        localStorage.removeItem(DRAFT_KEY)
+        toast.success(isActive ? 'Template created!' : 'Draft saved!')
         navigate(`/hrm/doc-builder/${res.data.id}`, { replace: true })
       } else {
         await hrmService.updateDocumentTemplate(id, payload)
-        toast.success('Template saved!')
+        localStorage.removeItem(DRAFT_KEY)
+        setDraftBanner(null)
+        toast.success(isActive ? 'Template saved!' : 'Draft saved!')
       }
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Failed to save template')
@@ -698,19 +774,36 @@ export default function DocumentTemplateBuilder() {
     }
   }
 
+  const handleSaveDraft = () => handleSave('Draft', false)
+
+  // Keep ref synced so Ctrl+S keyboard shortcut always calls the latest handleSave
+  useEffect(() => { handleSaveRef.current = handleSave })
+
   // ── Block operations ───────────────────────────────────────────────────────
   const addBlock = (type) => {
     const b = createBlock(type)
-    setBlocks(prev => [...prev, { ...b, order: prev.length }])
+    setBlocks(prev => {
+      const next = [...prev, { ...b, order: prev.length }]
+      recordHistory(next)
+      return next
+    })
     setSelectedBlockId(b.id)
   }
 
   const updateBlock = (updated) => {
-    setBlocks(prev => prev.map(b => b.id === updated.id ? updated : b))
+    setBlocks(prev => {
+      const next = prev.map(b => b.id === updated.id ? updated : b)
+      recordHistory(next)
+      return next
+    })
   }
 
   const deleteBlock = (blockId) => {
-    setBlocks(prev => prev.filter(b => b.id !== blockId))
+    setBlocks(prev => {
+      const next = prev.filter(b => b.id !== blockId)
+      recordHistory(next)
+      return next
+    })
     if (selectedBlockId === blockId) setSelectedBlockId(null)
   }
 
@@ -720,6 +813,7 @@ export default function DocumentTemplateBuilder() {
     const newBlock = { ...JSON.parse(JSON.stringify(src)), id: uuid(), order: src.order + 0.5 }
     setBlocks(prev => {
       const arr = [...prev, newBlock].sort((a, b) => a.order - b.order).map((b, i) => ({ ...b, order: i }))
+      recordHistory(arr)
       return arr
     })
     setSelectedBlockId(newBlock.id)
@@ -738,7 +832,10 @@ export default function DocumentTemplateBuilder() {
       return arr.map((b, i) => ({ ...b, order: i }))
     })
   }
-  const handleDragEnd = () => { dragIdx.current = null }
+  const handleDragEnd = () => {
+    dragIdx.current = null
+    recordHistory(blocks)
+  }
 
   // ── Placeholder insertion into focused block ───────────────────────────────
   const insertPlaceholder = (placeholder) => {
@@ -774,6 +871,12 @@ export default function DocumentTemplateBuilder() {
           <input value={meta.name} onChange={e => setMeta(m => ({ ...m, name: e.target.value }))}
             className="font-semibold text-sm bg-transparent border-none outline-none"
             style={{ color: 'var(--text-primary)', minWidth: '200px' }} />
+          {meta.is_active === false && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium"
+                  style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>
+              Draft
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -784,14 +887,28 @@ export default function DocumentTemplateBuilder() {
             {DOC_TYPES.map(dt => <option key={dt.value} value={dt.value}>{dt.label}</option>)}
           </select>
 
+          {/* Undo / Redo */}
+          <div className="flex items-center gap-0.5 border rounded-lg px-1 py-1"
+               style={{ borderColor: 'var(--border-color)' }}>
+            <button onClick={undo} disabled={!undoInfo.canUndo} title="Undo (Ctrl+Z)"
+              className="p-1 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-colors">
+              <RotateCcw size={13} style={{ color: 'var(--text-secondary)' }} />
+            </button>
+            <button onClick={redo} disabled={!undoInfo.canRedo} title="Redo (Ctrl+Y)"
+              className="p-1 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30 transition-colors"
+              style={{ transform: 'scaleX(-1)' }}>
+              <RotateCcw size={13} style={{ color: 'var(--text-secondary)' }} />
+            </button>
+          </div>
+
           {/* Zoom */}
           <div className="flex items-center gap-1 border rounded-lg px-2 py-1"
             style={{ borderColor: 'var(--border-color)' }}>
-            <button onClick={() => setZoom(z => Math.max(50, z - 10))} className="p-0.5 hover:bg-gray-100 rounded">
+            <button onClick={() => setZoom(z => Math.max(50, z - 10))} className="p-0.5 rounded hover:bg-[var(--bg-hover)]">
               <ZoomOut size={12} style={{ color: 'var(--text-secondary)' }} />
             </button>
             <span className="text-xs w-10 text-center" style={{ color: 'var(--text-secondary)' }}>{zoom}%</span>
-            <button onClick={() => setZoom(z => Math.min(150, z + 10))} className="p-0.5 hover:bg-gray-100 rounded">
+            <button onClick={() => setZoom(z => Math.min(150, z + 10))} className="p-0.5 rounded hover:bg-[var(--bg-hover)]">
               <ZoomIn size={12} style={{ color: 'var(--text-secondary)' }} />
             </button>
           </div>
@@ -803,6 +920,12 @@ export default function DocumentTemplateBuilder() {
             <Eye size={13} /> Preview
           </button>
 
+          <button onClick={handleSaveDraft} disabled={saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border disabled:opacity-60"
+            style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}>
+            <Clock size={13} /> Draft
+          </button>
+
           <button onClick={() => handleSave()} disabled={saving}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-60"
             style={{ background: 'var(--accent-blue)' }}>
@@ -810,6 +933,38 @@ export default function DocumentTemplateBuilder() {
           </button>
         </div>
       </div>
+
+      {/* ── Draft restore banner ─────────────────────────────────────────────── */}
+      {draftBanner && (
+        <div className="flex items-center justify-between px-4 py-2 text-sm shrink-0"
+             style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)', borderBottom: '1px solid var(--border-subtle)' }}>
+          <span>
+            ⚡ You have an unsaved draft from{' '}
+            {new Date(draftBanner.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                try {
+                  if (draftBanner.blocks) setBlocks(draftBanner.blocks)
+                  if (draftBanner.meta)   setMeta(draftBanner.meta)
+                  recordHistory(draftBanner.blocks || [])
+                  toast.success('Draft restored')
+                } catch {}
+                setDraftBanner(null)
+              }}
+              className="px-3 py-1 rounded-lg text-xs font-medium text-white"
+              style={{ background: 'var(--accent-blue)' }}>
+              Restore Draft
+            </button>
+            <button onClick={() => { localStorage.removeItem(DRAFT_KEY); setDraftBanner(null) }}
+              className="px-3 py-1 rounded-lg text-xs font-medium"
+              style={{ background: 'rgba(0,0,0,0.15)' }}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Main area ───────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">

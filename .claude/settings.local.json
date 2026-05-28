@@ -49,7 +49,8 @@
       "PowerShell(python -c \"import reportlab\" 2>&1)",
       "PowerShell(python -c \"import docx\" 2>&1)",
       "Bash(cd /mnt/d/crm-project/frontend && npx vite build --mode development 2>&1 | head -80)",
-      "Read(//mnt/d/crm-project/**)"
+      "Read(//mnt/d/crm-project/**)",
+      "Bash(npx --yes acorn --ecma2020 --module src/pages/hrm/DocumentTemplates.jsx)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",
