@@ -464,6 +464,10 @@ function DashboardTab() {
 
   // ── Dynamic cards ──────────────────────────────────────────────────────────
   const S = stats || {}
+
+  // attended = present + late + half_day + wfh (all statuses where employee showed up)
+  const attendedCount = S.attended ?? ((S.present || 0) + (S.late || 0) + (S.half_day || 0) + (S.wfh || 0))
+
   const CARDS = isToday ? [
     { label: 'Total Employees',   value: S.total_employees   ?? '—', icon: Users,        iconColor: 'text-blue-500' },
     { label: 'Present Today',     value: S.present           ?? '—', icon: CheckCircle,  iconColor: 'text-green-500' },
@@ -474,98 +478,120 @@ function DashboardTab() {
     { label: 'Half Day',          value: S.half_day          ?? '—', icon: Clock,        iconColor: 'text-purple-500' },
     { label: 'On Leave',          value: S.on_leave          ?? '—', icon: Wifi,         iconColor: 'text-indigo-500' },
   ] : [
-    { label: 'Present',          value: (S.present||0)+(S.wfh||0)+(S.late||0), icon: CheckCircle,  iconColor: 'text-green-500' },
-    { label: 'Absent',           value: S.absent     ?? '—',                    icon: XCircle,      iconColor: 'text-red-500' },
-    { label: 'Late',             value: S.late       ?? '—',                    icon: AlertCircle,  iconColor: 'text-orange-500' },
-    { label: 'Half Day',         value: S.half_day   ?? '—',                    icon: Clock,        iconColor: 'text-purple-500' },
-    { label: 'On Leave',         value: S.on_leave   ?? '—',                    icon: Wifi,         iconColor: 'text-indigo-500' },
-    { label: 'WFH',              value: S.wfh        ?? '—',                    icon: Users,        iconColor: 'text-blue-500' },
-    { label: 'Total Work Hrs',   value: S.total_work_hours > 0 ? formatHours(S.total_work_hours) : '—', icon: Activity, iconColor: 'text-emerald-500' },
-    { label: 'Overtime Hrs',     value: S.total_overtime_hours > 0 ? formatHours(S.total_overtime_hours) : '—', icon: TrendingUp, iconColor: 'text-yellow-500' },
+    { label: 'Attended',          value: attendedCount,                                                               icon: CheckCircle,  iconColor: 'text-green-500' },
+    { label: 'Absent',            value: S.absent           ?? '—',                                                   icon: XCircle,      iconColor: 'text-red-500' },
+    { label: 'Late',              value: S.late             ?? '—',                                                   icon: AlertCircle,  iconColor: 'text-orange-500' },
+    { label: 'Half Day',          value: S.half_day         ?? '—',                                                   icon: Clock,        iconColor: 'text-purple-500' },
+    { label: 'On Leave',          value: S.on_leave         ?? '—',                                                   icon: Wifi,         iconColor: 'text-indigo-500' },
+    { label: 'WFH',               value: S.wfh              ?? '—',                                                   icon: Users,        iconColor: 'text-blue-500' },
+    { label: 'Total Work Hrs',    value: S.total_work_hours      > 0 ? formatHours(S.total_work_hours)      : '—',   icon: Activity,     iconColor: 'text-emerald-500' },
+    { label: 'Overtime Hrs',      value: S.total_overtime_hours  > 0 ? formatHours(S.total_overtime_hours)  : '—',   icon: TrendingUp,   iconColor: 'text-yellow-500' },
   ]
 
-  const presetLabel = PRESETS.find(p => p.key === preset)?.label || preset
-  const records = isToday ? liveRecords : histRecords
-  const working  = isToday ? (S.currently_working ?? 0) : 0
-  const onBreakCnt = isToday ? (S.on_break ?? 0) : 0
-
-  const colSpan = isToday && canManage ? 9 : 8
+  const presetLabel  = PRESETS.find(p => p.key === preset)?.label || preset
+  const records      = isToday ? liveRecords : histRecords
+  const working      = isToday ? (S.currently_working ?? 0) : 0
+  const onBreakCnt   = isToday ? (S.on_break ?? 0) : 0
+  const colSpan      = isToday && canManage ? 9 : 8
+  const hasFilters   = statusFilter || modeFilter || search
+  const resetFilters = () => { setStatusFilter(''); setModeFilter(''); setSearch('') }
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="flex flex-col" style={{ minHeight: 0 }}>
 
-      {/* ── Filter bar ── */}
-      <div className="rounded-xl border p-3 flex flex-wrap items-center gap-2"
-           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+      {/* ── Compact single-line filter bar (sticky) ── */}
+      <div className="sticky top-0 z-20 px-4 pt-3 pb-2"
+           style={{ background: 'var(--bg-main)' }}>
+        <div className="rounded-xl border px-3 py-2 flex items-center gap-2 flex-wrap"
+             style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
 
-        <select className="input text-sm h-9" value={preset}
-          onChange={e => { setPreset(e.target.value); setPage(1) }} style={{ minWidth: 150 }}>
-          {PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-        </select>
+          {/* ── Date group ── */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <select className="input text-xs h-8" value={preset}
+              onChange={e => { setPreset(e.target.value); setPage(1) }}
+              style={{ minWidth: 118, paddingRight: '1.5rem' }}>
+              {PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+            </select>
+            {preset === 'custom' ? (
+              <>
+                <input type="date" className="input text-xs h-8" value={customStart}
+                  onChange={e => { setCustomStart(e.target.value); setPage(1) }}
+                  style={{ width: 128 }} />
+                <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-muted)' }}>–</span>
+                <input type="date" className="input text-xs h-8" value={customEnd}
+                  onChange={e => { setCustomEnd(e.target.value); setPage(1) }}
+                  style={{ width: 128 }} />
+              </>
+            ) : rangeLabel ? (
+              <span className="text-xs px-1.5 py-0.5 rounded flex-shrink-0 whitespace-nowrap"
+                    style={{ background: 'var(--bg-info)', color: 'var(--text-info)' }}>
+                {rangeLabel}
+              </span>
+            ) : null}
+          </div>
 
-        {preset === 'custom' && (
-          <>
-            <input type="date" className="input text-sm h-9" value={customStart}
-              onChange={e => { setCustomStart(e.target.value); setPage(1) }} />
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>–</span>
-            <input type="date" className="input text-sm h-9" value={customEnd}
-              onChange={e => { setCustomEnd(e.target.value); setPage(1) }} />
-          </>
-        )}
+          {/* ── Divider ── */}
+          <div className="w-px h-5 flex-shrink-0 hidden sm:block"
+               style={{ background: 'var(--border-subtle)' }} />
 
-        <select className="input text-sm h-9" value={statusFilter}
-          onChange={e => { setStatusFilter(e.target.value); setPage(1) }}>
-          <option value="">All Statuses</option>
-          {['present','late','absent','half_day','on_leave','wfh','holiday','weekend'].map(s => (
-            <option key={s} value={s}>{s.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
-          ))}
-        </select>
+          {/* ── Status & mode ── */}
+          <select className="input text-xs h-8 flex-shrink-0" value={statusFilter}
+            onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
+            style={{ minWidth: 108, paddingRight: '1.5rem' }}>
+            <option value="">All Statuses</option>
+            {['present','late','absent','half_day','on_leave','wfh','holiday','weekend'].map(s => (
+              <option key={s} value={s}>{s.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
+            ))}
+          </select>
 
-        <select className="input text-sm h-9" value={modeFilter}
-          onChange={e => { setModeFilter(e.target.value); setPage(1) }}>
-          <option value="">All Modes</option>
-          {['office','wfh','hybrid','field'].map(m => (
-            <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>
-          ))}
-        </select>
+          <select className="input text-xs h-8 flex-shrink-0" value={modeFilter}
+            onChange={e => { setModeFilter(e.target.value); setPage(1) }}
+            style={{ minWidth: 86, paddingRight: '1.5rem' }}>
+            <option value="">All Modes</option>
+            {['office','wfh','hybrid','field'].map(m => (
+              <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>
+            ))}
+          </select>
 
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5" style={{ color: 'var(--text-disabled)' }} />
-          <input className="input text-sm h-9 pl-8" placeholder="Search employee…"
-            value={search} onChange={e => setSearch(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && load(1)}
-            style={{ minWidth: 180 }} />
+          {/* ── Search (fluid) ── */}
+          <div className="relative flex-1" style={{ minWidth: 130, maxWidth: 220 }}>
+            <Search className="absolute left-2 top-2 w-3.5 h-3.5 pointer-events-none"
+                    style={{ color: 'var(--text-disabled)' }} />
+            <input className="input text-xs h-8 pl-7 w-full" placeholder="Employee…"
+              value={search} onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && load(1)} />
+          </div>
+
+          {/* ── Right spacer ── */}
+          <div className="flex-1 hidden md:block" />
+
+          {/* ── Action group ── */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {hasFilters && (
+              <button onClick={resetFilters} title="Reset filters"
+                className="px-2 h-8 rounded-lg text-xs font-medium"
+                style={{ background: 'var(--bg-alt)', color: 'var(--text-muted)' }}>
+                Reset
+              </button>
+            )}
+            <button onClick={() => load(page)} title="Refresh"
+              className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0"
+              style={{ background: 'var(--bg-alt)' }}>
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`}
+                         style={{ color: 'var(--text-muted)' }} />
+            </button>
+            <button onClick={handleExport} disabled={exporting || !range}
+              className="flex items-center gap-1 px-2.5 h-8 rounded-lg text-xs font-medium flex-shrink-0 whitespace-nowrap"
+              style={{ background: 'var(--bg-success)', color: 'var(--text-success)', opacity: (exporting || !range) ? 0.5 : 1 }}>
+              {exporting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+              Export
+            </button>
+          </div>
         </div>
-
-        <div className="flex-1" />
-
-        {rangeLabel && preset !== 'custom' && (
-          <span className="text-xs px-2 py-1 rounded-lg hidden md:flex items-center"
-                style={{ background: 'var(--bg-info)', color: 'var(--text-info)' }}>
-            {rangeLabel}
-          </span>
-        )}
-
-        {(statusFilter || modeFilter || search) && (
-          <button onClick={() => { setStatusFilter(''); setModeFilter(''); setSearch('') }}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-medium"
-            style={{ background: 'var(--bg-alt)', color: 'var(--text-muted)' }}>
-            Reset
-          </button>
-        )}
-
-        <button onClick={() => load(page)} title="Refresh"
-          className="p-2 rounded-lg" style={{ background: 'var(--bg-alt)' }}>
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} style={{ color: 'var(--text-muted)' }} />
-        </button>
-
-        <button onClick={handleExport} disabled={exporting || !range}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
-          style={{ background: 'var(--bg-success)', color: 'var(--text-success)', opacity: (exporting || !range) ? 0.5 : 1 }}>
-          {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-          Export CSV
-        </button>
       </div>
+
+      {/* ── Page body ── */}
+      <div className="px-4 pb-4 space-y-4">
 
       {/* ── Live banner ── */}
       {isToday && !loading && (working > 0 || onBreakCnt > 0) && (
@@ -756,6 +782,7 @@ function DashboardTab() {
           </div>
         )}
       </div>
+      </div>{/* end px-4 pb-4 body */}
     </div>
   )
 }

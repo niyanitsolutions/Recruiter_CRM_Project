@@ -627,11 +627,16 @@ class AttendanceService:
         end_inclusive = end_date + timedelta(days=1)
         match: dict = {"company_id": company_id, "date": {"$gte": start_date, "$lt": end_inclusive}}
 
+        # Statuses that mean the employee attended work (present in any form)
+        _ATTENDED = ["present", "late", "half_day", "wfh"]
+
         pipeline_totals = [
             {"$match": match},
             {"$group": {
                 "_id": None,
                 "total_records":         {"$sum": 1},
+                # attended = any status where employee actually showed up
+                "attended":              {"$sum": {"$cond": [{"$in": ["$status", _ATTENDED]}, 1, 0]}},
                 "present":               {"$sum": {"$cond": [{"$eq": ["$status", "present"]},  1, 0]}},
                 "late":                  {"$sum": {"$cond": [{"$eq": ["$status", "late"]},     1, 0]}},
                 "absent":                {"$sum": {"$cond": [{"$eq": ["$status", "absent"]},   1, 0]}},
@@ -649,7 +654,8 @@ class AttendanceService:
             {"$match": match},
             {"$group": {
                 "_id": "$date",
-                "present": {"$sum": {"$cond": [{"$in": ["$status", ["present", "wfh"]]}, 1, 0]}},
+                # present bar = all who attended (present + late + half_day + wfh)
+                "present": {"$sum": {"$cond": [{"$in": ["$status", _ATTENDED]},   1, 0]}},
                 "absent":  {"$sum": {"$cond": [{"$eq":  ["$status", "absent"]},   1, 0]}},
                 "late":    {"$sum": {"$cond": [{"$eq":  ["$status", "late"]},     1, 0]}},
             }},
