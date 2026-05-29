@@ -1874,10 +1874,14 @@ export default function DocumentTemplateBuilder() {
   useEffect(() => { handleSaveRef.current = handleSave })
 
   // ── Export helpers ────────────────────────────────────────────────────────
-  const getPrintData = useCallback(() => ({
-    blocks, branding, header, footer, watermark, pageConfig, meta,
-    overridePageCount: autoPageCount > pageCount ? autoPageCount : undefined,
-  }), [blocks, branding, header, footer, watermark, pageConfig, meta, autoPageCount, pageCount])
+  const getPrintData = useCallback(() => {
+    // Compute inline — pageCount (const) is declared later in the function body
+    const pc = 1 + blocks.filter(b => b.type === 'page_break').length
+    return {
+      blocks, branding, header, footer, watermark, pageConfig, meta,
+      overridePageCount: autoPageCount > pc ? autoPageCount : undefined,
+    }
+  }, [blocks, branding, header, footer, watermark, pageConfig, meta, autoPageCount])
   const handleExportPDF  = useCallback(() => { doExportPDF(getPrintData()); setShowExportMenu(false) }, [getPrintData])
   const handleExportDOCX = useCallback(() => { doExportDOCX(getPrintData()); setShowExportMenu(false) }, [getPrintData])
   const handlePrint      = useCallback(() => { doExportPDF(getPrintData()); setShowExportMenu(false) }, [getPrintData])
