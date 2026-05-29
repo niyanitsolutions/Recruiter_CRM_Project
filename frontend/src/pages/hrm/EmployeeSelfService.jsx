@@ -575,11 +575,13 @@ function LeaveTab({ employeeId }) {
       load()
       loadBalances()
     } catch (err) {
-      const detail = err?.response?.data?.detail
+      // Server may return either `detail` (HTTPException) or `message` (custom handler)
+      const raw = err?.response?.data
+      const detail = raw?.detail || raw?.message
       const msg = typeof detail === 'string'
         ? detail
         : Array.isArray(detail) ? detail.map(d => d?.msg || String(d)).join('; ')
-        : 'Failed to submit. Please try again.'
+        : `Submission failed (${err?.response?.status || 'network error'}). Please try again.`
       setFormError(msg)
       toast.error(msg)
     }

@@ -78,7 +78,12 @@
       "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\diagnose_save.py 2>&1)",
       "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\check_all_templates.py 2>&1)",
       "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\fix_sessions.py 2>&1)",
-      "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\final_test.py 2>&1)"
+      "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\final_test.py 2>&1)",
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(Start-Sleep -Seconds 1)",
+      "Bash(Start-Process -FilePath \"python\" -ArgumentList \"-m\", \"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\", \"--reload\" -WorkingDirectory \"d:/crm-project/backend\" -NoNewWindow)",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue)",
+      "PowerShell(head)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

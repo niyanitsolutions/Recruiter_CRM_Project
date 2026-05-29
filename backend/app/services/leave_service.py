@@ -130,22 +130,22 @@ class LeaveService:
         used_agg = await self.col.aggregate([
             {"$match": {
                 "company_id": company_id, "employee_id": employee_id,
-                "leave_type": leave_type, "status": LeaveStatus.APPROVED,
+                "leave_type": str(leave_type), "status": LeaveStatus.APPROVED.value,
                 "from_date": {"$gte": year_start}, "to_date": {"$lte": year_end},
             }},
             {"$group": {"_id": None, "total": {"$sum": "$total_days"}}},
         ]).to_list(1)
-        used = used_agg[0]["total"] if used_agg else 0.0
+        used = float(used_agg[0]["total"]) if used_agg else 0.0
 
         pend_agg = await self.col.aggregate([
             {"$match": {
                 "company_id": company_id, "employee_id": employee_id,
-                "leave_type": leave_type, "status": LeaveStatus.PENDING,
+                "leave_type": str(leave_type), "status": LeaveStatus.PENDING.value,
                 "from_date": {"$gte": year_start}, "to_date": {"$lte": year_end},
             }},
             {"$group": {"_id": None, "total": {"$sum": "$total_days"}}},
         ]).to_list(1)
-        pending = pend_agg[0]["total"] if pend_agg else 0.0
+        pending = float(pend_agg[0]["total"]) if pend_agg else 0.0
 
         available = allocated - used - pending
         if available < days:
@@ -411,7 +411,7 @@ class LeaveService:
             used_agg = await self.col.aggregate([
                 {"$match": {
                     "company_id": company_id, "employee_id": employee_id,
-                    "leave_type": lt, "status": LeaveStatus.APPROVED,
+                    "leave_type": lt, "status": LeaveStatus.APPROVED.value,
                     "from_date": {"$gte": year_start}, "to_date": {"$lte": year_end},
                 }},
                 {"$group": {"_id": None, "total": {"$sum": "$total_days"}}},
@@ -421,7 +421,7 @@ class LeaveService:
             pend_agg = await self.col.aggregate([
                 {"$match": {
                     "company_id": company_id, "employee_id": employee_id,
-                    "leave_type": lt, "status": LeaveStatus.PENDING,
+                    "leave_type": lt, "status": LeaveStatus.PENDING.value,
                     "from_date": {"$gte": year_start}, "to_date": {"$lte": year_end},
                 }},
                 {"$group": {"_id": None, "total": {"$sum": "$total_days"}}},

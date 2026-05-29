@@ -112,8 +112,10 @@ function ApplyLeaveModal({ open, onClose, onSuccess, policies }) {
       close()
       onSuccess()
     } catch (ex) {
-      const d = ex?.response?.data?.detail
-      setErr(typeof d === 'string' ? d : Array.isArray(d) ? d.map(x => x?.msg || x).join('; ') : 'Submission failed')
+      const raw = ex?.response?.data
+      const d = raw?.detail || raw?.message
+      setErr(typeof d === 'string' ? d : Array.isArray(d) ? d.map(x => x?.msg || x).join('; ')
+        : `Submission failed (${ex?.response?.status || 'network error'})`)
     }
     setSaving(false)
   }
@@ -222,7 +224,8 @@ function RejectModal({ leave, onClose, onSuccess }) {
       onClose()
       onSuccess()
     } catch (ex) {
-      toast.error(ex?.response?.data?.detail || 'Failed to reject leave')
+      const raw = ex?.response?.data
+      toast.error(raw?.detail || raw?.message || 'Failed to reject leave')
     }
     setSaving(false)
   }
@@ -331,7 +334,8 @@ export default function LeaveManagement() {
       load(page)
       loadBalances()
     } catch (ex) {
-      toast.error(ex?.response?.data?.detail || 'Failed to approve')
+      const raw = ex?.response?.data
+      toast.error(raw?.detail || raw?.message || 'Failed to approve')
     }
     setActLoading(p => ({ ...p, [id]: false }))
   }
@@ -345,7 +349,8 @@ export default function LeaveManagement() {
       load(page)
       loadBalances()
     } catch (ex) {
-      toast.error(ex?.response?.data?.detail || 'Failed to cancel')
+      const raw = ex?.response?.data
+      toast.error(raw?.detail || raw?.message || 'Failed to cancel')
     }
     setActLoading(p => ({ ...p, [id]: false }))
   }

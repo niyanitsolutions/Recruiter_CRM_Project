@@ -95,6 +95,10 @@ async def apply_leave(
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        import logging as _log
+        _log.getLogger(__name__).error("Leave apply unexpected error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Leave submission failed: {e}")
 
     try:
         from app.services.notification_service import NotificationService

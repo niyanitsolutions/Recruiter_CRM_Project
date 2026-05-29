@@ -10,10 +10,16 @@ class LeaveType(str, Enum):
     CASUAL = "casual"           # CL
     SICK = "sick"               # SL
     EARNED = "earned"           # EL / PL
+    ANNUAL = "annual"           # AL (alias for earned in some setups)
     MATERNITY = "maternity"
     PATERNITY = "paternity"
-    COMPENSATORY = "compensatory"
+    COMPENSATORY = "compensatory"   # legacy value
+    COMP_OFF = "comp_off"           # matches LeavePolicyType.COMP_OFF
+    MARRIAGE = "marriage"
+    BEREAVEMENT = "bereavement"
+    WFH = "wfh"                     # work-from-home allowance
     UNPAID = "unpaid"
+    CUSTOM = "custom"
     OTHER = "other"
 
 
