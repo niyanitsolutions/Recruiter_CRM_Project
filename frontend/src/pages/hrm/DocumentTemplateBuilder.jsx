@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useReducer, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
@@ -112,6 +112,79 @@ const createBlock = (type) => {
     qr_code:   { content: 'https://verify.example.com/{{document_number}}' },
   }
   return { ...base, ...(d[type] || {}), order: Date.now() }
+}
+
+// ─── Pagination Engine ────────────────────────────────────────────────────────
+
+// Estimated rendered height (px) for each block type — used for auto-pagination
+function getEstimatedBlockHeight(block) {
+  if (!block || block.is_hidden) return 0
+  const p = block.properties || {}
+  const mv = (p.margin_top || 0) + (p.margin_bottom || 0) + 10 // vertical padding/margin
+  switch (block.type) {
+    case 'heading': return 56 + mv
+    case 'text': case 'paragraph': {
+      const raw = typeof block.content === 'string' ? block.content.replace(/<[^>]*>/g, '') : ''
+      const lh = (p.line_height || 1.5) * ((p.font_size || 11) * 1.33) // pt→px
+      const lines = Math.max(1, Math.ceil(raw.length / 85))
+      return Math.ceil(lines * lh) + 16 + mv
+    }
+    case 'list_items': {
+      const n = Array.isArray(block.content) ? block.content.length : 1
+      return n * 28 + 10 + mv
+    }
+    case 'two_column': return 100 + mv
+    case 'divider': return 20 + mv
+    case 'spacer': return parseInt(p.height) || 20
+    case 'page_break': return 0
+    case 'table': return 40 + ((block.content?.rows?.length || 2) * 30) + mv
+    case 'salary_table': {
+      const r = Math.max(block.content?.earnings?.length || 3, block.content?.deductions?.length || 3)
+      return 40 + r * 27 + 40 + mv
+    }
+    case 'employee_details': case 'company_details':
+      return (Object.keys(block.content || {}).length || 4) * 30 + mv
+    case 'image': case 'logo': return 140 + mv
+    case 'signature': return Math.ceil((Array.isArray(block.content) ? block.content.length : 1) / 3) * 90 + mv
+    case 'qr_code': return 140 + mv
+    default: return 60 + mv
+  }
+}
+
+// Compute which block INDICES (0-based within the provided array) start a new page.
+// Returns an array of block indices. Explicit page_break blocks also trigger a page start.
+function calcPageBreaks(blocks, pageConfig, header, footer) {
+  const SZ_H = { A4: 297, LETTER: 279.4, LEGAL: 355.6, A3: 420, A5: 210 }
+  const SZ_W = { A4: 210, LETTER: 215.9, LEGAL: 215.9, A3: 297, A5: 148 }
+  const key = pageConfig?.size || 'A4'
+  const isLand = pageConfig?.orientation === 'landscape'
+  const pageH = Math.round((isLand ? SZ_W[key] || 210 : SZ_H[key] || 297) / 25.4 * 96)
+  const mTop = (pageConfig?.margin_top || 20) / 25.4 * 96
+  const mBot = (pageConfig?.margin_bottom || 20) / 25.4 * 96
+  const hdrH = header?.enabled ? (header.height || 80) + 24 : 0
+  const ftrH = footer?.enabled ? 64 : 0
+  const usable = pageH - mTop - mBot - hdrH - ftrH
+
+  const breaks = [] // indices where a new page starts
+  let used = 0
+
+  blocks.forEach((block, i) => {
+    if (block.type === 'page_break') {
+      // next non-break block starts a new page
+      if (i + 1 < blocks.length) breaks.push(i + 1)
+      used = 0
+      return
+    }
+    const h = getEstimatedBlockHeight(block)
+    if (used + h > usable && used > 0) {
+      breaks.push(i)
+      used = h
+    } else {
+      used += h
+    }
+  })
+
+  return breaks
 }
 
 // ─── Enterprise CSS (scrollbars + print + animations) ─────────────────────────
@@ -235,21 +308,27 @@ function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfi
   const mBottom = pageConfig?.margin_bottom || 20
   const mLeft = pageConfig?.margin_left || 20
 
-  // Split blocks into pages only by explicit page_break blocks.
-  // If no explicit breaks exist, all content renders in ONE continuous page
-  // (no white-space padding) and we rely on overridePageCount for the toolbar count.
-  // This gives the clean, natural MS Word-style flow.
+  // True auto-pagination: split blocks using estimated heights so blocks never
+  // straddle a page boundary.  Explicit page_break blocks also force a page split.
   const allBlocks = (blocks || []).filter(b => !b.is_hidden)
-  const pages = [[]]
-  for (const block of allBlocks) {
-    if (block.type === 'page_break') { pages.push([]); continue }
-    pages[pages.length - 1].push(block)
-  }
+  const autoBreaks = calcPageBreaks(allBlocks, pageConfig, header, footer)
 
-  // Toolbar shows either the explicit page count or the auto-calculated one.
-  const totalPages = overridePageCount && overridePageCount > pages.length
-    ? overridePageCount
-    : pages.length
+  // Build pages array respecting both explicit breaks and auto-breaks
+  const pages = [[]]
+  allBlocks.forEach((block, i) => {
+    if (block.type === 'page_break') {
+      // Force new page; don't render the marker itself
+      pages.push([])
+      return
+    }
+    if (autoBreaks.includes(i) && pages[pages.length - 1].length > 0) {
+      pages.push([block])
+    } else {
+      pages[pages.length - 1].push(block)
+    }
+  })
+
+  const totalPages = pages.length
 
   const watermarkDiv = watermark?.enabled
     ? `<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(${watermark.rotation||-45}deg);font-size:${watermark.font_size||60}px;color:${watermark.color||'#ccc'};opacity:${watermark.opacity||0.1};font-weight:bold;white-space:nowrap;pointer-events:none;z-index:0;">${watermark.text||'CONFIDENTIAL'}</div>`
@@ -1601,51 +1680,35 @@ function InteractiveHeaderCanvas({ header, onChange, branding }) {
   )
 }
 
-// ─── Auto-Pagination Overlay ──────────────────────────────────────────────────
+// ─── Page Separator (in DOM flow — blocks never cross this) ───────────────────
 
-function PaginationOverlay({ contentRef, headerH, footerH, margins, pageConfig, onPageCountChange }) {
-  const [breakY, setBreakY] = useState([])
-
-  useEffect(() => {
-    if (!contentRef?.current) return
-    // A4: 297mm, Letter: 279.4mm, Legal: 355.6mm
-    const sizes = { A4: 297, LETTER: 279.4, LEGAL: 355.6, A3: 420, A5: 210 }
-    const mmH    = sizes[pageConfig?.size || 'A4']
-    const pxH    = mmH / 25.4 * 96
-    const mTop   = (margins?.top  || 20) / 25.4 * 96
-    const mBot   = (margins?.bottom || 20) / 25.4 * 96
-    const hH     = headerH > 0 ? headerH + 24 : 0 // header + marginBottom
-    const fH     = footerH > 0 ? footerH + 24 : 0
-    const usable = pxH - mTop - mBot - hH - fH
-
-    const recalc = () => {
-      if (!contentRef.current) return
-      const totalH = contentRef.current.scrollHeight
-      const pts = []
-      let y = usable
-      while (y < totalH) { pts.push(y); y += usable }
-      setBreakY(pts)
-      onPageCountChange?.(pts.length + 1)
-    }
-    const ro = new ResizeObserver(recalc)
-    ro.observe(contentRef.current)
-    recalc()
-    return () => ro.disconnect()
-  }, [contentRef, headerH, footerH, margins, pageConfig, onPageCountChange])
-
-  if (!breakY.length) return null
+function PageSeparator({ pageNumber, mLeft, mRight, mBottom, mTop }) {
   return (
-    <>
-      {breakY.map((y, i) => (
-        <div key={i} style={{ position: 'absolute', left: -40, right: -40, top: y, zIndex: 50, pointerEvents: 'none' }}>
-          <div style={{ height: 24, background: '#e8edf2', display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid #c4cdd6', borderBottom: '1px solid #c4cdd6' }}>
-            <span style={{ fontSize: 10, color: '#6b7280', fontWeight: 500, userSelect: 'none' }}>
-              ── Page {i + 2} ──
-            </span>
-          </div>
-        </div>
-      ))}
-    </>
+    <div style={{
+      marginLeft: `-${mLeft}mm`,
+      marginRight: `-${mRight}mm`,
+      userSelect: 'none',
+      pointerEvents: 'none',
+    }}>
+      {/* Bottom white margin of previous page */}
+      <div style={{ height: `${mBottom}mm`, background: '#fff', boxShadow: '0 4px 10px rgba(0,0,0,0.12)' }} />
+      {/* Page gap — gray bar (like Word between pages) */}
+      <div style={{
+        height: 44,
+        background: '#c8d4df',
+        borderTop: '2px solid #b0bec5',
+        borderBottom: '2px solid #b0bec5',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        gap: 12,
+        boxShadow: 'inset 0 3px 6px rgba(0,0,0,0.08), inset 0 -3px 6px rgba(0,0,0,0.08)',
+      }}>
+        <span style={{ fontSize: 10, color: '#546e7a', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Page {pageNumber}
+        </span>
+      </div>
+      {/* Top white margin of next page */}
+      <div style={{ height: `${mTop}mm`, background: '#fff', boxShadow: '0 -4px 10px rgba(0,0,0,0.12)' }} />
+    </div>
   )
 }
 
@@ -1666,7 +1729,7 @@ export default function DocumentTemplateBuilder() {
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [zoomMenuOpen, setZoomMenuOpen]     = useState(false)
   const [saveState, setSaveState]           = useState('saved') // 'saved' | 'unsaved' | 'saving'
-  const contentRef = useRef(null) // for pagination overlay
+  const contentRef = useRef(null) // blocks content area ref
 
   const [meta, setMeta] = useState({ name: 'Untitled Template', description: '', doc_type: 'custom', category: 'hr', is_active: true })
   const [branding, setBranding] = useState({ primary_color: '#1e3a5f', secondary_color: '#4a90d9', font_family: 'Arial', font_size: 11, text_color: '#1a1a1a', heading_color: '#1e3a5f' })
@@ -1688,7 +1751,22 @@ export default function DocumentTemplateBuilder() {
   const [blocks, setBlocks] = useState([])
   const [zoom, setZoom]     = useState(100)
 
-  const [autoPageCount, setAutoPageCount] = useState(1)
+  // ── True pagination engine ─────────────────────────────────────────────────
+  // canvasPageBreaks: indices (in the full `blocks` array) where a new page starts.
+  // Computed from estimated block heights — no DOM measurement needed.
+  const canvasPageBreaks = useMemo(() => {
+    const visible = blocks
+      .map((b, i) => ({ block: b, orig: i }))
+      .filter(({ block }) => !block.is_hidden && block.type !== 'page_break')
+    // Get visible-only array for height calc
+    const visBlocks = visible.map(x => x.block)
+    const visBreaks = calcPageBreaks(visBlocks, pageConfig, header, footer)
+    // Map back to original indices
+    return visBreaks.map(vi => visible[vi]?.orig ?? vi)
+  }, [blocks, pageConfig, header, footer])
+
+  // Also count explicit page_break blocks so total = auto + explicit
+  const displayPageCount = canvasPageBreaks.length + 1
 
   const histRef    = useRef({ stack: [], idx: -1 })
   const [undoInfo, setUndoInfo] = useState({ canUndo: false, canRedo: false })
@@ -1869,13 +1947,8 @@ export default function DocumentTemplateBuilder() {
 
   // ── Export helpers ────────────────────────────────────────────────────────
   const getPrintData = useCallback(() => {
-    // Compute inline — pageCount (const) is declared later in the function body
-    const pc = 1 + blocks.filter(b => b.type === 'page_break').length
-    return {
-      blocks, branding, header, footer, watermark, pageConfig, meta,
-      overridePageCount: autoPageCount > pc ? autoPageCount : undefined,
-    }
-  }, [blocks, branding, header, footer, watermark, pageConfig, meta, autoPageCount])
+    return { blocks, branding, header, footer, watermark, pageConfig, meta }
+  }, [blocks, branding, header, footer, watermark, pageConfig, meta])
   const handleExportPDF  = useCallback(() => { doExportPDF(getPrintData()); setShowExportMenu(false) }, [getPrintData])
   const handleExportDOCX = useCallback(() => { doExportDOCX(getPrintData()); setShowExportMenu(false) }, [getPrintData])
   const handlePrint      = useCallback(() => { doExportPDF(getPrintData()); setShowExportMenu(false) }, [getPrintData])
@@ -1974,17 +2047,11 @@ export default function DocumentTemplateBuilder() {
 
   const selectedBlock = blocks.find(b => b.id === selectedId) || null
 
-  // Compute page count — explicit page_break blocks take priority; auto-overlay count is the fallback
-  const pageCount = 1 + blocks.filter(b => b.type === 'page_break').length
-  // displayPageCount uses the larger of the explicit count and the auto-calculated overlay count
-  const displayPageCount = Math.max(pageCount, autoPageCount)
-
   // Preview handler — opens a nicely-rendered preview window with print button
   const handlePreview = useCallback(() => {
     if (blocks.length === 0) { toast('Add some blocks to the canvas first', { icon: 'ℹ️' }); return }
     try {
-      const overridePageCount = autoPageCount > pageCount ? autoPageCount : undefined
-      const html = buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta, overridePageCount })
+      const html = buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta })
       const win = window.open('', '_blank', 'width=960,height=760,resizable=yes')
       if (!win) { toast.error('Allow popups to preview — check your browser settings'); return }
       win.document.write(html)
@@ -1993,7 +2060,7 @@ export default function DocumentTemplateBuilder() {
     } catch (e) {
       toast.error('Preview failed — ' + (e?.message || 'unknown error'))
     }
-  }, [blocks, branding, header, footer, watermark, pageConfig, meta, autoPageCount, pageCount])
+  }, [blocks, branding, header, footer, watermark, pageConfig, meta])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
@@ -2335,18 +2402,8 @@ export default function DocumentTemplateBuilder() {
               {/* Floating rich-text toolbar */}
               <RichTextToolbar containerRef={canvasRef} />
 
-              {/* Blocks + Auto-pagination overlay */}
+              {/* ── Blocks with true page separators in DOM flow ─────────── */}
               <div ref={contentRef} style={{ position: 'relative', zIndex: 1 }}>
-                {/* Auto-pagination visual breaks */}
-                <PaginationOverlay
-                  contentRef={contentRef}
-                  headerH={header.enabled ? (header.height || 80) : 0}
-                  footerH={footer.enabled ? 50 : 0}
-                  margins={{ top: pageConfig.margin_top, bottom: pageConfig.margin_bottom }}
-                  pageConfig={pageConfig}
-                  onPageCountChange={setAutoPageCount}
-                />
-
                 {blocks.length === 0 && (
                   <div
                     onDragOver={e => e.preventDefault()}
@@ -2359,34 +2416,56 @@ export default function DocumentTemplateBuilder() {
 
                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                   <SortableContext items={blocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
-                    {blocks.map((block) => (
-                      <div key={block.id}
-                        style={{ marginBottom: 4 }}
-                        onMouseEnter={e => { const h = e.currentTarget.querySelector('.drag-handle'); if (h) h.style.opacity = 1 }}
-                        onMouseLeave={e => { const h = e.currentTarget.querySelector('.drag-handle'); if (h) h.style.opacity = 0 }}>
-                        <SortableBlock
-                          block={block}
-                          selected={selectedId === block.id}
-                          editing={editingId === block.id}
-                          onSelect={setSelectedId}
-                          onStartEdit={bid => { setEditingId(bid); setRightTab('content') }}
-                          onStopEdit={() => setEditingId(null)}
-                          onDelete={deleteBlock}
-                          onDuplicate={duplicateBlock}
-                          onContentChange={(blockId, newContent) => {
-                            const b = blocks.find(x => x.id === blockId)
-                            if (b) updateBlock({ ...b, content: newContent })
-                          }}
-                          branding={branding}
-                          insertPlaceholder={insertPlaceholder}
-                        />
-                      </div>
-                    ))}
+                    {(() => {
+                      // Render blocks interspersed with PageSeparator elements.
+                      // PageSeparators are NOT in the dnd-kit items list, so dnd-kit ignores
+                      // them for sorting — but they ARE in DOM flow so they create real space,
+                      // ensuring no block ever visually crosses a page boundary.
+                      let pageNum = 1
+                      return blocks.map((block, index) => {
+                        const isPageStart = canvasPageBreaks.includes(index)
+                        if (isPageStart) pageNum++
+                        return (
+                          <React.Fragment key={block.id}>
+                            {isPageStart && (
+                              <PageSeparator
+                                pageNumber={pageNum}
+                                mLeft={pageConfig.margin_left || 20}
+                                mRight={pageConfig.margin_right || 20}
+                                mTop={pageConfig.margin_top || 20}
+                                mBottom={pageConfig.margin_bottom || 20}
+                              />
+                            )}
+                            <div
+                              style={{ marginBottom: 4 }}
+                              onMouseEnter={e => { const h = e.currentTarget.querySelector('.drag-handle'); if (h) h.style.opacity = 1 }}
+                              onMouseLeave={e => { const h = e.currentTarget.querySelector('.drag-handle'); if (h) h.style.opacity = 0 }}>
+                              <SortableBlock
+                                block={block}
+                                selected={selectedId === block.id}
+                                editing={editingId === block.id}
+                                onSelect={setSelectedId}
+                                onStartEdit={bid => { setEditingId(bid); setRightTab('content') }}
+                                onStopEdit={() => setEditingId(null)}
+                                onDelete={deleteBlock}
+                                onDuplicate={duplicateBlock}
+                                onContentChange={(blockId, newContent) => {
+                                  const b = blocks.find(x => x.id === blockId)
+                                  if (b) updateBlock({ ...b, content: newContent })
+                                }}
+                                branding={branding}
+                                insertPlaceholder={insertPlaceholder}
+                              />
+                            </div>
+                          </React.Fragment>
+                        )
+                      })
+                    })()}
                   </SortableContext>
                 </DndContext>
               </div>
 
-              {/* Footer */}
+              {/* Footer — page 1 footer shown at canvas bottom */}
               {footer.enabled && (
                 <div style={{ marginTop: 24, paddingTop: 10, borderTop: footer.border_top ? `1px solid ${branding.primary_color}` : 'none', fontSize: '8pt', color: '#888', position: 'relative', zIndex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
