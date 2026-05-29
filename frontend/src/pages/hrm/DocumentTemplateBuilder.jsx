@@ -196,77 +196,135 @@ function blockToHTML(block, branding) {
   }
 }
 
+function buildHeaderHTML(header, primary, fam) {
+  if (!header?.enabled) return ''
+  const logo = header.logo_align === 'left'
+    ? `<td style="text-align:left;width:140px;">${header.logo ? `<img src="${header.logo}" style="max-height:48px;max-width:140px;object-fit:contain;" />` : ''}</td>`
+    : `<td style="text-align:right;">${header.logo ? `<img src="${header.logo}" style="max-height:48px;max-width:140px;object-fit:contain;" />` : ''}</td>`
+  const text = `<td>
+    ${header.company_name ? `<div style="font-size:${header.name_font_size||14}pt;font-weight:${header.name_font_weight||'bold'};color:${header.name_color||primary};font-family:${fam};">${header.company_name}</div>` : ''}
+    ${header.company_address ? `<div style="font-size:9pt;color:#555;margin-top:1px;">${header.company_address}</div>` : ''}
+    ${header.company_contact ? `<div style="font-size:9pt;color:#555;">${header.company_contact}</div>` : ''}
+  </td>`
+  const row = header.logo_align === 'left' ? `${logo}${text}` : `${text}${logo}`
+  return `<div style="padding-bottom:12px;margin-bottom:16px;border-bottom:${header.border_bottom !== false ? `2px solid ${primary}` : 'none'};">
+    <table style="width:100%;border-collapse:collapse;"><tr>${row}</tr></table>
+  </div>`
+}
+
+function buildFooterHTML(footer, primary, pageNum, totalPages) {
+  if (!footer?.enabled) return ''
+  const left = [
+    footer.show_generated_date && `Generated: ${new Date().toLocaleDateString('en-IN')}`,
+    footer.disclaimer
+  ].filter(Boolean).join(' | ')
+  const right = footer.show_page_numbers ? `Page ${pageNum} of ${totalPages}` : ''
+  return `<div class="doc-footer" style="padding-top:10px;border-top:${footer.border_top !== false ? `1px solid ${primary}` : 'none'};font-size:8pt;color:#888;">
+    <table style="width:100%;border-collapse:collapse;"><tr>
+      <td>${left}</td>
+      ${right ? `<td style="text-align:right;">${right}</td>` : ''}
+    </tr></table>
+  </div>`
+}
+
 function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta }) {
   const primary = branding?.primary_color || '#1e3a5f'
   const fam = branding?.font_family || 'Arial'
-  const margins = `${pageConfig?.margin_top||20}mm ${pageConfig?.margin_right||20}mm ${pageConfig?.margin_bottom||20}mm ${pageConfig?.margin_left||20}mm`
+  const mTop = pageConfig?.margin_top || 20
+  const mRight = pageConfig?.margin_right || 20
+  const mBottom = pageConfig?.margin_bottom || 20
+  const mLeft = pageConfig?.margin_left || 20
 
-  const headerHTML = header?.enabled ? `
-    <div style="padding-bottom:12px;margin-bottom:16px;border-bottom:${header.border_bottom!==false?`2px solid ${primary}`:'none'};">
-      <table style="width:100%;border-collapse:collapse;">
-        <tr>
-          <td>
-            ${header.show_company_name!==false?`<div style="font-size:14pt;font-weight:700;color:${primary};font-family:${fam};">${header.company_name||'{{company_name}}'}</div>`:''}
-            ${header.company_address?`<div style="font-size:9pt;color:#555;">${header.company_address}</div>`:''}
-            ${header.company_contact?`<div style="font-size:9pt;color:#555;">${header.company_contact}</div>`:''}
-          </td>
-          <td style="text-align:right;">
-            ${header.logo?`<img src="${header.logo}" style="max-height:48px;max-width:140px;object-fit:contain;" />`:''}
-          </td>
-        </tr>
-      </table>
-    </div>` : ''
+  // Split blocks into pages by page_break blocks
+  const allBlocks = (blocks || []).filter(b => !b.is_hidden)
+  const pages = [[]]
+  for (const block of allBlocks) {
+    if (block.type === 'page_break') { pages.push([]); continue }
+    pages[pages.length - 1].push(block)
+  }
+  const totalPages = pages.length
 
-  const footerHTML = footer?.enabled ? `
-    <div style="margin-top:24px;padding-top:10px;border-top:${footer.border_top!==false?`1px solid ${primary}`:'none'};font-size:8pt;color:#888;">
-      <table style="width:100%;border-collapse:collapse;">
-        <tr>
-          <td>${[footer.show_generated_date&&`Generated: ${new Date().toLocaleDateString('en-IN')}`,footer.disclaimer].filter(Boolean).join(' | ')}</td>
-          ${footer.show_page_numbers?`<td style="text-align:right;">Page <span class="page-num">1</span></td>`:''}
-        </tr>
-      </table>
-    </div>` : ''
+  const watermarkDiv = watermark?.enabled
+    ? `<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(${watermark.rotation||-45}deg);font-size:${watermark.font_size||60}px;color:${watermark.color||'#ccc'};opacity:${watermark.opacity||0.1};font-weight:bold;white-space:nowrap;pointer-events:none;z-index:0;">${watermark.text||'CONFIDENTIAL'}</div>`
+    : ''
 
-  const watermarkHTML = watermark?.enabled ? `
-    <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(${watermark.rotation||-45}deg);font-size:${watermark.font_size||60}px;color:${watermark.color||'#ccc'};opacity:${watermark.opacity||0.1};font-weight:bold;white-space:nowrap;pointer-events:none;z-index:0;">
-      ${watermark.text||'CONFIDENTIAL'}
-    </div>` : ''
+  const headerStr   = buildHeaderHTML(header, primary, fam)
+  const footerStr = (pgNum) => buildFooterHTML(footer, primary, pgNum, totalPages)
 
-  const blocksHTML = (blocks || [])
-    .filter(b => !b.is_hidden)
-    .map(b => blockToHTML(b, branding))
-    .join('\n')
+  // Render each page as a separate section
+  const pagesHTML = pages.map((pageBlocks, i) => {
+    const pgNum = i + 1
+    const blocksContent = pageBlocks.map(b => blockToHTML(b, branding)).join('\n')
+    return `
+    <div class="doc-page" style="background:#fff;max-width:794px;margin:0 auto 0;padding:${mTop}mm ${mRight}mm ${mBottom}mm ${mLeft}mm;position:relative;box-sizing:border-box;">
+      ${watermarkDiv}
+      ${headerStr}
+      <div style="position:relative;z-index:1;">${blocksContent}</div>
+      <div style="flex:1;"></div>
+      ${footerStr(pgNum)}
+    </div>
+    ${i < pages.length - 1 ? `<div class="page-gap"></div>` : ''}
+    `
+  }).join('')
 
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${meta?.name || 'Document'}</title>
 <style>
-  @page { margin: ${margins}; size: ${pageConfig?.size||'A4'} ${pageConfig?.orientation||'portrait'}; }
-  body { font-family: ${fam}, sans-serif; font-size: ${branding?.font_size||11}pt; color: ${branding?.text_color||'#1a1a1a'}; margin: 0; padding: 20mm; }
+  /* Print mode */
+  @page { margin: 0; size: ${pageConfig?.size||'A4'} ${pageConfig?.orientation||'portrait'}; }
+  @media print {
+    .preview-toolbar, .page-gap { display: none !important; }
+    html, body { margin: 0; padding: 0; background: white; }
+    .doc-page { box-shadow: none !important; margin: 0 !important; max-width: none !important; break-after: page; page-break-after: always; padding: ${mTop}mm ${mRight}mm ${mBottom}mm ${mLeft}mm; }
+    .doc-page:last-of-type { break-after: auto; page-break-after: auto; }
+  }
+  /* Screen (preview) mode */
+  @media screen {
+    html, body { margin: 0; padding: 0; background: #d1d5db; font-family: ${fam}, sans-serif; font-size: ${branding?.font_size||11}pt; color: ${branding?.text_color||'#1a1a1a'}; }
+    .doc-page { box-shadow: 0 4px 24px rgba(0,0,0,.18); margin: 0 auto; display: flex; flex-direction: column; min-height: 1050px; }
+    .page-gap { height: 28px; background: #d1d5db; border-top: 1px solid #b6b9be; border-bottom: 1px solid #b6b9be; display: flex; align-items: center; justify-content: center; }
+    .preview-toolbar { position: sticky; top: 0; background: #1e293b; padding: 8px 16px; display: flex; align-items: center; gap: 10px; z-index: 1000; }
+    .preview-toolbar .title { color: #94a3b8; font-size: 13px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .preview-toolbar button { padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; }
+    .btn-print { background: #2563eb; color: white; }
+    .btn-close { background: #334155; color: #e2e8f0; }
+    .page-wrapper { padding: 20px 0; }
+  }
+  /* Common */
   table { border-collapse: collapse; }
   img { max-width: 100%; }
-  .page-break { page-break-after: always; break-after: page; }
+  * { box-sizing: border-box; }
 </style>
 </head>
 <body>
-  ${watermarkHTML}
-  ${headerHTML}
-  ${blocksHTML}
-  ${footerHTML}
+  <div class="preview-toolbar">
+    <span class="title">${meta?.name || 'Document Preview'}</span>
+    <span style="color:#64748b;font-size:11px;">${totalPages} page${totalPages !== 1 ? 's' : ''}</span>
+    <button class="btn-close" onclick="window.close()">✕ Close</button>
+    <button class="btn-print" onclick="window.print()">🖨 Print / Save PDF</button>
+  </div>
+  <div class="page-wrapper">
+    ${pagesHTML}
+  </div>
 </body>
 </html>`
 }
 
 function doExportPDF(printData) {
   const html = buildPrintHTML(printData)
-  const win = window.open('', '_blank')
+  const win = window.open('', '_blank', 'width=960,height=760,resizable=yes')
   if (!win) { toast.error('Please allow popups for PDF export'); return }
   win.document.write(html)
   win.document.close()
   win.focus()
-  setTimeout(() => win.print(), 400)
+  // Immediately trigger print dialog for PDF
+  setTimeout(() => {
+    try { win.print() } catch (e) {}
+  }, 600)
 }
 
 function doExportDOCX(printData) {
@@ -1767,8 +1825,11 @@ export default function DocumentTemplateBuilder() {
   }, [undo, redo, selectedId, editingId])
 
   // ── Save ──────────────────────────────────────────────────────────────────
-  const handleSave = async (versionNote = '', isActive = meta.is_active) => {
-    if (!meta.name.trim()) { toast.error('Template name is required'); return }
+  const handleSave = async (versionNote = '', isActive = true) => {
+    if (!meta.name.trim()) {
+      toast.error('Please enter a template name before saving')
+      return
+    }
     setSaving(true); setSaveState('saving')
     try {
       const payload = { ...meta, is_active: isActive, branding, header, footer, watermark, page_config: pageConfig,
@@ -1899,12 +1960,12 @@ export default function DocumentTemplateBuilder() {
   // Compute page count — must be before any conditional return (hooks order)
   const pageCount = 1 + blocks.filter(b => b.type === 'page_break').length
 
-  // Preview handler — works even before first save, always defined (hooks order)
+  // Preview handler — opens a nicely-rendered preview window with print button
   const handlePreview = useCallback(() => {
+    if (blocks.length === 0) { toast('Add some blocks to the canvas first', { icon: 'ℹ️' }); return }
     try {
-      const printData = { blocks, branding, header, footer, watermark, pageConfig, meta }
-      const html = buildPrintHTML(printData)
-      const win = window.open('', '_blank', 'width=960,height=760')
+      const html = buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta })
+      const win = window.open('', '_blank', 'width=960,height=760,resizable=yes')
       if (!win) { toast.error('Allow popups to preview — check your browser settings'); return }
       win.document.write(html)
       win.document.close()
@@ -2009,9 +2070,10 @@ export default function DocumentTemplateBuilder() {
             <Eye size={12} /> Preview
           </button>
 
-          {/* Draft save */}
-          <button onClick={() => handleSave('Draft', false)} disabled={saving} title="Save as inactive draft"
-            style={{ ...btnSm, display: 'flex', alignItems: 'center', gap: 4 }}>
+          {/* Draft save — visually distinct from Save */}
+          <button onClick={() => handleSave('Draft', false)} disabled={saving}
+            title="Save as draft (won't appear in active templates list)"
+            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 11px', borderRadius: 7, border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
             <Clock size={12} /> Draft
           </button>
 
@@ -2303,7 +2365,7 @@ export default function DocumentTemplateBuilder() {
                 <div style={{ marginTop: 24, paddingTop: 10, borderTop: footer.border_top ? `1px solid ${branding.primary_color}` : 'none', fontSize: '8pt', color: '#888', position: 'relative', zIndex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>{[footer.show_generated_date && `Generated: ${new Date().toLocaleDateString('en-IN')}`, footer.disclaimer].filter(Boolean).join(' | ')}</span>
-                    {footer.show_page_numbers && <span>Page 1</span>}
+                    {footer.show_page_numbers && <span>Page 1 of {pageCount}</span>}
                   </div>
                 </div>
               )}
