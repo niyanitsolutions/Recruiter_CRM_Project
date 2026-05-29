@@ -235,27 +235,21 @@ function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfi
   const mBottom = pageConfig?.margin_bottom || 20
   const mLeft = pageConfig?.margin_left || 20
 
-  // Split blocks into pages by explicit page_break blocks
+  // Split blocks into pages only by explicit page_break blocks.
+  // If no explicit breaks exist, all content renders in ONE continuous page
+  // (no white-space padding) and we rely on overridePageCount for the toolbar count.
+  // This gives the clean, natural MS Word-style flow.
   const allBlocks = (blocks || []).filter(b => !b.is_hidden)
-  const explicitPages = [[]]
+  const pages = [[]]
   for (const block of allBlocks) {
-    if (block.type === 'page_break') { explicitPages.push([]); continue }
-    explicitPages[explicitPages.length - 1].push(block)
+    if (block.type === 'page_break') { pages.push([]); continue }
+    pages[pages.length - 1].push(block)
   }
 
-  // If no explicit page_break blocks but auto-pagination computed multiple pages,
-  // split blocks evenly so the preview correctly shows multiple page sheets.
-  let pages = explicitPages
-  if (explicitPages.length === 1 && overridePageCount && overridePageCount > 1 && allBlocks.length > 0) {
-    const n = Math.min(overridePageCount, allBlocks.length)
-    const perPage = Math.ceil(allBlocks.length / n)
-    pages = []
-    for (let i = 0; i < allBlocks.length; i += perPage) {
-      pages.push(allBlocks.slice(i, i + perPage))
-    }
-  }
-
-  const totalPages = pages.length
+  // Toolbar shows either the explicit page count or the auto-calculated one.
+  const totalPages = overridePageCount && overridePageCount > pages.length
+    ? overridePageCount
+    : pages.length
 
   const watermarkDiv = watermark?.enabled
     ? `<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(${watermark.rotation||-45}deg);font-size:${watermark.font_size||60}px;color:${watermark.color||'#ccc'};opacity:${watermark.opacity||0.1};font-weight:bold;white-space:nowrap;pointer-events:none;z-index:0;">${watermark.text||'CONFIDENTIAL'}</div>`
@@ -272,8 +266,7 @@ function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfi
     <div class="doc-page" style="background:#fff;max-width:794px;margin:0 auto 0;padding:${mTop}mm ${mRight}mm ${mBottom}mm ${mLeft}mm;position:relative;box-sizing:border-box;">
       ${watermarkDiv}
       ${headerStr}
-      <div style="position:relative;z-index:1;">${blocksContent}</div>
-      <div style="flex:1;"></div>
+      <div class="page-content">${blocksContent}</div>
       ${footerStr(pgNum)}
     </div>
     ${i < pages.length - 1 ? `<div class="page-gap"></div>` : ''}
@@ -298,7 +291,8 @@ function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfi
   /* Screen (preview) mode */
   @media screen {
     html, body { margin: 0; padding: 0; background: #d1d5db; font-family: ${fam}, sans-serif; font-size: ${branding?.font_size||11}pt; color: ${branding?.text_color||'#1a1a1a'}; }
-    .doc-page { box-shadow: 0 4px 24px rgba(0,0,0,.18); margin: 0 auto; display: flex; flex-direction: column; min-height: 1050px; }
+    .doc-page { box-shadow: 0 4px 24px rgba(0,0,0,.18); margin: 0 auto; display: flex; flex-direction: column; min-height: ${(() => { const sizes={A4:297,LETTER:279.4,LEGAL:355.6,A3:420,A5:210}; const mmH=(pageConfig?.orientation==='landscape'?{A4:210,LETTER:215.9,LEGAL:215.9,A3:297,A5:148}:sizes)[pageConfig?.size||'A4']||297; return `${Math.round(mmH/25.4*96)}px`; })()} }
+    .doc-page .page-content { flex: 1; position: relative; z-index: 1; }
     .page-gap { height: 28px; background: #d1d5db; border-top: 1px solid #b6b9be; border-bottom: 1px solid #b6b9be; display: flex; align-items: center; justify-content: center; }
     .preview-toolbar { position: sticky; top: 0; background: #1e293b; padding: 8px 16px; display: flex; align-items: center; gap: 10px; z-index: 1000; }
     .preview-toolbar .title { color: #94a3b8; font-size: 13px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2310,7 +2304,12 @@ export default function DocumentTemplateBuilder() {
                 boxShadow: '0 4px 24px rgba(0,0,0,0.15)',
                 borderRadius: 8,
                 padding: `${pageConfig.margin_top || 20}mm ${pageConfig.margin_right || 20}mm ${pageConfig.margin_bottom || 20}mm ${pageConfig.margin_left || 20}mm`,
-                minHeight: '1050px',
+                minHeight: (() => {
+                  const mmH = { A4: 297, LETTER: 279.4, LEGAL: 355.6, A3: 420, A5: 210 }[pageConfig?.size || 'A4'] || 297
+                  const mmW = { A4: 210, LETTER: 215.9, LEGAL: 215.9, A3: 297, A5: 148 }[pageConfig?.size || 'A4'] || 210
+                  const h = pageConfig?.orientation === 'landscape' ? mmW : mmH
+                  return `${Math.round(h / 25.4 * 96)}px`
+                })(),
                 position: 'relative',
               }}
               onClick={e => e.stopPropagation()}

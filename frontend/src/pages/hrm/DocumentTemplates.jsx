@@ -541,11 +541,16 @@ export default function DocumentTemplates() {
         setTemplates(items)
         setTotal(res.data?.total || 0)
       })
-      .catch(() => {
+      .catch(err => {
         if (cancelled) return
         setTemplates([])
         setTotal(0)
-        toast.error('Failed to load templates')
+        const status = err?.response?.status
+        if (status === 403) {
+          toast.error('Permission denied — please log out and log back in to refresh your access.')
+        } else {
+          toast.error('Failed to load templates')
+        }
       })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }

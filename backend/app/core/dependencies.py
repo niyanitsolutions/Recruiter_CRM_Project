@@ -11,6 +11,7 @@ import logging
 
 from app.core.config import settings
 from app.core.database import get_master_db as _db_get_master_db, get_company_db as _db_get_company_db
+from app.models.company.role import ROLE_DEFAULT_PERMISSIONS, SystemRole
 
 logger = logging.getLogger(__name__)
 
@@ -173,13 +174,30 @@ def require_permissions(required_permissions) -> Callable:
         try:
             user_doc = await db["users"].find_one(
                 {"_id": current_user["id"], "is_deleted": False},
-                {"permissions": 1, "is_owner": 1}
+                {"permissions": 1, "is_owner": 1, "role": 1, "override_permissions": 1}
             )
             if user_doc:
                 if user_doc.get("is_owner"):
                     return current_user  # owner found in DB
 
                 db_permissions = set(user_doc.get("permissions") or [])
+
+                # Also merge current ROLE_DEFAULT_PERMISSIONS for the user's system role.
+                # This ensures new permissions added to the defaults (e.g. hrm:doc_templates:*)
+                # take effect immediately for existing sessions without requiring re-login.
+                # Only applies to system roles and when the user has no individual overrides.
+                if not user_doc.get("override_permissions"):
+                    role_name = current_user.get("role") or user_doc.get("role", "")
+                    try:
+                        system_role_enum = SystemRole(role_name)
+                        code_defaults = {
+                            p.value
+                            for p in ROLE_DEFAULT_PERMISSIONS.get(system_role_enum, [])
+                        }
+                        db_permissions = db_permissions | code_defaults
+                    except ValueError:
+                        pass  # custom role — keep db_permissions as-is
+
                 still_missing = [p for p in required_permissions if p not in db_permissions]
                 if not still_missing:
                     # DB has the permission — update the in-request user dict so
