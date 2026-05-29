@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useReducer, useMemo } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useReducer, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
@@ -259,11 +259,18 @@ function blockToHTML(block, branding) {
     }
     case 'employee_details': case 'company_details':
       return `<table style="width:100%;border-collapse:collapse;font-size:9pt;"><tbody>${Object.entries(c||{}).map(([k,v])=>`<tr><td style="padding:4px 8px;font-weight:600;color:${branding?.primary_color||'#1e3a5f'};width:35%;border-bottom:1px solid #e5e7eb;">${k}</td><td style="padding:4px 8px;border-bottom:1px solid #e5e7eb;">${v}</td></tr>`).join('')}</tbody></table>`
-    case 'image': case 'logo':
-      return c ? `<div style="text-align:${p.text_align||'center'};"><img src="${c}" style="max-width:${p.width||'200px'};max-height:120px;object-fit:contain;" /></div>` : ''
+    case 'image': case 'logo': {
+      if (!c) return ''
+      // Explicit width/height attributes ensure correct sizing in Word/DOCX exports.
+      // CSS max-width/max-height alone is ignored by Word's HTML renderer.
+      const imgPxW = parseInt(p.width) || 200
+      const imgPxH = parseInt(p.height) || 120
+      return `<div style="text-align:${p.text_align||'center'};"><img src="${c}" width="${imgPxW}" height="${imgPxH}" style="width:${p.width||'200px'};max-height:${imgPxH}px;object-fit:contain;" /></div>`
+    }
     case 'signature': {
       const sigs = Array.isArray(c)?c:[c||{}]
-      return `<div style="display:flex;gap:32px;margin-top:8px;">${sigs.map(s=>`<div style="text-align:center;min-width:120px;">${s?.image?`<img src="${s.image}" style="height:48px;width:120px;object-fit:contain;display:block;margin:0 auto;"/>`:'<div style="height:48px;border-bottom:1px solid #333;width:120px;margin:0 auto;"></div>'}<div style="font-size:9pt;font-weight:bold;margin-top:4px;">${s?.name||''}</div><div style="font-size:8pt;color:#666;">${s?.designation||''}</div></div>`).join('')}</div>`
+      // Signature images: use explicit 48×120 dimensions for DOCX compatibility
+      return `<div style="display:flex;gap:32px;margin-top:8px;">${sigs.map(s=>`<div style="text-align:center;min-width:120px;">${s?.image?`<img src="${s.image}" width="120" height="48" style="height:48px;width:120px;object-fit:contain;display:block;margin:0 auto;"/>`:'<div style="height:48px;border-bottom:1px solid #333;width:120px;margin:0 auto;"></div>'}<div style="font-size:9pt;font-weight:bold;margin-top:4px;">${s?.name||''}</div><div style="font-size:8pt;color:#666;">${s?.designation||''}</div></div>`).join('')}</div>`
     }
     default: return `<div style="${baseCSS}">${typeof c==='string'?c:JSON.stringify(c)}</div>`
   }
@@ -271,10 +278,19 @@ function blockToHTML(block, branding) {
 
 function buildHeaderHTML(header, primary, fam) {
   if (!header?.enabled) return ''
+  // Use stored dimensions from the interactive header (set when user resizes logo).
+  // Word ignores CSS max-width/max-height — explicit width/height HTML attributes
+  // are required so the logo renders at the correct size in DOCX exports.
+  const lW = header.logo_width  || 120
+  const lH = header.logo_height || 48
+  const logoImg = header.logo
+    ? `<img src="${header.logo}" width="${lW}" height="${lH}" style="width:${lW}px;height:${lH}px;object-fit:contain;display:block;" />`
+    : ''
+  const colW = lW + 20
   const logo = header.logo_align === 'left'
-    ? `<td style="text-align:left;width:140px;">${header.logo ? `<img src="${header.logo}" style="max-height:48px;max-width:140px;object-fit:contain;" />` : ''}</td>`
-    : `<td style="text-align:right;">${header.logo ? `<img src="${header.logo}" style="max-height:48px;max-width:140px;object-fit:contain;" />` : ''}</td>`
-  const text = `<td>
+    ? `<td style="text-align:left;width:${colW}px;vertical-align:middle;">${logoImg}</td>`
+    : `<td style="text-align:right;width:${colW}px;vertical-align:middle;">${logoImg}</td>`
+  const text = `<td style="vertical-align:middle;">
     ${header.company_name ? `<div style="font-size:${header.name_font_size||14}pt;font-weight:${header.name_font_weight||'bold'};color:${header.name_color||primary};font-family:${fam};">${header.company_name}</div>` : ''}
     ${header.company_address ? `<div style="font-size:9pt;color:#555;margin-top:1px;">${header.company_address}</div>` : ''}
     ${header.company_contact ? `<div style="font-size:9pt;color:#555;">${header.company_contact}</div>` : ''}
@@ -300,7 +316,7 @@ function buildFooterHTML(footer, primary, pageNum, totalPages) {
   </div>`
 }
 
-function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta, overridePageCount }) {
+function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta, measuredHeights }) {
   const primary = branding?.primary_color || '#1e3a5f'
   const fam = branding?.font_family || 'Arial'
   const mTop = pageConfig?.margin_top || 20
@@ -308,20 +324,40 @@ function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfi
   const mBottom = pageConfig?.margin_bottom || 20
   const mLeft = pageConfig?.margin_left || 20
 
-  // True auto-pagination: split blocks using estimated heights so blocks never
-  // straddle a page boundary.  Explicit page_break blocks also force a page split.
+  // Compute page breaks using real measured heights when available,
+  // falling back to estimates for blocks not yet rendered in the canvas.
   const allBlocks = (blocks || []).filter(b => !b.is_hidden)
-  const autoBreaks = calcPageBreaks(allBlocks, pageConfig, header, footer)
 
-  // Build pages array respecting both explicit breaks and auto-breaks
-  const pages = [[]]
+  // Page usable height (same formula as DOM measurement engine)
+  const SZ_H = { A4: 297, LETTER: 279.4, LEGAL: 355.6, A3: 420, A5: 210 }
+  const SZ_W = { A4: 210, LETTER: 215.9, LEGAL: 215.9, A3: 297, A5: 148 }
+  const _key  = pageConfig?.size || 'A4'
+  const _land = pageConfig?.orientation === 'landscape'
+  const _pageH = Math.round((_land ? SZ_W[_key] || 210 : SZ_H[_key] || 297) / 25.4 * 96)
+  const _mTop  = (pageConfig?.margin_top    || 20) / 25.4 * 96
+  const _mBot  = (pageConfig?.margin_bottom || 20) / 25.4 * 96
+  const _hdrH  = header?.enabled ? (header.height || 80) + 16 : 0
+  const _ftrH  = footer?.enabled ? 50 + 16 : 0
+  const _usable = Math.max(100, _pageH - _mTop - _mBot - _hdrH - _ftrH)
+
+  // Build breaks from measured (or estimated) heights
+  const _breaks = []
+  let _used = 0
   allBlocks.forEach((block, i) => {
     if (block.type === 'page_break') {
-      // Force new page; don't render the marker itself
-      pages.push([])
-      return
+      if (i + 1 < allBlocks.length) _breaks.push(i + 1)
+      _used = 0; return
     }
-    if (autoBreaks.includes(i) && pages[pages.length - 1].length > 0) {
+    const h = (measuredHeights && measuredHeights[block.id]) || getEstimatedBlockHeight(block)
+    if (_used + h > _usable && _used > 0) { _breaks.push(i); _used = h }
+    else _used += h
+  })
+
+  // Split blocks into page arrays
+  const pages = [[]]
+  allBlocks.forEach((block, i) => {
+    if (block.type === 'page_break') { pages.push([]); return }
+    if (_breaks.includes(i) && pages[pages.length - 1].length > 0) {
       pages.push([block])
     } else {
       pages[pages.length - 1].push(block)
@@ -1751,22 +1787,83 @@ export default function DocumentTemplateBuilder() {
   const [blocks, setBlocks] = useState([])
   const [zoom, setZoom]     = useState(100)
 
-  // ── True pagination engine ─────────────────────────────────────────────────
-  // canvasPageBreaks: indices (in the full `blocks` array) where a new page starts.
-  // Computed from estimated block heights — no DOM measurement needed.
-  const canvasPageBreaks = useMemo(() => {
+  // ── DOM-measurement pagination engine ─────────────────────────────────────
+  // blockHeightsRef: { [blockId]: actualRenderedHeightPx } — updated by useLayoutEffect
+  const blockHeightsRef = useRef({})
+  // domPageBreaks: block indices (in `blocks`) where a new page starts.
+  // Initialised from estimates so first render has correct separators immediately;
+  // then updated synchronously via useLayoutEffect with real getBoundingClientRect heights.
+  const [domPageBreaks, setDomPageBreaks] = useState(() => {
     const visible = blocks
       .map((b, i) => ({ block: b, orig: i }))
       .filter(({ block }) => !block.is_hidden && block.type !== 'page_break')
-    // Get visible-only array for height calc
-    const visBlocks = visible.map(x => x.block)
-    const visBreaks = calcPageBreaks(visBlocks, pageConfig, header, footer)
-    // Map back to original indices
+    const visBreaks = calcPageBreaks(visible.map(x => x.block), pageConfig, header, footer)
     return visBreaks.map(vi => visible[vi]?.orig ?? vi)
-  }, [blocks, pageConfig, header, footer])
+  })
 
-  // Also count explicit page_break blocks so total = auto + explicit
-  const displayPageCount = canvasPageBreaks.length + 1
+  // Compute usable content height (px) on each page, matching the canvas layout.
+  // Uses config values directly — these match the actual rendered output.
+  const getPageUsable = useCallback(() => {
+    const SZ_H = { A4: 297, LETTER: 279.4, LEGAL: 355.6, A3: 420, A5: 210 }
+    const SZ_W = { A4: 210, LETTER: 215.9, LEGAL: 215.9, A3: 297, A5: 148 }
+    const key  = pageConfig?.size || 'A4'
+    const land = pageConfig?.orientation === 'landscape'
+    const pageH = Math.round((land ? SZ_W[key] || 210 : SZ_H[key] || 297) / 25.4 * 96)
+    const mTop  = (pageConfig?.margin_top    || 20) / 25.4 * 96
+    const mBot  = (pageConfig?.margin_bottom || 20) / 25.4 * 96
+    const hdrH  = header?.enabled ? (header.height || 80) + 24 : 0  // +24 for bottom margin+border
+    const ftrH  = footer?.enabled ? 52 : 0                           // footer bar height
+    return Math.max(100, pageH - mTop - mBot - hdrH - ftrH)
+  }, [pageConfig, header, footer])
+
+  // Runs synchronously after every DOM paint — measures real block heights
+  // and recomputes page breaks.  The equality guard prevents infinite loops:
+  // once breaks stabilise the state update is a no-op.
+  useLayoutEffect(() => {
+    if (!contentRef.current) return
+
+    // Measure every rendered block
+    const blockEls = contentRef.current.querySelectorAll('[data-block-id]')
+    blockEls.forEach(el => {
+      const h = el.getBoundingClientRect().height
+      if (h > 0) blockHeightsRef.current[el.dataset.blockId] = h
+    })
+
+    const usable = getPageUsable()
+    const breaks = []
+    let used = 0
+
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i]
+      if (block.is_hidden) continue
+      if (block.type === 'page_break') {
+        // Advance to the next visible non-break block
+        for (let j = i + 1; j < blocks.length; j++) {
+          if (!blocks[j].is_hidden && blocks[j].type !== 'page_break') {
+            breaks.push(j)
+            break
+          }
+        }
+        used = 0
+        continue
+      }
+      // Prefer real DOM height; fall back to estimate for blocks not yet rendered
+      const h = blockHeightsRef.current[block.id] ?? getEstimatedBlockHeight(block)
+      if (used + h > usable && used > 0) {
+        breaks.push(i)
+        used = h
+      } else {
+        used += h
+      }
+    }
+
+    setDomPageBreaks(prev => {
+      if (prev.length === breaks.length && prev.every((v, k) => v === breaks[k])) return prev
+      return breaks
+    })
+  })   // ← no deps: runs after every render; equality guard prevents loop
+
+  const displayPageCount = domPageBreaks.length + 1
 
   const histRef    = useRef({ stack: [], idx: -1 })
   const [undoInfo, setUndoInfo] = useState({ canUndo: false, canRedo: false })
@@ -1947,7 +2044,8 @@ export default function DocumentTemplateBuilder() {
 
   // ── Export helpers ────────────────────────────────────────────────────────
   const getPrintData = useCallback(() => {
-    return { blocks, branding, header, footer, watermark, pageConfig, meta }
+    return { blocks, branding, header, footer, watermark, pageConfig, meta,
+             measuredHeights: { ...blockHeightsRef.current } }
   }, [blocks, branding, header, footer, watermark, pageConfig, meta])
   const handleExportPDF  = useCallback(() => { doExportPDF(getPrintData()); setShowExportMenu(false) }, [getPrintData])
   const handleExportDOCX = useCallback(() => { doExportDOCX(getPrintData()); setShowExportMenu(false) }, [getPrintData])
@@ -2051,7 +2149,9 @@ export default function DocumentTemplateBuilder() {
   const handlePreview = useCallback(() => {
     if (blocks.length === 0) { toast('Add some blocks to the canvas first', { icon: 'ℹ️' }); return }
     try {
-      const html = buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta })
+      // Pass measured heights so preview uses the same page splits as the canvas
+      const html = buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta,
+        measuredHeights: { ...blockHeightsRef.current } })
       const win = window.open('', '_blank', 'width=960,height=760,resizable=yes')
       if (!win) { toast.error('Allow popups to preview — check your browser settings'); return }
       win.document.write(html)
@@ -2421,9 +2521,10 @@ export default function DocumentTemplateBuilder() {
                       // PageSeparators are NOT in the dnd-kit items list, so dnd-kit ignores
                       // them for sorting — but they ARE in DOM flow so they create real space,
                       // ensuring no block ever visually crosses a page boundary.
+                      // domPageBreaks uses actual getBoundingClientRect heights (via useLayoutEffect).
                       let pageNum = 1
                       return blocks.map((block, index) => {
-                        const isPageStart = canvasPageBreaks.includes(index)
+                        const isPageStart = domPageBreaks.includes(index)
                         if (isPageStart) pageNum++
                         return (
                           <React.Fragment key={block.id}>
@@ -2436,7 +2537,9 @@ export default function DocumentTemplateBuilder() {
                                 mBottom={pageConfig.margin_bottom || 20}
                               />
                             )}
+                            {/* data-block-id is read by the DOM measurement useLayoutEffect */}
                             <div
+                              data-block-id={block.id}
                               style={{ marginBottom: 4 }}
                               onMouseEnter={e => { const h = e.currentTarget.querySelector('.drag-handle'); if (h) h.style.opacity = 1 }}
                               onMouseLeave={e => { const h = e.currentTarget.querySelector('.drag-handle'); if (h) h.style.opacity = 0 }}>
