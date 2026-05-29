@@ -74,7 +74,11 @@
       "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\test_api.py 2>&1)",
       "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\test_login.py 2>&1)",
       "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\fix_subscription.py 2>&1)",
-      "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\cleanup.py 2>&1)"
+      "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\cleanup.py 2>&1)",
+      "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\diagnose_save.py 2>&1)",
+      "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\check_all_templates.py 2>&1)",
+      "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\fix_sessions.py 2>&1)",
+      "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe d:\\\\tmp\\\\final_test.py 2>&1)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

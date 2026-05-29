@@ -2036,7 +2036,18 @@ export default function DocumentTemplateBuilder() {
       }
     } catch (e) {
       setSaveState('unsaved')
-      toast.error(e?.response?.data?.detail || 'Failed to save')
+      const status = e?.response?.status
+      const detail = e?.response?.data?.detail
+      // Session expired — tell user to log back in instead of just "Failed to save"
+      if (status === 401) {
+        toast.error('Session expired — please log in again to save your template.', { duration: 6000 })
+      } else if (status === 403) {
+        toast.error('Permission denied — you may need to log out and log back in.', { duration: 6000 })
+      } else if (typeof detail === 'string' && detail) {
+        toast.error(detail)
+      } else {
+        toast.error('Save failed — check your connection and try again.')
+      }
     } finally { setSaving(false) }
   }
 
