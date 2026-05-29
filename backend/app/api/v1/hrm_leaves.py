@@ -2,7 +2,8 @@
 import re as _re
 from typing import Optional
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
 from app.models.company.leave import LeaveApply, LeaveApproveReject
@@ -79,9 +80,32 @@ async def _resolve_hrm_employee_id(cu: dict, db) -> str:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+async def _notify_leave_applied_bg(db, company_id, employee_user_id, emp_id,
+                                    employee_name, leave_type_value, from_date, to_date, leave_id):
+    """Fire-and-forget notification — runs after the route has already responded."""
+    try:
+        from app.services.notification_service import NotificationService
+        await asyncio.wait_for(
+            NotificationService(db).notify_leave_applied(
+                company_id=company_id,
+                employee_user_id=employee_user_id,
+                employee_hrm_id=emp_id,
+                employee_name=employee_name,
+                leave_type=leave_type_value,
+                from_date=from_date,
+                to_date=to_date,
+                leave_id=leave_id,
+            ),
+            timeout=10.0,
+        )
+    except Exception:
+        pass
+
+
 @router.post("", status_code=201)
 async def apply_leave(
     data: LeaveApply,
+    background_tasks: BackgroundTasks,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:leave:apply"])),
@@ -89,31 +113,28 @@ async def apply_leave(
     emp_id = await _resolve_hrm_employee_id(cu, db)
     employee_name = cu.get("full_name") or cu.get("username", "")
 
+    # Use model_dump(mode='json') so enum fields are plain strings ("casual"), not enum objects
+    payload = data.model_dump(mode="json")
+
     try:
         result = await LeaveService(db).apply(
-            data.model_dump(), emp_id, employee_name, cu["company_id"]
+            payload, emp_id, employee_name, cu["company_id"]
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         import logging as _log
-        _log.getLogger(__name__).error("Leave apply unexpected error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Leave submission failed: {e}")
+        _log.getLogger(__name__).error("Leave apply error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Leave submission failed: {str(e)}")
 
-    try:
-        from app.services.notification_service import NotificationService
-        await NotificationService(db).notify_leave_applied(
-            company_id=cu["company_id"],
-            employee_user_id=cu["id"],
-            employee_hrm_id=emp_id,
-            employee_name=employee_name,
-            leave_type=data.leave_type.value if hasattr(data.leave_type, "value") else str(data.leave_type),
-            from_date=str(data.from_date),
-            to_date=str(data.to_date),
-            leave_id=result.get("id", ""),
-        )
-    except Exception:
-        pass
+    # Notification runs in the background — does NOT block the response
+    leave_type_value = payload.get("leave_type", "")
+    background_tasks.add_task(
+        _notify_leave_applied_bg,
+        db, cu["company_id"], cu["id"], emp_id,
+        employee_name, leave_type_value,
+        str(data.from_date), str(data.to_date), result.get("id", ""),
+    )
 
     return result
 
@@ -193,6 +214,7 @@ async def get_leave(
 async def approve_reject(
     leave_id: str,
     data: LeaveApproveReject,
+    background_tasks: BackgroundTasks,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:leave:team_approve"])),
@@ -208,22 +230,29 @@ async def approve_reject(
     if not result:
         raise HTTPException(status_code=404, detail="Leave not found")
 
-    try:
-        from app.services.notification_service import NotificationService
-        leave_type = result.get("leave_type", "")
-        if hasattr(leave_type, "value"):
-            leave_type = leave_type.value
-        await NotificationService(db).notify_leave_actioned(
-            company_id=cu["company_id"],
-            employee_user_id=result.get("employee_id", ""),
-            action=data.action,
-            leave_type=str(leave_type),
-            from_date=str(result.get("from_date", "")),
-            to_date=str(result.get("to_date", "")),
-            leave_id=leave_id,
-        )
-    except Exception:
-        pass
+    # Background notification — does NOT block the response
+    async def _notify():
+        try:
+            from app.services.notification_service import NotificationService
+            lt = result.get("leave_type", "")
+            if hasattr(lt, "value"):
+                lt = lt.value
+            await asyncio.wait_for(
+                NotificationService(db).notify_leave_actioned(
+                    company_id=cu["company_id"],
+                    employee_user_id=result.get("employee_id", ""),
+                    action=data.action,
+                    leave_type=str(lt),
+                    from_date=str(result.get("from_date", "")),
+                    to_date=str(result.get("to_date", "")),
+                    leave_id=leave_id,
+                ),
+                timeout=10.0,
+            )
+        except Exception:
+            pass
+
+    background_tasks.add_task(_notify)
 
     return result
 

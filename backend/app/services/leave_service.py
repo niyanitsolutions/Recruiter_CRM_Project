@@ -159,7 +159,7 @@ class LeaveService:
         query = {
             "company_id": company_id,
             "employee_id": employee_id,
-            "status": {"$in": [LeaveStatus.PENDING, LeaveStatus.APPROVED]},
+            "status": {"$in": [LeaveStatus.PENDING.value, LeaveStatus.APPROVED.value]},
             "from_date": {"$lte": to_date.isoformat()},
             "to_date":   {"$gte": from_date.isoformat()},
         }
@@ -173,6 +173,11 @@ class LeaveService:
 
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _enum_val(v) -> str:
+        """Return plain string from an enum value or plain string."""
+        return v.value if hasattr(v, "value") else str(v)
+
     async def apply(self, data: dict, employee_id: str, employee_name: str,
                     company_id: str, department: Optional[str] = None,
                     gender: Optional[str] = None) -> dict:
@@ -185,7 +190,9 @@ class LeaveService:
         if from_date > to_date:
             raise ValueError("from_date must not be after to_date")
 
-        duration = data.get("duration", LeaveDuration.FULL_DAY)
+        # Normalise enum → plain string so all subsequent lookups use "casual" not "LeaveType.CASUAL"
+        leave_type = self._enum_val(data.get("leave_type", ""))
+        duration   = self._enum_val(data.get("duration", LeaveDuration.FULL_DAY.value))
 
         # Compute working days (excludes weekends + holidays)
         days = await self._count_working_days(from_date, to_date, company_id, department, duration)
@@ -193,13 +200,10 @@ class LeaveService:
             raise ValueError("No working days in selected date range (all days are weekends or holidays)")
 
         # Policy validation
-        await self._validate_policy(
-            str(data.get("leave_type", "")), days, company_id,
-            gender=gender, department=department,
-        )
+        await self._validate_policy(leave_type, days, company_id, gender=gender, department=department)
 
         # Balance check
-        await self._check_balance(employee_id, company_id, str(data.get("leave_type", "")), days)
+        await self._check_balance(employee_id, company_id, leave_type, days)
 
         # Overlap check
         await self._check_overlapping(employee_id, company_id, from_date, to_date)
@@ -212,11 +216,11 @@ class LeaveService:
             "employee_id": employee_id,
             "employee_name": employee_name,
             "total_days": days,
-            "status": LeaveStatus.PENDING,
+            "status": LeaveStatus.PENDING.value,
             "from_date": from_date.isoformat(),
             "to_date":   to_date.isoformat(),
-            "leave_type": data.get("leave_type"),
-            "duration": duration,
+            "leave_type": leave_type,
+            "duration":   duration,
             "reason": data.get("reason", ""),
             "attachment_url": data.get("attachment_url"),
             "approver_id": None,
@@ -237,7 +241,7 @@ class LeaveService:
             "entity_type": "leave",
             "entity_id": doc_id,
             "user_id": employee_id,
-            "changes": {"leave_type": str(data.get("leave_type")), "days": days,
+            "changes": {"leave_type": leave_type, "days": days,
                         "from": from_date.isoformat(), "to": to_date.isoformat()},
             "timestamp": now.replace(tzinfo=None),
         })
