@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   FileText, Plus, Search, Edit2, Trash2, Copy, Eye,
   Zap, Clock, Grid, List, X, MoreVertical,
@@ -500,6 +500,7 @@ function TemplateCard({ template, onEdit, onDelete, onClone, onGenerate, onPrevi
 
 export default function DocumentTemplates() {
   const navigate   = useNavigate()
+  const location   = useLocation()
 
   const [templates, setTemplates]     = useState([])
   const [loading, setLoading]         = useState(true)
@@ -521,28 +522,36 @@ export default function DocumentTemplates() {
   const favOnly    = activeTab === 'favorites'
 
   // ── Load ────────────────────────────────────────────────────────────────────
-  const load = useCallback(async () => {
+  const load = useCallback(() => {
+    let cancelled = false
     setLoading(true)
-    try {
-      const params = {
-        search:    search    || undefined,
-        category:  category  || undefined,
-        doc_type:  docType   || undefined,
-        is_active: isArchived ? false : undefined,
-        page,
-        page_size: PAGE_SIZE,
-      }
-      const res   = await hrmService.listDocumentTemplates(params)
-      let items   = res.data?.items || []
-      if (favOnly) items = items.filter(t => favorites.includes(t.id))
-      setTemplates(items)
-      setTotal(res.data?.total || 0)
-    } catch {
-      toast.error('Failed to load templates')
-    } finally { setLoading(false) }
-  }, [search, category, docType, page, isArchived, favOnly, favorites])
+    const params = {
+      search:    search    || undefined,
+      category:  category  || undefined,
+      doc_type:  docType   || undefined,
+      is_active: isArchived ? false : undefined,
+      page,
+      page_size: PAGE_SIZE,
+    }
+    hrmService.listDocumentTemplates(params)
+      .then(res => {
+        if (cancelled) return
+        let items = res.data?.items || []
+        if (favOnly) items = items.filter(t => favorites.includes(t.id))
+        setTemplates(items)
+        setTotal(res.data?.total || 0)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setTemplates([])
+        setTotal(0)
+        toast.error('Failed to load templates')
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [search, category, docType, page, isArchived, favOnly, favorites, location.key])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => load(), [load])
   useEffect(() => { setPage(1) }, [search, category, docType, activeTab])
 
   // ── Actions ─────────────────────────────────────────────────────────────────

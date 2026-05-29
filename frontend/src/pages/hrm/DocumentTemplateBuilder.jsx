@@ -227,7 +227,7 @@ function buildFooterHTML(footer, primary, pageNum, totalPages) {
   </div>`
 }
 
-function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta }) {
+function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta, overridePageCount }) {
   const primary = branding?.primary_color || '#1e3a5f'
   const fam = branding?.font_family || 'Arial'
   const mTop = pageConfig?.margin_top || 20
@@ -235,13 +235,26 @@ function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfi
   const mBottom = pageConfig?.margin_bottom || 20
   const mLeft = pageConfig?.margin_left || 20
 
-  // Split blocks into pages by page_break blocks
+  // Split blocks into pages by explicit page_break blocks
   const allBlocks = (blocks || []).filter(b => !b.is_hidden)
-  const pages = [[]]
+  const explicitPages = [[]]
   for (const block of allBlocks) {
-    if (block.type === 'page_break') { pages.push([]); continue }
-    pages[pages.length - 1].push(block)
+    if (block.type === 'page_break') { explicitPages.push([]); continue }
+    explicitPages[explicitPages.length - 1].push(block)
   }
+
+  // If no explicit page_break blocks but auto-pagination computed multiple pages,
+  // split blocks evenly so the preview correctly shows multiple page sheets.
+  let pages = explicitPages
+  if (explicitPages.length === 1 && overridePageCount && overridePageCount > 1 && allBlocks.length > 0) {
+    const n = Math.min(overridePageCount, allBlocks.length)
+    const perPage = Math.ceil(allBlocks.length / n)
+    pages = []
+    for (let i = 0; i < allBlocks.length; i += perPage) {
+      pages.push(allBlocks.slice(i, i + perPage))
+    }
+  }
+
   const totalPages = pages.length
 
   const watermarkDiv = watermark?.enabled
@@ -1596,7 +1609,7 @@ function InteractiveHeaderCanvas({ header, onChange, branding }) {
 
 // ─── Auto-Pagination Overlay ──────────────────────────────────────────────────
 
-function PaginationOverlay({ contentRef, headerH, footerH, margins, pageConfig }) {
+function PaginationOverlay({ contentRef, headerH, footerH, margins, pageConfig, onPageCountChange }) {
   const [breakY, setBreakY] = useState([])
 
   useEffect(() => {
@@ -1618,12 +1631,13 @@ function PaginationOverlay({ contentRef, headerH, footerH, margins, pageConfig }
       let y = usable
       while (y < totalH) { pts.push(y); y += usable }
       setBreakY(pts)
+      onPageCountChange?.(pts.length + 1)
     }
     const ro = new ResizeObserver(recalc)
     ro.observe(contentRef.current)
     recalc()
     return () => ro.disconnect()
-  }, [contentRef, headerH, footerH, margins, pageConfig])
+  }, [contentRef, headerH, footerH, margins, pageConfig, onPageCountChange])
 
   if (!breakY.length) return null
   return (
@@ -1679,6 +1693,8 @@ export default function DocumentTemplateBuilder() {
   const [pageConfig, setPageConfig] = useState({ size: 'A4', orientation: 'portrait', margin_top: 20, margin_right: 20, margin_bottom: 20, margin_left: 20 })
   const [blocks, setBlocks] = useState([])
   const [zoom, setZoom]     = useState(100)
+
+  const [autoPageCount, setAutoPageCount] = useState(1)
 
   const histRef    = useRef({ stack: [], idx: -1 })
   const [undoInfo, setUndoInfo] = useState({ canUndo: false, canRedo: false })
@@ -1858,7 +1874,10 @@ export default function DocumentTemplateBuilder() {
   useEffect(() => { handleSaveRef.current = handleSave })
 
   // ── Export helpers ────────────────────────────────────────────────────────
-  const getPrintData = useCallback(() => ({ blocks, branding, header, footer, watermark, pageConfig, meta }), [blocks, branding, header, footer, watermark, pageConfig, meta])
+  const getPrintData = useCallback(() => ({
+    blocks, branding, header, footer, watermark, pageConfig, meta,
+    overridePageCount: autoPageCount > pageCount ? autoPageCount : undefined,
+  }), [blocks, branding, header, footer, watermark, pageConfig, meta, autoPageCount, pageCount])
   const handleExportPDF  = useCallback(() => { doExportPDF(getPrintData()); setShowExportMenu(false) }, [getPrintData])
   const handleExportDOCX = useCallback(() => { doExportDOCX(getPrintData()); setShowExportMenu(false) }, [getPrintData])
   const handlePrint      = useCallback(() => { doExportPDF(getPrintData()); setShowExportMenu(false) }, [getPrintData])
@@ -1957,14 +1976,17 @@ export default function DocumentTemplateBuilder() {
 
   const selectedBlock = blocks.find(b => b.id === selectedId) || null
 
-  // Compute page count — must be before any conditional return (hooks order)
+  // Compute page count — explicit page_break blocks take priority; auto-overlay count is the fallback
   const pageCount = 1 + blocks.filter(b => b.type === 'page_break').length
+  // displayPageCount uses the larger of the explicit count and the auto-calculated overlay count
+  const displayPageCount = Math.max(pageCount, autoPageCount)
 
   // Preview handler — opens a nicely-rendered preview window with print button
   const handlePreview = useCallback(() => {
     if (blocks.length === 0) { toast('Add some blocks to the canvas first', { icon: 'ℹ️' }); return }
     try {
-      const html = buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta })
+      const overridePageCount = autoPageCount > pageCount ? autoPageCount : undefined
+      const html = buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta, overridePageCount })
       const win = window.open('', '_blank', 'width=960,height=760,resizable=yes')
       if (!win) { toast.error('Allow popups to preview — check your browser settings'); return }
       win.document.write(html)
@@ -1973,7 +1995,7 @@ export default function DocumentTemplateBuilder() {
     } catch (e) {
       toast.error('Preview failed — ' + (e?.message || 'unknown error'))
     }
-  }, [blocks, branding, header, footer, watermark, pageConfig, meta])
+  }, [blocks, branding, header, footer, watermark, pageConfig, meta, autoPageCount, pageCount])
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
@@ -2059,7 +2081,7 @@ export default function DocumentTemplateBuilder() {
 
           {/* Page count */}
           <span style={{ fontSize: 11, color: 'var(--text-disabled)', padding: '0 2px', whiteSpace: 'nowrap' }}>
-            {pageCount}pg
+            {displayPageCount}pg
           </span>
 
           <div style={{ width: 1, height: 18, background: 'var(--border-color)' }} />
@@ -2319,6 +2341,7 @@ export default function DocumentTemplateBuilder() {
                   footerH={footer.enabled ? 50 : 0}
                   margins={{ top: pageConfig.margin_top, bottom: pageConfig.margin_bottom }}
                   pageConfig={pageConfig}
+                  onPageCountChange={setAutoPageCount}
                 />
 
                 {blocks.length === 0 && (
@@ -2365,7 +2388,7 @@ export default function DocumentTemplateBuilder() {
                 <div style={{ marginTop: 24, paddingTop: 10, borderTop: footer.border_top ? `1px solid ${branding.primary_color}` : 'none', fontSize: '8pt', color: '#888', position: 'relative', zIndex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>{[footer.show_generated_date && `Generated: ${new Date().toLocaleDateString('en-IN')}`, footer.disclaimer].filter(Boolean).join(' | ')}</span>
-                    {footer.show_page_numbers && <span>Page 1 of {pageCount}</span>}
+                    {footer.show_page_numbers && <span>Page 1 of {displayPageCount}</span>}
                   </div>
                 </div>
               )}
