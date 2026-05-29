@@ -581,7 +581,8 @@ function LeaveTab({ employeeId }) {
       const msg = typeof detail === 'string'
         ? detail
         : Array.isArray(detail) ? detail.map(d => d?.msg || String(d)).join('; ')
-        : `Submission failed (${err?.response?.status || 'network error'}). Please try again.`
+        : `Submission failed: ${err?.message || 'unknown error'} (HTTP ${err?.response?.status || 'no response'})`
+      console.error('[LeaveApply] error:', err?.message, err?.code, err?.response?.status, raw)
       setFormError(msg)
       toast.error(msg)
     }

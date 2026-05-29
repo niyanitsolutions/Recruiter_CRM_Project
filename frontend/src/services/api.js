@@ -107,7 +107,8 @@ api.interceptors.response.use(
       try {
         const response = await axios.post(
           `${import.meta.env.VITE_API_URL || '/api/v1'}/auth/refresh`,
-          { refresh_token: storedRefresh }
+          { refresh_token: storedRefresh },
+          { timeout: 10000 }   // hard 10 s timeout — prevents _isRefreshing from getting stuck
         )
         const { access_token } = response.data
         localStorage.setItem('access_token', access_token)
