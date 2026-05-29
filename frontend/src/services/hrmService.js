@@ -39,10 +39,14 @@ const updateAttendanceSettings = (data) => api.put(`${BASE}/attendance/settings`
 // ── Leaves ─────────────────────────────────────────────────────────────────
 const applyLeave = (data) => api.post(`${BASE}/leaves`, data)
 const listLeaves = (params) => api.get(`${BASE}/leaves`, { params })
+const listMyLeaves = (params) => api.get(`${BASE}/leaves/me`, { params })
 const getLeave = (id) => api.get(`${BASE}/leaves/${id}`)
 const leaveAction = (id, data) => api.post(`${BASE}/leaves/${id}/action`, data)
+const cancelLeave = (id) => api.post(`${BASE}/leaves/${id}/cancel`)
 const getLeaveBalance = (employeeId, year) =>
   api.get(`${BASE}/leaves/balance/${employeeId}`, { params: { year } })
+const getMyLeaveBalance = (year) =>
+  api.get(`${BASE}/leaves/balance/me`, { params: { year } })
 
 // ── Payroll ────────────────────────────────────────────────────────────────
 const generatePayroll = (data) => api.post(`${BASE}/payroll/generate`, data)
@@ -229,7 +233,7 @@ const hrmService = {
   getTeamAttendanceHistory, getMyAttendanceHistory, getAttendanceRangeStats, exportTeamAttendanceCsv, exportMyAttendanceCsv,
   checkIn, checkOut, startBreak, endBreak, getMyTodayAttendance, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance,
   getAttendanceTodayStats, getAttendanceSettings, updateAttendanceSettings,
-  applyLeave, listLeaves, getLeave, leaveAction, getLeaveBalance,
+  applyLeave, listLeaves, listMyLeaves, getLeave, leaveAction, cancelLeave, getLeaveBalance, getMyLeaveBalance,
   generatePayroll, listPayslips, listOwnPayslips, getPayslip, updatePayslipStatus, deletePayslip,
   createReview, listReviews, getReview, submitSelfReview, submitManagerReview, deleteReview,
   createAnnouncement, listAnnouncements, getAnnouncement, updateAnnouncement, deleteAnnouncement,

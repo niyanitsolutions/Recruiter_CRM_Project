@@ -23,6 +23,7 @@ from app.core.limiter import limiter
 from app.core.redis import init_redis, close_redis
 from app.services.plan_service import plan_service
 from app.services.subscription_reminder_service import reminder_background_loop
+from app.services.hrm_auto_checkout_loop import hrm_auto_checkout_loop
 from app.models.master.global_user import ensure_global_indexes
 
 # ============== Phase 1 - Auth & Tenant Management ==============
@@ -180,6 +181,8 @@ async def lifespan(app: FastAPI):
     print(" Subscription reminder scheduler started")
     cleanup_task = asyncio.create_task(session_cleanup_loop())
     print(" Session cleanup scheduler started")
+    auto_checkout_task = asyncio.create_task(hrm_auto_checkout_loop())
+    print(" HRM midnight auto punch-out scheduler started")
 
     # Ensure sessions TTL index exists (idempotent)
     try:
@@ -194,6 +197,7 @@ async def lifespan(app: FastAPI):
 
     yield
     # Shutdown
+    auto_checkout_task.cancel()
     cleanup_task.cancel()
     reminder_task.cancel()
     await close_redis()

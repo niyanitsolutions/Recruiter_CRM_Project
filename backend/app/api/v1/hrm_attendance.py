@@ -519,6 +519,19 @@ async def export_my_csv(
     return _csv_response(flat, _MY_FIELDS, f"my_attendance_{start_date}_{end_date}.csv")
 
 
+# ── Auto punch-out (admin / scheduler trigger) ───────────────────────────────
+
+@router.post("/auto-checkout")
+async def trigger_auto_checkout(
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
+):
+    """Punch out all employees who are still checked in. Idempotent — safe to call multiple times."""
+    count = await AttendanceService(db).auto_checkout_all(cu["company_id"])
+    return {"punched_out": count, "company_id": cu["company_id"]}
+
+
 # ── Manual update ─────────────────────────────────────────────────────────────
 
 @router.post("/manual")

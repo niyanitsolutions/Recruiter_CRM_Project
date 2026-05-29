@@ -7,7 +7,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
 import {
-  User, Clock, Calendar, Banknote, Plus, UserX,
+  User, Clock, Calendar, Banknote, Plus, UserX, X,
   Loader2, FolderOpen, Package, FileText, Download,
   ChevronLeft, ChevronRight, History,
 } from 'lucide-react'
@@ -483,102 +483,164 @@ function PayslipsTab() {
 
 // ── Leave Tab ─────────────────────────────────────────────────────────────────
 
-const LEAVE_TYPES = [
-  { value: 'casual',       label: 'Casual Leave' },
-  { value: 'sick',         label: 'Sick Leave' },
-  { value: 'earned',       label: 'Earned Leave' },
-  { value: 'maternity',    label: 'Maternity Leave' },
-  { value: 'paternity',    label: 'Paternity Leave' },
-  { value: 'compensatory', label: 'Compensatory Off' },
-  { value: 'unpaid',       label: 'Unpaid Leave' },
-]
+const EMPTY_FORM = { leave_type: '', duration: 'full_day', from_date: '', to_date: '', reason: '' }
 
-const EMPTY_FORM = { leave_type: 'casual', duration: 'full_day', from_date: '', to_date: '', reason: '' }
+function LeaveBalanceCard({ b }) {
+  const pct = b.allocated > 0 ? Math.min(100, ((b.used + b.pending) / b.allocated) * 100) : 0
+  const color = b.color || '#3b82f6'
+  return (
+    <div className="rounded-xl p-3.5 flex flex-col gap-2"
+         style={{ background: 'var(--bg-alt)', border: '1px solid var(--border-subtle)' }}>
+      <div className="flex items-center gap-1.5">
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+        <span className="text-xs font-semibold uppercase tracking-wide truncate"
+              style={{ color: 'var(--text-disabled)' }}>
+          {b.code || b.name}
+        </span>
+      </div>
+      <div className="flex items-end gap-1">
+        <span className="text-xl font-bold leading-none" style={{ color: 'var(--text-heading)' }}>
+          {b.remaining}
+        </span>
+        <span className="text-xs mb-0.5" style={{ color: 'var(--text-muted)' }}>/ {b.allocated}d</span>
+      </div>
+      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg-card)' }}>
+        <div className="h-full rounded-full transition-all"
+             style={{ width: `${pct}%`, background: pct >= 90 ? '#ef4444' : color }} />
+      </div>
+      <div className="flex justify-between text-xs" style={{ color: 'var(--text-disabled)' }}>
+        <span>Used {b.used}</span>
+        {b.pending > 0 && <span style={{ color: '#f59e0b' }}>Pend {b.pending}</span>}
+      </div>
+    </div>
+  )
+}
 
 function LeaveTab({ employeeId }) {
-  const [leaves, setLeaves]       = useState([])
-  const [total, setTotal]         = useState(0)
-  const [loading, setLoading]     = useState(true)
-  const [showApply, setShowApply] = useState(false)
-  const [form, setForm]           = useState(EMPTY_FORM)
-  const [formError, setFormError] = useState('')
-  const [saving, setSaving]       = useState(false)
+  const [leaves, setLeaves]         = useState([])
+  const [total, setTotal]           = useState(0)
+  const [loading, setLoading]       = useState(true)
+  const [balances, setBalances]     = useState([])
+  const [balLoading, setBalLoading] = useState(true)
+  const [showApply, setShowApply]   = useState(false)
+  const [form, setForm]             = useState(EMPTY_FORM)
+  const [formError, setFormError]   = useState('')
+  const [saving, setSaving]         = useState(false)
+  const [cancelLoading, setCancelLoading] = useState({})
+
+  const loadBalances = useCallback(async () => {
+    setBalLoading(true)
+    try {
+      const r = await hrmService.getMyLeaveBalance()
+      const data = r.data || []
+      setBalances(data)
+      // Pre-select first leave type in form
+      if (data.length > 0) setForm(f => ({ ...f, leave_type: f.leave_type || data[0].leave_type }))
+    } catch { setBalances([]) }
+    setBalLoading(false)
+  }, [])
 
   const load = useCallback(async () => {
     if (!employeeId) { setLoading(false); return }
     setLoading(true)
     try {
-      const res = await hrmService.listLeaves({ employee_id: employeeId, page_size: 50 })
+      const res = await hrmService.listMyLeaves({ page_size: 50 })
       setLeaves(res.data?.items || [])
       setTotal(res.data?.total || 0)
     } catch {/* silent */}
     setLoading(false)
   }, [employeeId])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load(); loadBalances() }, [load, loadBalances])
 
-  const openApply = () => { setForm(EMPTY_FORM); setFormError(''); setShowApply(true) }
+  const openApply = () => {
+    setForm({ ...EMPTY_FORM, leave_type: balances[0]?.leave_type || 'casual' })
+    setFormError('')
+    setShowApply(true)
+  }
   const closeApply = () => { setShowApply(false); setFormError('') }
 
   const handleApply = async (e) => {
     e.preventDefault()
     setFormError('')
-
-    // ── Client-side validation ──
-    if (!form.from_date || !form.to_date) {
-      setFormError('Please select both From and To dates.')
-      return
-    }
-    if (form.from_date > form.to_date) {
-      setFormError('From date cannot be after To date.')
-      return
-    }
-    if (!form.reason || form.reason.trim().length < 5) {
-      setFormError('Reason must be at least 5 characters.')
-      return
-    }
+    if (!form.from_date || !form.to_date) { setFormError('Select both from and to dates.'); return }
+    if (form.from_date > form.to_date)    { setFormError('From date cannot be after To date.'); return }
+    if (!form.reason || form.reason.trim().length < 5) { setFormError('Reason must be at least 5 characters.'); return }
 
     setSaving(true)
     try {
-      await hrmService.applyLeave({ ...form, employee_id: employeeId })
+      await hrmService.applyLeave(form)
       toast.success('Leave application submitted successfully')
       closeApply()
       load()
+      loadBalances()
     } catch (err) {
       const detail = err?.response?.data?.detail
       const msg = typeof detail === 'string'
         ? detail
-        : Array.isArray(detail)
-          ? detail.map(d => d?.msg || String(d)).join('; ')
-          : 'Failed to submit leave application. Please try again.'
+        : Array.isArray(detail) ? detail.map(d => d?.msg || String(d)).join('; ')
+        : 'Failed to submit. Please try again.'
       setFormError(msg)
       toast.error(msg)
     }
     setSaving(false)
   }
 
+  const handleCancel = async (id) => {
+    if (!window.confirm('Cancel this leave application?')) return
+    setCancelLoading(p => ({ ...p, [id]: true }))
+    try {
+      await hrmService.cancelLeave(id)
+      toast.success('Leave cancelled')
+      load()
+      loadBalances()
+    } catch (ex) {
+      toast.error(ex?.response?.data?.detail || 'Failed to cancel leave')
+    }
+    setCancelLoading(p => ({ ...p, [id]: false }))
+  }
+
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-6 space-y-5">
+
+      {/* Balance Cards */}
+      {balLoading ? (
+        <div className="grid grid-cols-3 gap-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="rounded-xl p-3.5 animate-pulse h-24"
+                 style={{ background: 'var(--bg-alt)', border: '1px solid var(--border-subtle)' }} />
+          ))}
+        </div>
+      ) : balances.length > 0 ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {balances.map(b => <LeaveBalanceCard key={b.policy_id} b={b} />)}
+        </div>
+      ) : null}
+
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{total} leave application{total !== 1 ? 's' : ''}</p>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          {total} leave application{total !== 1 ? 's' : ''}
+        </p>
         <button onClick={openApply} className="btn-primary flex items-center gap-2 text-sm">
           <Plus className="w-4 h-4" /> Apply Leave
         </button>
       </div>
 
+      {/* Apply Modal */}
       <ModalPortal isOpen={showApply}>
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
           <form
             onSubmit={handleApply}
-            className="rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl mx-4"
+            className="rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl"
             style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
           >
             <h2 className="text-lg font-semibold" style={{ color: 'var(--text-heading)' }}>Apply for Leave</h2>
 
-            {/* Inline error banner */}
             {formError && (
-              <div className="text-sm px-3 py-2 rounded-lg"
-                   style={{ background: 'var(--bg-danger, rgba(255,71,87,0.10))', color: 'var(--text-danger, #ef4444)' }}>
+              <div className="flex items-start gap-2 text-sm px-3 py-2.5 rounded-lg"
+                   style={{ background: 'rgba(239,68,68,0.10)', color: '#ef4444' }}>
+                <UserX className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 {formError}
               </div>
             )}
@@ -586,23 +648,32 @@ function LeaveTab({ employeeId }) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Leave Type</label>
-                <select
-                  className="input w-full mt-1"
-                  value={form.leave_type}
-                  onChange={e => setForm(f => ({ ...f, leave_type: e.target.value }))}
-                >
-                  {LEAVE_TYPES.map(t => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
+                <select className="input w-full mt-1" value={form.leave_type}
+                        onChange={e => setForm(f => ({ ...f, leave_type: e.target.value }))}>
+                  {balances.length > 0
+                    ? balances.map(b => (
+                        <option key={b.policy_id} value={b.leave_type}>
+                          {b.name} ({b.remaining}d left)
+                        </option>
+                      ))
+                    : (
+                      <>
+                        <option value="casual">Casual Leave</option>
+                        <option value="sick">Sick Leave</option>
+                        <option value="earned">Earned Leave</option>
+                        <option value="maternity">Maternity Leave</option>
+                        <option value="paternity">Paternity Leave</option>
+                        <option value="comp_off">Compensatory Off</option>
+                        <option value="unpaid">Unpaid Leave</option>
+                      </>
+                    )
+                  }
                 </select>
               </div>
               <div>
                 <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Duration</label>
-                <select
-                  className="input w-full mt-1"
-                  value={form.duration}
-                  onChange={e => setForm(f => ({ ...f, duration: e.target.value }))}
-                >
+                <select className="input w-full mt-1" value={form.duration}
+                        onChange={e => setForm(f => ({ ...f, duration: e.target.value }))}>
                   <option value="full_day">Full Day</option>
                   <option value="half_day_morning">Half Day – Morning</option>
                   <option value="half_day_afternoon">Half Day – Afternoon</option>
@@ -613,22 +684,14 @@ function LeaveTab({ employeeId }) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>From Date</label>
-                <input
-                  type="date"
-                  className="input w-full mt-1"
-                  value={form.from_date}
-                  onChange={e => setForm(f => ({ ...f, from_date: e.target.value }))}
-                />
+                <input type="date" className="input w-full mt-1" value={form.from_date}
+                       onChange={e => setForm(f => ({ ...f, from_date: e.target.value }))} />
               </div>
               <div>
                 <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>To Date</label>
-                <input
-                  type="date"
-                  className="input w-full mt-1"
-                  value={form.to_date}
-                  min={form.from_date || undefined}
-                  onChange={e => setForm(f => ({ ...f, to_date: e.target.value }))}
-                />
+                <input type="date" className="input w-full mt-1" value={form.to_date}
+                       min={form.from_date || undefined}
+                       onChange={e => setForm(f => ({ ...f, to_date: e.target.value }))} />
               </div>
             </div>
 
@@ -636,22 +699,15 @@ function LeaveTab({ employeeId }) {
               <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
                 Reason <span style={{ color: 'var(--text-muted)' }}>(min 5 chars)</span>
               </label>
-              <textarea
-                className="input w-full mt-1 resize-none"
-                rows={3}
-                placeholder="Briefly describe the reason for your leave…"
-                value={form.reason}
-                onChange={e => setForm(f => ({ ...f, reason: e.target.value }))}
-              />
+              <textarea className="input w-full mt-1 resize-none" rows={3}
+                        placeholder="Briefly describe the reason for your leave…"
+                        value={form.reason}
+                        onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} />
             </div>
 
             <div className="flex justify-end gap-3">
               <button type="button" onClick={closeApply} className="btn-secondary">Cancel</button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="btn-primary flex items-center gap-2"
-              >
+              <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2">
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 {saving ? 'Submitting…' : 'Submit Application'}
               </button>
@@ -660,33 +716,65 @@ function LeaveTab({ employeeId }) {
         </div>
       </ModalPortal>
 
+      {/* Leave List */}
       {loading ? (
         <div className="py-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading…</div>
       ) : leaves.length === 0 ? (
-        <div className="py-8 text-center" style={{ color: 'var(--text-muted)' }}>No leave applications</div>
+        <div className="py-8 text-center" style={{ color: 'var(--text-muted)' }}>
+          <Calendar className="w-10 h-10 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">No leave applications</p>
+        </div>
       ) : (
-        <div className="space-y-0">
-          {leaves.map(l => (
+        <div className="rounded-xl overflow-hidden"
+             style={{ border: '1px solid var(--border-subtle)', background: 'var(--bg-alt)' }}>
+          {leaves.map((l, i) => (
             <div
               key={l.id}
-              className="flex items-start justify-between py-3"
-              style={{ borderBottom: '1px solid var(--border-subtle)' }}
+              className="flex items-start justify-between px-4 py-3 gap-3"
+              style={{ borderBottom: i < leaves.length - 1 ? '1px solid var(--border-subtle)' : 'none' }}
             >
-              <div>
-                <p className="font-medium capitalize" style={{ color: 'var(--text-body)' }}>
-                  {l.leave_type?.replace(/_/g, ' ')} Leave
-                </p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-medium capitalize text-sm" style={{ color: 'var(--text-body)' }}>
+                    {l.leave_type?.replace(/_/g, ' ')} Leave
+                  </p>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {l.duration === 'half_day_morning' ? '· AM Half'
+                      : l.duration === 'half_day_afternoon' ? '· PM Half' : ''}
+                  </span>
+                </div>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                  {new Date(l.from_date).toLocaleDateString('en-IN')}
+                  {new Date(l.from_date + 'T00:00:00').toLocaleDateString('en-IN')}
                   {' – '}
-                  {new Date(l.to_date).toLocaleDateString('en-IN')}
+                  {new Date(l.to_date + 'T00:00:00').toLocaleDateString('en-IN')}
                   {l.total_days ? ` · ${l.total_days} day${l.total_days > 1 ? 's' : ''}` : ''}
                 </p>
                 {l.reason && (
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{l.reason}</p>
+                  <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-disabled)' }}>
+                    {l.reason}
+                  </p>
+                )}
+                {l.rejection_reason && (
+                  <p className="text-xs mt-0.5" style={{ color: '#ef4444' }}>
+                    Rejected: {l.rejection_reason}
+                  </p>
                 )}
               </div>
-              <StatusBadge status={l.status} />
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <StatusBadge status={l.status} />
+                {l.status === 'pending' && (
+                  <button
+                    onClick={() => handleCancel(l.id)}
+                    disabled={cancelLoading[l.id]}
+                    title="Cancel Application"
+                    className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
+                    style={{ color: 'var(--text-muted)' }}>
+                    {cancelLoading[l.id]
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <X className="w-3.5 h-3.5" />}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

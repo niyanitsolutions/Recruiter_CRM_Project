@@ -111,26 +111,43 @@ class LeaveService:
     async def _check_balance(
         self, employee_id: str, company_id: str, leave_type: str, days: float
     ) -> None:
-        """Raise ValueError if insufficient balance (respects negative_balance policy)."""
+        """Raise ValueError if insufficient balance (policy-driven, all leave types)."""
         policy = await self._get_policy(leave_type, company_id)
-        if policy and policy.get("negative_balance_allowed"):
-            return  # Negative balance allowed — skip balance check
+        if not policy:
+            return  # No policy configured — allow
+
+        if policy.get("negative_balance_allowed"):
+            return  # Negative balance explicitly permitted
+
+        allocated = float(policy.get("annual_allocation", 0))
+        if allocated <= 0:
+            return  # Zero allocation means unlimited / not tracked
 
         year = date.today().year
-        bal = await self.bal.find_one({"employee_id": employee_id, "company_id": company_id, "year": year})
-        if not bal:
-            return  # First leave this year — no existing balance yet, allow
+        year_start = f"{year}-01-01"
+        year_end   = f"{year}-12-31"
 
-        field_map = {
-            LeaveType.CASUAL: ("casual_total", "casual_used"),
-            LeaveType.SICK:   ("sick_total",   "sick_used"),
-            LeaveType.EARNED: ("earned_total", "earned_used"),
-        }
-        if leave_type not in field_map:
-            return  # Only check known types
+        used_agg = await self.col.aggregate([
+            {"$match": {
+                "company_id": company_id, "employee_id": employee_id,
+                "leave_type": leave_type, "status": LeaveStatus.APPROVED,
+                "from_date": {"$gte": year_start}, "to_date": {"$lte": year_end},
+            }},
+            {"$group": {"_id": None, "total": {"$sum": "$total_days"}}},
+        ]).to_list(1)
+        used = used_agg[0]["total"] if used_agg else 0.0
 
-        total_f, used_f = field_map[leave_type]
-        available = float(bal.get(total_f, 0)) - float(bal.get(used_f, 0)) - float(bal.get(used_f.replace("used", "pending"), 0))
+        pend_agg = await self.col.aggregate([
+            {"$match": {
+                "company_id": company_id, "employee_id": employee_id,
+                "leave_type": leave_type, "status": LeaveStatus.PENDING,
+                "from_date": {"$gte": year_start}, "to_date": {"$lte": year_end},
+            }},
+            {"$group": {"_id": None, "total": {"$sum": "$total_days"}}},
+        ]).to_list(1)
+        pending = pend_agg[0]["total"] if pend_agg else 0.0
+
+        available = allocated - used - pending
         if available < days:
             raise ValueError(
                 f"Insufficient leave balance. Available: {available:.1f} days, Requested: {days:.1f} days"
@@ -353,17 +370,77 @@ class LeaveService:
         )
 
     async def get_balance(self, employee_id: str, company_id: str, year: int) -> dict:
+        """Legacy single-doc balance (kept for backward compat). Prefer get_policy_balances()."""
         doc = await self.bal.find_one({"employee_id": employee_id, "company_id": company_id, "year": year})
         if doc:
             doc["id"] = str(doc.pop("_id", ""))
             return doc
+        # Fall back to policy-seeded values for casual/sick/earned
+        casual_pol  = await self._get_policy("casual", company_id)
+        sick_pol    = await self._get_policy("sick", company_id)
+        earned_pol  = await self._get_policy("earned", company_id)
         return {
             "employee_id": employee_id,
             "year": year,
-            "casual_total": 12, "casual_used": 0,
-            "sick_total": 12, "sick_used": 0,
-            "earned_total": 15, "earned_used": 0,
+            "casual_total":  float(casual_pol["annual_allocation"]) if casual_pol else 12.0,
+            "casual_used":   0,
+            "sick_total":    float(sick_pol["annual_allocation"]) if sick_pol else 12.0,
+            "sick_used":     0,
+            "earned_total":  float(earned_pol["annual_allocation"]) if earned_pol else 15.0,
+            "earned_used":   0,
         }
+
+    async def get_policy_balances(self, employee_id: str, company_id: str, year: int) -> list:
+        """Return per-policy balance computed from actual leave applications.
+
+        Pulls annual_allocation from each active policy and computes
+        used/pending from real leave records — no separate balance table needed.
+        """
+        policies = await self.db[self.POL_COL].find(
+            {"company_id": company_id, "is_active": True, "is_deleted": False}
+        ).sort("name", 1).to_list(None)
+
+        year_start = f"{year}-01-01"
+        year_end   = f"{year}-12-31"
+
+        result = []
+        for pol in policies:
+            lt        = str(pol.get("leave_type", ""))
+            allocated = float(pol.get("annual_allocation", 0))
+
+            used_agg = await self.col.aggregate([
+                {"$match": {
+                    "company_id": company_id, "employee_id": employee_id,
+                    "leave_type": lt, "status": LeaveStatus.APPROVED,
+                    "from_date": {"$gte": year_start}, "to_date": {"$lte": year_end},
+                }},
+                {"$group": {"_id": None, "total": {"$sum": "$total_days"}}},
+            ]).to_list(1)
+            used = float(used_agg[0]["total"]) if used_agg else 0.0
+
+            pend_agg = await self.col.aggregate([
+                {"$match": {
+                    "company_id": company_id, "employee_id": employee_id,
+                    "leave_type": lt, "status": LeaveStatus.PENDING,
+                    "from_date": {"$gte": year_start}, "to_date": {"$lte": year_end},
+                }},
+                {"$group": {"_id": None, "total": {"$sum": "$total_days"}}},
+            ]).to_list(1)
+            pending = float(pend_agg[0]["total"]) if pend_agg else 0.0
+
+            result.append({
+                "policy_id":  str(pol.get("_id", "")),
+                "leave_type": lt,
+                "name":       pol.get("name", lt.replace("_", " ").title()),
+                "code":       pol.get("code", ""),
+                "color":      pol.get("color", "#3b82f6"),
+                "allocated":  allocated,
+                "used":       round(used, 2),
+                "pending":    round(pending, 2),
+                "remaining":  round(max(0.0, allocated - used - pending), 2),
+                "negative_balance_allowed": bool(pol.get("negative_balance_allowed", False)),
+            })
+        return result
 
     async def count_on_leave_today(self, company_id: str) -> int:
         today_str = date.today().isoformat()

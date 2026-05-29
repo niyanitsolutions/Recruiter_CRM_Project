@@ -86,9 +86,7 @@ async def apply_leave(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:leave:apply"])),
 ):
-    # Resolve HRM employee ID — never use the user's auth _id here
     emp_id = await _resolve_hrm_employee_id(cu, db)
-
     employee_name = cu.get("full_name") or cu.get("username", "")
 
     try:
@@ -129,6 +127,23 @@ async def list_leaves(
     return await LeaveService(db).list(cu["company_id"], employee_id, status, page, page_size)
 
 
+# NOTE: Static-path routes (/balance/me, /me) MUST be declared before the dynamic
+# wildcard routes (/balance/{employee_id}, /{leave_id}) so FastAPI matches them first.
+
+@router.get("/balance/me")
+async def get_my_balance(
+    year: Optional[int] = None,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:leave:apply"])),
+):
+    """Return per-policy leave balance for the calling employee."""
+    emp_id = await _resolve_hrm_employee_id(cu, db)
+    return await LeaveService(db).get_policy_balances(
+        emp_id, cu["company_id"], year or date.today().year
+    )
+
+
 @router.get("/balance/{employee_id}")
 async def get_balance(
     employee_id: str,
@@ -137,7 +152,24 @@ async def get_balance(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:leave:apply"])),
 ):
-    return await LeaveService(db).get_balance(employee_id, cu["company_id"], year or date.today().year)
+    """Return per-policy leave balance for a specific employee (HR/admin use)."""
+    return await LeaveService(db).get_policy_balances(
+        employee_id, cu["company_id"], year or date.today().year
+    )
+
+
+@router.get("/me")
+async def list_my_leaves(
+    status: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:leave:apply"])),
+):
+    """List leave applications for the calling employee."""
+    emp_id = await _resolve_hrm_employee_id(cu, db)
+    return await LeaveService(db).list(cu["company_id"], emp_id, status, page, page_size)
 
 
 @router.get("/{leave_id}")
@@ -189,4 +221,22 @@ async def approve_reject(
     except Exception:
         pass
 
+    return result
+
+
+@router.post("/{leave_id}/cancel")
+async def cancel_leave(
+    leave_id: str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:leave:apply"])),
+):
+    """Cancel a pending or approved leave (employee can only cancel their own)."""
+    emp_id = await _resolve_hrm_employee_id(cu, db)
+    try:
+        result = await LeaveService(db).cancel(leave_id, emp_id, cu["company_id"])
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    if not result:
+        raise HTTPException(status_code=404, detail="Leave not found")
     return result
