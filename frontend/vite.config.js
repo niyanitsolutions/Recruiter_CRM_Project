@@ -14,12 +14,17 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://127.0.0.1:8000',
           changeOrigin: true,
+          // Generous timeouts so employee leave requests (more DB queries) don't get dropped
+          proxyTimeout: 30000,   // 30 s — time for proxy to wait for backend response
+          timeout: 30000,        // 30 s — socket inactivity timeout
         },
         // Proxy /uploads so resume files served by FastAPI StaticFiles
         // are accessible during local development without setting VITE_API_URL.
         '/uploads': {
           target: 'http://127.0.0.1:8000',
           changeOrigin: true,
+          proxyTimeout: 15000,
+          timeout: 15000,
         },
       },
     },
