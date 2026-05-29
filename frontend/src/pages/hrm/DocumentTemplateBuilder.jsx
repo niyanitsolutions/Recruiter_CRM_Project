@@ -4,7 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import QRCode from 'qrcode'
+// QRCode loaded dynamically to avoid Node.js-only modules crashing the browser bundle
 import {
   Save, ArrowLeft, Eye, EyeOff, Plus, Trash2, GripVertical,
   Type, Heading, Table, Image, PenTool, Minus, AlignLeft, AlignCenter,
@@ -287,8 +287,10 @@ function QRBlockRenderer({ content }) {
   const [dataUrl, setDataUrl] = useState('')
   useEffect(() => {
     if (!content) return
-    QRCode.toDataURL(content || 'https://hireflow.app', { width: 120, margin: 1, color: { dark: '#1e3a5f', light: '#ffffff' } })
-      .then(setDataUrl).catch(() => {})
+    import('qrcode').then(mod => {
+      const QRCode = mod.default || mod
+      return QRCode.toDataURL(content, { width: 120, margin: 1, color: { dark: '#1e3a5f', light: '#ffffff' } })
+    }).then(setDataUrl).catch(() => {})
   }, [content])
   return (
     <div style={{ display: 'inline-block', border: '1px solid #e2e8f0', padding: 8, borderRadius: 6, textAlign: 'center' }}>
@@ -1894,27 +1896,29 @@ export default function DocumentTemplateBuilder() {
 
   const selectedBlock = blocks.find(b => b.id === selectedId) || null
 
+  // Compute page count — must be before any conditional return (hooks order)
+  const pageCount = 1 + blocks.filter(b => b.type === 'page_break').length
+
+  // Preview handler — works even before first save, always defined (hooks order)
+  const handlePreview = useCallback(() => {
+    try {
+      const printData = { blocks, branding, header, footer, watermark, pageConfig, meta }
+      const html = buildPrintHTML(printData)
+      const win = window.open('', '_blank', 'width=960,height=760')
+      if (!win) { toast.error('Allow popups to preview — check your browser settings'); return }
+      win.document.write(html)
+      win.document.close()
+      win.focus()
+    } catch (e) {
+      toast.error('Preview failed — ' + (e?.message || 'unknown error'))
+    }
+  }, [blocks, branding, header, footer, watermark, pageConfig, meta])
+
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
       <div className="eb-spinner" style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid var(--accent-blue)', borderTopColor: 'transparent' }} />
     </div>
   )
-
-  // Compute page count from page_break blocks
-  const pageCount = 1 + blocks.filter(b => b.type === 'page_break').length
-
-  // Inline preview handler – works even before first save
-  const handlePreview = useCallback(() => {
-    const html = buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta })
-    const win = window.open('', '_blank', 'width=900,height=700')
-    if (!win) { toast.error('Allow popups for preview'); return }
-    win.document.write(`
-      <html><head><title>Preview — ${meta.name}</title>
-      <style>body{margin:0;background:#e8edf2;} .page{background:#fff;margin:20px auto;padding:20mm;max-width:794px;box-shadow:0 4px 24px rgba(0,0,0,.15);}</style></head>
-      <body><div class="page">${buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfig, meta }).replace(/<!DOCTYPE html>[\s\S]*?<body[^>]*>/, '').replace('</body></html>', '')}</div></body></html>
-    `)
-    win.document.close()
-  }, [blocks, branding, header, footer, watermark, pageConfig, meta])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg-primary)' }}
