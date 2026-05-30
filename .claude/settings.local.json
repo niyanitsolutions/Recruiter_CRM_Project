@@ -109,7 +109,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8000/api/v1/health)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8000/)",
       "PowerShell(Start-Process -FilePath \"cmd.exe\" -ArgumentList \"/k\", \"cd /d d:\\\\crm-project\\\\frontend && npm run dev\" -WindowStyle Normal)",
-      "Bash(curl -s -X POST http://127.0.0.1:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"vijayr8106@gmail.com\",\"password\":\"admin123\"}')"
+      "Bash(curl -s -X POST http://127.0.0.1:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"vijayr8106@gmail.com\",\"password\":\"admin123\"}')",
+      "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\" -Recurse -Filter \"*template*\" -ErrorAction SilentlyContinue)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

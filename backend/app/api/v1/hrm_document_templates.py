@@ -105,6 +105,106 @@ async def get_full_schema(
     }
 
 
+# ─── Auto-fill ────────────────────────────────────────────────────────────────
+# NOTE: these must be registered BEFORE /{template_id} so FastAPI does not
+#       capture "auto-fill" as a template_id on single-segment GET requests.
+
+@router.get("/auto-fill/employee/{employee_id}")
+async def auto_fill_employee(
+    employee_id: str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:doc_templates:view"])),
+):
+    """Return auto-fill field data from an HRM employee record."""
+    fields = await DocumentTemplateService(db).auto_fill_from_employee(employee_id, cu["company_id"])
+    return {"employee_id": employee_id, "field_data": fields}
+
+
+@router.get("/auto-fill/candidate/{candidate_id}")
+async def auto_fill_candidate(
+    candidate_id: str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:doc_templates:view"])),
+):
+    """Return auto-fill field data from a candidate record."""
+    fields = await DocumentTemplateService(db).auto_fill_from_candidate(candidate_id, cu["company_id"])
+    return {"candidate_id": candidate_id, "field_data": fields}
+
+
+# ─── Generation History ───────────────────────────────────────────────────────
+# NOTE: must be before /{template_id} even though 2-segment paths don't conflict
+#       today — prevents future regressions if single-segment catch-all is widened.
+
+@router.get("/generations/history")
+async def list_generation_history(
+    template_id:  Optional[str] = None,
+    employee_id:  Optional[str] = None,
+    page:      int = Query(1,  ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:doc_templates:view"])),
+):
+    return await DocumentTemplateService(db).list_generations(
+        cu["company_id"], template_id, employee_id, page, page_size
+    )
+
+
+@router.get("/generations/{gen_id}")
+async def get_generation(
+    gen_id: str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:doc_templates:view"])),
+):
+    gen = await DocumentTemplateService(db).get_generation(gen_id, cu["company_id"])
+    if not gen:
+        raise HTTPException(status_code=404, detail="Generation record not found")
+    return gen
+
+
+# ─── Reusable Content Blocks ──────────────────────────────────────────────────
+# CRITICAL: GET /content-blocks MUST be before GET /{template_id}.
+# FastAPI matches routes in registration order; "content-blocks" is a single
+# path segment that would otherwise be captured by /{template_id}, returning
+# 404 "Template not found" instead of the content-blocks list.
+
+@router.post("/content-blocks", status_code=201)
+async def create_content_block(
+    data: ContentBlockCreate,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:doc_templates:manage"])),
+):
+    return await DocumentTemplateService(db).create_content_block(cu["company_id"], data, cu["id"])
+
+
+@router.get("/content-blocks")
+async def list_content_blocks(
+    category: Optional[str] = None,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:doc_templates:view"])),
+):
+    return await DocumentTemplateService(db).list_content_blocks(cu["company_id"], category)
+
+
+@router.delete("/content-blocks/{block_id}", status_code=204)
+async def delete_content_block(
+    block_id: str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:doc_templates:manage"])),
+):
+    ok = await DocumentTemplateService(db).delete_content_block(block_id, cu["company_id"])
+    if not ok:
+        raise HTTPException(status_code=404, detail="Content block not found")
+
+
+# ─── Template by ID (dynamic route — must stay AFTER all static-prefix routes) ─
+
 @router.get("/{template_id}")
 async def get_template(
     template_id: str,
@@ -188,32 +288,6 @@ async def restore_version(
     return result
 
 
-# ─── Auto-fill ────────────────────────────────────────────────────────────────
-
-@router.get("/auto-fill/employee/{employee_id}")
-async def auto_fill_employee(
-    employee_id: str,
-    cu: dict = Depends(require_hrm_module),
-    db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:doc_templates:view"])),
-):
-    """Return auto-fill field data from an HRM employee record."""
-    fields = await DocumentTemplateService(db).auto_fill_from_employee(employee_id, cu["company_id"])
-    return {"employee_id": employee_id, "field_data": fields}
-
-
-@router.get("/auto-fill/candidate/{candidate_id}")
-async def auto_fill_candidate(
-    candidate_id: str,
-    cu: dict = Depends(require_hrm_module),
-    db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:doc_templates:view"])),
-):
-    """Return auto-fill field data from a candidate record."""
-    fields = await DocumentTemplateService(db).auto_fill_from_candidate(candidate_id, cu["company_id"])
-    return {"candidate_id": candidate_id, "field_data": fields}
-
-
 # ─── Document Generation ──────────────────────────────────────────────────────
 
 @router.post("/{template_id}/generate")
@@ -295,65 +369,3 @@ async def export_docx(
     return await generate_document(template_id, req, cu, db, None)
 
 
-# ─── Generation History ───────────────────────────────────────────────────────
-
-@router.get("/generations/history")
-async def list_generation_history(
-    template_id:  Optional[str] = None,
-    employee_id:  Optional[str] = None,
-    page:      int = Query(1,  ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    cu: dict = Depends(require_hrm_module),
-    db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:doc_templates:view"])),
-):
-    return await DocumentTemplateService(db).list_generations(
-        cu["company_id"], template_id, employee_id, page, page_size
-    )
-
-
-@router.get("/generations/{gen_id}")
-async def get_generation(
-    gen_id: str,
-    cu: dict = Depends(require_hrm_module),
-    db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:doc_templates:view"])),
-):
-    gen = await DocumentTemplateService(db).get_generation(gen_id, cu["company_id"])
-    if not gen:
-        raise HTTPException(status_code=404, detail="Generation record not found")
-    return gen
-
-
-# ─── Reusable Content Blocks ──────────────────────────────────────────────────
-
-@router.post("/content-blocks", status_code=201)
-async def create_content_block(
-    data: ContentBlockCreate,
-    cu: dict = Depends(require_hrm_module),
-    db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:doc_templates:manage"])),
-):
-    return await DocumentTemplateService(db).create_content_block(cu["company_id"], data, cu["id"])
-
-
-@router.get("/content-blocks")
-async def list_content_blocks(
-    category: Optional[str] = None,
-    cu: dict = Depends(require_hrm_module),
-    db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:doc_templates:view"])),
-):
-    return await DocumentTemplateService(db).list_content_blocks(cu["company_id"], category)
-
-
-@router.delete("/content-blocks/{block_id}", status_code=204)
-async def delete_content_block(
-    block_id: str,
-    cu: dict = Depends(require_hrm_module),
-    db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:doc_templates:manage"])),
-):
-    ok = await DocumentTemplateService(db).delete_content_block(block_id, cu["company_id"])
-    if not ok:
-        raise HTTPException(status_code=404, detail="Content block not found")

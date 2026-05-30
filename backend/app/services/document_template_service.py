@@ -54,7 +54,7 @@ class DocumentTemplateService:
             "description": data.description or "",
             "doc_type": data.doc_type if isinstance(data.doc_type, str) else data.doc_type.value,
             "category": data.category if isinstance(data.category, str) else data.category.value,
-            "is_active": True,
+            "is_active": bool(data.is_active),
             "is_default": data.is_default,
             "is_deleted": False,
             "version": 1,

@@ -179,6 +179,7 @@ class TemplateBlock(BaseModel):
     properties: BlockProperties = Field(default_factory=BlockProperties)
     order: int = 0
     is_locked: bool = False               # prevent editing in generation form
+    is_hidden: bool = False               # hide block from canvas and export
     condition: Optional[str] = None       # e.g. "salary_ctc > 100000"
 
 
@@ -296,6 +297,8 @@ class TemplateCreate(BaseModel):
     description: str = ""
     doc_type: DocumentType = DocumentType.CUSTOM
     category: TemplateCategory = TemplateCategory.HR
+    is_active: bool = True                # False = save as draft (inactive)
+    is_default: bool = False
     page_config: Optional[dict] = None
     branding: Optional[dict] = None
     header: Optional[dict] = None
@@ -305,7 +308,6 @@ class TemplateCreate(BaseModel):
     signatures: Optional[List[dict]] = None
     allowed_roles: Optional[List[str]] = None
     tags: Optional[List[str]] = None
-    is_default: bool = False
 
 
 class TemplateUpdate(BaseModel):
