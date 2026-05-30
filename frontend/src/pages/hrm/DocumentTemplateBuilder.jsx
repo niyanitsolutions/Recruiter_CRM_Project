@@ -151,6 +151,47 @@ function getEstimatedBlockHeight(block) {
   }
 }
 
+// PDF-accurate block height estimator — no canvas wrapper overhead (12 px BlockPreview padding).
+// Used for both print/export pagination and canvas page-separator placement so they always match.
+function getPDFBlockHeight(block) {
+  if (!block || block.is_hidden) return 0
+  const p = block.properties || {}
+  const mv = (p.margin_top || 0) + (p.margin_bottom || 0)
+  switch (block.type) {
+    case 'heading': {
+      const fs = (p.font_size || 18) * 1.33  // pt → px
+      return Math.ceil(fs * (p.line_height || 1.3)) + 4 + mv
+    }
+    case 'text': case 'paragraph': {
+      const raw = typeof block.content === 'string' ? block.content.replace(/<[^>]*>/g, '') : ''
+      const lh  = (p.line_height || 1.5) * ((p.font_size || 11) * 1.33)
+      const lines = Math.max(1, Math.ceil(raw.length / 90))
+      return Math.ceil(lines * lh) + mv
+    }
+    case 'list_items': {
+      const n  = Array.isArray(block.content) ? block.content.length : 1
+      const lh = (p.line_height || 1.5) * ((p.font_size || 11) * 1.33)
+      return Math.ceil(n * lh) + mv
+    }
+    case 'two_column': return 80 + mv
+    case 'divider':    return 10 + mv
+    case 'spacer':     return parseInt(p.height) || 20
+    case 'page_break': return 0
+    case 'table':      return 28 + ((block.content?.rows?.length || 2) * 24) + mv
+    case 'salary_table': {
+      const r = Math.max(block.content?.earnings?.length || 3, block.content?.deductions?.length || 3)
+      return 28 + r * 22 + 28 + mv
+    }
+    case 'employee_details': case 'company_details':
+      return (Object.keys(block.content || {}).length || 4) * 24 + mv
+    case 'image': case 'logo': return (parseInt(p.height) || 120) + mv
+    case 'signature':
+      return Math.ceil((Array.isArray(block.content) ? block.content.length : 1) / 3) * 80 + mv
+    case 'qr_code': return 110 + mv
+    default: return 40 + mv
+  }
+}
+
 // Compute which block INDICES (0-based within the provided array) start a new page.
 // Returns an array of block indices. Explicit page_break blocks also trigger a page start.
 function calcPageBreaks(blocks, pageConfig, header, footer) {
@@ -161,9 +202,9 @@ function calcPageBreaks(blocks, pageConfig, header, footer) {
   const pageH = Math.round((isLand ? SZ_W[key] || 210 : SZ_H[key] || 297) / 25.4 * 96)
   const mTop = (pageConfig?.margin_top || 20) / 25.4 * 96
   const mBot = (pageConfig?.margin_bottom || 20) / 25.4 * 96
-  const hdrH = header?.enabled ? (header.height || 80) + 24 : 0
-  const ftrH = footer?.enabled ? 64 : 0
-  const usable = pageH - mTop - mBot - hdrH - ftrH
+  const hdrH = header?.enabled ? (header.height || 80) + 16 : 0  // matches buildPrintHTML + getPageUsable
+  const ftrH = footer?.enabled ? 60 : 0                           // matches buildPrintHTML + getPageUsable
+  const usable = Math.max(100, pageH - mTop - mBot - hdrH - ftrH)
 
   const breaks = [] // indices where a new page starts
   let used = 0
@@ -175,7 +216,7 @@ function calcPageBreaks(blocks, pageConfig, header, footer) {
       used = 0
       return
     }
-    const h = getEstimatedBlockHeight(block)
+    const h = getPDFBlockHeight(block)
     if (used + h > usable && used > 0) {
       breaks.push(i)
       used = h
@@ -328,7 +369,7 @@ function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfi
   // falling back to estimates for blocks not yet rendered in the canvas.
   const allBlocks = (blocks || []).filter(b => !b.is_hidden)
 
-  // Page usable height (same formula as DOM measurement engine)
+  // Page usable height — must exactly match getPageUsable() in the canvas engine
   const SZ_H = { A4: 297, LETTER: 279.4, LEGAL: 355.6, A3: 420, A5: 210 }
   const SZ_W = { A4: 210, LETTER: 215.9, LEGAL: 215.9, A3: 297, A5: 148 }
   const _key  = pageConfig?.size || 'A4'
@@ -337,10 +378,10 @@ function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfi
   const _mTop  = (pageConfig?.margin_top    || 20) / 25.4 * 96
   const _mBot  = (pageConfig?.margin_bottom || 20) / 25.4 * 96
   const _hdrH  = header?.enabled ? (header.height || 80) + 16 : 0
-  const _ftrH  = footer?.enabled ? 50 + 16 : 0
+  const _ftrH  = footer?.enabled ? 60 : 0
   const _usable = Math.max(100, _pageH - _mTop - _mBot - _hdrH - _ftrH)
 
-  // Build breaks from measured (or estimated) heights
+  // Build breaks using PDF-accurate heights — same engine as the canvas page-separator logic
   const _breaks = []
   let _used = 0
   allBlocks.forEach((block, i) => {
@@ -348,7 +389,7 @@ function buildPrintHTML({ blocks, branding, header, footer, watermark, pageConfi
       if (i + 1 < allBlocks.length) _breaks.push(i + 1)
       _used = 0; return
     }
-    const h = (measuredHeights && measuredHeights[block.id]) || getEstimatedBlockHeight(block)
+    const h = getPDFBlockHeight(block)
     if (_used + h > _usable && _used > 0) { _breaks.push(i); _used = h }
     else _used += h
   })
@@ -1811,8 +1852,8 @@ export default function DocumentTemplateBuilder() {
     const pageH = Math.round((land ? SZ_W[key] || 210 : SZ_H[key] || 297) / 25.4 * 96)
     const mTop  = (pageConfig?.margin_top    || 20) / 25.4 * 96
     const mBot  = (pageConfig?.margin_bottom || 20) / 25.4 * 96
-    const hdrH  = header?.enabled ? (header.height || 80) + 24 : 0  // +24 for bottom margin+border
-    const ftrH  = footer?.enabled ? 52 : 0                           // footer bar height
+    const hdrH  = header?.enabled ? (header.height || 80) + 16 : 0  // matches buildPrintHTML
+    const ftrH  = footer?.enabled ? 60 : 0                           // matches buildPrintHTML
     return Math.max(100, pageH - mTop - mBot - hdrH - ftrH)
   }, [pageConfig, header, footer])
 
@@ -1847,8 +1888,11 @@ export default function DocumentTemplateBuilder() {
         used = 0
         continue
       }
-      // Prefer real DOM height; fall back to estimate for blocks not yet rendered
-      const h = blockHeightsRef.current[block.id] ?? getEstimatedBlockHeight(block)
+      // Use PDF-accurate height — ensures canvas separators match the print/PDF output.
+      // DOM-measured heights include ~12 px BlockPreview wrapper overhead not present in PDF,
+      // so we subtract that overhead when a measurement is available; otherwise use getPDFBlockHeight.
+      const domH = blockHeightsRef.current[block.id]
+      const h = domH ? Math.max(10, domH - 12) : getPDFBlockHeight(block)
       if (used + h > usable && used > 0) {
         breaks.push(i)
         used = h
@@ -1941,7 +1985,7 @@ export default function DocumentTemplateBuilder() {
     setLoading(true)
     hrmService.getDocumentTemplate(id).then(res => {
       const t = res.data
-      setMeta({ name: t.name, description: t.description || '', doc_type: t.doc_type, category: t.category, is_active: t.is_active })
+      setMeta({ name: t.name || '', description: t.description || '', doc_type: t.doc_type || 'custom', category: t.category || 'hr', is_active: t.is_active !== false })
       if (t.branding)    setBranding(t.branding)
       if (t.header)      setHeader(h => ({ ...h, ...t.header }))
       if (t.footer)      setFooter(f => ({ ...f, ...t.footer }))
@@ -2011,8 +2055,17 @@ export default function DocumentTemplateBuilder() {
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = async (versionNote = '', isActive = true) => {
-    if (!meta.name.trim()) {
+    const templateName = (meta?.name || '').trim()
+    if (!templateName) {
       toast.error('Please enter a template name before saving')
+      return
+    }
+    if (!meta?.doc_type) {
+      toast.error('Please select a document type before saving')
+      return
+    }
+    if (blocks.length === 0) {
+      toast.error('Please add at least one block before saving')
       return
     }
     setSaving(true); setSaveState('saving')
@@ -2198,7 +2251,7 @@ export default function DocumentTemplateBuilder() {
           </button>
           <div style={{ width: 1, height: 18, background: 'var(--border-color)', flexShrink: 0 }} />
           <input
-            value={meta.name}
+            value={meta.name ?? ''}
             onChange={e => setMeta(m => ({ ...m, name: e.target.value }))}
             placeholder="Template name"
             title="Ctrl+S to save"
@@ -2350,7 +2403,7 @@ export default function DocumentTemplateBuilder() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 16px', background: '#fef3c7', borderBottom: '1px solid #fcd34d', flexShrink: 0, fontSize: 12, color: '#92400e' }}>
           <span>⚡ Unsaved draft from {new Date(draftBanner.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => { try { if (draftBanner.blocks) { setBlocks(draftBanner.blocks); recordHistory(draftBanner.blocks) } if (draftBanner.meta) setMeta(draftBanner.meta); toast.success('Draft restored') } catch {} setDraftBanner(null) }}
+            <button onClick={() => { try { if (draftBanner.blocks) { setBlocks(draftBanner.blocks); recordHistory(draftBanner.blocks) } if (draftBanner.meta) setMeta(m => ({ ...m, ...draftBanner.meta, name: draftBanner.meta?.name || m.name || '' })); toast.success('Draft restored') } catch {} setDraftBanner(null) }}
               style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: 'none', background: 'var(--accent-blue)', color: '#fff', cursor: 'pointer' }}>
               Restore
             </button>
