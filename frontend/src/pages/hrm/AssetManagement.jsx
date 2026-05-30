@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
-  Package, Plus, Search, Loader2, AlertCircle, X, Edit2, Trash2,
-  UserCheck, RotateCcw, Monitor, Smartphone, Mouse, Keyboard, Headphones,
-  CheckCircle, Clock, Wrench, AlertTriangle, History, ArrowRight, QrCode, Download,
+  Package, Plus, Search, Loader2, X, Edit2, Trash2,
+  UserCheck, RotateCcw, CheckCircle, Clock, Wrench, AlertTriangle,
+  History, QrCode, Download, Settings,
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import toast from 'react-hot-toast'
@@ -226,10 +226,71 @@ function AssignModal({ asset, onClose, onAssigned }) {
   )
 }
 
+// ── Asset Status Change Modal (Phase 9) ──────────────────────────────────────
+
+const STATUS_CHANGE_OPTIONS = [
+  { from: ['available', 'assigned'], to: 'maintenance', label: 'Send to Maintenance', color: '#f59e0b', bg: '#fef3c7', icon: Wrench },
+  { from: ['maintenance'],           to: 'available',   label: 'Mark Available',       color: '#10b981', bg: '#d1fae5', icon: CheckCircle },
+  { from: ['available', 'maintenance', 'assigned'], to: 'retired', label: 'Retire Asset', color: '#94a3b8', bg: '#f1f5f9', icon: AlertTriangle },
+  { from: ['available', 'maintenance', 'assigned', 'retired'], to: 'lost', label: 'Mark as Lost', color: '#ef4444', bg: '#fee2e2', icon: AlertTriangle },
+]
+
+function StatusChangeModal({ asset, onClose, onChanged }) {
+  const [loading, setLoading] = useState(false)
+  const options = STATUS_CHANGE_OPTIONS.filter(o => o.from.includes(asset.status))
+
+  const handleChange = async (newStatus) => {
+    setLoading(true)
+    try {
+      await hrmService.updateAsset(asset.id, { status: newStatus })
+      toast.success(`Asset status updated to ${newStatus}`)
+      onChanged()
+      onClose()
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Status change failed')
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between p-5 border-b">
+          <div>
+            <h3 className="font-semibold text-gray-900">Change Status</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{asset.asset_tag} · Currently: <strong>{asset.status}</strong></p>
+          </div>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="p-5 space-y-2">
+          {options.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-4">No status changes available from "{asset.status}".</p>
+          ) : options.map(opt => {
+            const Icon = opt.icon
+            return (
+              <button key={opt.to} onClick={() => handleChange(opt.to)} disabled={loading}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:shadow-sm disabled:opacity-50"
+                style={{ borderColor: opt.color + '40', background: opt.bg }}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                     style={{ background: opt.color + '20' }}>
+                  <Icon className="w-4 h-4" style={{ color: opt.color }} />
+                </div>
+                <span className="text-sm font-medium" style={{ color: opt.color }}>{opt.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Asset QR Code Modal ───────────────────────────────────────────────────────
 
 function AssetQRModal({ asset, onClose }) {
-  const assetUrl = `${window.location.origin}/hrm/assets/scan/${asset.id}`
+  // Phase 14: Use public_token (not internal _id) to prevent ID enumeration
+  const publicToken = asset.public_token || asset.id
+  const assetUrl = `${window.location.origin}/asset/public/${publicToken}`
 
   const handleDownload = () => {
     const svg = document.getElementById('asset-qr-svg')
@@ -413,9 +474,10 @@ function AssetHistoryModal({ asset, onClose }) {
 
 function AssetCard({ asset, onEdit, onDelete, onAssign, onReturn, onRefresh }) {
   const StatusIcon = STATUS_ICON[asset.status] || Package
-  const [returning, setReturning] = useState(false)
+  const [returning, setReturning]     = useState(false)
   const [showHistory, setShowHistory] = useState(false)
-  const [showQR, setShowQR] = useState(false)
+  const [showQR, setShowQR]           = useState(false)
+  const [showStatus, setShowStatus]   = useState(false)
 
   const handleReturn = async () => {
     if (!confirm('Mark asset as returned?')) return
@@ -487,6 +549,11 @@ function AssetCard({ asset, onEdit, onDelete, onAssign, onReturn, onRefresh }) {
             {returning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />} Return
           </button>
         )}
+        {/* Status change — Phase 9 */}
+        <button onClick={() => setShowStatus(true)}
+          className="p-1.5 text-amber-400 hover:bg-amber-50 rounded-lg transition-colors" title="Change Status">
+          <Settings className="w-3.5 h-3.5" />
+        </button>
         <button onClick={() => setShowHistory(true)}
           className="p-1.5 text-indigo-400 hover:bg-indigo-50 rounded-lg transition-colors" title="View History">
           <History className="w-3.5 h-3.5" />
@@ -501,8 +568,9 @@ function AssetCard({ asset, onEdit, onDelete, onAssign, onReturn, onRefresh }) {
         </button>
       </div>
 
-      {showHistory && <AssetHistoryModal asset={asset} onClose={() => setShowHistory(false)} />}
-      {showQR && <AssetQRModal asset={asset} onClose={() => setShowQR(false)} />}
+      {showStatus  && <StatusChangeModal  asset={asset} onClose={() => setShowStatus(false)}  onChanged={onRefresh} />}
+      {showHistory && <AssetHistoryModal  asset={asset} onClose={() => setShowHistory(false)} />}
+      {showQR      && <AssetQRModal       asset={asset} onClose={() => setShowQR(false)} />}
     </div>
   )
 }
@@ -547,10 +615,10 @@ export default function AssetManagement() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Package className="w-6 h-6 text-indigo-600" />
-            Asset Management
-          </h1>
+          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color:'var(--text-heading)' }}>
+            <Package className="w-5 h-5 text-indigo-600" />
+            Assets
+          </h2>
           <p className="text-gray-500 text-sm mt-0.5">{total} total assets</p>
         </div>
         <button onClick={() => { setEditAsset(null); setShowForm(true) }} className="btn-primary flex items-center gap-2">

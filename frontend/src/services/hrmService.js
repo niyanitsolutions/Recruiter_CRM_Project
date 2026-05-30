@@ -143,6 +143,7 @@ const uploadViaToken = (token, formData) =>
   })
 
 // ── Assets ─────────────────────────────────────────────────────────────────
+const getAssetByPublicToken = (token) => api.get(`${BASE}/assets/public/${token}`)
 const createAsset = (data) => api.post(`${BASE}/assets`, data)
 const getMyAssets = () => api.get(`${BASE}/assets/me`)
 const listAssets = (params) => api.get(`${BASE}/assets`, { params })
@@ -264,6 +265,7 @@ const hrmService = {
   getOrgChart,
   generateDocUploadToken, listDocUploadTokens, reactivateDocUploadToken, revokeDocUploadToken,
   validateDocUploadToken, uploadViaToken,
+  getAssetByPublicToken,
   createAsset, getMyAssets, listAssets, getAsset, updateAsset, deleteAsset, assignAsset, returnAsset,
   createExitRequest, listExitRequests, getExitRequest, updateExitRequest, updateExitStatus,
   toggleChecklistItem, cancelExitRequest,

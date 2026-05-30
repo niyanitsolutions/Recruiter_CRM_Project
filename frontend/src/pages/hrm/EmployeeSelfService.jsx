@@ -8,7 +8,7 @@ import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
 import {
   User, Clock, Calendar, Banknote, Plus, UserX, X,
-  Loader2, FolderOpen, Package, FileText, Download,
+  Loader2, FolderOpen, Package, FileText, Download, Eye,
   ChevronLeft, ChevronRight, History,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -789,10 +789,10 @@ function LeaveTab({ employeeId }) {
 // ── Documents Tab ─────────────────────────────────────────────────────────────
 
 const DOC_STATUS_CFG = {
-  pending:           { label: 'Pending',       color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
-  approved:          { label: 'Approved',       color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
-  rejected:          { label: 'Rejected',       color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
-  reupload_required: { label: 'Reupload Req.', color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)' },
+  pending:           { label: 'Pending',        color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
+  approved:          { label: 'Approved',        color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
+  rejected:          { label: 'Rejected',        color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+  reupload_required: { label: 'Reupload Req.',  color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)' },
 }
 
 function DocumentsTab() {
@@ -897,16 +897,30 @@ function DocumentsTab() {
               )}
             </div>
             {doc.file_url && doc.doc_id && (
-              <a
-                href={downloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-shrink-0 p-2 rounded-lg transition-colors"
-                style={{ color: 'var(--text-muted)' }}
-                title="Download"
-              >
-                <Download className="w-4 h-4" />
-              </a>
+              <div className="flex flex-col gap-1 flex-shrink-0">
+                {/* Preview link — uses static URL so no auth headers needed */}
+                <a
+                  href={doc.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-shrink-0 p-1.5 rounded-lg transition-colors"
+                  style={{ color: 'var(--text-muted)' }}
+                  title="Preview"
+                >
+                  <Eye className="w-4 h-4" />
+                </a>
+                {/* Download link with correct filename */}
+                <a
+                  href={downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-shrink-0 p-1.5 rounded-lg transition-colors"
+                  style={{ color: 'var(--text-muted)' }}
+                  title="Download"
+                >
+                  <Download className="w-4 h-4" />
+                </a>
+              </div>
             )}
           </div>
         )
@@ -920,16 +934,26 @@ function DocumentsTab() {
 function AssetsTab() {
   const [assets, setAssets]   = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
 
   useEffect(() => {
     hrmService.getMyAssets()
       .then(r => setAssets(r.data?.items || []))
-      .catch(() => {})
+      .catch(e => setError(e?.response?.data?.detail || 'Failed to load assets'))
       .finally(() => setLoading(false))
   }, [])
 
+  const fmtDate = (dt) => dt ? new Date(dt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : null
+
   if (loading) return (
     <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading…</div>
+  )
+
+  if (error) return (
+    <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+      <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
+      <p className="text-sm">{error}</p>
+    </div>
   )
 
   return (
@@ -937,30 +961,50 @@ function AssetsTab() {
       {assets.length === 0 ? (
         <div className="py-10 flex flex-col items-center gap-3" style={{ color: 'var(--text-muted)' }}>
           <Package className="w-10 h-10 opacity-30" />
-          <p className="text-sm">No assets assigned to you</p>
+          <p className="text-sm font-medium">No assets assigned to you</p>
+          <p className="text-xs opacity-70">Assets assigned by HR will appear here.</p>
         </div>
       ) : assets.map(asset => (
         <div
           key={asset.id}
-          className="flex items-center gap-3 p-3 rounded-xl"
+          className="rounded-xl p-4"
           style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)' }}
         >
-          <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: 'rgba(124,58,237,0.12)' }}
-          >
-            <Package className="w-5 h-5" style={{ color: '#7c3aed' }} />
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                 style={{ background: 'rgba(124,58,237,0.12)' }}>
+              <Package className="w-5 h-5" style={{ color: '#7c3aed' }} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 justify-between flex-wrap">
+                <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-body)' }}>
+                  {asset.brand ? `${asset.brand} ${asset.model_name || ''}`.trim() : asset.asset_tag}
+                </p>
+                <StatusBadge status={asset.status} />
+              </div>
+              <div className="mt-1 space-y-0.5">
+                <p className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>
+                  <span className="font-medium">Type:</span> {asset.asset_type?.replace(/_/g, ' ')}
+                  {asset.asset_tag && <span> · <span className="font-mono">{asset.asset_tag}</span></span>}
+                </p>
+                {asset.serial_number && (
+                  <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                    S/N: {asset.serial_number}
+                  </p>
+                )}
+                {asset.assigned_on && (
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Assigned: {fmtDate(asset.assigned_on)}
+                  </p>
+                )}
+                {asset.warranty_expiry && (
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Warranty until: {fmtDate(asset.warranty_expiry)}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate" style={{ color: 'var(--text-body)' }}>
-              {asset.brand ? `${asset.brand} ${asset.model_name || ''}` : (asset.asset_tag || 'Asset')}
-            </p>
-            <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>
-              {asset.asset_type?.replace(/_/g, ' ')}
-              {asset.asset_tag ? ` · ${asset.asset_tag}` : ''}
-            </p>
-          </div>
-          <StatusBadge status={asset.status} />
         </div>
       ))}
     </div>

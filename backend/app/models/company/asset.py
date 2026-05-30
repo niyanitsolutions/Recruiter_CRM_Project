@@ -76,6 +76,8 @@ class AssetCreate(BaseModel):
     condition: AssetCondition = AssetCondition.GOOD
     notes: Optional[str] = None
     location: Optional[str] = None
+    # public_token is auto-generated on creation
+    public_token: Optional[str] = None
 
 
 class AssetUpdate(BaseModel):

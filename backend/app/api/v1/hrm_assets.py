@@ -1,5 +1,6 @@
 """HRM — Asset Management API"""
 import re as _re
+import secrets
 from datetime import datetime, timezone
 from typing import Optional
 import uuid
@@ -31,6 +32,9 @@ async def create_asset(
         raise HTTPException(status_code=400, detail="Asset tag already exists")
 
     now = datetime.now(timezone.utc)
+    payload = data.model_dump(exclude_none=True)
+    # Auto-generate a public token for QR code (Phase 14 — no internal ID exposure)
+    payload["public_token"] = secrets.token_urlsafe(20)
     doc = {
         "_id": str(uuid.uuid4()),
         "company_id": cu["company_id"],
@@ -40,7 +44,7 @@ async def create_asset(
         "created_at": now,
         "updated_at": now,
         "is_deleted": False,
-        **data.model_dump(exclude_none=True),
+        **payload,
     }
     await db.hrm_assets.insert_one(doc)
     return _serial(doc)
@@ -239,3 +243,49 @@ async def delete_asset(
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Asset not found")
+
+
+# ── Public: QR scan — no authentication required (Phase 13 & 14) ─────────────
+
+from fastapi import Request as _Request
+from app.core.database import get_company_db as _get_any_company_db_by_id
+
+_public_router = APIRouter(prefix="/hrm/assets/public", tags=["HRM - Assets (Public)"])
+
+
+@_public_router.get("/{public_token}")
+async def get_asset_by_public_token(public_token: str):
+    """
+    Public endpoint — no authentication required.
+    Returns safe asset information for QR code scanning.
+    Searches across all tenant databases for the given public_token.
+    """
+    from app.core.database import DatabaseManager, get_master_db as _get_master
+    master = _get_master()
+    tenant_ids = await master.tenants.distinct("_id", {"is_deleted": {"$ne": True}})
+    for tid in tenant_ids:
+        try:
+            db = DatabaseManager.get_company_db(tid)
+        except Exception:
+            continue
+        doc = await db.hrm_assets.find_one(
+            {"public_token": public_token, "is_deleted": False},
+        )
+        if doc:
+            purchase_date = doc.get("purchase_date")
+            warranty_expiry = doc.get("warranty_expiry")
+            return {
+                "asset_tag":        doc.get("asset_tag"),
+                "asset_type":       doc.get("asset_type"),
+                "brand":            doc.get("brand"),
+                "model_name":       doc.get("model_name"),
+                "serial_number":    doc.get("serial_number"),
+                "status":           doc.get("status"),
+                "condition":        doc.get("condition"),
+                "location":         doc.get("location"),
+                "purchase_date":    str(purchase_date)  if purchase_date  else None,
+                "warranty_expiry":  str(warranty_expiry) if warranty_expiry else None,
+                "assigned_to_name": doc.get("assigned_to_name"),
+                "assigned_on":      doc.get("assigned_on"),
+            }
+    raise HTTPException(status_code=404, detail="Asset not found")

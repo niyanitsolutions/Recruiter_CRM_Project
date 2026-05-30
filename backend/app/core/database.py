@@ -187,6 +187,33 @@ class DatabaseManager:
                 {"keys": [("is_deleted", 1), ("status", 1)]},
                 {"keys": [("employee_id", 1)], "sparse": True},
             ],
+            "hrm_employees": [
+                {"keys": [("is_deleted", 1)]},
+                {"keys": [("is_deleted", 1), ("status", 1)]},
+                {"keys": [("company_id", 1), ("is_deleted", 1)]},
+                {"keys": [("email", 1), ("company_id", 1)], "sparse": True},
+                {"keys": [("employee_id", 1), ("company_id", 1)], "sparse": True},
+            ],
+            "hrm_assets": [
+                {"keys": [("is_deleted", 1)]},
+                {"keys": [("company_id", 1), ("is_deleted", 1)]},
+                {"keys": [("company_id", 1), ("status", 1), ("is_deleted", 1)]},
+                {"keys": [("asset_tag", 1), ("company_id", 1)], "unique": True, "sparse": True},
+                {"keys": [("assigned_to_id", 1), ("company_id", 1)], "sparse": True},
+                {"keys": [("public_token", 1)], "unique": True, "sparse": True},
+            ],
+            "hrm_exit": [
+                {"keys": [("is_deleted", 1)]},
+                {"keys": [("company_id", 1), ("is_deleted", 1)]},
+                {"keys": [("company_id", 1), ("status", 1), ("is_deleted", 1)]},
+                {"keys": [("employee_id", 1), ("company_id", 1), ("is_deleted", 1)]},
+            ],
+            "hrm_doc_upload_tokens": [
+                {"keys": [("token", 1)], "unique": True, "sparse": True},
+                {"keys": [("company_id", 1), ("employee_id", 1)]},
+                {"keys": [("company_id", 1), ("status", 1)]},
+                {"keys": [("expires_at", 1)], "sparse": True},
+            ],
             "attendance": [
                 {"keys": [("employee_id", 1), ("date", -1)]},
                 {"keys": [("date", -1)]},

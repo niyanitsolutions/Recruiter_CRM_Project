@@ -115,10 +115,13 @@ async def list_upload_tokens(
 
     total = await db.hrm_doc_upload_tokens.count_documents(query)
     skip = (page - 1) * page_size
-    cursor = db.hrm_doc_upload_tokens.find(query, {"token": 0}).sort("created_at", -1).skip(skip).limit(page_size)
+    cursor = db.hrm_doc_upload_tokens.find(query).sort("created_at", -1).skip(skip).limit(page_size)
     items = await cursor.to_list(page_size)
     for item in items:
         item["id"] = item.pop("_id")
+        # Only expose the token value if the link is active (for copy functionality)
+        if item.get("status") != "active":
+            item.pop("token", None)
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
