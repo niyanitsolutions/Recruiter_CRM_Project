@@ -260,7 +260,13 @@ export default function DocumentGenerator() {
 
   // ── Load template, then fetch form fields by doc_type ──
   useEffect(() => {
-    if (!selectedTemplateId) { setLoading(false); return }
+    // Guard: reject falsy AND the literal string "undefined" (happens when template.id
+    // was the JS primitive undefined and was interpolated into a URL template literal)
+    if (!selectedTemplateId || selectedTemplateId === 'undefined') {
+      setLoading(false)
+      if (selectedTemplateId === 'undefined') setError('Invalid template link — please select a template from the list.')
+      return
+    }
     setLoading(true)
     setError(null)
     hrmService.getDocumentTemplate(selectedTemplateId)
@@ -467,7 +473,7 @@ export default function DocumentGenerator() {
                       key={t.id}
                       data-template-card
                       data-name={t.name}
-                      onClick={() => setSelectedTemplateId(t.id)}
+                      onClick={() => t.id && setSelectedTemplateId(t.id)}
                       className="text-left p-5 rounded-2xl border-2 transition-all hover:shadow-lg hover:-translate-y-0.5 group"
                       style={{ background: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
                       onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-blue)'}

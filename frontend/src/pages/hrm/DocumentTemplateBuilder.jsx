@@ -1975,6 +1975,7 @@ export default function DocumentTemplateBuilder() {
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (isNew) return
+    if (!id || id === 'undefined') { navigate('/hrm/doc-templates', { replace: true }); return }
     const savedDraft = localStorage.getItem(DRAFT_KEY)
     if (savedDraft) {
       try {

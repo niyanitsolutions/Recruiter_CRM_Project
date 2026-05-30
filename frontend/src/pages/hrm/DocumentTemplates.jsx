@@ -616,12 +616,21 @@ export default function DocumentTemplates() {
   }
 
   const handleGenerate = (template) => {
+    if (!template?.id) { console.error('[DOC_TMPL] handleGenerate called with missing template.id', template); return }
     pushRecent(template)
     navigate(`/hrm/doc-generator?template=${template.id}`)
   }
 
-  const handleEdit    = (template, tab) => navigate(`/hrm/doc-builder/${template.id}${tab ? `?tab=${tab}` : ''}`)
-  const handlePreview = (template) => { pushRecent(template); navigate(`/hrm/doc-generator?template=${template.id}&preview=1`) }
+  const handleEdit = (template, tab) => {
+    if (!template?.id) { console.error('[DOC_TMPL] handleEdit called with missing template.id', template); return }
+    navigate(`/hrm/doc-builder/${template.id}${tab ? `?tab=${tab}` : ''}`)
+  }
+
+  const handlePreview = (template) => {
+    if (!template?.id) { console.error('[DOC_TMPL] handlePreview called with missing template.id', template); return }
+    pushRecent(template)
+    navigate(`/hrm/doc-generator?template=${template.id}&preview=1`)
+  }
 
   // Recently-used cross-referenced with current template list
   const recentTemplates = React.useMemo(() => {
