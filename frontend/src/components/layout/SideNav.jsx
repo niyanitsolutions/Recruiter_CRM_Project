@@ -12,6 +12,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Target,
   Briefcase,
   History,
@@ -34,12 +35,12 @@ import {
   UserCog,
   Clock,
   PersonStanding,
-  GitBranch,
   FolderOpen,
   Package,
   DoorOpen,
   LayoutGrid,
   ArrowLeftRight,
+  Layers,
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType } from '../../store/authSlice'
@@ -106,18 +107,18 @@ const PERMISSION_NAV_MAP = [
   // Employee Self-Service
   { permissions: ['hrm:attendance:self', 'hrm:leave:apply', 'hrm:payroll:view_self'],
     path: '/hrm/ess',                  icon: LayoutGrid,      label: 'My Portal',       section: 'HRM', hrmOnly: true },
-  // Org Chart
-  { permissions: ['hrm:employees:view', 'hrm:employees:manage'],
-    path: '/hrm/org-chart',            icon: GitBranch,       label: 'Org Chart',       section: 'HRM', hrmOnly: true },
-  // Document Vault
-  { permissions: ['hrm:documents:manage', 'hrm:employees:view'],
-    path: '/hrm/documents',            icon: FolderOpen,      label: 'Document Vault',  section: 'HRM', hrmOnly: true },
-  // Asset Management
-  { permissions: ['hrm:assets:view', 'hrm:assets:manage'],
-    path: '/hrm/assets',               icon: Package,         label: 'Assets',          section: 'HRM', hrmOnly: true },
-  // Exit Management
-  { permissions: ['hrm:exit:manage', 'hrm:exit:view'],
-    path: '/hrm/exit',                 icon: DoorOpen,        label: 'Exit Management', section: 'HRM', hrmOnly: true },
+  // Emp Resources group (Documents, Assets, Exit)
+  { permissions: ['hrm:documents:manage', 'hrm:employees:view', 'hrm:assets:view', 'hrm:assets:manage', 'hrm:exit:manage', 'hrm:exit:view'],
+    path: '/hrm/emp-resources',        icon: Layers,          label: 'Emp Resources',   section: 'HRM', hrmOnly: true, isGroup: true,
+    children: [
+      { permissions: ['hrm:documents:manage', 'hrm:employees:view'],
+        path: '/hrm/documents', icon: FolderOpen, label: 'Documents' },
+      { permissions: ['hrm:assets:view', 'hrm:assets:manage'],
+        path: '/hrm/assets', icon: Package, label: 'Assets' },
+      { permissions: ['hrm:exit:manage', 'hrm:exit:view'],
+        path: '/hrm/exit', icon: DoorOpen, label: 'Exit Management', badge: 'pendingExits' },
+    ],
+  },
   // User ↔ Employee Sync
   { permissions: ['hrm:employees:manage'],
     path: '/hrm/sync',                 icon: ArrowLeftRight,  label: 'User Sync',       section: 'HRM', hrmOnly: true },
@@ -142,7 +143,21 @@ const buildPermissionMenu = (permissions, isOwner = false, isAdmin = false, user
     if (item.path === '/hrm/ess') {
       if (!MY_PORTAL_ALLOWED_ROLES.includes(userRole) || userType === 'partner') continue
     } else if (!isOwner && !isAdmin && !item.permissions.some(p => perms.has(p))) continue
+
     if (!sectionMap[item.section]) sectionMap[item.section] = []
+
+    // For group items, filter children by permissions too
+    if (item.isGroup && item.children) {
+      const allowedChildren = isOwner || isAdmin
+        ? item.children
+        : item.children.filter(c => c.permissions.some(p => perms.has(p)))
+      if (allowedChildren.length === 0) continue
+      const groupItem = { ...item, children: allowedChildren }
+      const isDuplicate = sectionMap[item.section].some(i => i.path === item.path)
+      if (!isDuplicate) sectionMap[item.section].push(groupItem)
+      continue
+    }
+
     const isDuplicate = sectionMap[item.section].some(
       (i) => i.path === item.path && JSON.stringify(i.query || {}) === JSON.stringify(item.query || {})
     )
@@ -165,11 +180,38 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
   const location     = useLocation()
   const [unreadCount, setUnreadCount] = useState(0)
   const [hrmBadges, setHrmBadges]     = useState({ pendingLeaves: 0, pendingExits: 0 })
+  // Track which collapsible groups are open (keyed by group path)
+  const [openGroups, setOpenGroups]   = useState(() => {
+    try { return JSON.parse(localStorage.getItem('nav_open_groups') || '{}') } catch { return {} }
+  })
 
   // Close mobile nav on route change
   useEffect(() => {
     if (mobileOpen && onMobileClose) onMobileClose()
   }, [location.pathname])
+
+  // Auto-expand groups when a child route is active
+  useEffect(() => {
+    const groupItems = PERMISSION_NAV_MAP.filter(i => i.isGroup && i.children)
+    for (const g of groupItems) {
+      const childActive = g.children.some(c => location.pathname.startsWith(c.path))
+      if (childActive && !openGroups[g.path]) {
+        setOpenGroups(prev => {
+          const next = { ...prev, [g.path]: true }
+          try { localStorage.setItem('nav_open_groups', JSON.stringify(next)) } catch {}
+          return next
+        })
+      }
+    }
+  }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleGroup = (path) => {
+    setOpenGroups(prev => {
+      const next = { ...prev, [path]: !prev[path] }
+      try { localStorage.setItem('nav_open_groups', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
 
   // Poll unread notification count every 60s
   useEffect(() => {
@@ -283,14 +325,14 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
   const { flat, sections } = getMenuSections()
 
   // ── Shared nav-link renderers ─────────────────────────────────────────────
-  const getBadgeCount = (path) => {
-    if (path === '/hrm/leaves') return hrmBadges.pendingLeaves
-    if (path === '/hrm/exit')   return hrmBadges.pendingExits
+  const getBadgeCount = (path, badgeKey) => {
+    if (path === '/hrm/leaves' || badgeKey === 'pendingLeaves') return hrmBadges.pendingLeaves
+    if (path === '/hrm/exit'   || badgeKey === 'pendingExits')  return hrmBadges.pendingExits
     return 0
   }
 
   const NavItem = ({ item }) => {
-    const badge = getBadgeCount(item.path)
+    const badge = getBadgeCount(item.path, item.badge)
     return (
       <li>
         <NavLink
@@ -321,6 +363,92 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
           )}
         </NavLink>
       </li>
+    )
+  }
+
+  /** Collapsible group item with nested child links */
+  const GroupNavItem = ({ item }) => {
+    const isOpen = !!openGroups[item.path]
+    const anyChildActive = item.children?.some(c => location.pathname.startsWith(c.path))
+    const totalBadge = item.children?.reduce((sum, c) => sum + getBadgeCount(c.path, c.badge), 0) || 0
+
+    return (
+      <>
+        <li>
+          <button
+            onClick={() => toggleGroup(item.path)}
+            title={isCollapsed ? item.label : undefined}
+            className={clsx(
+              'nav-item w-full text-left',
+              anyChildActive && 'nav-item-active',
+              isCollapsed && 'justify-center px-3'
+            )}
+          >
+            <span className="relative flex-shrink-0">
+              <item.icon className="w-5 h-5" />
+              {totalBadge > 0 && isCollapsed && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
+                  {totalBadge > 99 ? '99+' : totalBadge}
+                </span>
+              )}
+            </span>
+            {!isCollapsed && (
+              <>
+                <span className="flex items-center gap-2 flex-1">
+                  {item.label}
+                  {totalBadge > 0 && (
+                    <span className="ml-auto min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                      {totalBadge > 99 ? '99+' : totalBadge}
+                    </span>
+                  )}
+                </span>
+                <ChevronDown
+                  className={clsx('w-4 h-4 flex-shrink-0 transition-transform duration-200', isOpen && 'rotate-180')}
+                  style={{ color: 'var(--text-muted)' }}
+                />
+              </>
+            )}
+          </button>
+        </li>
+        {/* Children — shown when expanded (or always in collapsed mode as tooltips) */}
+        {(isOpen || isCollapsed) && item.children?.map(child => {
+          const childBadge = getBadgeCount(child.path, child.badge)
+          return (
+            <li key={child.path}>
+              <NavLink
+                to={child.path}
+                title={isCollapsed ? child.label : undefined}
+                className={({ isActive }) =>
+                  clsx(
+                    'nav-item',
+                    isActive && 'nav-item-active',
+                    isCollapsed ? 'justify-center px-3' : 'pl-8'
+                  )
+                }
+              >
+                <span className="relative flex-shrink-0">
+                  <child.icon className="w-4 h-4" />
+                  {childBadge > 0 && isCollapsed && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
+                      {childBadge > 99 ? '99+' : childBadge}
+                    </span>
+                  )}
+                </span>
+                {!isCollapsed && (
+                  <span className="flex items-center gap-2 flex-1 text-sm">
+                    {child.label}
+                    {childBadge > 0 && (
+                      <span className="ml-auto min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                        {childBadge > 99 ? '99+' : childBadge}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </NavLink>
+            </li>
+          )
+        })}
+      </>
     )
   }
 
@@ -461,9 +589,11 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
             )}
             <ul className="space-y-1 px-3">
               {sec.items.map((item) =>
-                item.query
-                  ? <QueryNavItem key={item.path + JSON.stringify(item.query)} path={item.path} query={item.query} icon={item.icon} label={item.label} />
-                  : <NavItem key={item.path} item={item} />
+                item.isGroup
+                  ? <GroupNavItem key={item.path} item={item} />
+                  : item.query
+                    ? <QueryNavItem key={item.path + JSON.stringify(item.query)} path={item.path} query={item.query} icon={item.icon} label={item.label} />
+                    : <NavItem key={item.path} item={item} />
               )}
             </ul>
           </div>

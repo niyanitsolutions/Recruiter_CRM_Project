@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react'
 import {
   Package, Plus, Search, Loader2, AlertCircle, X, Edit2, Trash2,
   UserCheck, RotateCcw, Monitor, Smartphone, Mouse, Keyboard, Headphones,
-  CheckCircle, Clock, Wrench, AlertTriangle,
+  CheckCircle, Clock, Wrench, AlertTriangle, History, ArrowRight, QrCode, Download,
 } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
 
@@ -194,7 +195,7 @@ function AssignModal({ asset, onClose, onAssigned }) {
                 key={emp._id || emp.id}
                 onClick={() => setSelected(emp)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 text-left transition-colors
-                  ${selected?.(_id || id) === (emp._id || emp.id) ? 'bg-indigo-50' : ''}`}
+                  ${selected && (selected._id || selected.id) === (emp._id || emp.id) ? 'bg-indigo-50' : ''}`}
               >
                 <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-semibold text-xs flex-shrink-0">
                   {emp.full_name?.charAt(0)}
@@ -225,9 +226,196 @@ function AssignModal({ asset, onClose, onAssigned }) {
   )
 }
 
+// ── Asset QR Code Modal ───────────────────────────────────────────────────────
+
+function AssetQRModal({ asset, onClose }) {
+  const assetUrl = `${window.location.origin}/hrm/assets/scan/${asset.id}`
+
+  const handleDownload = () => {
+    const svg = document.getElementById('asset-qr-svg')
+    if (!svg) return
+    const svgData = new XMLSerializer().serializeToString(svg)
+    const canvas = document.createElement('canvas')
+    canvas.width = 300; canvas.height = 300
+    const ctx = canvas.getContext('2d')
+    const img = new window.Image()
+    img.onload = () => {
+      ctx.fillStyle = 'white'
+      ctx.fillRect(0, 0, 300, 300)
+      ctx.drawImage(img, 0, 0, 300, 300)
+      const a = document.createElement('a')
+      a.download = `${asset.asset_tag}-QR.png`
+      a.href = canvas.toDataURL('image/png')
+      a.click()
+    }
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)))
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between p-5 border-b">
+          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <QrCode className="w-4 h-4 text-indigo-600" />
+            Asset QR Code
+          </h3>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="p-6 flex flex-col items-center gap-4">
+          <div className="p-3 border-2 border-gray-100 rounded-xl">
+            <QRCodeSVG
+              id="asset-qr-svg"
+              value={assetUrl}
+              size={220}
+              level="M"
+              includeMargin
+            />
+          </div>
+          <div className="text-center">
+            <p className="font-bold text-gray-900">{asset.asset_tag}</p>
+            <p className="text-sm text-gray-500 capitalize">{asset.asset_type} {asset.brand ? `· ${asset.brand}` : ''}</p>
+            {asset.serial_number && <p className="text-xs text-gray-400 font-mono mt-0.5">S/N: {asset.serial_number}</p>}
+          </div>
+          <div className="text-xs text-gray-400 text-center bg-gray-50 rounded-lg px-3 py-2 w-full truncate">
+            {assetUrl}
+          </div>
+          <button onClick={handleDownload}
+            className="btn-primary w-full flex items-center justify-center gap-2">
+            <Download className="w-4 h-4" /> Download QR PNG
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Asset History & Timeline Modal ────────────────────────────────────────────
+
+const TIMELINE_EVENTS = {
+  assigned:    { color: '#6366f1', bg: '#eef2ff', label: 'Assigned' },
+  returned:    { color: '#10b981', bg: '#d1fae5', label: 'Returned' },
+  maintenance: { color: '#f59e0b', bg: '#fef3c7', label: 'Maintenance' },
+  retired:     { color: '#94a3b8', bg: '#f1f5f9', label: 'Retired' },
+  lost:        { color: '#ef4444', bg: '#fee2e2', label: 'Lost' },
+  created:     { color: '#8b5cf6', bg: '#ede9fe', label: 'Created' },
+}
+
+function AssetHistoryModal({ asset, onClose }) {
+  const history = asset.assignment_history || []
+
+  // Build timeline entries from history
+  const entries = []
+
+  // Created entry
+  entries.push({
+    type: 'created',
+    date: asset.created_at,
+    label: 'Asset Created',
+    note: `Status: ${asset.status === 'available' && history.length === 0 ? 'Available' : 'Created'}`,
+  })
+
+  // Assignment history entries
+  for (const h of history) {
+    entries.push({
+      type: 'assigned',
+      date: h.assigned_on,
+      label: `Assigned to ${h.employee_name}`,
+      note: h.notes || '',
+    })
+    if (h.returned_on) {
+      entries.push({
+        type: 'returned',
+        date: h.returned_on,
+        label: `Returned by ${h.employee_name}`,
+        note: h.condition_on_return ? `Condition: ${h.condition_on_return}` : h.notes || '',
+      })
+    }
+  }
+
+  // Current status if not returned
+  if (asset.status === 'maintenance') {
+    entries.push({ type: 'maintenance', date: asset.updated_at, label: 'Sent to Maintenance' })
+  } else if (asset.status === 'retired') {
+    entries.push({ type: 'retired', date: asset.updated_at, label: 'Retired' })
+  } else if (asset.status === 'lost') {
+    entries.push({ type: 'lost', date: asset.updated_at, label: 'Marked as Lost' })
+  }
+
+  // Sort by date
+  entries.sort((a, b) => new Date(a.date) - new Date(b.date))
+
+  const fmt = (dt) => dt ? new Date(dt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b sticky top-0 bg-white rounded-t-2xl">
+          <div>
+            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+              <History className="w-4 h-4 text-indigo-600" />
+              Asset Timeline
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">{asset.asset_tag} · {asset.brand} {asset.model_name}</p>
+          </div>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          {entries.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">No history available.</p>
+          ) : (
+            <div className="relative">
+              {/* Vertical line */}
+              <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gray-100" />
+              <div className="space-y-4">
+                {entries.map((e, i) => {
+                  const cfg = TIMELINE_EVENTS[e.type] || TIMELINE_EVENTS.created
+                  return (
+                    <div key={i} className="relative flex gap-4 pl-14">
+                      {/* Circle */}
+                      <div
+                        className="absolute left-2.5 w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 border-2 border-white shadow-sm"
+                        style={{ background: cfg.color, top: '2px' }}
+                      />
+                      <div className="flex-1 pb-4 border-b border-gray-50 last:border-0">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-gray-800">{e.label}</span>
+                          <span className="text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0"
+                                style={{ background: cfg.bg, color: cfg.color }}>
+                            {cfg.label}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">{fmt(e.date)}</p>
+                        {e.note && <p className="text-xs text-gray-500 mt-1">{e.note}</p>}
+                      </div>
+                    </div>
+                  )
+                })}
+                {/* Current state dot */}
+                <div className="relative flex gap-4 pl-14">
+                  <div className="absolute left-2.5 w-5 h-5 rounded-full border-4 border-indigo-500 bg-white flex-shrink-0"
+                       style={{ top: '2px' }} />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-indigo-700">Current: {asset.status}</span>
+                    {asset.status === 'assigned' && asset.assigned_to_name && (
+                      <p className="text-xs text-gray-500 mt-0.5">Assigned to {asset.assigned_to_name}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AssetCard({ asset, onEdit, onDelete, onAssign, onReturn, onRefresh }) {
   const StatusIcon = STATUS_ICON[asset.status] || Package
   const [returning, setReturning] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [showQR, setShowQR] = useState(false)
 
   const handleReturn = async () => {
     if (!confirm('Mark asset as returned?')) return
@@ -299,11 +487,22 @@ function AssetCard({ asset, onEdit, onDelete, onAssign, onReturn, onRefresh }) {
             {returning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />} Return
           </button>
         )}
+        <button onClick={() => setShowHistory(true)}
+          className="p-1.5 text-indigo-400 hover:bg-indigo-50 rounded-lg transition-colors" title="View History">
+          <History className="w-3.5 h-3.5" />
+        </button>
+        <button onClick={() => setShowQR(true)}
+          className="p-1.5 text-purple-400 hover:bg-purple-50 rounded-lg transition-colors" title="QR Code">
+          <QrCode className="w-3.5 h-3.5" />
+        </button>
         <button onClick={handleDelete}
           className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {showHistory && <AssetHistoryModal asset={asset} onClose={() => setShowHistory(false)} />}
+      {showQR && <AssetQRModal asset={asset} onClose={() => setShowQR(false)} />}
     </div>
   )
 }

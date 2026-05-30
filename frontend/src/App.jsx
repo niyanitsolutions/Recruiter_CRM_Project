@@ -143,6 +143,8 @@ const HRInterviews       = lazy(() => import('./pages/hrm/hiring/HRInterviews'))
 const HROnboarding       = lazy(() => import('./pages/hrm/hiring/HROnboarding'))
 const EmployeeSelfService = lazy(() => import('./pages/hrm/EmployeeSelfService'))
 const OrgChart           = lazy(() => import('./pages/hrm/OrgChart'))
+const EmployeeDocUpload  = lazy(() => import('./pages/hrm/EmployeeDocUpload'))
+const AssetScanPage      = lazy(() => import('./pages/hrm/AssetScanPage'))
 const DocumentVault      = lazy(() => import('./pages/hrm/DocumentVault'))
 const AssetManagement    = lazy(() => import('./pages/hrm/AssetManagement'))
 const ExitManagement     = lazy(() => import('./pages/hrm/ExitManagement'))
@@ -889,6 +891,9 @@ function App() {
       {/* Candidate self-registration via form link — public, no auth */}
       <Route path="/apply/:token" element={<CandidatePublicForm />} />
 
+      {/* Employee secure document upload — public, no auth */}
+      <Route path="/document-upload/:token" element={<EmployeeDocUpload />} />
+
       {/* Email verification — public, uses AuthLayout for consistent design */}
       <Route element={<AuthLayout />}>
         <Route path="/verify-email" element={<VerifyEmail />} />
@@ -1160,9 +1165,10 @@ function App() {
         <Route path="/hrm/hiring/interviews"   element={<PermissionRoute permission="hrm:hiring:view"><HRInterviews /></PermissionRoute>} />
         <Route path="/hrm/hiring/onboarding"   element={<PermissionRoute permission="hrm:hiring:view"><HROnboarding /></PermissionRoute>} />
         <Route path="/hrm/ess"                 element={<PermissionRoute allowedRoles={MY_PORTAL_ALLOWED_ROLES}><EmployeeSelfService /></PermissionRoute>} />
-        <Route path="/hrm/org-chart"           element={<PermissionRoute permission="hrm:employees:view"><OrgChart /></PermissionRoute>} />
+        <Route path="/hrm/emp-resources"        element={<Navigate to="/hrm/documents" replace />} />
         <Route path="/hrm/documents"           element={<PermissionRoute permission="hrm:employees:view"><DocumentVault /></PermissionRoute>} />
         <Route path="/hrm/assets"              element={<PermissionRoute permission="hrm:assets:view"><AssetManagement /></PermissionRoute>} />
+        <Route path="/hrm/assets/scan/:assetId" element={<AssetScanPage />} />
         <Route path="/hrm/exit"                element={<PermissionRoute permission="hrm:exit:manage"><ExitManagement /></PermissionRoute>} />
         <Route path="/hrm/sync"                element={<PermissionRoute permission="hrm:employees:manage"><HRMSyncPanel /></PermissionRoute>} />
         <Route path="/hrm/doc-templates"       element={<PermissionRoute permission="hrm:doc_templates:view"><HRMDocumentTemplates /></PermissionRoute>} />

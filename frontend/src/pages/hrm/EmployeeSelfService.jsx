@@ -788,68 +788,117 @@ function LeaveTab({ employeeId }) {
 
 // ── Documents Tab ─────────────────────────────────────────────────────────────
 
+const DOC_STATUS_CFG = {
+  pending:           { label: 'Pending',       color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
+  approved:          { label: 'Approved',       color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
+  rejected:          { label: 'Rejected',       color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+  reupload_required: { label: 'Reupload Req.', color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)' },
+}
+
 function DocumentsTab() {
-  const [docs, setDocs]     = useState([])
+  const [result, setResult]   = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
 
   useEffect(() => {
     hrmService.getMyDocuments()
-      .then(r => setDocs(r.data?.documents || []))
-      .catch(() => {})
+      .then(r => setResult(r.data))
+      .catch(e => setError(e?.response?.data?.detail || 'Failed to load documents'))
       .finally(() => setLoading(false))
   }, [])
 
-  const DOC_ICONS = {
-    pdf:  { bg: 'rgba(255,71,87,0.12)',  color: '#FF4757' },
-    image:{ bg: 'rgba(79,172,254,0.12)', color: '#4FACFE' },
-    doc:  { bg: 'rgba(67,233,123,0.12)', color: '#43E97B' },
-  }
-
-  const docIconType = (url = '') => {
-    const ext = url.split('.').pop()?.toLowerCase()
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return 'image'
-    if (ext === 'pdf') return 'pdf'
-    return 'doc'
+  const docIconCfg = (url = '') => {
+    const ext = (url.split('.').pop() || '').toLowerCase()
+    if (['jpg','jpeg','png','gif','webp'].includes(ext)) return { bg: 'rgba(79,172,254,0.12)', color: '#4FACFE' }
+    if (ext === 'pdf') return { bg: 'rgba(255,71,87,0.12)', color: '#FF4757' }
+    return { bg: 'rgba(67,233,123,0.12)', color: '#43E97B' }
   }
 
   if (loading) return (
     <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading…</div>
   )
 
+  if (error) return (
+    <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+      <FolderOpen className="w-8 h-8 mx-auto mb-2 opacity-30" />
+      <p className="text-sm">{error}</p>
+    </div>
+  )
+
+  const docs = result?.documents || []
+  const empId = result?.employee_id
+  const message = result?.message
+
+  if (!empId || message?.includes('No employee profile')) {
+    return (
+      <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+        <FolderOpen className="w-10 h-10 mx-auto mb-3 opacity-30" />
+        <p className="text-sm font-medium">No employee profile linked</p>
+        <p className="text-xs mt-1 opacity-70">Ask your HR administrator to link your account to an employee record.</p>
+      </div>
+    )
+  }
+
   return (
     <div className="p-6 space-y-3">
       {docs.length === 0 ? (
         <div className="py-10 flex flex-col items-center gap-3" style={{ color: 'var(--text-muted)' }}>
           <FolderOpen className="w-10 h-10 opacity-30" />
-          <p className="text-sm">No documents uploaded yet</p>
+          <p className="text-sm">No documents uploaded yet.</p>
+          <p className="text-xs opacity-70">Your HR team will upload your documents here.</p>
         </div>
-      ) : docs.map((doc, idx) => {
-        const iconType = docIconType(doc.file_url)
-        const cfg = DOC_ICONS[iconType]
+      ) : docs.map((doc) => {
+        const cfg = docIconCfg(doc.file_url)
+        const statusCfg = DOC_STATUS_CFG[doc.status] || DOC_STATUS_CFG.pending
+        const downloadUrl = hrmService.getDocumentServeUrl(empId, doc.doc_id, true)
         return (
           <div
-            key={idx}
-            className="flex items-center gap-3 p-3 rounded-xl"
+            key={doc.doc_id || doc.doc_type}
+            className="flex items-start gap-3 p-3 rounded-xl"
             style={{ background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)' }}
           >
             <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+              className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
               style={{ background: cfg.bg }}
             >
               <FileText className="w-5 h-5" style={{ color: cfg.color }} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate" style={{ color: 'var(--text-body)' }}>
-                {doc.doc_name || 'Document'}
-              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-medium truncate" style={{ color: 'var(--text-body)' }}>
+                  {doc.doc_name || 'Document'}
+                </p>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                      style={{ background: statusCfg.bg, color: statusCfg.color }}>
+                  {statusCfg.label}
+                </span>
+                {doc.version > 1 && (
+                  <span className="text-[9px] text-gray-400 font-mono">v{doc.version}</span>
+                )}
+              </div>
               <p className="text-xs capitalize mt-0.5" style={{ color: 'var(--text-muted)' }}>
                 {doc.doc_type?.replace(/_/g, ' ')}
                 {doc.uploaded_at ? ` · ${new Date(doc.uploaded_at).toLocaleDateString('en-IN')}` : ''}
               </p>
+              {doc.status === 'rejected' && doc.rejection_reason && (
+                <p className="text-xs mt-1 font-medium" style={{ color: '#ef4444' }}>
+                  Reason: {doc.rejection_reason}
+                </p>
+              )}
+              {doc.status === 'reupload_required' && doc.rejection_reason && (
+                <p className="text-xs mt-1 font-medium" style={{ color: '#8b5cf6' }}>
+                  Action needed: {doc.rejection_reason}
+                </p>
+              )}
+              {doc.comments && (
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  Note: {doc.comments}
+                </p>
+              )}
             </div>
-            {doc.file_url && (
+            {doc.file_url && doc.doc_id && (
               <a
-                href={doc.file_url}
+                href={downloadUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-shrink-0 p-2 rounded-lg transition-colors"

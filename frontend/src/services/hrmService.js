@@ -103,16 +103,44 @@ const uploadDocument = (employeeId, formData) =>
   api.post(`${BASE}/documents/upload/${employeeId}`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
+const multiUploadDocuments = (employeeId, formData) =>
+  api.post(`${BASE}/documents/multi-upload/${employeeId}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  })
 const getDocuments = (employeeId) => api.get(`${BASE}/documents/${employeeId}`)
 const getMyDocuments = () => api.get(`${BASE}/documents/me`)
 const getAllDocuments = (params) => api.get(`${BASE}/documents/all`, { params })
-const deleteDocument = (employeeId, docIndex) =>
-  api.delete(`${BASE}/documents/${employeeId}/${docIndex}`)
-const updateDocumentMeta = (employeeId, docIndex, data) =>
-  api.patch(`${BASE}/documents/${employeeId}/${docIndex}`, data)
+const getEmployeeDocumentCounts = (params) => api.get(`${BASE}/documents/employee-counts`, { params })
+const deleteDocument = (employeeId, docId) =>
+  api.delete(`${BASE}/documents/${employeeId}/${docId}`)
+const updateDocumentMeta = (employeeId, docId, data) =>
+  api.patch(`${BASE}/documents/${employeeId}/${docId}/meta`, data)
+const updateDocumentStatus = (employeeId, docId, data) =>
+  api.patch(`${BASE}/documents/${employeeId}/${docId}/status`, data)
+const getDocumentServeUrl = (employeeId, docId, download = false) => {
+  const base = `${import.meta.env.VITE_API_URL || '/api/v1'}/hrm/documents/serve/${employeeId}/${docId}`
+  const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token') || ''
+  const params = new URLSearchParams()
+  if (token) params.set('token', token)
+  if (download) params.set('download', 'true')
+  return params.toString() ? `${base}?${params}` : base
+}
 
 // ── Org Chart ──────────────────────────────────────────────────────────────
 const getOrgChart = () => api.get(`${BASE}/employees/org-chart/tree`)
+
+// ── Doc Upload Tokens ──────────────────────────────────────────────────────
+const generateDocUploadToken = (data) => api.post(`${BASE}/doc-upload-tokens`, data)
+const listDocUploadTokens = (params) => api.get(`${BASE}/doc-upload-tokens`, { params })
+const reactivateDocUploadToken = (id, data) => api.post(`${BASE}/doc-upload-tokens/${id}/reactivate`, data)
+const revokeDocUploadToken = (id) => api.delete(`${BASE}/doc-upload-tokens/${id}`)
+const validateDocUploadToken = (token) => api.get(`${BASE}/doc-upload-tokens/validate/${token}`)
+const uploadViaToken = (token, formData) =>
+  api.post(`${BASE}/doc-upload-tokens/upload/${token}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  })
 
 // ── Assets ─────────────────────────────────────────────────────────────────
 const createAsset = (data) => api.post(`${BASE}/assets`, data)
@@ -228,11 +256,14 @@ const hrmService = {
   createHiringCandidate, listHiringCandidates, getHiringCandidate, updateHiringCandidate,
   createInterview, listInterviews, submitInterviewFeedback,
   createOnboarding, listOnboardings, getOnboarding, updateOnboarding, completeOnboarding,
-  uploadDocument, getDocuments, getMyDocuments, getAllDocuments, deleteDocument, updateDocumentMeta,
+  uploadDocument, multiUploadDocuments, getDocuments, getMyDocuments, getAllDocuments,
+  getEmployeeDocumentCounts, deleteDocument, updateDocumentMeta, updateDocumentStatus, getDocumentServeUrl,
   getAnnouncements,
   getSyncStatus, getSyncUnlinkedPreview, getUnlinkedUsers, getUnlinkedEmployees,
   syncEmployeeToUser, syncUserToEmployee, linkUserEmployee, unlinkUserEmployee,
   getOrgChart,
+  generateDocUploadToken, listDocUploadTokens, reactivateDocUploadToken, revokeDocUploadToken,
+  validateDocUploadToken, uploadViaToken,
   createAsset, getMyAssets, listAssets, getAsset, updateAsset, deleteAsset, assignAsset, returnAsset,
   createExitRequest, listExitRequests, getExitRequest, updateExitRequest, updateExitStatus,
   toggleChecklistItem, cancelExitRequest,

@@ -11,14 +11,14 @@ from app.models.company.exit_management import ExitCreate, ExitUpdate, ExitStatu
 router = APIRouter(prefix="/hrm/exit", tags=["HRM - Exit Management"])
 
 DEFAULT_CHECKLIST = [
-    "Return company assets (laptop, phone, access cards)",
-    "Handover pending tasks and documentation",
-    "IT access revocation",
-    "Email handover / auto-reply setup",
-    "Finance clearance (salary, reimbursements)",
-    "PF/Gratuity processing",
-    "Experience letter / relieving letter issued",
-    "Exit interview completed",
+    "Notice Period Completion",
+    "Manager Approval & Task Handover",
+    "Asset Return (laptop, phone, access cards)",
+    "Document Clearance",
+    "Exit Interview",
+    "Final Settlement (salary, reimbursements)",
+    "HR Approval & Relieving Letter",
+    "IT Access Revocation",
 ]
 
 

@@ -223,6 +223,15 @@ function ExitCard({ exit: ex, onRefresh }) {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <StatusBadge status={ex.status} />
+          {totalItems > 0 && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-14 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                <div className="h-1.5 rounded-full bg-indigo-400"
+                     style={{ width: `${(completedItems / totalItems) * 100}%` }} />
+              </div>
+              <span className="text-[10px] text-gray-400">{Math.round((completedItems / totalItems) * 100)}%</span>
+            </div>
+          )}
           {expanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
         </div>
       </div>
@@ -256,29 +265,52 @@ function ExitCard({ exit: ex, onRefresh }) {
             {ex.detailed_reason && <p className="text-xs text-gray-500 mt-1">{ex.detailed_reason}</p>}
           </div>
 
-          {/* Checklist */}
+          {/* Checklist with progress */}
           {ex.checklist?.length > 0 && (
-            <div className="bg-white rounded-xl p-3 border border-gray-100">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-gray-600">Exit Checklist</p>
-                <span className="text-xs text-gray-400">{completedItems}/{totalItems} done</span>
+            <div className="bg-white rounded-xl p-4 border border-gray-100">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-gray-700">Exit Checklist</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">{completedItems}/{totalItems}</span>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                        style={{
+                          background: completedItems === totalItems ? '#d1fae5' : completedItems > 0 ? '#fef3c7' : '#f1f5f9',
+                          color: completedItems === totalItems ? '#10b981' : completedItems > 0 ? '#f59e0b' : '#94a3b8',
+                        }}>
+                    {totalItems ? Math.round((completedItems / totalItems) * 100) : 0}%
+                  </span>
+                </div>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-1 mb-3">
-                <div className="bg-green-500 h-1 rounded-full transition-all"
-                  style={{ width: totalItems ? `${(completedItems / totalItems) * 100}%` : '0%' }} />
+              {/* Progress bar */}
+              <div className="w-full bg-gray-100 rounded-full h-2 mb-4 overflow-hidden">
+                <div
+                  className="h-2 rounded-full transition-all duration-500"
+                  style={{
+                    width: totalItems ? `${(completedItems / totalItems) * 100}%` : '0%',
+                    background: completedItems === totalItems
+                      ? 'linear-gradient(90deg, #10b981, #34d399)'
+                      : 'linear-gradient(90deg, #6366f1, #8b5cf6)',
+                  }}
+                />
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 {ex.checklist.map((item, i) => (
                   <button
                     key={i}
-                    disabled={checkLoading}
+                    disabled={checkLoading || ['completed', 'cancelled'].includes(ex.status)}
                     onClick={() => toggleChecklist(i)}
-                    className="w-full flex items-center gap-2.5 text-left hover:bg-gray-50 rounded-lg px-2 py-1.5 transition-colors"
+                    className="w-full flex items-center gap-3 text-left rounded-xl px-3 py-2.5 transition-colors hover:bg-gray-50 disabled:cursor-default"
                   >
-                    {item.completed
-                      ? <CheckSquare className="w-4 h-4 text-green-500 flex-shrink-0" />
-                      : <Square className="w-4 h-4 text-gray-300 flex-shrink-0" />}
-                    <span className={`text-xs ${item.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                      item.completed ? 'bg-green-500 border-green-500' : 'border-gray-300 bg-white'
+                    }`}>
+                      {item.completed && (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className={`text-sm flex-1 ${item.completed ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                       {item.item}
                     </span>
                   </button>
