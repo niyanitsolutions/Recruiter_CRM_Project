@@ -101,13 +101,8 @@ const PERMISSION_NAV_MAP = [
     path: '/hrm/attendance',        icon: Clock,           label: 'Attendance',       section: 'HRM', hrmOnly: true },
   { permissions: ['hrm:leave:apply', 'hrm:leave:team_approve', 'hrm:leave:manage'],
     path: '/hrm/leaves',            icon: Calendar,        label: 'Leave Management', section: 'HRM', hrmOnly: true },
-  // Internal Hiring
   { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
     path: '/hrm/hiring',               icon: PersonStanding,  label: 'Hiring',          section: 'Internal Hiring', hrmOnly: true },
-  { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring/offers',        icon: FileCheck,       label: 'Offers',           section: 'Internal Hiring', hrmOnly: true },
-  { permissions: ['hrm:offer_templates:view', 'hrm:offer_templates:manage', 'hrm:hiring:manage'],
-    path: '/hrm/offer-templates',      icon: FileText,        label: 'Offer Templates',  section: 'Internal Hiring', hrmOnly: true },
   // Employee Self-Service
   { permissions: ['hrm:attendance:self', 'hrm:leave:apply', 'hrm:payroll:view_self'],
     path: '/hrm/ess',                  icon: LayoutGrid,      label: 'My Portal',       section: 'HRM', hrmOnly: true },

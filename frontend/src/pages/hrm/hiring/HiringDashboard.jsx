@@ -1,21 +1,17 @@
 import React, { useState, useEffect } from 'react'
-import { Briefcase, Users, Calendar, FileText, UserCheck, LayoutTemplate } from 'lucide-react'
+import { Briefcase, Users, Calendar, UserCheck } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import HRJobs from './HRJobs'
 import HRCandidates from './HRCandidates'
 import HRInterviews from './HRInterviews'
-import HROffer from './HROffer'
 import HROnboarding from './HROnboarding'
-import OfferTemplates from '../OfferTemplates'
 
 const TABS = [
-  { key: 'overview',        label: 'Overview' },
-  { key: 'jobs',            label: 'Jobs' },
-  { key: 'candidates',      label: 'Candidates' },
-  { key: 'interviews',      label: 'Interviews' },
-  { key: 'offers',          label: 'Offers' },
-  { key: 'offer_templates', label: 'Offer Templates' },
-  { key: 'onboarding',      label: 'Onboarding' },
+  { key: 'overview',   label: 'Overview' },
+  { key: 'jobs',       label: 'Jobs' },
+  { key: 'candidates', label: 'Candidates' },
+  { key: 'interviews', label: 'Interviews' },
+  { key: 'onboarding', label: 'Onboarding' },
 ]
 
 const STEP_COLORS = {
@@ -28,32 +24,29 @@ const STEP_COLORS = {
 }
 
 function OverviewTab({ onSwitchTab }) {
-  const [counts, setCounts] = useState({ jobs: 0, candidates: 0, interviews: 0, offers: 0, onboarding: 0 })
+  const [counts, setCounts] = useState({ jobs: 0, candidates: 0, interviews: 0, onboarding: 0 })
 
   useEffect(() => {
     Promise.all([
       hrmService.listJobs({ page: 1, page_size: 1, status: 'open' }),
       hrmService.listHiringCandidates({ page: 1, page_size: 1 }),
       hrmService.listInterviews({ page: 1, page_size: 1 }),
-      hrmService.listOffers({ page: 1, page_size: 1 }),
       hrmService.listOnboardings({ page: 1, page_size: 1 }),
-    ]).then(([j, c, i, o, ob]) => {
+    ]).then(([j, c, i, ob]) => {
       setCounts({
         jobs:        j.data.total  || 0,
         candidates:  c.data.total  || 0,
         interviews:  i.data.total  || 0,
-        offers:      o.data.total  || 0,
         onboarding:  ob.data.total || 0,
       })
     }).catch(() => {})
   }, [])
 
   const steps = [
-    { label: 'Open Jobs',  count: counts.jobs,        icon: Briefcase,     tab: 'jobs',       color: 'blue' },
-    { label: 'Candidates', count: counts.candidates,  icon: Users,         tab: 'candidates', color: 'indigo' },
-    { label: 'Interviews', count: counts.interviews,  icon: Calendar,      tab: 'interviews', color: 'purple' },
-    { label: 'Offers',     count: counts.offers,      icon: FileText,      tab: 'offers',     color: 'yellow' },
-    { label: 'Onboarding', count: counts.onboarding,  icon: UserCheck,     tab: 'onboarding', color: 'green' },
+    { label: 'Open Jobs',  count: counts.jobs,        icon: Briefcase,  tab: 'jobs',       color: 'blue' },
+    { label: 'Candidates', count: counts.candidates,  icon: Users,      tab: 'candidates', color: 'indigo' },
+    { label: 'Interviews', count: counts.interviews,  icon: Calendar,   tab: 'interviews', color: 'purple' },
+    { label: 'Onboarding', count: counts.onboarding,  icon: UserCheck,  tab: 'onboarding', color: 'green' },
   ]
 
   return (
@@ -146,13 +139,11 @@ export default function HiringDashboard() {
 
       {/* Tab content */}
       <div className="flex-1 overflow-auto">
-        {activeTab === 'overview'        && <OverviewTab onSwitchTab={setActiveTab} />}
-        {activeTab === 'jobs'            && <HRJobs />}
-        {activeTab === 'candidates'      && <HRCandidates />}
-        {activeTab === 'interviews'      && <HRInterviews />}
-        {activeTab === 'offers'          && <HROffer />}
-        {activeTab === 'offer_templates' && <OfferTemplates />}
-        {activeTab === 'onboarding'      && <HROnboarding />}
+        {activeTab === 'overview'   && <OverviewTab onSwitchTab={setActiveTab} />}
+        {activeTab === 'jobs'       && <HRJobs />}
+        {activeTab === 'candidates' && <HRCandidates />}
+        {activeTab === 'interviews' && <HRInterviews />}
+        {activeTab === 'onboarding' && <HROnboarding />}
       </div>
     </div>
   )

@@ -514,6 +514,8 @@ export default function DocumentTemplates() {
   const [cloneTarget, setCloneTarget] = useState(null)
   const [showWizard, setShowWizard]   = useState(false)
   const [showImport, setShowImport]   = useState(false)
+  // ID of the template just created (from builder navigate state) — used to highlight it
+  const [highlightId, setHighlightId] = useState(location.state?.newTemplateId || null)
 
   const [favorites, setFavoritesState] = useState(getFavorites)
 
@@ -564,6 +566,13 @@ export default function DocumentTemplates() {
 
   useEffect(() => load(), [load])
   useEffect(() => { setPage(1) }, [search, category, docType, activeTab])
+
+  // Clear the location state so the highlight ID doesn't persist on manual refresh
+  useEffect(() => {
+    if (location.state?.newTemplateId) {
+      navigate('.', { replace: true, state: {} })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Actions ─────────────────────────────────────────────────────────────────
   const handleDelete = async (template) => {
@@ -791,12 +800,15 @@ export default function DocumentTemplates() {
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {templates.map(t => (
-            <TemplateCard key={t.id} template={t}
-              onEdit={handleEdit} onDelete={handleDelete}
-              onClone={setCloneTarget} onGenerate={handleGenerate}
-              onPreview={handlePreview} onArchive={handleArchive}
-              isFavorite={favorites.includes(t.id)}
-              onToggleFavorite={handleToggleFavorite} />
+            <div key={t.id}
+              style={t.id === highlightId ? { outline: '2px solid var(--accent-blue)', borderRadius: '0.75rem', animation: 'none' } : undefined}>
+              <TemplateCard template={t}
+                onEdit={handleEdit} onDelete={handleDelete}
+                onClone={setCloneTarget} onGenerate={handleGenerate}
+                onPreview={handlePreview} onArchive={handleArchive}
+                isFavorite={favorites.includes(t.id)}
+                onToggleFavorite={handleToggleFavorite} />
+            </div>
           ))}
         </div>
       ) : (

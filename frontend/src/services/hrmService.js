@@ -91,12 +91,6 @@ const createInterview = (data) => api.post(`${BASE}/hiring/interviews`, data)
 const listInterviews = (params) => api.get(`${BASE}/hiring/interviews`, { params })
 const submitInterviewFeedback = (id, data) => api.post(`${BASE}/hiring/interviews/${id}/feedback`, data)
 
-// ── Hiring — Offers ────────────────────────────────────────────────────────
-const createOffer = (data) => api.post(`${BASE}/hiring/offers`, data)
-const listOffers = (params) => api.get(`${BASE}/hiring/offers`, { params })
-const getOffer = (id) => api.get(`${BASE}/hiring/offers/${id}`)
-const respondOffer = (id, data) => api.post(`${BASE}/hiring/offers/${id}/respond`, data)
-
 // ── Hiring — Onboarding ────────────────────────────────────────────────────
 const createOnboarding = (data) => api.post(`${BASE}/hiring/onboarding`, data)
 const listOnboardings = (params) => api.get(`${BASE}/hiring/onboarding`, { params })
@@ -175,14 +169,6 @@ const deleteShift = (id) => api.delete(`${BASE}/shifts/${id}`)
 const seedDefaultShifts = () => api.post(`${BASE}/shifts/seed-defaults`)
 const assignShift = (data) => api.post(`${BASE}/shifts/assign`, data)
 
-// ── Offer Templates ────────────────────────────────────────────────────────
-const createTemplate = (data) => api.post(`${BASE}/offer-templates`, data)
-const listTemplates = (params) => api.get(`${BASE}/offer-templates`, { params })
-const getTemplate = (id) => api.get(`${BASE}/offer-templates/${id}`)
-const updateTemplate = (id, data) => api.put(`${BASE}/offer-templates/${id}`, data)
-const deleteTemplate = (id) => api.delete(`${BASE}/offer-templates/${id}`)
-const generateFromTemplate = (id, data) => api.post(`${BASE}/offer-templates/${id}/generate`, data)
-
 // ── Document Templates ─────────────────────────────────────────────────────
 const DOC_TMPL = `${BASE}/document-templates`
 
@@ -241,13 +227,11 @@ const hrmService = {
   createJob, listJobs, getJob, updateJob, deleteJob,
   createHiringCandidate, listHiringCandidates, getHiringCandidate, updateHiringCandidate,
   createInterview, listInterviews, submitInterviewFeedback,
-  createOffer, listOffers, getOffer, respondOffer,
   createOnboarding, listOnboardings, getOnboarding, updateOnboarding, completeOnboarding,
   uploadDocument, getDocuments, getMyDocuments, getAllDocuments, deleteDocument, updateDocumentMeta,
   getAnnouncements,
   getSyncStatus, getSyncUnlinkedPreview, getUnlinkedUsers, getUnlinkedEmployees,
   syncEmployeeToUser, syncUserToEmployee, linkUserEmployee, unlinkUserEmployee,
-  createTemplate, listTemplates, getTemplate, updateTemplate, deleteTemplate, generateFromTemplate,
   getOrgChart,
   createAsset, getMyAssets, listAssets, getAsset, updateAsset, deleteAsset, assignAsset, returnAsset,
   createExitRequest, listExitRequests, getExitRequest, updateExitRequest, updateExitStatus,

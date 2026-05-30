@@ -140,9 +140,7 @@ const HiringDashboard    = lazy(() => import('./pages/hrm/hiring/HiringDashboard
 const HRJobs             = lazy(() => import('./pages/hrm/hiring/HRJobs'))
 const HRCandidates       = lazy(() => import('./pages/hrm/hiring/HRCandidates'))
 const HRInterviews       = lazy(() => import('./pages/hrm/hiring/HRInterviews'))
-const HROffer            = lazy(() => import('./pages/hrm/hiring/HROffer'))
 const HROnboarding       = lazy(() => import('./pages/hrm/hiring/HROnboarding'))
-const OfferTemplates     = lazy(() => import('./pages/hrm/OfferTemplates'))
 const EmployeeSelfService = lazy(() => import('./pages/hrm/EmployeeSelfService'))
 const OrgChart           = lazy(() => import('./pages/hrm/OrgChart'))
 const DocumentVault      = lazy(() => import('./pages/hrm/DocumentVault'))
@@ -1160,9 +1158,7 @@ function App() {
         <Route path="/hrm/hiring/jobs"         element={<PermissionRoute permission="hrm:hiring:view"><HRJobs /></PermissionRoute>} />
         <Route path="/hrm/hiring/candidates"   element={<PermissionRoute permission="hrm:hiring:view"><HRCandidates /></PermissionRoute>} />
         <Route path="/hrm/hiring/interviews"   element={<PermissionRoute permission="hrm:hiring:view"><HRInterviews /></PermissionRoute>} />
-        <Route path="/hrm/hiring/offers"       element={<PermissionRoute permission="hrm:hiring:view"><HROffer /></PermissionRoute>} />
         <Route path="/hrm/hiring/onboarding"   element={<PermissionRoute permission="hrm:hiring:view"><HROnboarding /></PermissionRoute>} />
-        <Route path="/hrm/offer-templates"     element={<PermissionRoute permission="hrm:offer_templates:view"><OfferTemplates /></PermissionRoute>} />
         <Route path="/hrm/ess"                 element={<PermissionRoute allowedRoles={MY_PORTAL_ALLOWED_ROLES}><EmployeeSelfService /></PermissionRoute>} />
         <Route path="/hrm/org-chart"           element={<PermissionRoute permission="hrm:employees:view"><OrgChart /></PermissionRoute>} />
         <Route path="/hrm/documents"           element={<PermissionRoute permission="hrm:employees:view"><DocumentVault /></PermissionRoute>} />

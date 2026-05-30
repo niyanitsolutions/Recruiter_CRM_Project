@@ -2113,10 +2113,10 @@ export default function DocumentTemplateBuilder() {
           '| id =', res?.data?.id, '| res.data =', JSON.stringify(res?.data)?.slice(0, 200))
         localStorage.removeItem(DRAFT_KEY)
         setSaveState('saved')
-        toast.success(isActive ? 'Template created!' : 'Draft saved!')
-        // ── STEP 6: redirect ────────────────────────────────────────────────
-        console.log('[SAVE][6] Navigating to /hrm/doc-builder/' + res.data.id)
-        navigate(`/hrm/doc-builder/${res.data.id}`, { replace: true })
+        toast.success(isActive ? 'Template created! Redirecting to list…' : 'Draft saved!')
+        // ── STEP 6: navigate to list so user immediately sees the new template ─
+        console.log('[SAVE][6] Template created id=' + res.data.id + ' — navigating to list')
+        navigate('/hrm/doc-templates', { replace: true, state: { newTemplateId: res.data.id } })
       } else {
         // ── STEP 4: update request ──────────────────────────────────────────
         console.log('[SAVE][4] PUT /hrm/document-templates/' + id + ' — updating...')
@@ -2290,8 +2290,9 @@ export default function DocumentTemplateBuilder() {
         {/* ── Left cluster: back + name + type ────────────────────────────── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: '0 0 auto', marginRight: 8 }}>
           <button onClick={() => navigate('/hrm/doc-templates')}
-            title="Back to templates"
-            style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', borderRadius: 5, flexShrink: 0, whiteSpace: 'nowrap' }}>
+            disabled={saving}
+            title={saving ? 'Save in progress…' : 'Back to templates'}
+            style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', padding: '4px 6px', borderRadius: 5, flexShrink: 0, whiteSpace: 'nowrap', opacity: saving ? 0.4 : 1 }}>
             <ArrowLeft size={14} /> Back
           </button>
           <div style={{ width: 1, height: 18, background: 'var(--border-color)', flexShrink: 0 }} />
