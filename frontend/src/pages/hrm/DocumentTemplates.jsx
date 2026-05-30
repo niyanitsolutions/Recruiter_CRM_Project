@@ -533,9 +533,13 @@ export default function DocumentTemplates() {
       page,
       page_size: PAGE_SIZE,
     }
+    console.log('[LIST][1] Fetching templates — params =', JSON.stringify(params))
     hrmService.listDocumentTemplates(params)
       .then(res => {
         if (cancelled) return
+        console.log('[LIST][2] API response — status =', res?.status,
+          '| total =', res?.data?.total, '| items.length =', res?.data?.items?.length,
+          '| items =', JSON.stringify(res?.data?.items?.map(t => ({ id: t.id, name: t.name, doc_type: t.doc_type, is_active: t.is_active }))))
         let items = res.data?.items || []
         if (favOnly) items = items.filter(t => favorites.includes(t.id))
         setTemplates(items)
@@ -543,13 +547,15 @@ export default function DocumentTemplates() {
       })
       .catch(err => {
         if (cancelled) return
+        const status = err?.response?.status
+        const detail = err?.response?.data?.detail
+        console.error('[LIST][ERROR] status=%s detail=%s err=%s', status, detail, err?.message, err)
         setTemplates([])
         setTotal(0)
-        const status = err?.response?.status
         if (status === 403) {
           toast.error('Permission denied — please log out and log back in to refresh your access.')
         } else {
-          toast.error('Failed to load templates')
+          toast.error(`Failed to load templates (HTTP ${status || 'network error'})`)
         }
       })
       .finally(() => { if (!cancelled) setLoading(false) })

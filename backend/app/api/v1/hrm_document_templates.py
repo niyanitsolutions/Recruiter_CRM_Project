@@ -1,4 +1,5 @@
 """HRM — Document Template API Routes (Enterprise Edition)"""
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -13,6 +14,7 @@ from app.services.document_template_service import DocumentTemplateService
 from app.services.document_generator_service import DocumentGeneratorService
 
 router = APIRouter(prefix="/hrm/document-templates", tags=["HRM - Document Templates"])
+logger = logging.getLogger(__name__)
 
 
 # ─── Template CRUD ────────────────────────────────────────────────────────────
@@ -24,7 +26,19 @@ async def create_template(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:doc_templates:manage"])),
 ):
-    return await DocumentTemplateService(db).create(cu["company_id"], data, cu["id"])
+    logger.info(
+        "[DOC_TMPL][CREATE] user=%s company=%s name=%r doc_type=%s blocks=%d",
+        cu.get("id"), cu.get("company_id"), data.name, data.doc_type,
+        len(data.blocks or []),
+    )
+    try:
+        result = await DocumentTemplateService(db).create(cu["company_id"], data, cu["id"])
+        logger.info("[DOC_TMPL][CREATE] SUCCESS id=%s", result.get("id"))
+        return result
+    except Exception as exc:
+        logger.error("[DOC_TMPL][CREATE] FAILED user=%s company=%s error=%s",
+                     cu.get("id"), cu.get("company_id"), exc, exc_info=True)
+        raise
 
 
 @router.get("")
@@ -39,9 +53,15 @@ async def list_templates(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:doc_templates:view"])),
 ):
-    return await DocumentTemplateService(db).list(
+    logger.info(
+        "[DOC_TMPL][LIST] user=%s company=%s doc_type=%s category=%s search=%r is_active=%s page=%d",
+        cu.get("id"), cu.get("company_id"), doc_type, category, search, is_active, page,
+    )
+    result = await DocumentTemplateService(db).list(
         cu["company_id"], doc_type, category, search, is_active, page, page_size
     )
+    logger.info("[DOC_TMPL][LIST] returned total=%s items=%d", result.get("total"), len(result.get("items", [])))
+    return result
 
 
 @router.get("/schema/fields")

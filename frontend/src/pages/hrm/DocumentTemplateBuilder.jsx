@@ -2028,8 +2028,16 @@ export default function DocumentTemplateBuilder() {
       // Auto-save to server silently if unsaved
       if (saveState === 'unsaved') {
         setSaveState('saving')
-        const payload = { ...meta, branding, header, footer, watermark, page_config: pageConfig, blocks: blocks.map((b, i) => ({ ...b, order: i })), version_note: `Auto-saved ${new Date().toLocaleTimeString()}` }
-        hrmService.updateDocumentTemplate(id, payload)
+        const autoPayload = {
+          name:        (meta?.name || '').trim() || undefined,  // skip if blank — server keeps existing
+          description: meta?.description || '',
+          doc_type:    meta?.doc_type,
+          branding, header, footer, watermark,
+          page_config: pageConfig,
+          blocks:      blocks.map((b, i) => ({ ...b, order: i })),
+          version_note: `Auto-saved ${new Date().toLocaleTimeString()}`,
+        }
+        hrmService.updateDocumentTemplate(id, autoPayload)
           .then(() => setSaveState('saved'))
           .catch(() => setSaveState('unsaved'))
       }
@@ -2055,43 +2063,80 @@ export default function DocumentTemplateBuilder() {
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = async (versionNote = '', isActive = true) => {
+    // ── STEP 1: clicked ──────────────────────────────────────────────────────
+    console.log('[SAVE][1] Save clicked — isNew=%s, id=%s, isActive=%s', isNew, id, isActive)
+    console.log('[SAVE][1] meta =', JSON.stringify(meta))
+    console.log('[SAVE][1] blocks.length =', blocks.length)
+
+    // ── STEP 2: validate ─────────────────────────────────────────────────────
     const templateName = (meta?.name || '').trim()
+    console.log('[SAVE][2] templateName =', JSON.stringify(templateName), '| doc_type =', meta?.doc_type)
     if (!templateName) {
+      console.warn('[SAVE][2] BLOCKED — empty template name')
       toast.error('Please enter a template name before saving')
       return
     }
     if (!meta?.doc_type) {
+      console.warn('[SAVE][2] BLOCKED — no doc_type')
       toast.error('Please select a document type before saving')
       return
     }
     if (blocks.length === 0) {
+      console.warn('[SAVE][2] BLOCKED — no blocks')
       toast.error('Please add at least one block before saving')
       return
     }
+
+    // ── STEP 3: build payload ─────────────────────────────────────────────────
     setSaving(true); setSaveState('saving')
+    const payload = {
+      name:         templateName,          // validated string — never undefined
+      description:  meta.description || '',
+      doc_type:     meta.doc_type,
+      category:     meta.category || 'hr',
+      is_active:    isActive,
+      branding, header, footer, watermark,
+      page_config:  pageConfig,
+      blocks:       blocks.map((b, i) => ({ ...b, order: i })),
+      version_note: versionNote || `Saved ${new Date().toLocaleTimeString()}`,
+    }
+    console.log('[SAVE][3] payload.name =', payload.name, '| doc_type =', payload.doc_type,
+      '| blocks =', payload.blocks.length, '| isNew =', isNew)
+
     try {
-      const payload = { ...meta, is_active: isActive, branding, header, footer, watermark, page_config: pageConfig,
-        blocks: blocks.map((b, i) => ({ ...b, order: i })),
-        version_note: versionNote || `Saved ${new Date().toLocaleTimeString()}`,
-      }
       if (isNew) {
+        // ── STEP 4: create request ──────────────────────────────────────────
+        console.log('[SAVE][4] POST /hrm/document-templates — creating new template...')
         const res = await hrmService.createDocumentTemplate(payload)
+        // ── STEP 5: response ────────────────────────────────────────────────
+        console.log('[SAVE][5] CREATE response status =', res?.status,
+          '| id =', res?.data?.id, '| res.data =', JSON.stringify(res?.data)?.slice(0, 200))
         localStorage.removeItem(DRAFT_KEY)
         setSaveState('saved')
         toast.success(isActive ? 'Template created!' : 'Draft saved!')
+        // ── STEP 6: redirect ────────────────────────────────────────────────
+        console.log('[SAVE][6] Navigating to /hrm/doc-builder/' + res.data.id)
         navigate(`/hrm/doc-builder/${res.data.id}`, { replace: true })
       } else {
-        await hrmService.updateDocumentTemplate(id, payload)
+        // ── STEP 4: update request ──────────────────────────────────────────
+        console.log('[SAVE][4] PUT /hrm/document-templates/' + id + ' — updating...')
+        const res = await hrmService.updateDocumentTemplate(id, payload)
+        // ── STEP 5: response ────────────────────────────────────────────────
+        console.log('[SAVE][5] UPDATE response status =', res?.status)
         localStorage.removeItem(DRAFT_KEY)
         setDraftBanner(null)
         setSaveState('saved')
         toast.success(isActive ? 'Template saved!' : 'Draft saved!')
+        // ── STEP 6: no redirect for updates ────────────────────────────────
+        console.log('[SAVE][6] Update complete — staying on page')
       }
+      // ── STEP 7: done ───────────────────────────────────────────────────────
+      console.log('[SAVE][7] Save SUCCESS')
     } catch (e) {
       setSaveState('unsaved')
       const status = e?.response?.status
       const detail = e?.response?.data?.detail
-      // Session expired — tell user to log back in instead of just "Failed to save"
+      console.error('[SAVE][ERROR] status=%s detail=%s error=%s', status, detail, e?.message, e)
       if (status === 401) {
         toast.error('Session expired — please log in again to save your template.', { duration: 6000 })
       } else if (status === 403) {
@@ -2099,7 +2144,7 @@ export default function DocumentTemplateBuilder() {
       } else if (typeof detail === 'string' && detail) {
         toast.error(detail)
       } else {
-        toast.error('Save failed — check your connection and try again.')
+        toast.error(`Save failed (HTTP ${status || 'network error'}) — check console for details.`)
       }
     } finally { setSaving(false) }
   }
