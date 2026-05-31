@@ -268,8 +268,11 @@ async def get_asset_by_public_token(public_token: str):
             db = DatabaseManager.get_company_db(tid)
         except Exception:
             continue
+        # Search by public_token first; fall back to _id for assets created
+        # before public_token was introduced (the QR URL uses asset.id as fallback).
         doc = await db.hrm_assets.find_one(
-            {"public_token": public_token, "is_deleted": False},
+            {"$or": [{"public_token": public_token}, {"_id": public_token}],
+             "is_deleted": False},
         )
         if doc:
             purchase_date = doc.get("purchase_date")

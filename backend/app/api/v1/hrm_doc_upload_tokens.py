@@ -5,10 +5,13 @@ Employee opens the link and uploads documents.
 Token is invalidated after use or expiry.
 """
 import os
+import pathlib
 import secrets
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
+
+_BACKEND_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
@@ -17,7 +20,7 @@ from app.core.dependencies import get_company_db, require_hrm_module, require_pe
 
 router = APIRouter(prefix="/hrm/doc-upload-tokens", tags=["HRM - Doc Upload Tokens"])
 
-UPLOAD_DIR = "uploads/hrm_docs"
+UPLOAD_DIR = str(_BACKEND_ROOT / "uploads" / "hrm_docs")
 ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".docx"}
 MAX_SIZE_MB = 10
 DEFAULT_EXPIRY_HOURS = 72
@@ -35,7 +38,6 @@ class GenerateTokenRequest(BaseModel):
 
 
 class ReactivateTokenRequest(BaseModel):
-    token_id: str
     expiry_hours: int = DEFAULT_EXPIRY_HOURS
 
 
@@ -183,25 +185,37 @@ async def revoke_token(
     return {"message": "Token revoked"}
 
 
+async def _find_token_across_companies(token: str):
+    """Search all tenant DBs for a token record (no auth required)."""
+    from app.core.database import DatabaseManager, get_master_db as _get_master
+    master = _get_master()
+    tenant_ids = await master.tenants.distinct("_id", {"is_deleted": {"$ne": True}})
+    for tid in tenant_ids:
+        try:
+            db = DatabaseManager.get_company_db(tid)
+        except Exception:
+            continue
+        rec = await db.hrm_doc_upload_tokens.find_one({"token": token})
+        if rec:
+            return rec, db
+    return None, None
+
+
 # ── Public: Validate token (no auth needed) ───────────────────────────────────
 
 @router.get("/validate/{token}")
-async def validate_token(
-    token: str,
-    db=Depends(get_company_db),
-):
-    """Validate an upload token and return employee info (public endpoint)."""
+async def validate_token(token: str):
+    """Validate an upload token and return employee info (public endpoint — no auth)."""
     now = datetime.now(timezone.utc)
-    rec = await db.hrm_doc_upload_tokens.find_one({"token": token})
-    if not rec:
+    rec, db = await _find_token_across_companies(token)
+    if not rec or db is None:
         raise HTTPException(status_code=404, detail="Invalid upload link.")
 
     if rec.get("status") == "used":
         raise HTTPException(status_code=410, detail="This upload link has already been used.")
     if rec.get("status") == "revoked":
         raise HTTPException(status_code=410, detail="This upload link has been revoked.")
-    if rec.get("status") == "expired" or rec.get("expires_at", now) < now:
-        # Mark expired
+    if rec.get("status") == "expired" or (rec.get("expires_at") and rec["expires_at"] < now):
         await db.hrm_doc_upload_tokens.update_one(
             {"_id": rec["_id"]}, {"$set": {"status": "expired"}}
         )
@@ -224,16 +238,15 @@ async def upload_via_token(
     files: List[UploadFile] = File(...),
     doc_types: str = Form(...),
     doc_names: str = Form(...),
-    db=Depends(get_company_db),
 ):
     """Employee uploads documents via their secure token link (no login required)."""
     now = datetime.now(timezone.utc)
-    rec = await db.hrm_doc_upload_tokens.find_one({"token": token})
-    if not rec:
+    rec, db = await _find_token_across_companies(token)
+    if not rec or db is None:
         raise HTTPException(status_code=404, detail="Invalid upload link.")
     if rec.get("status") != "active":
         raise HTTPException(status_code=410, detail="This upload link has expired or already been used.")
-    if rec.get("expires_at", now) < now:
+    if rec.get("expires_at") and rec["expires_at"] < now:
         await db.hrm_doc_upload_tokens.update_one({"_id": rec["_id"]}, {"$set": {"status": "expired"}})
         raise HTTPException(status_code=410, detail="This upload link has expired.")
 

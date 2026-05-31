@@ -3,8 +3,12 @@ import os
 import re as _re
 import uuid
 import mimetypes
+import pathlib
 from typing import Optional, List
 from datetime import datetime, timezone
+
+# Absolute path to backend root regardless of CWD where uvicorn is launched
+_BACKEND_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent  # .../backend
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.responses import StreamingResponse, FileResponse
@@ -14,7 +18,8 @@ from app.core.dependencies import get_company_db, get_company_db_by_id, require_
 
 router = APIRouter(prefix="/hrm/documents", tags=["HRM - Documents"])
 
-UPLOAD_DIR = "uploads/hrm_docs"
+# Use absolute path so uploads work regardless of uvicorn launch directory
+UPLOAD_DIR = str(_BACKEND_ROOT / "uploads" / "hrm_docs")
 ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".docx"}
 MAX_SIZE_MB = 10
 
@@ -232,6 +237,15 @@ async def update_document_status(
         raise HTTPException(status_code=404, detail="Employee not found")
 
     docs = emp.get("documents", [])
+
+    # Ensure every document has a doc_id (backwards compat for legacy uploads)
+    changed = False
+    for i, d in enumerate(docs):
+        if not d.get("doc_id"):
+            docs[i]["doc_id"] = str(uuid.uuid4())
+            changed = True
+
+    # Find by doc_id
     idx = next((i for i, d in enumerate(docs) if d.get("doc_id") == doc_id), None)
     if idx is None:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -477,7 +491,7 @@ async def delete_document(
     removed_doc = docs[idx]
     file_url = removed_doc.get("file_url", "")
     if file_url.startswith("/uploads/"):
-        disk_path = file_url.lstrip("/")
+        disk_path = str(_BACKEND_ROOT / file_url.lstrip("/"))
         if os.path.exists(disk_path):
             try:
                 os.remove(disk_path)
@@ -532,6 +546,9 @@ async def serve_document(
         raise HTTPException(status_code=404, detail="Employee not found")
 
     docs = emp.get("documents", [])
+
+    # Find by doc_id; also accept legacy docs (no doc_id) by checking if doc_id
+    # matches the URL-safe base name of the file for backwards compat.
     doc = next((d for d in docs if d.get("doc_id") == doc_id), None)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -540,9 +557,11 @@ async def serve_document(
     if not file_url.startswith("/uploads/"):
         raise HTTPException(status_code=404, detail="File not found")
 
-    disk_path = file_url.lstrip("/")
+    # Build absolute path regardless of CWD
+    relative_part = file_url.lstrip("/")  # e.g. "uploads/hrm_docs/uuid.pdf"
+    disk_path = str(_BACKEND_ROOT / relative_part)
     if not os.path.exists(disk_path):
-        raise HTTPException(status_code=404, detail="File not found on disk")
+        raise HTTPException(status_code=404, detail=f"File not found on disk: {relative_part}")
 
     original_filename = doc.get("original_filename") or os.path.basename(disk_path)
     mime_type = _get_mime(original_filename)
@@ -636,9 +655,32 @@ async def list_documents(
     )
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
+
+    # Ensure every document has doc_id — add for legacy docs & persist
+    raw_docs = emp.get("documents") or []
+    needs_save = False
+    for d in raw_docs:
+        if not d.get("doc_id"):
+            d["doc_id"] = str(uuid.uuid4())
+            needs_save = True
+        # Ensure status field exists for legacy docs
+        if "status" not in d:
+            d["status"] = "pending"
+            needs_save = True
+        # Ensure original_filename exists
+        if not d.get("original_filename") and d.get("file_url"):
+            d["original_filename"] = os.path.basename(d["file_url"])
+            needs_save = True
+
+    if needs_save:
+        await db.hrm_employees.update_one(
+            {"_id": employee_id},
+            {"$set": {"documents": raw_docs, "updated_at": datetime.now(timezone.utc)}},
+        )
+
     return {
         "employee_id": employee_id,
         "full_name": emp.get("full_name", ""),
         "employee_code": emp.get("employee_id", ""),
-        "documents": emp.get("documents", []),
+        "documents": raw_docs,
     }

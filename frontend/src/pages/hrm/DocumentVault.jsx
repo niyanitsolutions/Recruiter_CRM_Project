@@ -585,7 +585,9 @@ function EmployeeDocPanel({ employee, onClose, onRefresh }) {
                 const Icon = fileIcon(doc.file_url)
                 const typeColor = DOC_TYPE_COLORS[doc.doc_type] || '#94a3b8'
                 const cat = DOC_CATEGORIES.find(c => c.key === doc.doc_type)
-                const downloadUrl = hrmService.getDocumentServeUrl(employee.id, doc.doc_id, true)
+                const downloadUrl = doc.doc_id
+                  ? hrmService.getDocumentServeUrl(employee.id, doc.doc_id, true)
+                  : doc.file_url
 
                 return (
                   <div key={doc.doc_id || doc.doc_type}

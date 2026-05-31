@@ -352,9 +352,14 @@ app.include_router(hrm_document_templates.router, prefix=API_V1_PREFIX, tags=["H
 app.include_router(hrm_doc_upload_tokens.router, prefix=API_V1_PREFIX, tags=["HRM - Doc Upload Tokens"])
 
 
-# Serve uploaded files (resumes, etc.)
-os.makedirs("uploads/resumes", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+# Serve uploaded files — use path relative to this file so it works regardless of CWD
+import pathlib as _pathlib
+_APP_DIR     = _pathlib.Path(__file__).resolve().parent          # .../backend/app
+_BACKEND_DIR = _APP_DIR.parent                                    # .../backend
+_UPLOADS_DIR = _BACKEND_DIR / "uploads"
+os.makedirs(str(_UPLOADS_DIR / "resumes"),   exist_ok=True)
+os.makedirs(str(_UPLOADS_DIR / "hrm_docs"),  exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_UPLOADS_DIR)), name="uploads")
 
 
 @app.get("/", tags=["Health Check"])
