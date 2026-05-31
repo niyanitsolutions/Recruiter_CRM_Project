@@ -85,9 +85,11 @@ async def list_assets(
 async def get_my_assets(
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:self"])),
 ):
-    """Return assets assigned to the calling user's linked employee record."""
+    """Return assets assigned to the calling user's linked employee record.
+    No extra permission required beyond authentication — any logged-in user
+    can view their own assets.
+    """
     emp_id = cu.get("hrm_employee_id")
     if not emp_id:
         user_doc = await db.users.find_one(
@@ -262,18 +264,25 @@ async def get_asset_by_public_token(public_token: str):
     """
     from app.core.database import DatabaseManager, get_master_db as _get_master
     master = _get_master()
-    tenant_ids = await master.tenants.distinct("_id", {"is_deleted": {"$ne": True}})
-    for tid in tenant_ids:
+    # Use company_id (short key) — not _id (UUID) — because company DBs are
+    # named company_{company_id}_db and get_company_db resolves via company_id.
+    company_ids = await master.tenants.distinct("company_id", {"is_deleted": {"$ne": True}})
+    for cid in company_ids:
+        if not cid:
+            continue
         try:
-            db = DatabaseManager.get_company_db(tid)
+            db = DatabaseManager.get_company_db(str(cid))
         except Exception:
             continue
         # Search by public_token first; fall back to _id for assets created
-        # before public_token was introduced (the QR URL uses asset.id as fallback).
-        doc = await db.hrm_assets.find_one(
-            {"$or": [{"public_token": public_token}, {"_id": public_token}],
-             "is_deleted": False},
-        )
+        # before public_token field was added (QR URL uses asset.id as fallback).
+        try:
+            doc = await db.hrm_assets.find_one(
+                {"$or": [{"public_token": public_token}, {"_id": public_token}],
+                 "is_deleted": False},
+            )
+        except Exception:
+            continue
         if doc:
             purchase_date = doc.get("purchase_date")
             warranty_expiry = doc.get("warranty_expiry")

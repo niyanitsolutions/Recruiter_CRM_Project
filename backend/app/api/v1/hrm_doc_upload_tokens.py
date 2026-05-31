@@ -186,16 +186,27 @@ async def revoke_token(
 
 
 async def _find_token_across_companies(token: str):
-    """Search all tenant DBs for a token record (no auth required)."""
+    """Search all tenant DBs for a token record (no auth required).
+
+    IMPORTANT: tenant._id is the UUID used for master-DB identity, but the
+    company database is named after tenant.company_id (the short key stored in
+    JWT and used by get_company_db). We must query by company_id, not _id.
+    """
     from app.core.database import DatabaseManager, get_master_db as _get_master
     master = _get_master()
-    tenant_ids = await master.tenants.distinct("_id", {"is_deleted": {"$ne": True}})
-    for tid in tenant_ids:
+    # Use company_id field (short key) — this is what get_company_db uses
+    company_ids = await master.tenants.distinct("company_id", {"is_deleted": {"$ne": True}})
+    for cid in company_ids:
+        if not cid:
+            continue
         try:
-            db = DatabaseManager.get_company_db(tid)
+            db = DatabaseManager.get_company_db(str(cid))
         except Exception:
             continue
-        rec = await db.hrm_doc_upload_tokens.find_one({"token": token})
+        try:
+            rec = await db.hrm_doc_upload_tokens.find_one({"token": token})
+        except Exception:
+            continue
         if rec:
             return rec, db
     return None, None
