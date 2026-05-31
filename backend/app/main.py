@@ -61,8 +61,11 @@ from app.api.v1 import (
     hrm_offer_templates, hrm_documents, hrm_sync,
     hrm_assets, hrm_exit,
     hrm_holidays, hrm_leave_policies, hrm_shifts,
-    hrm_document_templates, hrm_doc_upload_tokens,
+    hrm_doc_upload_tokens,
 )
+
+# ============== Document Center ==============
+from app.api.v1 import document_center
 
 # ============== Company Settings ==============
 from app.api.v1 import company_settings
@@ -348,8 +351,8 @@ app.include_router(hrm_exit.router,             prefix=API_V1_PREFIX, tags=["HRM
 app.include_router(hrm_holidays.router,           prefix=API_V1_PREFIX, tags=["HRM - Holidays"])
 app.include_router(hrm_leave_policies.router,    prefix=API_V1_PREFIX, tags=["HRM - Leave Policies"])
 app.include_router(hrm_shifts.router,            prefix=API_V1_PREFIX, tags=["HRM - Shifts"])
-app.include_router(hrm_document_templates.router, prefix=API_V1_PREFIX, tags=["HRM - Document Templates"])
 app.include_router(hrm_doc_upload_tokens.router, prefix=API_V1_PREFIX, tags=["HRM - Doc Upload Tokens"])
+app.include_router(document_center.router,       prefix=API_V1_PREFIX, tags=["Document Center"])
 
 
 # Serve uploaded files — use path relative to this file so it works regardless of CWD

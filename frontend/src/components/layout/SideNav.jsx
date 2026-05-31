@@ -37,6 +37,7 @@ import {
   LayoutGrid,
   ArrowLeftRight,
   Layers,
+  BookOpen,
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType } from '../../store/authSlice'
@@ -109,11 +110,9 @@ const PERMISSION_NAV_MAP = [
   // User ↔ Employee Sync
   { permissions: ['hrm:employees:manage'],
     path: '/hrm/sync',                 icon: ArrowLeftRight,  label: 'User Sync',       section: 'HRM', hrmOnly: true },
-  // Document Templates
-  { permissions: ['hrm:doc_templates:view', 'hrm:doc_templates:manage'],
-    path: '/hrm/doc-templates',        icon: FileText,        label: 'Doc Templates',   section: 'HRM', hrmOnly: true },
-  { permissions: ['hrm:doc_templates:generate'],
-    path: '/hrm/doc-generator',        icon: FileCheck,       label: 'Doc Generator',   section: 'HRM', hrmOnly: true },
+  // Document Center
+  { permissions: ['docs:view', 'docs:create', 'docs:manage'],
+    path: '/hrm/doc-center',           icon: BookOpen,        label: 'Document Center', section: 'HRM', hrmOnly: true },
 ]
 
 /**

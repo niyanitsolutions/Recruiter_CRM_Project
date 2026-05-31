@@ -151,9 +151,7 @@ const DocumentVault      = lazy(() => import('./pages/hrm/DocumentVault'))
 const AssetManagement    = lazy(() => import('./pages/hrm/AssetManagement'))
 const ExitManagement     = lazy(() => import('./pages/hrm/ExitManagement'))
 const HRMSyncPanel             = lazy(() => import('./pages/hrm/HRMSyncPanel'))
-const HRMDocumentTemplates     = lazy(() => import('./pages/hrm/DocumentTemplates'))
-const HRMDocumentBuilder       = lazy(() => import('./pages/hrm/DocumentTemplateBuilder'))
-const HRMDocumentGenerator     = lazy(() => import('./pages/hrm/DocumentGenerator'))
+const DocumentCenter           = lazy(() => import('./pages/hrm/document-center/DocumentCenter'))
 
 // Reports, Analytics, Imports, Exports, Targets, Audit
 const ReportsPage        = lazy(() => import('./pages/reports/ReportsPage'))
@@ -1181,10 +1179,10 @@ function App() {
           element={<Navigate to="/hrm/emp-resources?tab=exit" replace />} />
         <Route path="/hrm/assets/scan/:assetId" element={<AssetScanPage />} />
         <Route path="/hrm/sync"                element={<PermissionRoute permission="hrm:employees:manage"><HRMSyncPanel /></PermissionRoute>} />
-        <Route path="/hrm/doc-templates"       element={<PermissionRoute permission="hrm:doc_templates:view"><HRMDocumentTemplates /></PermissionRoute>} />
-        <Route path="/hrm/doc-builder/new"     element={<PermissionRoute permission="hrm:doc_templates:manage"><HRMDocumentBuilder /></PermissionRoute>} />
-        <Route path="/hrm/doc-builder/:id"     element={<PermissionRoute permission="hrm:doc_templates:manage"><HRMDocumentBuilder /></PermissionRoute>} />
-        <Route path="/hrm/doc-generator"       element={<PermissionRoute permission="hrm:doc_templates:generate"><HRMDocumentGenerator /></PermissionRoute>} />
+
+        {/* ── Document Center ── */}
+        <Route path="/hrm/doc-center/*"
+          element={<PermissionRoute permission="docs:view" showUnauthorized><DocumentCenter /></PermissionRoute>} />
       </Route>
 
       {/* DEFAULT */}

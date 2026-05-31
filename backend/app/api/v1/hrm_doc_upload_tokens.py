@@ -30,6 +30,15 @@ def _allowed(filename: str) -> bool:
     return os.path.splitext(filename.lower())[1] in ALLOWED_EXTENSIONS
 
 
+def _to_utc(dt) -> "datetime | None":
+    """Motor returns datetimes as UTC-naive. Make them UTC-aware for comparison."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 class GenerateTokenRequest(BaseModel):
     employee_id: str
     expiry_hours: int = DEFAULT_EXPIRY_HOURS
@@ -226,7 +235,8 @@ async def validate_token(token: str):
         raise HTTPException(status_code=410, detail="This upload link has already been used.")
     if rec.get("status") == "revoked":
         raise HTTPException(status_code=410, detail="This upload link has been revoked.")
-    if rec.get("status") == "expired" or (rec.get("expires_at") and rec["expires_at"] < now):
+    expires_at = _to_utc(rec.get("expires_at"))
+    if rec.get("status") == "expired" or (expires_at and expires_at < now):
         await db.hrm_doc_upload_tokens.update_one(
             {"_id": rec["_id"]}, {"$set": {"status": "expired"}}
         )
@@ -257,7 +267,8 @@ async def upload_via_token(
         raise HTTPException(status_code=404, detail="Invalid upload link.")
     if rec.get("status") != "active":
         raise HTTPException(status_code=410, detail="This upload link has expired or already been used.")
-    if rec.get("expires_at") and rec["expires_at"] < now:
+    expires_at = _to_utc(rec.get("expires_at"))
+    if expires_at and expires_at < now:
         await db.hrm_doc_upload_tokens.update_one({"_id": rec["_id"]}, {"$set": {"status": "expired"}})
         raise HTTPException(status_code=410, detail="This upload link has expired.")
 

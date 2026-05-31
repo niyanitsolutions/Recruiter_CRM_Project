@@ -112,7 +112,9 @@
       "Bash(curl -s -X POST http://127.0.0.1:8000/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"username\":\"vijayr8106@gmail.com\",\"password\":\"admin123\"}')",
       "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\" -Recurse -Filter \"*template*\" -ErrorAction SilentlyContinue)",
       "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\\\\models\\\\company\" | Where-Object { $_.Name -match \"\\(asset|exit|document\\)\" } | Select-Object FullName)",
-      "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\\\\hrm\" | Where-Object { $_.Name -match \"\\(Document|Asset|Exit\\)\" } | Select-Object FullName)"
+      "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\\\\hrm\" | Where-Object { $_.Name -match \"\\(Document|Asset|Exit\\)\" } | Select-Object FullName)",
+      "Bash(cd /d/crm-project/backend && grep -n \"< now\\\\|> now\\\\|expires_at\" app/api/v1/hrm_documents.py | grep -v \"model_config\" | head -20)",
+      "Read(//d/d/crm-project/backend/app/api/v1/**)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

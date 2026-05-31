@@ -173,10 +173,6 @@ class Permission(str, Enum):
     # Offer Templates
     HRM_OFFER_TEMPLATES_VIEW   = "hrm:offer_templates:view"
     HRM_OFFER_TEMPLATES_MANAGE = "hrm:offer_templates:manage"
-    # Document Templates (Enterprise Builder)
-    HRM_DOC_TEMPLATES_VIEW     = "hrm:doc_templates:view"
-    HRM_DOC_TEMPLATES_MANAGE   = "hrm:doc_templates:manage"
-    HRM_DOC_TEMPLATES_GENERATE = "hrm:doc_templates:generate"
     # Documents
     HRM_DOCUMENTS_MANAGE     = "hrm:documents:manage"
     # Assets
@@ -187,6 +183,14 @@ class Permission(str, Enum):
     HRM_EXIT_MANAGE          = "hrm:exit:manage"
     # Notifications (in-app read access)
     NOTIFICATIONS_VIEW       = "notifications:view"
+
+    # ── Document Center ───────────────────────────────────────────────────────
+    DOCS_VIEW     = "docs:view"      # Browse templates & generated documents
+    DOCS_CREATE   = "docs:create"    # Create / edit templates
+    DOCS_DELETE   = "docs:delete"    # Delete templates and documents
+    DOCS_GENERATE = "docs:generate"  # Generate documents from templates
+    DOCS_APPROVE  = "docs:approve"   # Approve / reject template submissions
+    DOCS_MANAGE   = "docs:manage"    # Full admin access (includes all above)
 
 
 # ── Convenience sets ──────────────────────────────────────────────────────────
@@ -213,15 +217,19 @@ _HRM_FULL = [
     Permission.HRM_HIRING_MANAGE,
     Permission.HRM_OFFER_TEMPLATES_VIEW,
     Permission.HRM_OFFER_TEMPLATES_MANAGE,
-    Permission.HRM_DOC_TEMPLATES_VIEW,
-    Permission.HRM_DOC_TEMPLATES_MANAGE,
-    Permission.HRM_DOC_TEMPLATES_GENERATE,
     Permission.HRM_DOCUMENTS_MANAGE,
     Permission.HRM_ASSETS_VIEW,
     Permission.HRM_ASSETS_MANAGE,
     Permission.HRM_EXIT_VIEW,
     Permission.HRM_EXIT_MANAGE,
     Permission.NOTIFICATIONS_VIEW,
+    # Document Center — full access for HR/Admin
+    Permission.DOCS_VIEW,
+    Permission.DOCS_CREATE,
+    Permission.DOCS_DELETE,
+    Permission.DOCS_GENERATE,
+    Permission.DOCS_APPROVE,
+    Permission.DOCS_MANAGE,
 ]
 
 # Team-level HRM (MANAGER)
@@ -297,6 +305,13 @@ _CRM_ADMIN_BASE = [
     Permission.EXPORTS_VIEW, Permission.EXPORTS_CREATE,
     Permission.NOTIFICATIONS_CREATE,
     Permission.NOTIFICATIONS_VIEW,
+    # Document Center — full admin access
+    Permission.DOCS_VIEW,
+    Permission.DOCS_CREATE,
+    Permission.DOCS_DELETE,
+    Permission.DOCS_GENERATE,
+    Permission.DOCS_APPROVE,
+    Permission.DOCS_MANAGE,
 ]
 
 
