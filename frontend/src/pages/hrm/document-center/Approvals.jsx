@@ -1,270 +1,315 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import {
-  CheckSquare, Clock, CheckCircle, XCircle, Loader2,
-  User, Calendar, MessageSquare, Filter,
+  CheckCircle, XCircle, Clock, Loader2, X, RefreshCw,
+  FileText, User, Calendar, MessageSquare, CheckSquare,
 } from 'lucide-react'
 import documentCenterService from '../../../services/documentCenterService'
 
-const STATUS_INFO = {
-  pending:  { icon: Clock,        cls: 'bg-amber-100 text-amber-700',  label: 'Pending' },
-  approved: { icon: CheckCircle,  cls: 'bg-green-100 text-green-700',  label: 'Approved' },
-  rejected: { icon: XCircle,      cls: 'bg-red-100 text-red-700',      label: 'Rejected' },
+const STATUS_CONFIG = {
+  pending:  { icon: Clock,         color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30',  label: 'Pending' },
+  approved: { icon: CheckCircle,   color: 'bg-green-100 text-green-700 dark:bg-green-900/30',    label: 'Approved' },
+  rejected: { icon: XCircle,       color: 'bg-red-100 text-red-700 dark:bg-red-900/30',          label: 'Rejected' },
 }
 
-const ReviewModal = ({ approval, onClose, onReview }) => {
-  const [status,   setStatus]   = useState('approved')
+// ─── Review Modal ──────────────────────────────────────────────────────────────
+function ReviewModal({ approval, onClose, onDone }) {
+  const [decision, setDecision] = useState('')
   const [comments, setComments] = useState('')
-  const [saving,   setSaving]   = useState(false)
+  const [busy, setBusy] = useState(false)
 
   const handleSubmit = async () => {
-    setSaving(true)
+    if (!decision) { toast.error('Select approve or reject'); return }
+    setBusy(true)
     try {
-      await onReview(approval._id, { status, reviewer_comments: comments })
+      await documentCenterService.reviewApproval(approval._id || approval.id, {
+        status: decision,
+        reviewer_comments: comments,
+      })
+      toast.success(`Template ${decision}`)
+      onDone()
       onClose()
-    } finally { setSaving(false) }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-md rounded-xl shadow-2xl overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
-          <h3 className="font-semibold" style={{ color: 'var(--text-heading)' }}>Review Template</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
-        <div className="p-5 space-y-4">
-          <div className="rounded-lg p-3 border" style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
-            <p className="text-sm font-medium" style={{ color: 'var(--text-heading)' }}>{approval.template_name}</p>
-            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Requested by {approval.requested_by_name}</p>
-            {approval.comments && <p className="text-xs mt-1 italic" style={{ color: 'var(--text-muted)' }}>"{approval.comments}"</p>}
-          </div>
-          <div>
-            <label className="text-xs font-medium mb-2 block" style={{ color: 'var(--text-muted)' }}>Decision *</label>
-            <div className="flex gap-3">
-              {[
-                { val: 'approved', label: 'Approve', cls: 'border-green-500 text-green-600 bg-green-50' },
-                { val: 'rejected', label: 'Reject',  cls: 'border-red-500 text-red-600 bg-red-50' },
-              ].map(opt => (
-                <button key={opt.val} type="button"
-                  onClick={() => setStatus(opt.val)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
-                    status === opt.val ? opt.cls : 'border-transparent'
-                  }`}
-                  style={status !== opt.val ? { borderColor: 'var(--border)', color: 'var(--text-body)', background: 'var(--bg-secondary)' } : {}}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--text-muted)' }}>Reviewer Comments</label>
-            <textarea value={comments} onChange={e => setComments(e.target.value)} rows={3}
-              placeholder="Add your review comments…"
-              className="w-full px-3 py-2 text-sm rounded-lg border resize-none focus:outline-none focus:ring-2 focus:ring-violet-500"
-              style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
-          </div>
-        </div>
-        <div className="flex justify-end gap-3 px-5 py-4 border-t" style={{ borderColor: 'var(--border)' }}>
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>Cancel</button>
-          <button onClick={handleSubmit} disabled={saving}
-            className={`flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg ${
-              status === 'approved' ? 'bg-green-600' : 'bg-red-600'
-            }`}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : status === 'approved' ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-            {status === 'approved' ? 'Approve' : 'Reject'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const RequestModal = ({ templates, onClose, onRequest }) => {
-  const [templateId, setTemplateId] = useState(templates[0]?._id || '')
-  const [comments,   setComments]   = useState('')
-  const [saving,     setSaving]     = useState(false)
-
-  const handleSubmit = async () => {
-    if (!templateId) { toast.error('Select a template'); return }
-    setSaving(true)
-    try { await onRequest({ template_id: templateId, comments }); onClose() }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-md rounded-xl shadow-2xl overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
-          <h3 className="font-semibold" style={{ color: 'var(--text-heading)' }}>Request Approval</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
-        <div className="p-5 space-y-4">
-          <div>
-            <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--text-muted)' }}>Template *</label>
-            <select value={templateId} onChange={e => setTemplateId(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg border"
-              style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}>
-              {templates.filter(t => t.status === 'draft').map(t => <option key={t._id} value={t._id}>{t.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-medium mb-1 block" style={{ color: 'var(--text-muted)' }}>Comments (optional)</label>
-            <textarea value={comments} onChange={e => setComments(e.target.value)} rows={3}
-              placeholder="Add notes for the reviewer…"
-              className="w-full px-3 py-2 text-sm rounded-lg border resize-none"
-              style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
-          </div>
-        </div>
-        <div className="flex justify-end gap-3 px-5 py-4 border-t" style={{ borderColor: 'var(--border)' }}>
-          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>Cancel</button>
-          <button onClick={handleSubmit} disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg"
-            style={{ background: 'linear-gradient(135deg,#7c3aed,#4f46e5)' }}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckSquare className="w-4 h-4" />}
-            Submit
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default function Approvals() {
-  const [approvals,  setApprovals]  = useState([])
-  const [total,      setTotal]      = useState(0)
-  const [loading,    setLoading]    = useState(true)
-  const [statusFilter, setStatusFilter] = useState('pending')
-  const [reviewing,  setReviewing]  = useState(null)
-  const [requesting, setRequesting] = useState(false)
-  const [templates,  setTemplates]  = useState([])
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      const r = await documentCenterService.listApprovals({ status: statusFilter || undefined, limit: 50 })
-      setApprovals(r.data?.data?.approvals || [])
-      setTotal(r.data?.data?.total || 0)
-    } catch { toast.error('Failed to load approvals') }
-    finally { setLoading(false) }
-  }
-
-  useEffect(() => {
-    load()
-    documentCenterService.listTemplates({ status: 'draft', limit: 200 }).then(r => setTemplates(r.data?.data?.templates || [])).catch(() => {})
-  }, [statusFilter])
-
-  const handleReview = async (id, data) => {
-    try {
-      await documentCenterService.reviewApproval(id, data)
-      toast.success(`Template ${data.status}`)
-      load()
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Review failed')
-      throw err
+    } finally {
+      setBusy(false)
     }
   }
-
-  const handleRequest = async (data) => {
-    try {
-      await documentCenterService.requestApproval(data)
-      toast.success('Approval requested')
-      load()
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || 'Request failed')
-      throw err
-    }
-  }
-
-  const pendingCount = approvals.filter(a => a.status === 'pending').length
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: 'var(--text-heading)' }}>
-            <CheckSquare className="w-5 h-5 text-violet-600" /> Approvals
-            {pendingCount > 0 && statusFilter === 'pending' && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">{pendingCount} pending</span>
-            )}
-          </h2>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Review and approve template submissions</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+      <div className="rounded-2xl w-full max-w-md shadow-2xl" style={{ background: 'var(--bg-secondary)' }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <h3 className="font-semibold" style={{ color: 'var(--text-heading)' }}>
+            Review Approval
+          </h3>
+          <button onClick={onClose}><X className="w-4 h-4" style={{ color: 'var(--text-muted)' }} /></button>
         </div>
-        <button onClick={() => setRequesting(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
-          style={{ background: 'linear-gradient(135deg,#7c3aed,#4f46e5)' }}>
-          <CheckSquare className="w-4 h-4" /> Request Approval
-        </button>
-      </div>
+        <div className="p-6 space-y-4">
+          {/* Template info */}
+          <div className="p-3 rounded-xl" style={{ background: 'var(--bg-primary)' }}>
+            <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-muted)' }}>Template</p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>{approval.template_name}</p>
+          </div>
 
-      {/* Status filter tabs */}
-      <div className="flex gap-1 mb-5 border-b" style={{ borderColor: 'var(--border)' }}>
-        {[
-          { val: 'pending',  label: 'Pending' },
-          { val: 'approved', label: 'Approved' },
-          { val: 'rejected', label: 'Rejected' },
-          { val: '',         label: 'All' },
-        ].map(opt => (
-          <button key={opt.val} onClick={() => setStatusFilter(opt.val)}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-              statusFilter === opt.val ? 'border-violet-600 text-violet-600' : 'border-transparent'
-            }`}
-            style={statusFilter !== opt.val ? { color: 'var(--text-muted)' } : {}}>
-            {opt.label}
+          {/* Requester comments */}
+          {approval.comments && (
+            <div className="p-3 rounded-xl" style={{ background: 'var(--bg-primary)' }}>
+              <p className="text-xs font-medium mb-0.5" style={{ color: 'var(--text-muted)' }}>
+                Requester Note
+              </p>
+              <p className="text-sm" style={{ color: 'var(--text-body)' }}>{approval.comments}</p>
+            </div>
+          )}
+
+          {/* Decision */}
+          <div>
+            <label className="block text-xs font-medium mb-2" style={{ color: 'var(--text-muted)' }}>
+              Decision *
+            </label>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDecision('approved')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${
+                  decision === 'approved' ? 'border-green-500 bg-green-50 text-green-700 dark:bg-green-900/20' : ''
+                }`}
+                style={decision !== 'approved' ? { borderColor: 'var(--border)', color: 'var(--text-body)' } : {}}
+              >
+                <CheckCircle className="w-4 h-4" /> Approve
+              </button>
+              <button
+                onClick={() => setDecision('rejected')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${
+                  decision === 'rejected' ? 'border-red-500 bg-red-50 text-red-700 dark:bg-red-900/20' : ''
+                }`}
+                style={decision !== 'rejected' ? { borderColor: 'var(--border)', color: 'var(--text-body)' } : {}}
+              >
+                <XCircle className="w-4 h-4" /> Reject
+              </button>
+            </div>
+          </div>
+
+          {/* Reviewer comments */}
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
+              Comments (optional)
+            </label>
+            <textarea
+              value={comments}
+              onChange={e => setComments(e.target.value)}
+              rows={3}
+              placeholder="Add a note for the requester…"
+              className="w-full px-3 py-2 text-sm rounded-xl border resize-none focus:outline-none focus:ring-2 focus:ring-violet-500"
+              style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
+            />
+          </div>
+        </div>
+        <div className="flex gap-3 px-6 pb-6">
+          <button onClick={onClose}
+            className="flex-1 px-4 py-2 rounded-lg text-sm border font-medium"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+            Cancel
           </button>
-        ))}
+          <button onClick={handleSubmit} disabled={busy || !decision}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              decision === 'approved' ? 'bg-green-600 text-white hover:bg-green-700'
+            : decision === 'rejected' ? 'bg-red-600 text-white hover:bg-red-700'
+            : 'bg-gray-200 text-gray-500'
+            } disabled:opacity-50`}>
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckSquare className="w-4 h-4" />}
+            {busy ? 'Submitting…' : decision === 'approved' ? 'Approve' : decision === 'rejected' ? 'Reject' : 'Submit'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Approval Card ─────────────────────────────────────────────────────────────
+function ApprovalCard({ approval, onRefresh }) {
+  const [showReview, setShowReview] = useState(false)
+  const status = approval.status || 'pending'
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.pending
+  const StatusIcon = cfg.icon
+
+  return (
+    <>
+      <div className="rounded-xl border p-4 transition-all hover:shadow-md"
+        style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            {/* Template name */}
+            <div className="flex items-center gap-2 mb-1">
+              <FileText className="w-4 h-4 flex-shrink-0 text-violet-500" />
+              <h3 className="font-semibold text-sm truncate" style={{ color: 'var(--text-heading)' }}>
+                {approval.template_name}
+              </h3>
+            </div>
+
+            {/* Meta */}
+            <div className="flex items-center flex-wrap gap-3 text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+              <span className="flex items-center gap-1">
+                <User className="w-3 h-3" /> {approval.requested_by_name || 'Unknown'}
+              </span>
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                {new Date(approval.created_at).toLocaleDateString()}
+              </span>
+              {approval.approver_name && (
+                <span className="flex items-center gap-1">
+                  <CheckSquare className="w-3 h-3" /> {approval.approver_name}
+                </span>
+              )}
+            </div>
+
+            {/* Comments */}
+            {approval.comments && (
+              <div className="flex items-start gap-1.5 mb-3">
+                <MessageSquare className="w-3 h-3 mt-0.5 flex-shrink-0" style={{ color: 'var(--text-muted)' }} />
+                <p className="text-xs italic" style={{ color: 'var(--text-muted)' }}>{approval.comments}</p>
+              </div>
+            )}
+
+            {/* Reviewer comments */}
+            {approval.reviewer_comments && (
+              <div className="p-2 rounded-lg mb-3 text-xs italic" style={{ background: 'var(--bg-primary)', color: 'var(--text-muted)' }}>
+                <span className="font-medium not-italic">Reviewer: </span>
+                {approval.reviewer_comments}
+              </div>
+            )}
+          </div>
+
+          {/* Status badge + action */}
+          <div className="flex flex-col items-end gap-2">
+            <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5 ${cfg.color}`}>
+              <StatusIcon className="w-3 h-3" />
+              {cfg.label}
+            </span>
+            {status === 'pending' && (
+              <button onClick={() => setShowReview(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white"
+                style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}>
+                Review
+              </button>
+            )}
+            {approval.reviewed_at && (
+              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                {new Date(approval.reviewed_at).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center h-32">
-          <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
-        </div>
-      ) : approvals.length === 0 ? (
-        <div className="text-center py-16 border rounded-xl" style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
-          <CheckSquare className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-          <p style={{ color: 'var(--text-muted)' }}>No {statusFilter || ''} approvals found</p>
-        </div>
-      ) : (
-        <div className="space-y-3 max-w-3xl">
-          {approvals.map(appr => {
-            const info  = STATUS_INFO[appr.status] || STATUS_INFO.pending
-            const Icon  = info.icon
-            return (
-              <div key={appr._id}
-                className="border rounded-xl p-4 flex items-start gap-4 transition-colors hover:border-violet-300"
-                style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
-                <Icon className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: appr.status === 'approved' ? '#10b981' : appr.status === 'rejected' ? '#ef4444' : '#f59e0b' }} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-semibold text-sm" style={{ color: 'var(--text-heading)' }}>{appr.template_name}</p>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${info.cls}`}>{info.label}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: 'var(--text-muted)' }}>
-                    <span className="flex items-center gap-1"><User className="w-3 h-3" /> Requested by {appr.requested_by_name}</span>
-                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(appr.created_at).toLocaleDateString()}</span>
-                    {appr.approver_name && <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3" />Reviewed by {appr.approver_name}</span>}
-                  </div>
-                  {appr.comments && (
-                    <p className="text-xs mt-1 italic" style={{ color: 'var(--text-muted)' }}>Request: "{appr.comments}"</p>
-                  )}
-                  {appr.reviewer_comments && (
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Review: "{appr.reviewer_comments}"</p>
-                  )}
-                </div>
-                {appr.status === 'pending' && (
-                  <button onClick={() => setReviewing(appr)}
-                    className="flex-shrink-0 px-3 py-1.5 text-xs font-medium text-white rounded-lg"
-                    style={{ background: 'linear-gradient(135deg,#7c3aed,#4f46e5)' }}>
-                    Review
-                  </button>
-                )}
-              </div>
-            )
-          })}
-        </div>
+      {showReview && (
+        <ReviewModal
+          approval={approval}
+          onClose={() => setShowReview(false)}
+          onDone={onRefresh}
+        />
       )}
+    </>
+  )
+}
 
-      {reviewing && <ReviewModal approval={reviewing} onClose={() => setReviewing(null)} onReview={handleReview} />}
-      {requesting && <RequestModal templates={templates} onClose={() => setRequesting(false)} onRequest={handleRequest} />}
+// ─── Main Component ────────────────────────────────────────────────────────────
+export default function Approvals() {
+  const [approvals, setApprovals] = useState([])
+  const [total,     setTotal]     = useState(0)
+  const [loading,   setLoading]   = useState(false)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [mineOnly,  setMineOnly]  = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await documentCenterService.listApprovals({
+        ...(statusFilter ? { status: statusFilter } : {}),
+        mine: mineOnly,
+        limit: 100,
+      })
+      const d = r.data?.data
+      setApprovals(d?.approvals || [])
+      setTotal(d?.total || 0)
+    } catch {
+      toast.error('Failed to load approvals')
+    } finally {
+      setLoading(false)
+    }
+  }, [statusFilter, mineOnly])
+
+  useEffect(() => { load() }, [load])
+
+  const counts = {
+    pending:  approvals.filter(a => a.status === 'pending').length,
+    approved: approvals.filter(a => a.status === 'approved').length,
+    rejected: approvals.filter(a => a.status === 'rejected').length,
+  }
+
+  return (
+    <div className="flex flex-col h-full" style={{ background: 'var(--bg-primary)' }}>
+      {/* Header */}
+      <div className="px-6 pt-6 pb-4 border-b flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-xl font-bold" style={{ color: 'var(--text-heading)' }}>Approvals</h1>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>{total} request{total !== 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={load} className="p-2 rounded-lg border" style={{ borderColor: 'var(--border)' }} title="Refresh">
+            <RefreshCw className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          {[
+            { key: 'pending',  label: 'Pending',  color: 'text-yellow-600', bg: 'bg-yellow-50 dark:bg-yellow-900/20' },
+            { key: 'approved', label: 'Approved', color: 'text-green-600',  bg: 'bg-green-50 dark:bg-green-900/20' },
+            { key: 'rejected', label: 'Rejected', color: 'text-red-600',    bg: 'bg-red-50 dark:bg-red-900/20' },
+          ].map(s => (
+            <button key={s.key}
+              onClick={() => setStatusFilter(statusFilter === s.key ? '' : s.key)}
+              className={`p-3 rounded-xl text-center transition-all border ${
+                statusFilter === s.key ? `${s.bg} border-current ${s.color}` : ''
+              }`}
+              style={statusFilter !== s.key ? { borderColor: 'var(--border)', background: 'var(--bg-secondary)' } : {}}>
+              <div className={`text-2xl font-bold ${s.color}`}>{counts[s.key]}</div>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{s.label}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Filters */}
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-body)' }}>
+            <input type="checkbox" checked={mineOnly} onChange={e => setMineOnly(e.target.checked)} className="accent-violet-600" />
+            My requests only
+          </label>
+        </div>
+      </div>
+
+      {/* List */}
+      <div className="flex-1 overflow-auto p-6">
+        {loading ? (
+          <div className="flex items-center justify-center h-48">
+            <Loader2 className="w-8 h-8 animate-spin text-violet-600" />
+          </div>
+        ) : approvals.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-center">
+            <CheckSquare className="w-12 h-12 mb-3" style={{ color: 'var(--text-muted)' }} />
+            <p className="font-medium mb-1" style={{ color: 'var(--text-heading)' }}>No approvals found</p>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+              {statusFilter ? `No ${statusFilter} approvals` : 'Approval requests will appear here'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {approvals.map(a => (
+              <ApprovalCard key={a._id || a.id} approval={a} onRefresh={load} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

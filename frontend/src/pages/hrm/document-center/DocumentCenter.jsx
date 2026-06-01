@@ -1,32 +1,22 @@
-import { useState, useEffect, Suspense, lazy } from 'react'
+import { Suspense, lazy } from 'react'
 import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom'
-import {
-  Upload, FileText, Wand2, Layout, BookOpen, FolderOpen,
-  History, CheckSquare, Archive, ChevronRight, Star, Plus,
-} from 'lucide-react'
+import { Plus, FileText, CheckSquare, Archive, Clock, LayoutTemplate } from 'lucide-react'
 import { clsx } from 'clsx'
 
-// Sub-pages (lazy loaded)
-const ImportDocuments  = lazy(() => import('./ImportDocuments'))
-const TemplateBuilder  = lazy(() => import('./TemplateBuilder'))
-const AdvancedDesigner = lazy(() => import('./AdvancedDesigner'))
+const NewTemplatePage    = lazy(() => import('./NewTemplatePage'))
+const ImportEditor       = lazy(() => import('./ImportEditor'))
+const QuickBuilder       = lazy(() => import('./QuickBuilder'))
+const AdvancedDesigner   = lazy(() => import('./AdvancedDesigner'))
+const Templates          = lazy(() => import('./Templates'))
 const GeneratedDocuments = lazy(() => import('./GeneratedDocuments'))
-const TemplateLibrary  = lazy(() => import('./TemplateLibrary'))
-const Categories       = lazy(() => import('./Categories'))
-const VersionHistory   = lazy(() => import('./VersionHistory'))
-const Approvals        = lazy(() => import('./Approvals'))
-const ArchivePage      = lazy(() => import('./ArchivePage'))
+const Approvals          = lazy(() => import('./Approvals'))
+const Archive            = lazy(() => import('./Archive'))
 
 const NAV_ITEMS = [
-  { key: 'library',    label: 'Template Library',    icon: BookOpen,    path: 'library',    desc: 'Pre-built HR document templates' },
-  { key: 'import',     label: 'Import Documents',    icon: Upload,      path: 'import',     desc: 'Import DOCX, PDF, or HTML files' },
-  { key: 'builder',    label: 'Template Builder',    icon: FileText,    path: 'builder',    desc: 'Simple rich-text template editor' },
-  { key: 'designer',   label: 'Advanced Designer',   icon: Layout,      path: 'designer',   desc: 'Drag-drop canvas designer' },
-  { key: 'generated',  label: 'Generated Documents', icon: CheckSquare, path: 'generated',  desc: 'All generated & sent documents' },
-  { key: 'categories', label: 'Categories',          icon: FolderOpen,  path: 'categories', desc: 'Manage template categories' },
-  { key: 'history',    label: 'Version History',     icon: History,     path: 'history',    desc: 'All template version snapshots' },
-  { key: 'approvals',  label: 'Approvals',           icon: Star,        path: 'approvals',  desc: 'Pending review & approval queue' },
-  { key: 'archive',    label: 'Archive',             icon: Archive,     path: 'archive',    desc: 'Archived templates' },
+  { key: 'templates',  label: 'Templates',           icon: LayoutTemplate, path: 'templates' },
+  { key: 'generated',  label: 'Generated Documents',  icon: FileText,       path: 'generated' },
+  { key: 'approvals',  label: 'Approvals',            icon: CheckSquare,    path: 'approvals' },
+  { key: 'archive',    label: 'Archive',              icon: Archive,        path: 'archive' },
 ]
 
 const Spinner = () => (
@@ -36,105 +26,78 @@ const Spinner = () => (
 )
 
 export default function DocumentCenter() {
-  const navigate  = useNavigate()
-  const location  = useLocation()
-  const [collapsed, setCollapsed] = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
 
-  // Derive active key from URL
-  const segments   = location.pathname.split('/')
-  const activeKey  = segments[segments.indexOf('doc-center') + 1] || 'library'
+  const segments  = location.pathname.split('/')
+  const dcIndex   = segments.indexOf('doc-center')
+  const activeKey = segments[dcIndex + 1] || 'templates'
 
   const goto = (path) => navigate(`/hrm/doc-center/${path}`)
 
   return (
     <div className="flex h-full min-h-[calc(100vh-68px)]" style={{ background: 'var(--bg-primary)' }}>
 
-      {/* ── Left sub-navigation ── */}
+      {/* ── Left sidebar ── */}
       <aside
-        className="flex-shrink-0 flex flex-col border-r transition-all duration-200"
-        style={{
-          width: collapsed ? 56 : 220,
-          background: 'var(--bg-secondary)',
-          borderColor: 'var(--border)',
-        }}
+        className="flex-shrink-0 flex flex-col border-r"
+        style={{ width: 220, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
       >
         {/* Header */}
-        <div
-          className="flex items-center justify-between px-3 py-4 border-b"
-          style={{ borderColor: 'var(--border)' }}
-        >
-          {!collapsed && (
-            <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-              Document Center
-            </span>
-          )}
+        <div className="px-4 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>
+            Document Center
+          </p>
           <button
-            onClick={() => setCollapsed(c => !c)}
-            className="p-1 rounded-md hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors ml-auto"
-            title={collapsed ? 'Expand' : 'Collapse'}
+            onClick={() => goto('new')}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
           >
-            <ChevronRight
-              className="w-4 h-4 transition-transform"
-              style={{ color: 'var(--text-muted)', transform: collapsed ? 'rotate(0deg)' : 'rotate(180deg)' }}
-            />
+            <Plus className="w-4 h-4" />
+            New Template
           </button>
         </div>
 
-        {/* Quick create button */}
-        {!collapsed && (
-          <div className="px-3 pt-3">
-            <button
-              onClick={() => goto('builder')}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white transition-all"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
-            >
-              <Plus className="w-4 h-4 flex-shrink-0" />
-              New Template
-            </button>
-          </div>
-        )}
-
-        {/* Nav items */}
+        {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
           {NAV_ITEMS.map((item) => {
-            const isActive = activeKey === item.key || activeKey?.startsWith(item.key)
+            const isActive = activeKey === item.key
             return (
               <button
                 key={item.key}
                 onClick={() => goto(item.path)}
-                title={collapsed ? item.label : undefined}
                 className={clsx(
-                  'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-all text-left',
+                  'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all text-left',
                   isActive
-                    ? 'bg-violet-600 text-white'
-                    : 'hover:bg-violet-50 dark:hover:bg-violet-900/20',
+                    ? 'bg-violet-600 text-white font-medium'
+                    : 'hover:bg-violet-50 dark:hover:bg-violet-900/20 font-normal',
                 )}
                 style={isActive ? {} : { color: 'var(--text-body)' }}
               >
                 <item.icon className="w-4 h-4 flex-shrink-0" />
-                {!collapsed && <span className="truncate">{item.label}</span>}
+                <span className="truncate">{item.label}</span>
               </button>
             )
           })}
         </nav>
       </aside>
 
-      {/* ── Right content area ── */}
+      {/* ── Right content ── */}
       <main className="flex-1 overflow-auto">
         <Suspense fallback={<Spinner />}>
           <Routes>
-            <Route index element={<Navigate to="library" replace />} />
-            <Route path="library"    element={<TemplateLibrary />} />
-            <Route path="import"     element={<ImportDocuments />} />
-            <Route path="builder"    element={<TemplateBuilder />} />
-            <Route path="builder/:id" element={<TemplateBuilder />} />
-            <Route path="designer"   element={<AdvancedDesigner />} />
-            <Route path="designer/:id" element={<AdvancedDesigner />} />
-            <Route path="generated"  element={<GeneratedDocuments />} />
-            <Route path="categories" element={<Categories />} />
-            <Route path="history"    element={<VersionHistory />} />
-            <Route path="approvals"  element={<Approvals />} />
-            <Route path="archive"    element={<ArchivePage />} />
+            <Route index element={<Navigate to="templates" replace />} />
+            <Route path="templates"           element={<Templates />} />
+            <Route path="new"                 element={<NewTemplatePage />} />
+            <Route path="import"              element={<ImportEditor />} />
+            <Route path="import/:id"          element={<ImportEditor />} />
+            <Route path="quick"               element={<QuickBuilder />} />
+            <Route path="quick/:id"           element={<QuickBuilder />} />
+            <Route path="advanced"            element={<AdvancedDesigner />} />
+            <Route path="advanced/:id"        element={<AdvancedDesigner />} />
+            <Route path="generated"           element={<GeneratedDocuments />} />
+            <Route path="approvals"           element={<Approvals />} />
+            <Route path="archive"             element={<Archive />} />
           </Routes>
         </Suspense>
       </main>

@@ -730,6 +730,34 @@ class DocumentCenterService:
         await db.doc_templates.update_one({"_id": template_id}, {"$set": updates})
         return True, "Template updated"
 
+    async def duplicate_template(
+        self, db: AsyncIOMotorDatabase, template_id: str, user_id: str, user_name: str
+    ) -> Tuple[bool, str, Optional[Dict]]:
+        existing = await db.doc_templates.find_one({"_id": template_id, "is_deleted": {"$ne": True}})
+        if not existing:
+            return False, "Template not found", None
+        content_obj = TemplateContent(**existing.get("content", {}))
+        tmpl = DocTemplate(
+            name=f"Copy of {existing['name']}",
+            description=existing.get("description", ""),
+            category_id=existing.get("category_id"),
+            category_name=existing.get("category_name", ""),
+            template_type=DocTemplateType(existing.get("template_type", "simple")),
+            tags=existing.get("tags", []),
+            content=content_obj,
+            dynamic_fields=existing.get("dynamic_fields", []),
+            created_by=user_id,
+            created_by_name=user_name,
+            updated_by=user_id,
+        )
+        doc = tmpl.model_dump(by_alias=True)
+        await db.doc_templates.insert_one(doc)
+        await self._save_version(
+            db, doc["_id"], 1, doc["name"], content_obj,
+            f"Duplicated from {existing['name']}", user_id, user_name,
+        )
+        return True, "Template duplicated", doc
+
     async def delete_template(self, db: AsyncIOMotorDatabase, template_id: str) -> Tuple[bool, str]:
         result = await db.doc_templates.update_one(
             {"_id": template_id},

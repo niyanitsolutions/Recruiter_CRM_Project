@@ -166,6 +166,22 @@ async def delete_template(
     return {"success": True, "message": msg}
 
 
+@router.post("/templates/{template_id}/duplicate", status_code=201)
+async def duplicate_template(
+    template_id: str,
+    db   = Depends(get_company_db),
+    user = Depends(require_permissions(PERM_CREATE)),
+):
+    ok, msg, doc = await document_center_service.duplicate_template(
+        db, template_id,
+        user["_id"],
+        user.get("full_name", user.get("username", "")),
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail=msg)
+    return {"success": True, "message": msg, "data": doc}
+
+
 @router.post("/templates/{template_id}/favorite")
 async def toggle_favorite(
     template_id: str,
@@ -321,6 +337,22 @@ async def list_generated(
         limit=limit,
     )
     return {"success": True, "data": {"documents": docs, "total": total}}
+
+
+@router.post("/generated/{doc_id}/archive")
+async def archive_generated(
+    doc_id: str,
+    db   = Depends(get_company_db),
+    user = Depends(require_permissions(PERM_VIEW)),
+):
+    from datetime import datetime, timezone
+    result = await db.doc_generated.update_one(
+        {"_id": doc_id, "is_deleted": {"$ne": True}},
+        {"$set": {"status": "archived", "updated_at": datetime.now(timezone.utc)}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"success": True, "message": "Document archived"}
 
 
 @router.delete("/generated/{doc_id}")
