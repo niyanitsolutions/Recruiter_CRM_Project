@@ -53,29 +53,56 @@ class ApprovalStatus(str, Enum):
 # ─── Sub-models (embedded in TemplateContent) ─────────────────────────────────
 
 class HeaderContent(BaseModel):
-    show:             bool  = True
-    logo_url:         Optional[str] = None
-    company_name:     str   = ""
-    company_address:  str   = ""
-    company_email:    str   = ""
-    company_phone:    str   = ""
-    alignment:        str   = "left"      # left | center | right
-    font_family:      str   = "Arial"
-    font_size:        int   = 12
-    font_weight:      str   = "normal"
-    font_style:       str   = "normal"
-    font_color:       str   = "#000000"
-    background_color: str   = "#ffffff"
-    border_bottom:    bool  = True
+    model_config = ConfigDict(extra="allow")
+    show:              bool  = True
+    logo_url:          Optional[str] = None
+    logo_height:       int   = 40
+    logo_alignment:    str   = "left"      # left | center | right (independent)
+    company_name:      str   = ""
+    company_address:   str   = ""
+    company_email:     str   = ""
+    company_phone:     str   = ""
+    company_website:   str   = ""
+    gst_number:        str   = ""
+    reg_number:        str   = ""
+    company_alignment: str   = "left"      # separate from logo alignment
+    header_height:     int   = 120         # px
+    padding_top:       int   = 12
+    padding_right:     int   = 16
+    padding_bottom:    int   = 8
+    padding_left:      int   = 16
+    margin_top:        int   = 0
+    margin_right:      int   = 0
+    margin_bottom:     int   = 0
+    margin_left:       int   = 0
+    font_family:       str   = "Arial"
+    font_size:         int   = 12
+    font_weight:       str   = "normal"
+    font_style:        str   = "normal"
+    font_color:        str   = "#000000"
+    background_color:  str   = "#ffffff"
+    border_bottom:     bool  = True
+    border_color:      str   = "#d1d5db"
+    border_width:      int   = 1
 
 
 class FooterContent(BaseModel):
+    model_config = ConfigDict(extra="allow")
     show:               bool = True
     text:               str  = ""
     description:        str  = ""
     website:            str  = ""
     email:              str  = ""
     phone:              str  = ""
+    footer_height:      int  = 60
+    padding_top:        int  = 8
+    padding_right:      int  = 16
+    padding_bottom:     int  = 12
+    padding_left:       int  = 16
+    margin_top:         int  = 0
+    margin_right:       int  = 0
+    margin_bottom:      int  = 0
+    margin_left:        int  = 0
     show_page_numbers:  bool = True
     show_date:          bool = True
     confidential_label: bool = False
@@ -83,6 +110,8 @@ class FooterContent(BaseModel):
     font_size:          int  = 10
     font_color:         str  = "#666666"
     border_top:         bool = True
+    border_color:       str  = "#d1d5db"
+    border_width:       int  = 1
 
 
 class WatermarkContent(BaseModel):

@@ -1,6 +1,6 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom'
-import { Plus, FileText, CheckSquare, Archive as ArchiveIcon, LayoutTemplate, FolderOpen, History } from 'lucide-react'
+import { Plus, FileText, CheckSquare, Archive as ArchiveIcon, LayoutTemplate, FolderOpen, History, ChevronLeft, ChevronRight } from 'lucide-react'
 import { clsx } from 'clsx'
 
 const NewTemplatePage    = lazy(() => import('./NewTemplatePage'))
@@ -30,48 +30,74 @@ const Spinner = () => (
 )
 
 export default function DocumentCenter() {
-  const navigate = useNavigate()
-  const location = useLocation()
+  const navigate   = useNavigate()
+  const location   = useLocation()
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('dc_sidebar_collapsed') === 'true')
 
   const segments  = location.pathname.split('/')
   const dcIndex   = segments.indexOf('doc-center')
   const activeKey = segments[dcIndex + 1] || 'templates'
 
-  const goto = (path) => navigate(`/hrm/doc-center/${path}`)
+  const goto   = (path) => navigate(`/hrm/doc-center/${path}`)
+  const toggle = () => setCollapsed(v => {
+    const next = !v
+    localStorage.setItem('dc_sidebar_collapsed', next)
+    return next
+  })
 
   return (
     <div className="flex h-full min-h-[calc(100vh-68px)]" style={{ background: 'var(--bg-primary)' }}>
 
       {/* ── Left sidebar ── */}
       <aside
-        className="flex-shrink-0 flex flex-col border-r"
-        style={{ width: 220, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
+        className="flex-shrink-0 flex flex-col border-r transition-all duration-200 relative"
+        style={{ width: collapsed ? 56 : 220, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
       >
         {/* Header */}
-        <div className="px-4 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
-          <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>
-            Document Center
-          </p>
-          <button
-            onClick={() => goto('new')}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
-          >
-            <Plus className="w-4 h-4" />
-            New Template
-          </button>
+        <div
+          className="border-b flex items-center"
+          style={{ borderColor: 'var(--border)', padding: collapsed ? '12px 8px' : '16px 16px 12px' }}
+        >
+          {!collapsed && (
+            <p className="text-xs font-semibold uppercase tracking-wider flex-1 truncate" style={{ color: 'var(--text-muted)' }}>
+              Doc Center
+            </p>
+          )}
+          {!collapsed && (
+            <button
+              onClick={() => goto('new')}
+              title="New Template"
+              className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New
+            </button>
+          )}
+          {collapsed && (
+            <button
+              onClick={() => goto('new')}
+              title="New Template"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-white transition-all hover:opacity-90 mx-auto"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto py-3 space-y-0.5" style={{ padding: collapsed ? '12px 6px' : '12px 8px' }}>
           {NAV_ITEMS.map((item) => {
             const isActive = activeKey === item.key
             return (
               <button
                 key={item.key}
                 onClick={() => goto(item.path)}
+                title={collapsed ? item.label : undefined}
                 className={clsx(
-                  'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all text-left',
+                  'w-full flex items-center rounded-lg text-sm transition-all',
+                  collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-3 py-2.5 text-left',
                   isActive
                     ? 'bg-violet-600 text-white font-medium'
                     : 'hover:bg-violet-50 dark:hover:bg-violet-900/20 font-normal',
@@ -79,11 +105,21 @@ export default function DocumentCenter() {
                 style={isActive ? {} : { color: 'var(--text-body)' }}
               >
                 <item.icon className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate">{item.label}</span>
+                {!collapsed && <span className="truncate">{item.label}</span>}
               </button>
             )
           })}
         </nav>
+
+        {/* Collapse toggle button */}
+        <button
+          onClick={toggle}
+          className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border flex items-center justify-center z-10 hover:bg-violet-600 hover:text-white hover:border-violet-600 transition-colors"
+          style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+        </button>
       </aside>
 
       {/* ── Right content ── */}

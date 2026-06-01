@@ -11,12 +11,14 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import {
   Save, Eye, ArrowLeft, Loader2, Wand2, Plus, Trash2, GripVertical,
-  ChevronDown, ChevronUp, Bold, Italic, Underline, AlignLeft, AlignCenter,
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
+  Bold, Italic, Underline, AlignLeft, AlignCenter,
   AlignRight, AlignJustify, List, ListOrdered, Link2, Palette, Type,
   Table, Image as ImageIcon, FileText, Minus as MinusIcon, RotateCcw,
   RotateCw, Hash, Quote, Layers, Columns, Stamp, Clock, CheckCircle,
   AlertCircle, QrCode, GripHorizontal, Maximize2, ZoomIn, ZoomOut, X,
   Download, Printer, Upload,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
 } from 'lucide-react'
 import documentCenterService from '../../../services/documentCenterService'
 
@@ -204,20 +206,17 @@ function blocksToHtml(blocks) {
 }
 
 // ─── Shared UI ─────────────────────────────────────────────────────────────────
-const Panel = ({ title, children, defaultOpen = false }) => {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="border-b" style={{ borderColor: 'var(--border)' }}>
-      <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wider"
-        style={{ color: 'var(--text-muted)' }}>
-        {title}
-        {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-      </button>
-      {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
-    </div>
-  )
-}
+const Panel = ({ title, children, open, onToggle }) => (
+  <div className="border-b" style={{ borderColor: 'var(--border)' }}>
+    <button type="button" onClick={onToggle}
+      className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold uppercase tracking-wider"
+      style={{ color: 'var(--text-muted)' }}>
+      {title}
+      {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+    </button>
+    {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
+  </div>
+)
 
 const Lbl = ({ children }) => <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>{children}</p>
 const Inp = (props) => (
@@ -798,7 +797,19 @@ export default function AdvancedDesigner() {
   const [preview,  setPreview]  = useState(false)
   const [showFullPreview, setShowFullPreview] = useState(false)
   const [autoSaveStatus, setAutoSaveStatus]   = useState('saved')
+  const [showExport, setShowExport] = useState(false)
+  const exportRef = useRef(null)
   const autoSaveTimer = useRef(null)
+
+  // Panel state
+  const [leftWidth,  setLeftWidth]  = useState(() => parseInt(localStorage.getItem('ad_left_w')  || '240'))
+  const [rightWidth, setRightWidth] = useState(() => parseInt(localStorage.getItem('ad_right_w') || '260'))
+  const [leftCollapsed,  setLeftCollapsed]  = useState(() => localStorage.getItem('ad_left_col')  === 'true')
+  const [rightCollapsed, setRightCollapsed] = useState(() => localStorage.getItem('ad_right_col') === 'true')
+  const [openSection, setOpenSection] = useState('blocks')
+  const toggleSection = (key) => setOpenSection(k => k === key ? null : key)
+  const toggleLeftPanel  = () => setLeftCollapsed(v  => { const n = !v; localStorage.setItem('ad_left_col',  n); return n })
+  const toggleRightPanel = () => setRightCollapsed(v => { const n = !v; localStorage.setItem('ad_right_col', n); return n })
 
   const [name,        setName]        = useState('Untitled Template')
   const [description, setDescription] = useState('')
@@ -808,17 +819,58 @@ export default function AdvancedDesigner() {
 
   const [blocks,     setBlocks]     = useState([DEFAULT_BLOCKS.heading1(), DEFAULT_BLOCKS.paragraph()])
   const [selectedId, setSelectedId] = useState(null)
-  const [activePanel, setActivePanel] = useState('blocks')
+  const historyRef  = useRef([[DEFAULT_BLOCKS.heading1(), DEFAULT_BLOCKS.paragraph()]])
+  const historyIdx  = useRef(0)
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+  // activePanel removed — now using openSection accordion
+
+  const pushHistory = useCallback((newBlocks) => {
+    const hist = historyRef.current.slice(0, historyIdx.current + 1)
+    hist.push(newBlocks)
+    if (hist.length > 50) hist.shift()
+    historyRef.current = hist
+    historyIdx.current = hist.length - 1
+    setCanUndo(historyIdx.current > 0)
+    setCanRedo(false)
+  }, [])
+
+  const handleUndo = useCallback(() => {
+    if (historyIdx.current <= 0) return
+    historyIdx.current -= 1
+    const prev = historyRef.current[historyIdx.current]
+    setBlocks(prev)
+    setCanUndo(historyIdx.current > 0)
+    setCanRedo(true)
+  }, [])
+
+  const handleRedo = useCallback(() => {
+    if (historyIdx.current >= historyRef.current.length - 1) return
+    historyIdx.current += 1
+    const next = historyRef.current[historyIdx.current]
+    setBlocks(next)
+    setCanUndo(true)
+    setCanRedo(historyIdx.current < historyRef.current.length - 1)
+  }, [])
 
   const [header, setHeader] = useState({
-    show: true, logo_url: '', company_name: '', company_address: '', company_email: '',
-    company_phone: '', alignment: 'left', font_size: 12, font_color: '#000000',
-    background_color: '#ffffff', border_bottom: true,
+    show: true, logo_url: '', logo_height: 40,
+    logo_alignment: 'left', company_alignment: 'left',
+    header_height: 120,
+    padding_top: 12, padding_right: 16, padding_bottom: 8, padding_left: 16,
+    margin_top: 0, margin_right: 0, margin_bottom: 0, margin_left: 0,
+    company_name: '', company_address: '', company_email: '',
+    company_phone: '', company_website: '', gst_number: '', reg_number: '',
+    font_family: 'Arial', font_size: 12, font_color: '#000000',
+    background_color: '#ffffff', border_bottom: true, border_color: '#d1d5db', border_width: 1,
   })
   const [footer, setFooter] = useState({
-    show: true, text: '', show_page_numbers: true, show_date: true,
+    show: true, text: '', description: '', show_page_numbers: true, show_date: true,
     confidential_label: false, alignment: 'center', font_size: 10,
-    font_color: '#666666', border_top: true,
+    font_color: '#666666', border_top: true, border_color: '#d1d5db', border_width: 1,
+    footer_height: 60,
+    padding_top: 8, padding_right: 16, padding_bottom: 12, padding_left: 16,
+    margin_top: 0, margin_right: 0, margin_bottom: 0, margin_left: 0,
   })
   const [paper, setPaper] = useState({
     size: 'A4', orientation: 'portrait',
@@ -896,33 +948,45 @@ export default function AdvancedDesigner() {
     const factory = DEFAULT_BLOCKS[type]
     if (!factory) return
     const newBlock = factory()
-    setBlocks(prev => [...prev, newBlock])
+    setBlocks(prev => {
+      const next = [...prev, newBlock]
+      pushHistory(next)
+      return next
+    })
     setSelectedId(newBlock.id)
     scheduleAutoSave()
-  }, [scheduleAutoSave])
+  }, [scheduleAutoSave, pushHistory])
 
   const updateBlock = useCallback((updated) => {
-    setBlocks(prev => prev.map(b => b.id === updated.id ? updated : b))
+    setBlocks(prev => {
+      const next = prev.map(b => b.id === updated.id ? updated : b)
+      pushHistory(next)
+      return next
+    })
     scheduleAutoSave()
-  }, [scheduleAutoSave])
+  }, [scheduleAutoSave, pushHistory])
 
   const deleteBlock = useCallback((blockId) => {
     setBlocks(prev => {
       const next = prev.filter(b => b.id !== blockId)
-      return next.length ? next : [DEFAULT_BLOCKS.paragraph()]
+      const result = next.length ? next : [DEFAULT_BLOCKS.paragraph()]
+      pushHistory(result)
+      return result
     })
     if (selectedId === blockId) setSelectedId(null)
-  }, [selectedId])
+  }, [selectedId, pushHistory])
 
   const handleDragEnd = useCallback(({ active, over }) => {
     if (!over || active.id === over.id) return
     setBlocks(prev => {
       const oi = prev.findIndex(b => b.id === active.id)
       const ni = prev.findIndex(b => b.id === over.id)
-      return arrayMove(prev, oi, ni)
+      const next = arrayMove(prev, oi, ni)
+      pushHistory(next)
+      return next
     })
     scheduleAutoSave()
-  }, [scheduleAutoSave])
+  }, [scheduleAutoSave, pushHistory])
 
   const insertField = (field) => {
     if (!selectedBlock || !['heading1','heading2','heading3','paragraph','richtext','quote'].includes(selectedBlock.type)) {
@@ -979,6 +1043,102 @@ export default function AdvancedDesigner() {
     reader.readAsDataURL(file)
   }
 
+  // Close export dropdown on outside click
+  useEffect(() => {
+    const onOutside = (e) => { if (exportRef.current && !exportRef.current.contains(e.target)) setShowExport(false) }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
+  }, [])
+
+  // Keyboard shortcuts: Ctrl+Z undo, Ctrl+Y / Ctrl+Shift+Z redo
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo() }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); handleRedo() }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [handleUndo, handleRedo])
+
+  // Export handlers
+  const buildFullHtml = () => {
+    const html = getBodyHtml()
+    const hPt = `${header.padding_top??12}px ${header.padding_right??16}px ${header.padding_bottom??8}px ${header.padding_left??16}px`
+    const fPt = `${footer.padding_top??8}px ${footer.padding_right??16}px ${footer.padding_bottom??12}px ${footer.padding_left??16}px`
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  body { margin: 0; font-family: Arial; font-size: 12pt; line-height: 1.6; color: #1f2937; }
+  @media print { .no-print { display:none!important; } }
+  table { border-collapse: collapse; width: 100%; } td,th { border: 1px solid #e5e7eb; padding: 6px 10px; }
+  th { background: #7c3aed; color: white; }
+  .doc-header { background: ${header.background_color}; color: ${header.font_color}; padding: ${hPt};
+    border-bottom: ${header.border_bottom ? `${header.border_width??1}px solid ${header.border_color||'#d1d5db'}` : 'none'};
+    min-height: ${header.header_height||120}px; box-sizing: border-box; text-align: ${header.company_alignment||'left'}; }
+  .doc-footer { color: ${footer.font_color}; font-size: ${footer.font_size}px; padding: ${fPt};
+    border-top: ${footer.border_top ? `${footer.border_width??1}px solid ${footer.border_color||'#d1d5db'}` : 'none'};
+    min-height: ${footer.footer_height||60}px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; }
+  .page-break { page-break-after: always; }
+</style></head><body>
+${header.show ? `<div class="doc-header">
+  ${header.logo_url ? `<img src="${header.logo_url}" style="height:${header.logo_height||40}px;display:block;margin:${(header.logo_alignment||'left')==='center'?'0 auto 4px':(header.logo_alignment||'left')==='right'?'0 0 4px auto':'0 0 4px 0'};" />` : ''}
+  ${header.company_name ? `<div style="font-weight:bold;font-size:${header.font_size+2}px;">${header.company_name}</div>` : ''}
+  ${header.company_address ? `<div style="font-size:${header.font_size-1}px;">${header.company_address}</div>` : ''}
+</div>` : ''}
+<div style="padding: 20px;">${html}</div>
+${footer.show ? `<div class="doc-footer">
+  <span>${footer.show_date ? new Date().toLocaleDateString() : ''}</span>
+  <span>${footer.text||''}${footer.confidential_label?' | CONFIDENTIAL':''}</span>
+  <span>${footer.show_page_numbers ? 'Page 1' : ''}</span>
+</div>` : ''}
+</body></html>`
+  }
+
+  const handleExportHTML = () => {
+    const blob = new Blob([buildFullHtml()], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = `${name||'document'}.html`; a.click()
+    URL.revokeObjectURL(url); setShowExport(false)
+  }
+
+  const handleExportTXT = () => {
+    const txt = blocks.map(b => {
+      if (b.type === 'bulletlist' || b.type === 'numberedlist') return (b.items||[]).join('\n')
+      return b.content || b.col1 || ''
+    }).join('\n\n').trim()
+    const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = `${name||'document'}.txt`; a.click()
+    URL.revokeObjectURL(url); setShowExport(false)
+  }
+
+  const handlePrint = () => {
+    const w = window.open('', '_blank')
+    w.document.write(buildFullHtml()); w.document.close(); w.focus()
+    setTimeout(() => { w.print(); w.close() }, 400); setShowExport(false)
+  }
+
+  const handleExportPDF = () => {
+    setShowExport(false)
+    const w = window.open('', '_blank')
+    w.document.write(buildFullHtml())
+    w.document.close(); w.focus()
+    toast.success('Print dialog opening — choose "Save as PDF"')
+    setTimeout(() => { w.print(); w.close() }, 500)
+  }
+
+  const handleExportDOCX = async () => {
+    if (!id) { toast.error('Save the template first to export DOCX'); return }
+    setShowExport(false)
+    const toastId = toast.loading('Generating DOCX…')
+    try {
+      const r = await documentCenterService.generateDocument({
+        template_id: id, document_name: name, generate_pdf: false, generate_docx: true, field_values: {},
+      })
+      const genId = r.data?.data?._id
+      if (genId) { window.open(documentCenterService.downloadDOCX(genId), '_blank'); toast.success('DOCX ready', { id: toastId }) }
+    } catch { toast.error('DOCX export failed', { id: toastId }) }
+  }
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <Loader2 className="w-8 h-8 animate-spin text-violet-600" />
@@ -1028,6 +1188,17 @@ export default function AdvancedDesigner() {
         )}
 
         <div className="flex items-center gap-2">
+          <button onClick={handleUndo} disabled={!canUndo} title="Undo (Ctrl+Z)"
+            className="p-1.5 rounded-lg border transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+            <RotateCcw className="w-4 h-4" />
+          </button>
+          <button onClick={handleRedo} disabled={!canRedo} title="Redo (Ctrl+Y)"
+            className="p-1.5 rounded-lg border transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+            <RotateCw className="w-4 h-4" />
+          </button>
+          <div className="w-px h-5" style={{ background: 'var(--border)' }} />
           <button onClick={() => setShowFullPreview(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border"
             style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
@@ -1039,6 +1210,37 @@ export default function AdvancedDesigner() {
             <Eye className="w-4 h-4" />
             {preview ? 'Edit' : 'Quick View'}
           </button>
+
+          {/* Export dropdown */}
+          <div className="relative" ref={exportRef}>
+            <button onClick={() => setShowExport(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export</span>
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showExport && (
+              <div className="absolute right-0 top-full mt-1 z-50 rounded-xl border shadow-xl overflow-hidden"
+                style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', minWidth: 160 }}>
+                {[
+                  { label: 'Export PDF',  icon: FileText, fn: handleExportPDF  },
+                  { label: 'Export DOCX', icon: FileText, fn: handleExportDOCX },
+                  { label: 'Export HTML', icon: FileText, fn: handleExportHTML },
+                  { label: 'Export TXT',  icon: FileText, fn: handleExportTXT  },
+                  { label: 'Print',       icon: Printer,  fn: handlePrint      },
+                ].map(item => (
+                  <button key={item.label} onClick={item.fn}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors text-left"
+                    style={{ color: 'var(--text-body)' }}>
+                    <item.icon className="w-3.5 h-3.5 text-violet-500" />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {id && (
             <button onClick={() => navigate(`/hrm/doc-center/generated?tmpl=${id}`)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border"
@@ -1058,27 +1260,14 @@ export default function AdvancedDesigner() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* ── Left panel ── */}
-        <aside className="w-60 flex-shrink-0 border-r overflow-y-auto flex flex-col"
-          style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+        <aside className="flex-shrink-0 border-r flex flex-col overflow-hidden transition-all duration-200"
+          style={{ width: leftCollapsed ? 0 : leftWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
 
-          {/* Panel switcher */}
-          <div className="grid grid-cols-3 gap-1 p-2 border-b flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
-            {[
-              { key: 'blocks', label: 'Blocks' },
-              { key: 'fields', label: 'Fields' },
-              { key: 'layout', label: 'Layout' },
-            ].map(p => (
-              <button key={p.key} onClick={() => setActivePanel(p.key)}
-                className={`py-1.5 text-xs rounded-lg font-medium transition-colors ${activePanel === p.key ? 'bg-violet-600 text-white' : ''}`}
-                style={activePanel !== p.key ? { color: 'var(--text-muted)' } : {}}>
-                {p.label}
-              </button>
-            ))}
-          </div>
+          {/* Scrollable left panel content */}
+          <div className="flex-1 overflow-y-auto">
 
-          {/* Blocks panel */}
-          {activePanel === 'blocks' && (
-            <div className="p-3 space-y-4 overflow-y-auto flex-1">
+          <Panel title="Blocks" open={openSection === 'blocks'} onToggle={() => toggleSection('blocks')}>
+            <div className="space-y-3">
               {Object.entries(blockGroups).map(([group, items]) => (
                 <div key={group}>
                   <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>{group}</p>
@@ -1095,137 +1284,196 @@ export default function AdvancedDesigner() {
                 </div>
               ))}
             </div>
-          )}
+          </Panel>
 
-          {/* Fields panel */}
-          {activePanel === 'fields' && (
-            <div className="p-3 overflow-y-auto flex-1">
-              <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>Select a text block, then click a field</p>
-              {Object.entries(fieldGroups).map(([group, fields]) => (
-                <div key={group} className="mb-4">
-                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>{group}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {fields.map(f => (
-                      <button key={f.field} onClick={() => insertField(f.field)}
-                        className="text-[11px] px-2 py-0.5 rounded-full border font-mono transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
-                        style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+          {/* Fields panel as accordion */}
+          <Panel title="HR Fields" open={openSection === 'fields'} onToggle={() => toggleSection('fields')}>
+            <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>Select a text block, then click a field</p>
+            {Object.entries(fieldGroups).map(([group, fields]) => (
+              <div key={group} className="mb-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-muted)' }}>{group}</p>
+                <div className="flex flex-wrap gap-1">
+                  {fields.map(f => (
+                    <button key={f.field} onClick={() => insertField(f.field)}
+                      className="text-[11px] px-2 py-0.5 rounded-full border font-mono transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+                      style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
                         {f.label}
                       </button>
                     ))}
                   </div>
                 </div>
               ))}
-            </div>
-          )}
+          </Panel>
 
-          {/* Layout panel */}
-          {activePanel === 'layout' && (
-            <div className="overflow-y-auto flex-1">
-              <Panel title="Template Info" defaultOpen>
-                <div><Lbl>Description</Lbl>
-                  <textarea value={description} onChange={e => { setDescription(e.target.value); scheduleAutoSave() }} rows={2}
-                    className="w-full px-2.5 py-1.5 text-sm rounded-lg border resize-none focus:outline-none focus:ring-1 focus:ring-violet-500"
-                    style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
-                </div>
-                <div><Lbl>Category</Lbl>
-                  <Sel value={categoryId} onChange={e => { setCategoryId(e.target.value); scheduleAutoSave() }}>
-                    <option value="">— No Category —</option>
-                    {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                  </Sel>
-                </div>
-                <div><Lbl>Tags</Lbl>
-                  <Inp value={tags} onChange={e => { setTags(e.target.value); scheduleAutoSave() }} placeholder="HR, Offer…" />
-                </div>
-              </Panel>
-              <Panel title="Paper">
-                <div><Lbl>Size</Lbl>
-                  <Sel value={paper.size} onChange={e => setPaper(p => ({ ...p, size: e.target.value }))}>
-                    <option value="A4">A4</option>
-                    <option value="letter">Letter</option>
-                    <option value="legal">Legal</option>
-                  </Sel>
-                </div>
-                <div><Lbl>Orientation</Lbl>
-                  <Sel value={paper.orientation} onChange={e => setPaper(p => ({ ...p, orientation: e.target.value }))}>
-                    <option value="portrait">Portrait</option>
-                    <option value="landscape">Landscape</option>
-                  </Sel>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {['top','bottom','left','right'].map(s => (
-                    <div key={s}>
-                      <Lbl>Margin {s.charAt(0).toUpperCase() + s.slice(1)}</Lbl>
-                      <Inp type="number" value={paper[`margin_${s}`]} min={0} max={200}
-                        onChange={e => setPaper(p => ({ ...p, [`margin_${s}`]: +e.target.value }))} />
-                    </div>
-                  ))}
-                </div>
-              </Panel>
-              <Panel title="Header">
-                <Tog label="Show Header" checked={header.show} onChange={v => setHeader(h => ({ ...h, show: v }))} />
-                {header.show && <>
-                  <div>
-                    <Lbl>Logo</Lbl>
-                    {header.logo_url ? (
-                      <div className="relative inline-block">
-                        <img src={header.logo_url} alt="Logo" style={{ height: 30, maxWidth: '100%', borderRadius: 4, border: '1px solid var(--border)' }} />
-                        <button onClick={() => setHeader(h => ({ ...h, logo_url: '' }))}
-                          className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center">
-                          <X className="w-2.5 h-2.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
-                        <Upload className="w-3.5 h-3.5" />
-                        <span className="text-xs">Upload Logo</span>
-                        <input type="file" accept="image/*" className="sr-only" onChange={handleLogoUpload} />
-                      </label>
-                    )}
-                  </div>
-                  <div><Lbl>Company Name</Lbl><Inp value={header.company_name} onChange={e => setHeader(h => ({ ...h, company_name: e.target.value }))} /></div>
-                  <div><Lbl>Address</Lbl><Inp value={header.company_address} onChange={e => setHeader(h => ({ ...h, company_address: e.target.value }))} /></div>
-                  <div><Lbl>Alignment</Lbl>
-                    <Sel value={header.alignment} onChange={e => setHeader(h => ({ ...h, alignment: e.target.value }))}>
-                      <option value="left">Left</option>
-                      <option value="center">Center</option>
-                      <option value="right">Right</option>
-                    </Sel>
-                  </div>
-                  <Tog label="Border Bottom" checked={header.border_bottom} onChange={v => setHeader(h => ({ ...h, border_bottom: v }))} />
-                </>}
-              </Panel>
-              <Panel title="Footer">
-                <Tog label="Show Footer" checked={footer.show} onChange={v => setFooter(f => ({ ...f, show: v }))} />
-                {footer.show && <>
-                  <div><Lbl>Footer Text</Lbl><Inp value={footer.text} onChange={e => setFooter(f => ({ ...f, text: e.target.value }))} /></div>
-                  <Tog label="Page Numbers" checked={footer.show_page_numbers} onChange={v => setFooter(f => ({ ...f, show_page_numbers: v }))} />
-                  <Tog label="Current Date"  checked={footer.show_date} onChange={v => setFooter(f => ({ ...f, show_date: v }))} />
-                  <Tog label="Confidential"  checked={footer.confidential_label} onChange={v => setFooter(f => ({ ...f, confidential_label: v }))} />
-                </>}
-              </Panel>
-              <Panel title="Watermark">
-                <Tog label="Enable" checked={watermark.enabled} onChange={v => setWatermark(w => ({ ...w, enabled: v }))} />
-                {watermark.enabled && <>
-                  <div className="flex flex-wrap gap-1">
-                    {WATERMARK_PRESETS.map(p => (
-                      <button key={p} onClick={() => setWatermark(w => ({ ...w, text: p }))}
-                        className={`text-xs px-2 py-0.5 rounded-full border ${watermark.text === p ? 'bg-violet-600 text-white border-violet-600' : ''}`}
-                        style={watermark.text !== p ? { borderColor: 'var(--border)', color: 'var(--text-body)' } : {}}>
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                  <div><Lbl>Custom Text</Lbl><Inp value={watermark.text} onChange={e => setWatermark(w => ({ ...w, text: e.target.value }))} /></div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div><Lbl>Opacity</Lbl><Inp type="number" value={watermark.opacity} min={0.05} max={1} step={0.05} onChange={e => setWatermark(w => ({ ...w, opacity: +e.target.value }))} /></div>
-                    <div><Lbl>Rotation°</Lbl><Inp type="number" value={watermark.rotation} min={-180} max={180} onChange={e => setWatermark(w => ({ ...w, rotation: +e.target.value }))} /></div>
-                  </div>
-                </>}
-              </Panel>
+          <Panel title="Template Info" open={openSection === 'info'} onToggle={() => toggleSection('info')}>
+            <div><Lbl>Description</Lbl>
+              <textarea value={description} onChange={e => { setDescription(e.target.value); scheduleAutoSave() }} rows={2}
+                className="w-full px-2.5 py-1.5 text-sm rounded-lg border resize-none focus:outline-none focus:ring-1 focus:ring-violet-500"
+                style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
             </div>
-          )}
+            <div><Lbl>Category</Lbl>
+              <Sel value={categoryId} onChange={e => { setCategoryId(e.target.value); scheduleAutoSave() }}>
+                <option value="">— No Category —</option>
+                {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+              </Sel>
+            </div>
+            <div><Lbl>Tags</Lbl>
+              <Inp value={tags} onChange={e => { setTags(e.target.value); scheduleAutoSave() }} placeholder="HR, Offer…" />
+            </div>
+          </Panel>
+
+          <Panel title="Header" open={openSection === 'header'} onToggle={() => toggleSection('header')}>
+            <Tog label="Show Header" checked={header.show} onChange={v => setHeader(h => ({ ...h, show: v }))} />
+            {header.show && <>
+              <div>
+                <Lbl>Logo</Lbl>
+                {header.logo_url ? (
+                  <div className="relative inline-block">
+                    <img src={header.logo_url} alt="Logo" style={{ height: 30, maxWidth: '100%', borderRadius: 4, border: '1px solid var(--border)' }} />
+                    <button onClick={() => setHeader(h => ({ ...h, logo_url: '' }))}
+                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center">
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                    <Upload className="w-3.5 h-3.5" /><span className="text-xs">Upload Logo</span>
+                    <input type="file" accept="image/*" className="sr-only" onChange={handleLogoUpload} />
+                  </label>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Lbl>Logo Height</Lbl><Inp type="number" value={header.logo_height||40} min={20} max={120} onChange={e => setHeader(h => ({ ...h, logo_height: +e.target.value }))} /></div>
+                <div><Lbl>Logo Align</Lbl>
+                  <Sel value={header.logo_alignment||'left'} onChange={e => setHeader(h => ({ ...h, logo_alignment: e.target.value }))}>
+                    <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+                  </Sel>
+                </div>
+              </div>
+              <div><Lbl>Header Height (px)</Lbl>
+                <Sel value={header.header_height||120} onChange={e => setHeader(h => ({ ...h, header_height: +e.target.value }))}>
+                  {[80,100,120,140,160,200].map(v => <option key={v} value={v}>{v}px</option>)}
+                </Sel>
+              </div>
+              <div><Lbl>Company Name</Lbl><Inp value={header.company_name} onChange={e => setHeader(h => ({ ...h, company_name: e.target.value }))} /></div>
+              <div><Lbl>Address</Lbl><Inp value={header.company_address} onChange={e => setHeader(h => ({ ...h, company_address: e.target.value }))} /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Lbl>Company Align</Lbl>
+                  <Sel value={header.company_alignment||'left'} onChange={e => setHeader(h => ({ ...h, company_alignment: e.target.value }))}>
+                    <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+                  </Sel>
+                </div>
+                <div><Lbl>Font Size</Lbl><Inp type="number" value={header.font_size||12} min={8} max={24} onChange={e => setHeader(h => ({ ...h, font_size: +e.target.value }))} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Lbl>Text Color</Lbl><input type="color" value={header.font_color||'#000000'} onChange={e => setHeader(h => ({ ...h, font_color: e.target.value }))} className="w-full h-8 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--border)' }} /></div>
+                <div><Lbl>Background</Lbl><input type="color" value={header.background_color||'#ffffff'} onChange={e => setHeader(h => ({ ...h, background_color: e.target.value }))} className="w-full h-8 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--border)' }} /></div>
+              </div>
+              <p className="text-[10px] font-bold uppercase tracking-wider pt-1" style={{ color: 'var(--text-muted)' }}>Padding (px)</p>
+              <div className="grid grid-cols-4 gap-1">
+                {['top','right','bottom','left'].map(s => (
+                  <div key={s}><p className="text-[9px] text-center mb-0.5" style={{ color: 'var(--text-muted)' }}>{s[0].toUpperCase()}</p>
+                    <Inp type="number" value={header[`padding_${s}`]??12} min={0} max={80} onChange={e => setHeader(h => ({ ...h, [`padding_${s}`]: +e.target.value }))} /></div>
+                ))}
+              </div>
+              <Tog label="Show Border Bottom" checked={header.border_bottom} onChange={v => setHeader(h => ({ ...h, border_bottom: v }))} />
+            </>}
+          </Panel>
+
+          <Panel title="Footer" open={openSection === 'footer'} onToggle={() => toggleSection('footer')}>
+            <Tog label="Show Footer" checked={footer.show} onChange={v => setFooter(f => ({ ...f, show: v }))} />
+            {footer.show && <>
+              <div><Lbl>Footer Text</Lbl><Inp value={footer.text} onChange={e => setFooter(f => ({ ...f, text: e.target.value }))} /></div>
+              <div><Lbl>Footer Height (px)</Lbl>
+                <Sel value={footer.footer_height||60} onChange={e => setFooter(f => ({ ...f, footer_height: +e.target.value }))}>
+                  {[40,50,60,80,100].map(v => <option key={v} value={v}>{v}px</option>)}
+                </Sel>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Lbl>Font Size</Lbl><Inp type="number" value={footer.font_size||10} min={6} max={18} onChange={e => setFooter(f => ({ ...f, font_size: +e.target.value }))} /></div>
+                <div><Lbl>Text Color</Lbl><input type="color" value={footer.font_color||'#666666'} onChange={e => setFooter(f => ({ ...f, font_color: e.target.value }))} className="w-full h-8 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--border)' }} /></div>
+              </div>
+              <p className="text-[10px] font-bold uppercase tracking-wider pt-1" style={{ color: 'var(--text-muted)' }}>Padding (px)</p>
+              <div className="grid grid-cols-4 gap-1">
+                {['top','right','bottom','left'].map(s => (
+                  <div key={s}><p className="text-[9px] text-center mb-0.5" style={{ color: 'var(--text-muted)' }}>{s[0].toUpperCase()}</p>
+                    <Inp type="number" value={footer[`padding_${s}`]??8} min={0} max={60} onChange={e => setFooter(f => ({ ...f, [`padding_${s}`]: +e.target.value }))} /></div>
+                ))}
+              </div>
+              <Tog label="Page Numbers"       checked={footer.show_page_numbers} onChange={v => setFooter(f => ({ ...f, show_page_numbers: v }))} />
+              <Tog label="Current Date"       checked={footer.show_date} onChange={v => setFooter(f => ({ ...f, show_date: v }))} />
+              <Tog label="Confidential Label" checked={footer.confidential_label} onChange={v => setFooter(f => ({ ...f, confidential_label: v }))} />
+              <Tog label="Show Border Top"    checked={footer.border_top} onChange={v => setFooter(f => ({ ...f, border_top: v }))} />
+            </>}
+          </Panel>
+
+          <Panel title="Paper" open={openSection === 'paper'} onToggle={() => toggleSection('paper')}>
+            <div><Lbl>Size</Lbl>
+              <Sel value={paper.size} onChange={e => setPaper(p => ({ ...p, size: e.target.value }))}>
+                <option value="A4">A4</option><option value="letter">Letter</option><option value="legal">Legal</option>
+              </Sel>
+            </div>
+            <div><Lbl>Orientation</Lbl>
+              <Sel value={paper.orientation} onChange={e => setPaper(p => ({ ...p, orientation: e.target.value }))}>
+                <option value="portrait">Portrait</option><option value="landscape">Landscape</option>
+              </Sel>
+            </div>
+            <p className="text-[10px] font-bold uppercase tracking-wider pt-1" style={{ color: 'var(--text-muted)' }}>Margins (pt)</p>
+            <div className="grid grid-cols-2 gap-2">
+              {['top','bottom','left','right'].map(s => (
+                <div key={s}><Lbl>{s.charAt(0).toUpperCase()+s.slice(1)}</Lbl>
+                  <Inp type="number" value={paper[`margin_${s}`]} min={0} max={200} onChange={e => setPaper(p => ({ ...p, [`margin_${s}`]: +e.target.value }))} /></div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="Watermark" open={openSection === 'watermark'} onToggle={() => toggleSection('watermark')}>
+            <Tog label="Enable" checked={watermark.enabled} onChange={v => setWatermark(w => ({ ...w, enabled: v }))} />
+            {watermark.enabled && <>
+              <div className="flex flex-wrap gap-1">
+                {WATERMARK_PRESETS.map(p => (
+                  <button key={p} onClick={() => setWatermark(w => ({ ...w, text: p }))}
+                    className={`text-xs px-2 py-0.5 rounded-full border ${watermark.text === p ? 'bg-violet-600 text-white border-violet-600' : ''}`}
+                    style={watermark.text !== p ? { borderColor: 'var(--border)', color: 'var(--text-body)' } : {}}>
+                    {p}
+                  </button>
+                ))}
+              </div>
+              <div><Lbl>Custom Text</Lbl><Inp value={watermark.text} onChange={e => setWatermark(w => ({ ...w, text: e.target.value }))} /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Lbl>Opacity</Lbl><Inp type="number" value={watermark.opacity} min={0.05} max={1} step={0.05} onChange={e => setWatermark(w => ({ ...w, opacity: +e.target.value }))} /></div>
+                <div><Lbl>Rotation°</Lbl><Inp type="number" value={watermark.rotation} min={-180} max={180} onChange={e => setWatermark(w => ({ ...w, rotation: +e.target.value }))} /></div>
+              </div>
+            </>}
+          </Panel>
+
+          </div>{/* end scrollable */}
         </aside>
+
+        {/* ── Left collapse toggle ── */}
+        <div className="flex flex-col flex-shrink-0 relative">
+          <button onClick={toggleLeftPanel}
+            title={leftCollapsed ? 'Show blocks panel' : 'Hide blocks panel'}
+            className="absolute top-2 -right-3 z-20 w-6 h-6 rounded-full border flex items-center justify-center hover:bg-violet-600 hover:text-white hover:border-violet-600 transition-colors"
+            style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+            {leftCollapsed ? <PanelLeftOpen className="w-3 h-3" /> : <PanelLeftClose className="w-3 h-3" />}
+          </button>
+          {!leftCollapsed && (
+            <div className="w-1.5 h-full cursor-col-resize hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors"
+              style={{ borderLeft: '1px solid var(--border)' }}
+              onMouseDown={e => {
+                e.preventDefault()
+                const startX = e.clientX, startW = leftWidth
+                const onMove = (ev) => {
+                  const n = Math.max(200, Math.min(400, startW + (ev.clientX - startX)))
+                  setLeftWidth(n); localStorage.setItem('ad_left_w', n)
+                }
+                const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+                document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp)
+              }} />
+          )}
+        </div>
 
         {/* ── Center canvas ── */}
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -1236,45 +1484,85 @@ export default function AdvancedDesigner() {
           <div className="flex-1 overflow-auto py-8 px-4" style={{ background: '#d1d5db' }}
             onClick={() => setSelectedId(null)}>
             <div className="flex flex-col items-center gap-0">
-              {preview ? (
-                /* Preview mode: single page view */
-                <div className="bg-white shadow-2xl relative" style={{ width: paperW, minHeight: '297mm', fontFamily: 'Arial, sans-serif' }}>
-                  {watermark.enabled && (
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      pointerEvents: 'none', zIndex: 1, transform: `rotate(${watermark.rotation}deg)`,
-                      fontSize: watermark.size, opacity: watermark.opacity, color: '#9ca3af', fontWeight: 'bold', userSelect: 'none' }}>
-                      {watermark.text}
-                    </div>
-                  )}
-                  {header.show && (
-                    <div style={{ paddingLeft: ml, paddingRight: mr, paddingTop: '12px', paddingBottom: '8px',
-                      borderBottom: header.border_bottom ? '1px solid #d1d5db' : 'none',
-                      textAlign: header.alignment, backgroundColor: header.background_color || '#fff',
-                      color: header.font_color || '#000', fontSize: header.font_size }}>
-                      {header.logo_url && <img src={header.logo_url} alt="Logo" style={{ height: 40, display: 'block', margin: header.alignment === 'center' ? '0 auto 4px' : '0 0 4px' }} />}
-                      {header.company_name && <div style={{ fontWeight: 'bold', fontSize: (header.font_size || 12) + 2 }}>{header.company_name}</div>}
-                      {header.company_address && <div style={{ fontSize: (header.font_size || 12) - 1 }}>{header.company_address}</div>}
-                    </div>
-                  )}
-                  <div style={{ paddingTop: mt, paddingBottom: mb, paddingLeft: ml, paddingRight: mr, position: 'relative', zIndex: 2 }}
-                    dangerouslySetInnerHTML={{ __html: getBodyHtml() }} />
-                  {footer.show && (
-                    <div style={{ paddingLeft: ml, paddingRight: mr, paddingBottom: '12px', paddingTop: '8px',
-                      borderTop: footer.border_top ? '1px solid #d1d5db' : 'none',
-                      fontSize: footer.font_size, color: footer.font_color,
-                      display: 'flex', justifyContent: 'space-between' }}>
-                      <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
-                      <span>{footer.text}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
-                      <span>{footer.show_page_numbers ? 'Page 1' : ''}</span>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* Edit mode: multiple pages */
+              {(() => {
+                // Shared header/footer renderer
+                const PageHeader = ({ pageNum }) => header.show ? (
+                  <div style={{
+                    padding: `${header.padding_top??12}px ${header.padding_right??16}px ${header.padding_bottom??8}px ${header.padding_left??16}px`,
+                    margin: `${header.margin_top??0}px ${header.margin_right??0}px ${header.margin_bottom??0}px ${header.margin_left??0}px`,
+                    minHeight: `${header.header_height||120}px`,
+                    borderBottom: header.border_bottom ? `${header.border_width??1}px solid ${header.border_color||'#d1d5db'}` : 'none',
+                    textAlign: header.company_alignment || 'left',
+                    backgroundColor: header.background_color || '#fff', color: header.font_color || '#000',
+                    fontSize: header.font_size, fontFamily: header.font_family || 'Arial', boxSizing: 'border-box',
+                  }}>
+                    {header.logo_url && <img src={header.logo_url} alt="Logo" style={{ height: header.logo_height||40, display: 'block',
+                      margin: (header.logo_alignment||'left')==='center'?'0 auto 4px':(header.logo_alignment||'left')==='right'?'0 0 4px auto':'0 0 4px 0' }} />}
+                    {header.company_name && <div style={{ fontWeight: 'bold', fontSize: (header.font_size||12)+2 }}>{header.company_name}</div>}
+                    {header.company_address && <div style={{ fontSize: (header.font_size||12)-1 }}>{header.company_address}</div>}
+                    {(header.company_email||header.company_phone) && (
+                      <div style={{ fontSize: (header.font_size||12)-1, color: '#6b7280' }}>
+                        {[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}
+                      </div>
+                    )}
+                  </div>
+                ) : null
+
+                const PageFooter = ({ pageNum, totalPages }) => footer.show ? (
+                  <div style={{
+                    padding: `${footer.padding_top??8}px ${footer.padding_right??16}px ${footer.padding_bottom??12}px ${footer.padding_left??16}px`,
+                    margin: `${footer.margin_top??0}px ${footer.margin_right??0}px ${footer.margin_bottom??0}px ${footer.margin_left??0}px`,
+                    minHeight: `${footer.footer_height||60}px`,
+                    borderTop: footer.border_top ? `${footer.border_width??1}px solid ${footer.border_color||'#d1d5db'}` : 'none',
+                    fontSize: footer.font_size, color: footer.font_color,
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box',
+                  }}>
+                    <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
+                    <span>{footer.text||''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
+                    <span>{footer.show_page_numbers ? `Page ${pageNum}` : ''}</span>
+                  </div>
+                ) : null
+
+                return preview ? (
+                /* Preview mode: paginated pages */
                 pages.map((pageBlocks, pageIndex) => (
-                  <div key={pageIndex}>
+                  <div key={pageIndex} className="mb-8">
+                    <div className="bg-white shadow-2xl relative" style={{ width: paperW, fontFamily: 'Arial, sans-serif', minHeight: '297mm', boxSizing: 'border-box' }}>
+                      {watermark.enabled && (
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          pointerEvents: 'none', zIndex: 1, transform: `rotate(${watermark.rotation}deg)`,
+                          fontSize: watermark.size, opacity: watermark.opacity, color: '#9ca3af', fontWeight: 'bold', userSelect: 'none' }}>
+                          {watermark.text}
+                        </div>
+                      )}
+                      <PageHeader pageNum={pageIndex + 1} />
+                      <div style={{ paddingTop: mt, paddingBottom: mb, paddingLeft: ml, paddingRight: mr, position: 'relative', zIndex: 2 }}
+                        dangerouslySetInnerHTML={{ __html: pageBlocks.map(blockToHtml).join('\n') }} />
+                      <PageFooter pageNum={pageIndex + 1} totalPages={pages.length} />
+                    </div>
+                    {pageIndex < pages.length - 1 && (
+                      <div className="flex items-center justify-center my-3 gap-3">
+                        <div className="h-px flex-1 bg-gray-300" />
+                        <span className="text-xs text-gray-400 font-medium px-2">Page {pageIndex + 1}</span>
+                        <div className="h-px flex-1 bg-gray-300" />
+                      </div>
+                    )}
+                  </div>
+                ))
+                ) : (
+                /* Edit mode: multiple pages with header/footer on every page */
+                pages.map((pageBlocks, pageIndex) => (
+                  <div key={pageIndex} className="mb-8">
+                    {/* Page indicator */}
+                    {pages.length > 1 && (
+                      <div className="flex items-center justify-center mb-2 gap-3">
+                        <div className="h-px flex-1 bg-gray-300" />
+                        <span className="text-xs text-gray-500 font-semibold px-3 py-1 rounded-full bg-gray-100">Page {pageIndex + 1} of {pages.length}</span>
+                        <div className="h-px flex-1 bg-gray-300" />
+                      </div>
+                    )}
                     {/* Page */}
-                    <div className="bg-white shadow-2xl relative" style={{ width: paperW, minHeight: pageIndex === 0 ? '297mm' : undefined, fontFamily: 'Arial, sans-serif' }}
+                    <div className="bg-white shadow-2xl relative" style={{ width: paperW, minHeight: '297mm', fontFamily: 'Arial, sans-serif', boxSizing: 'border-box' }}
                       onClick={e => e.stopPropagation()}>
 
                       {/* Watermark */}
@@ -1286,22 +1574,8 @@ export default function AdvancedDesigner() {
                         </div>
                       )}
 
-                      {/* Header (first page only) */}
-                      {header.show && pageIndex === 0 && (
-                        <div style={{ paddingLeft: ml, paddingRight: mr, paddingTop: '12px', paddingBottom: '8px',
-                          borderBottom: header.border_bottom ? '1px solid #d1d5db' : 'none',
-                          textAlign: header.alignment, backgroundColor: header.background_color || '#fff',
-                          color: header.font_color || '#000', fontSize: header.font_size }}>
-                          {header.logo_url && <img src={header.logo_url} alt="Logo" style={{ height: header.logo_height || 40, display: 'block', margin: header.alignment === 'center' ? '0 auto 4px' : '0 0 4px' }} />}
-                          {header.company_name && <div style={{ fontWeight: 'bold', fontSize: (header.font_size || 12) + 2 }}>{header.company_name}</div>}
-                          {header.company_address && <div style={{ fontSize: (header.font_size || 12) - 1 }}>{header.company_address}</div>}
-                          {(header.company_email || header.company_phone) && (
-                            <div style={{ fontSize: (header.font_size || 12) - 1, color: '#6b7280' }}>
-                              {[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      {/* Header on EVERY page */}
+                      <PageHeader pageNum={pageIndex + 1} />
 
                       {/* Blocks */}
                       <div className="relative z-10" style={{ paddingTop: pageIndex === 0 ? mt : '20px', paddingBottom: mb, paddingLeft: ml, paddingRight: mr }}>
@@ -1324,7 +1598,7 @@ export default function AdvancedDesigner() {
 
                         {pageIndex === pages.length - 1 && (
                           <div className="flex justify-center mt-4 pl-7 pr-7">
-                            <button onClick={() => setActivePanel('blocks')}
+                            <button onClick={() => toggleSection('blocks')}
                               className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-dashed text-sm transition-colors hover:border-violet-500 hover:text-violet-600"
                               style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
                               <Plus className="w-4 h-4" /> Add Block
@@ -1333,42 +1607,46 @@ export default function AdvancedDesigner() {
                         )}
                       </div>
 
-                      {/* Footer (last page) */}
-                      {footer.show && pageIndex === pages.length - 1 && (
-                        <div style={{ paddingLeft: ml, paddingRight: mr, paddingBottom: '12px', paddingTop: '8px',
-                          borderTop: footer.border_top ? '1px solid #d1d5db' : 'none',
-                          fontSize: footer.font_size, color: footer.font_color,
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
-                          <span>{footer.text}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
-                          <span>{footer.show_page_numbers ? `Page ${pages.length}` : ''}</span>
-                        </div>
-                      )}
+                      {/* Footer on EVERY page */}
+                      <PageFooter pageNum={pageIndex + 1} totalPages={pages.length} />
                     </div>
-
-                    {/* Page separator */}
-                    {pageIndex < pages.length - 1 && (
-                      <div className="flex items-center justify-center py-4" style={{ width: paperW }}>
-                        <div className="flex items-center gap-3">
-                          <div className="h-px flex-1 bg-gray-400" style={{ width: 80 }} />
-                          <span className="text-xs px-2 py-0.5 rounded bg-gray-500 text-white">
-                            Page {pageIndex + 2}
-                          </span>
-                          <div className="h-px flex-1 bg-gray-400" style={{ width: 80 }} />
-                        </div>
-                      </div>
-                    )}
                   </div>
                 ))
-              )}
+                )})()}
             </div>
           </div>
         </div>
 
+        {/* ── Right collapse toggle ── */}
+        {!preview && (
+          <div className="flex flex-col flex-shrink-0 relative">
+            <button onClick={toggleRightPanel}
+              title={rightCollapsed ? 'Show properties panel' : 'Hide properties panel'}
+              className="absolute top-2 -left-3 z-20 w-6 h-6 rounded-full border flex items-center justify-center hover:bg-violet-600 hover:text-white hover:border-violet-600 transition-colors"
+              style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+              {rightCollapsed ? <PanelRightOpen className="w-3 h-3" /> : <PanelRightClose className="w-3 h-3" />}
+            </button>
+            {!rightCollapsed && (
+              <div className="w-1.5 h-full cursor-col-resize hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors"
+                style={{ borderLeft: '1px solid var(--border)' }}
+                onMouseDown={e => {
+                  e.preventDefault()
+                  const startX = e.clientX, startW = rightWidth
+                  const onMove = (ev) => {
+                    const n = Math.max(200, Math.min(420, startW - (ev.clientX - startX)))
+                    setRightWidth(n); localStorage.setItem('ad_right_w', n)
+                  }
+                  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+                  document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp)
+                }} />
+            )}
+          </div>
+        )}
+
         {/* ── Right panel: Properties ── */}
         {!preview && (
-          <aside className="w-52 flex-shrink-0 border-l overflow-y-auto"
-            style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+          <aside className="flex-shrink-0 border-l overflow-y-auto transition-all duration-200"
+            style={{ width: rightCollapsed ? 0 : rightWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
             <div className="px-4 py-3 border-b flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
               <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Properties</p>
             </div>

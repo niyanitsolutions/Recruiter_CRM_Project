@@ -280,31 +280,35 @@ def _generate_pdf(template: DocTemplate, html_content: str, field_values: Dict[s
 
         # Header
         if header_cfg.show:
-            header_y = page_size[1] - margin_t + 10
+            hh_pt = getattr(header_cfg, 'header_height', 120) * 0.75  # px to pt approx
+            header_y = page_size[1] - margin_t + hh_pt * 0.5 + 4
             canvas.setFont("Helvetica-Bold", header_cfg.font_size + 2)
             try:
                 r, g, b = int(header_cfg.font_color[1:3], 16)/255, int(header_cfg.font_color[3:5], 16)/255, int(header_cfg.font_color[5:7], 16)/255
                 canvas.setFillColorRGB(r, g, b)
             except Exception:
                 canvas.setFillColorRGB(0, 0, 0)
+            # Use company_alignment (new field) with fallback to alignment (old field)
+            h_align = getattr(header_cfg, 'company_alignment', None) or getattr(header_cfg, 'alignment', 'left')
             align_x = {
-                "left": margin_l,
+                "left":   margin_l,
                 "center": page_size[0] / 2,
-                "right": page_size[0] - margin_r,
-            }.get(header_cfg.alignment, margin_l)
+                "right":  page_size[0] - margin_r,
+            }.get(h_align, margin_l)
             draw_fn = {
-                "left":  canvas.drawString,
+                "left":   canvas.drawString,
                 "center": canvas.drawCentredString,
-                "right": canvas.drawRightString,
-            }.get(header_cfg.alignment, canvas.drawString)
+                "right":  canvas.drawRightString,
+            }.get(h_align, canvas.drawString)
             if header_cfg.company_name:
                 draw_fn(align_x, header_y, header_cfg.company_name)
             if header_cfg.company_address:
-                canvas.setFont("Helvetica", header_cfg.font_size - 1)
+                canvas.setFont("Helvetica", max(6, header_cfg.font_size - 1))
                 draw_fn(align_x, header_y - 14, header_cfg.company_address)
             if header_cfg.border_bottom:
+                border_y = page_size[1] - margin_t
                 canvas.setStrokeColorRGB(0.7, 0.7, 0.7)
-                canvas.line(margin_l, header_y - 22, page_size[0] - margin_r, header_y - 22)
+                canvas.line(margin_l, border_y, page_size[0] - margin_r, border_y)
 
         # Footer
         if footer_cfg.show:

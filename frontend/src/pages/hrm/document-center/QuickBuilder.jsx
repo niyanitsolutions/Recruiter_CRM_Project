@@ -6,9 +6,11 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, Link2, RotateCcw, RotateCw,
   Plus, Minus, Type, Palette, Table, Image as ImageIcon,
-  ChevronDown, ChevronUp, Loader2, ArrowLeft, FileText,
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
+  Loader2, ArrowLeft, FileText,
   Stamp, ZoomIn, ZoomOut, X, Download, Printer, GripVertical,
   Clock, CheckCircle, AlertCircle, Upload, Maximize2,
+  PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen,
 } from 'lucide-react'
 import documentCenterService from '../../../services/documentCenterService'
 
@@ -97,24 +99,21 @@ const TB = ({ icon: Icon, label, onClick, active, disabled }) => (
   </button>
 )
 
-// ─── Collapsible Panel ─────────────────────────────────────────────────────────
-const Panel = ({ title, children, defaultOpen = false }) => {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="border-b" style={{ borderColor: 'var(--border)' }}>
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wider"
-        style={{ color: 'var(--text-muted)' }}
-      >
-        {title}
-        {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-      </button>
-      {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
-    </div>
-  )
-}
+// ─── Accordion Panel (controlled) ────────────────────────────────────────────
+const Panel = ({ title, children, open, onToggle }) => (
+  <div className="border-b" style={{ borderColor: 'var(--border)' }}>
+    <button
+      type="button"
+      onClick={onToggle}
+      className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold uppercase tracking-wider"
+      style={{ color: 'var(--text-muted)' }}
+    >
+      {title}
+      {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+    </button>
+    {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
+  </div>
+)
 
 const Lbl = ({ children }) => <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>{children}</p>
 const Inp = (props) => (
@@ -159,6 +158,147 @@ function ResizeDivider({ onDrag, side = 'right' }) {
     >
       <GripVertical className="w-3 h-3" style={{ color: 'var(--text-muted)' }} />
     </div>
+  )
+}
+
+// ─── Page break splitter ─────────────────────────────────────────────────────
+function splitHtmlByPageBreaks(html) {
+  // Split on explicit page-break divs inserted by insertPageBreak()
+  const marker = /<div[^>]*style="[^"]*page-break-after\s*:\s*always[^"]*"[^>]*>.*?<\/div>/gi
+  const parts = html.split(marker)
+  return parts.length > 1 ? parts : [html]
+}
+
+// ─── Shared header renderer ───────────────────────────────────────────────────
+function DocHeader({ header, ml, mr }) {
+  if (!header.show) return null
+  return (
+    <div style={{
+      padding: `${header.padding_top??12}px ${header.padding_right??16}px ${header.padding_bottom??8}px ${header.padding_left??16}px`,
+      margin: `${header.margin_top??0}px ${header.margin_right??0}px ${header.margin_bottom??0}px ${header.margin_left??0}px`,
+      minHeight: `${header.header_height||120}px`,
+      borderBottom: header.border_bottom ? `${header.border_width??1}px solid ${header.border_color||'#d1d5db'}` : 'none',
+      textAlign: header.company_alignment || 'left',
+      backgroundColor: header.background_color || '#fff',
+      color: header.font_color || '#000',
+      fontSize: header.font_size || 12,
+      fontFamily: header.font_family || 'Arial',
+      boxSizing: 'border-box',
+    }}>
+      {header.logo_url && (
+        <img src={header.logo_url} alt="Logo" style={{
+          height: header.logo_height || 40, display: 'block',
+          margin: (header.logo_alignment||'left')==='center'?'0 auto 4px'
+                : (header.logo_alignment||'left')==='right'?'0 0 4px auto':'0 0 4px 0',
+        }} />
+      )}
+      {header.company_name && <div style={{ fontWeight: 'bold', fontSize: (header.font_size||12)+2 }}>{header.company_name}</div>}
+      {header.company_address && <div style={{ fontSize: (header.font_size||12)-1 }}>{header.company_address}</div>}
+      {(header.company_email||header.company_phone) && (
+        <div style={{ fontSize: (header.font_size||12)-1, color: '#6b7280' }}>
+          {[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}
+        </div>
+      )}
+      {header.company_website && <div style={{ fontSize: (header.font_size||12)-1, color: '#6b7280' }}>{header.company_website}</div>}
+      {(header.gst_number||header.reg_number) && (
+        <div style={{ fontSize: (header.font_size||12)-2, color: '#6b7280', marginTop: 2 }}>
+          {[header.gst_number&&`GST: ${header.gst_number}`, header.reg_number&&`Reg: ${header.reg_number}`].filter(Boolean).join('  |  ')}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Shared footer renderer ───────────────────────────────────────────────────
+function DocFooter({ footer, pageNum, ml, mr }) {
+  if (!footer.show) return null
+  return (
+    <div style={{
+      padding: `${footer.padding_top??8}px ${footer.padding_right??16}px ${footer.padding_bottom??12}px ${footer.padding_left??16}px`,
+      margin: `${footer.margin_top??0}px ${footer.margin_right??0}px ${footer.margin_bottom??0}px ${footer.margin_left??0}px`,
+      minHeight: `${footer.footer_height||60}px`,
+      borderTop: footer.border_top ? `${footer.border_width??1}px solid ${footer.border_color||'#d1d5db'}` : 'none',
+      fontSize: footer.font_size || 10, color: footer.font_color || '#666',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      boxSizing: 'border-box',
+    }}>
+      <span style={{ fontSize: (footer.font_size||10)-1 }}>
+        {footer.show_date ? new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) : ''}
+      </span>
+      <span>
+        {footer.text||''}{footer.confidential_label?(footer.text?' | CONFIDENTIAL':'CONFIDENTIAL'):''}
+        {footer.description?<><br/><span style={{fontSize:(footer.font_size||10)-2}}>{footer.description}</span></>:null}
+      </span>
+      <span>{footer.show_page_numbers ? `Page ${pageNum}` : ''}</span>
+    </div>
+  )
+}
+
+// ─── Paginated Document (editor + preview) ────────────────────────────────────
+function PaginatedDocument({ html, header, footer, paper, watermark, ml, mr, mt, mb, paperW, editorRef, onInput, onKeyUp, onMouseUp, readOnly = false }) {
+  const pages = splitHtmlByPageBreaks(html || '')
+
+  const WatermarkLayer = () => watermark.enabled ? (
+    <div style={{
+      position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      pointerEvents: 'none', zIndex: 1, transform: `rotate(${watermark.rotation}deg)`,
+      fontSize: watermark.size, opacity: watermark.opacity, color: '#9ca3af', fontWeight: 'bold', userSelect: 'none',
+    }}>
+      {watermark.text}
+    </div>
+  ) : null
+
+  if (readOnly) {
+    // Preview mode: static paginated pages
+    return (
+      <>
+        {pages.map((pageHtml, i) => (
+          <div key={i} className="mb-8">
+            {pages.length > 1 && i > 0 && (
+              <div className="flex items-center justify-center mb-2 gap-3">
+                <div className="h-px flex-1 bg-gray-400" />
+                <span className="text-xs text-white px-2 py-0.5 rounded font-medium" style={{ background: '#6b7280' }}>Page {i + 1}</span>
+                <div className="h-px flex-1 bg-gray-400" />
+              </div>
+            )}
+            <div className="bg-white shadow-2xl relative" style={{ width: paperW, fontFamily: 'Arial, sans-serif', boxSizing: 'border-box' }}>
+              <WatermarkLayer />
+              <DocHeader header={header} ml={ml} mr={mr} />
+              <div style={{ paddingTop: mt, paddingBottom: mb, paddingLeft: ml, paddingRight: mr, fontSize: '12pt', lineHeight: 1.6, color: '#1f2937', position: 'relative', zIndex: 2 }}
+                dangerouslySetInnerHTML={{ __html: pageHtml }} />
+              <DocFooter footer={footer} pageNum={i + 1} ml={ml} mr={mr} />
+            </div>
+          </div>
+        ))}
+      </>
+    )
+  }
+
+  // Editor mode: first page is contentEditable, rest are visual separators
+  return (
+    <>
+      {/* Single contentEditable div — we show page-break guides */}
+      <div className="bg-white shadow-2xl relative" style={{ width: paperW, fontFamily: 'Arial, sans-serif' }}>
+        <WatermarkLayer />
+        <DocHeader header={header} ml={ml} mr={mr} />
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onMouseUp={onMouseUp}
+          onKeyUp={onKeyUp}
+          onInput={onInput}
+          className="focus:outline-none"
+          style={{
+            paddingTop: mt, paddingBottom: mb, paddingLeft: ml, paddingRight: mr,
+            minHeight: '400px', fontSize: '12pt', lineHeight: 1.6, color: '#1f2937',
+            position: 'relative', zIndex: 2,
+          }}
+          data-placeholder="Start typing your document content here…"
+        />
+        <DocFooter footer={footer} pageNum={1} ml={ml} mr={mr} />
+      </div>
+    </>
   )
 }
 
@@ -271,67 +411,18 @@ ${footer.show ? `<div class="footer">
       </div>
 
       {/* Canvas */}
-      <div className="flex-1 overflow-auto py-8 px-4 flex justify-center" style={{ background: '#2d2d3d' }}>
+      <div className="flex-1 overflow-auto py-8 px-4" style={{ background: '#2d2d3d' }}>
         <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', transition: 'transform 0.2s' }}>
-          <div className="bg-white shadow-2xl relative" style={{ width: paperW, minHeight: '297mm', fontFamily: 'Arial, sans-serif' }}>
-            {/* Watermark */}
-            {watermark.enabled && (
-              <div style={{
-                position: 'absolute', inset: 0, display: 'flex',
-                alignItems: 'center', justifyContent: 'center',
-                pointerEvents: 'none', zIndex: 1,
-                transform: `rotate(${watermark.rotation}deg)`,
-                fontSize: watermark.size, opacity: watermark.opacity,
-                color: '#9ca3af', fontWeight: 'bold', userSelect: 'none',
-              }}>
-                {watermark.text}
-              </div>
-            )}
-
-            {/* Header */}
-            {header.show && (
-              <div style={{
-                paddingLeft: ml, paddingRight: mr, paddingTop: '12px', paddingBottom: '8px',
-                borderBottom: header.border_bottom ? '1px solid #d1d5db' : 'none',
-                textAlign: header.alignment, backgroundColor: header.background_color, color: header.font_color,
-                fontSize: header.font_size,
-              }}>
-                {header.logo_url && (
-                  <img src={header.logo_url} alt="Logo"
-                    style={{ height: 40, display: 'block', margin: header.alignment === 'center' ? '0 auto 4px' : header.alignment === 'right' ? '0 0 4px auto' : '0 0 4px 0' }} />
-                )}
-                {header.company_name && <div style={{ fontWeight: 'bold', fontSize: header.font_size + 2 }}>{header.company_name}</div>}
-                {header.company_address && <div style={{ fontSize: header.font_size - 1 }}>{header.company_address}</div>}
-                {(header.company_email || header.company_phone) && (
-                  <div style={{ fontSize: header.font_size - 1, color: '#6b7280' }}>
-                    {[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Body */}
-            <div style={{
-              paddingTop: mt, paddingBottom: mb, paddingLeft: ml, paddingRight: mr,
-              fontSize: '12pt', lineHeight: 1.6, color: '#1f2937', position: 'relative', zIndex: 2,
-            }}
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
-
-            {/* Footer */}
-            {footer.show && (
-              <div style={{
-                paddingLeft: ml, paddingRight: mr, paddingBottom: '12px', paddingTop: '8px',
-                borderTop: footer.border_top ? '1px solid #d1d5db' : 'none',
-                fontSize: footer.font_size, color: footer.font_color,
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              }}>
-                <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
-                <span>{footer.text}{footer.confidential_label ? (footer.text ? '  |  CONFIDENTIAL' : 'CONFIDENTIAL') : ''}</span>
-                <span>{footer.show_page_numbers ? 'Page 1' : ''}</span>
-              </div>
-            )}
-          </div>
+          <PaginatedDocument
+            html={html}
+            header={header}
+            footer={footer}
+            paper={paper}
+            watermark={watermark}
+            ml={ml} mr={mr} mt={mt} mb={mb}
+            paperW={paperW}
+            readOnly
+          />
         </div>
       </div>
     </div>
@@ -507,6 +598,8 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
   const [preview,  setPreview]  = useState(false)
   const [showFullPreview, setShowFullPreview] = useState(false)
   const [autoSaveStatus, setAutoSaveStatus]   = useState('saved') // saved | saving | unsaved | error
+  const [showExport, setShowExport] = useState(false)
+  const exportRef = useRef(null)
 
   const [name,        setName]        = useState('Untitled Template')
   const [description, setDescription] = useState('')
@@ -515,20 +608,37 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
   const [categories,  setCategories]  = useState([])
 
   // Panel widths (persisted to localStorage)
-  const [leftWidth,  setLeftWidth]  = useState(() => parseInt(localStorage.getItem('qb_left_w')  || '256'))
+  const [leftWidth,  setLeftWidth]  = useState(() => parseInt(localStorage.getItem('qb_left_w')  || '260'))
   const [rightWidth, setRightWidth] = useState(() => parseInt(localStorage.getItem('qb_right_w') || '220'))
+
+  // Panel collapse (persisted)
+  const [leftCollapsed,  setLeftCollapsed]  = useState(() => localStorage.getItem('qb_left_col')  === 'true')
+  const [rightCollapsed, setRightCollapsed] = useState(() => localStorage.getItem('qb_right_col') === 'true')
+
+  // Accordion: which left panel section is open
+  const [openSection, setOpenSection] = useState('header')
+  const toggleSection = (key) => setOpenSection(k => k === key ? null : key)
 
   const [header, setHeader] = useState({
     show: true, logo_url: '', logo_height: 40,
+    logo_alignment: 'left', company_alignment: 'left',
+    header_height: 120,
+    padding_top: 12, padding_right: 16, padding_bottom: 8, padding_left: 16,
+    margin_top: 0, margin_right: 0, margin_bottom: 0, margin_left: 0,
     company_name: '', company_address: '', company_email: '',
     company_phone: '', company_website: '', gst_number: '', reg_number: '',
-    alignment: 'left', font_family: 'Arial',
-    font_size: 12, font_color: '#000000', background_color: '#ffffff', border_bottom: true,
+    font_family: 'Arial',
+    font_size: 12, font_color: '#000000', background_color: '#ffffff',
+    border_bottom: true, border_color: '#d1d5db', border_width: 1,
   })
   const [footer, setFooter] = useState({
     show: true, text: '', description: '', show_page_numbers: true,
     show_date: true, confidential_label: false,
-    alignment: 'center', font_size: 10, font_color: '#666666', border_top: true,
+    footer_height: 60,
+    padding_top: 8, padding_right: 16, padding_bottom: 12, padding_left: 16,
+    margin_top: 0, margin_right: 0, margin_bottom: 0, margin_left: 0,
+    alignment: 'center', font_size: 10, font_color: '#666666',
+    border_top: true, border_color: '#d1d5db', border_width: 1,
   })
   const [paper, setPaper] = useState({
     size: 'A4', orientation: 'portrait',
@@ -577,17 +687,32 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
   // Panel resize handlers
   const handleLeftResize  = useCallback((dx) => {
     setLeftWidth(prev => {
-      const next = Math.max(180, Math.min(420, prev + dx))
+      const next = Math.max(200, Math.min(460, prev + dx))
       localStorage.setItem('qb_left_w', next)
       return next
     })
   }, [])
   const handleRightResize = useCallback((dx) => {
     setRightWidth(prev => {
-      const next = Math.max(160, Math.min(360, prev - dx))
+      const next = Math.max(180, Math.min(380, prev - dx))
       localStorage.setItem('qb_right_w', next)
       return next
     })
+  }, [])
+
+  // Panel collapse toggles
+  const toggleLeftPanel = useCallback(() => {
+    setLeftCollapsed(v => { const n = !v; localStorage.setItem('qb_left_col', n); return n })
+  }, [])
+  const toggleRightPanel = useCallback(() => {
+    setRightCollapsed(v => { const n = !v; localStorage.setItem('qb_right_col', n); return n })
+  }, [])
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    const onOutside = (e) => { if (exportRef.current && !exportRef.current.contains(e.target)) setShowExport(false) }
+    document.addEventListener('mousedown', onOutside)
+    return () => document.removeEventListener('mousedown', onOutside)
   }, [])
 
   // Auto-save (only for existing templates)
@@ -662,6 +787,136 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
         </td>
       </tr>
     </table>`)
+
+  // Export helpers
+  const buildFullHtml = (html) => {
+    const hPt = `${header.padding_top}px ${header.padding_right}px ${header.padding_bottom}px ${header.padding_left}px`
+    const fPt = `${footer.padding_top}px ${footer.padding_right}px ${footer.padding_bottom}px ${footer.padding_left}px`
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  body { margin: 0; font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.6; color: #1f2937; }
+  @page { margin: ${mt} ${mr} ${mb} ${ml}; }
+  @media print { .no-print { display:none!important; } }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border: 1px solid #e5e7eb; padding: 6px 10px; }
+  th { background: #7c3aed; color: white; }
+  blockquote { border-left: 4px solid #7c3aed; padding-left: 12px; color: #6b7280; margin: 8px 0; }
+  .doc-header { background: ${header.background_color}; color: ${header.font_color}; padding: ${hPt};
+    border-bottom: ${header.border_bottom ? `${header.border_width}px solid ${header.border_color}` : 'none'};
+    margin: ${header.margin_top}px ${header.margin_right}px ${header.margin_bottom}px ${header.margin_left}px;
+    min-height: ${header.header_height}px; box-sizing: border-box; }
+  .doc-footer { color: ${footer.font_color}; font-size: ${footer.font_size}px; padding: ${fPt};
+    border-top: ${footer.border_top ? `${footer.border_width}px solid ${footer.border_color}` : 'none'};
+    margin: ${footer.margin_top}px ${footer.margin_right}px ${footer.margin_bottom}px ${footer.margin_left}px;
+    min-height: ${footer.footer_height}px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; }
+  .page-break { page-break-after: always; }
+</style>
+</head><body>
+${header.show ? `<div class="doc-header" style="text-align:${header.company_alignment}">
+  ${header.logo_url ? `<img src="${header.logo_url}" style="height:${header.logo_height}px;display:block;margin:${header.logo_alignment==='center'?'0 auto 4px':header.logo_alignment==='right'?'0 0 4px auto':'0 0 4px 0'};" />` : ''}
+  ${header.company_name ? `<div style="font-weight:bold;font-size:${header.font_size+2}px;">${header.company_name}</div>` : ''}
+  ${header.company_address ? `<div style="font-size:${header.font_size-1}px;">${header.company_address}</div>` : ''}
+  ${(header.company_email||header.company_phone) ? `<div style="font-size:${header.font_size-1}px;color:#6b7280;">${[header.company_email,header.company_phone].filter(Boolean).join(' | ')}</div>` : ''}
+</div>` : ''}
+<div style="padding:${mt} ${mr} ${mb} ${ml};">${html}</div>
+${footer.show ? `<div class="doc-footer">
+  <span>${footer.show_date ? new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : ''}</span>
+  <span>${footer.text||''}${footer.confidential_label?(footer.text?' | CONFIDENTIAL':'CONFIDENTIAL'):''}</span>
+  <span>${footer.show_page_numbers ? 'Page 1' : ''}</span>
+</div>` : ''}
+</body></html>`
+  }
+
+  const handleExportHTML = () => {
+    const html = buildFullHtml(getBodyHtml())
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a'); a.href = url; a.download = `${name || 'document'}.html`; a.click()
+    URL.revokeObjectURL(url)
+    setShowExport(false)
+  }
+
+  const handleExportTXT = () => {
+    const txt = (editorRef.current?.innerText || '').trim()
+    const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a'); a.href = url; a.download = `${name || 'document'}.txt`; a.click()
+    URL.revokeObjectURL(url)
+    setShowExport(false)
+  }
+
+  const handlePrint = () => {
+    const w = window.open('', '_blank')
+    w.document.write(buildFullHtml(getBodyHtml()))
+    w.document.close(); w.focus()
+    setTimeout(() => { w.print(); w.close() }, 400)
+    setShowExport(false)
+  }
+
+  const handleExportPDF = () => {
+    // Use browser print → matches preview exactly (PDF via system print dialog)
+    setShowExport(false)
+    const hPt = `${header.padding_top??12}px ${header.padding_right??16}px ${header.padding_bottom??8}px ${header.padding_left??16}px`
+    const fPt = `${footer.padding_top??8}px ${footer.padding_right??16}px ${footer.padding_bottom??12}px ${footer.padding_left??16}px`
+    const pages = splitHtmlByPageBreaks(getBodyHtml())
+    const pagesHtml = pages.map((p, i) => `
+      <div class="doc-page">
+        ${header.show ? `<div class="doc-header" style="text-align:${header.company_alignment||'left'}">
+          ${header.logo_url ? `<img src="${header.logo_url}" style="height:${header.logo_height||40}px;display:block;margin:${(header.logo_alignment||'left')==='center'?'0 auto 4px':(header.logo_alignment||'left')==='right'?'0 0 4px auto':'0 0 4px 0'};" />` : ''}
+          ${header.company_name?`<div style="font-weight:bold;font-size:${(header.font_size||12)+2}px;">${header.company_name}</div>`:''}
+          ${header.company_address?`<div style="font-size:${(header.font_size||12)-1}px;">${header.company_address}</div>`:''}
+          ${(header.company_email||header.company_phone)?`<div style="font-size:${(header.font_size||12)-1}px;color:#6b7280;">${[header.company_email,header.company_phone].filter(Boolean).join(' | ')}</div>`:''}
+        </div>` : ''}
+        <div class="doc-body">${p}</div>
+        ${footer.show ? `<div class="doc-footer">
+          <span>${footer.show_date?new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}):''}</span>
+          <span>${footer.text||''}${footer.confidential_label?' | CONFIDENTIAL':''}</span>
+          <span>${footer.show_page_numbers?`Page ${i+1}`:''}</span>
+        </div>` : ''}
+      </div>
+      ${i < pages.length-1 ? '<div class="page-break"></div>' : ''}
+    `).join('')
+
+    const w = window.open('', '_blank')
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${name||'Document'}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: ${header.font_family||'Arial'}, sans-serif; font-size: 12pt; line-height: 1.6; color: #1f2937; }
+  @page { size: ${paper.size} ${paper.orientation}; margin: ${mt} ${mr} ${mb} ${ml}; }
+  @media print { .page-break { page-break-after: always; } }
+  .doc-page { position: relative; }
+  .doc-header { background: ${header.background_color||'#fff'}; color: ${header.font_color||'#000'};
+    padding: ${hPt}; min-height: ${header.header_height||120}px; font-size: ${header.font_size||12}px;
+    border-bottom: ${header.border_bottom?`${header.border_width||1}px solid ${header.border_color||'#d1d5db'}`:'none'}; }
+  .doc-body { padding: ${mt} ${mr} ${mb} ${ml}; }
+  .doc-footer { color: ${footer.font_color||'#666'}; font-size: ${footer.font_size||10}px; padding: ${fPt};
+    min-height: ${footer.footer_height||60}px; border-top: ${footer.border_top?`${footer.border_width||1}px solid ${footer.border_color||'#d1d5db'}`:'none'};
+    display: flex; justify-content: space-between; align-items: center; }
+  table { border-collapse: collapse; width: 100%; } td, th { border: 1px solid #e5e7eb; padding: 6px 10px; }
+  th { background: #7c3aed; color: white; }
+  blockquote { border-left: 4px solid #7c3aed; padding-left: 12px; color: #6b7280; margin: 8px 0; }
+</style></head><body>${pagesHtml}</body></html>`)
+    w.document.close(); w.focus()
+    toast.success('Print dialog opening — choose "Save as PDF"')
+    setTimeout(() => { w.print(); w.close() }, 500)
+  }
+
+  const handleExportDOCX = async () => {
+    if (!id) { toast.error('Save the template first to export DOCX'); return }
+    setShowExport(false)
+    const toastId = toast.loading('Generating DOCX…')
+    try {
+      const r = await documentCenterService.generateDocument({
+        template_id: id, document_name: name, generate_pdf: false, generate_docx: true, field_values: {},
+      })
+      const genId = r.data?.data?._id
+      if (genId) {
+        const url = documentCenterService.downloadDOCX(genId)
+        window.open(url, '_blank')
+        toast.success('DOCX ready', { id: toastId })
+      }
+    } catch { toast.error('DOCX export failed', { id: toastId }) }
+  }
 
   // Logo upload → base64 data URL
   const handleLogoUpload = (e) => {
@@ -785,8 +1040,41 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
             style={preview ? {} : { borderColor: 'var(--border)', color: 'var(--text-body)' }}
           >
             <Eye className="w-4 h-4" />
-            {preview ? 'Edit' : 'Quick Preview'}
+            {preview ? 'Edit' : 'Preview'}
           </button>
+
+          {/* Export dropdown */}
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setShowExport(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export</span>
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showExport && (
+              <div className="absolute right-0 top-full mt-1 z-50 rounded-xl border shadow-xl overflow-hidden"
+                style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', minWidth: 160 }}>
+                {[
+                  { label: 'Export PDF',  icon: FileText, fn: handleExportPDF  },
+                  { label: 'Export DOCX', icon: FileText, fn: handleExportDOCX },
+                  { label: 'Export HTML', icon: FileText, fn: handleExportHTML },
+                  { label: 'Export TXT',  icon: FileText, fn: handleExportTXT  },
+                  { label: 'Print',       icon: Printer,  fn: handlePrint      },
+                ].map(item => (
+                  <button key={item.label} onClick={item.fn}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors text-left"
+                    style={{ color: 'var(--text-body)' }}>
+                    <item.icon className="w-3.5 h-3.5 text-violet-500" />
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {id && (
             <button
               onClick={() => navigate(`/hrm/doc-center/generated?tmpl=${id}`)}
@@ -812,10 +1100,11 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
 
         {/* ── Left panel ── */}
         <aside
-          className="flex-shrink-0 border-r overflow-y-auto flex flex-col"
-          style={{ width: leftWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
+          className="flex-shrink-0 border-r flex flex-col transition-all duration-200 overflow-hidden"
+          style={{ width: leftCollapsed ? 0 : leftWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
         >
-          <Panel title="Template Info" defaultOpen>
+          <div className="flex-1 overflow-y-auto">
+          <Panel title="Template Info" open={openSection === 'info'} onToggle={() => toggleSection('info')}>
             <div>
               <Lbl>Description</Lbl>
               <textarea value={description} onChange={e => { setDescription(e.target.value); scheduleAutoSave() }}
@@ -836,20 +1125,18 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
             </div>
           </Panel>
 
-          <Panel title="Header" defaultOpen>
+          <Panel title="Header" open={openSection === 'header'} onToggle={() => toggleSection('header')}>
             <Tog label="Show Header" checked={header.show} onChange={v => setHeader(h => ({ ...h, show: v }))} />
             {header.show && <>
-              {/* Logo upload */}
+              {/* Logo */}
               <div>
                 <Lbl>Logo</Lbl>
                 {header.logo_url ? (
                   <div className="relative inline-block">
                     <img src={header.logo_url} alt="Logo"
                       style={{ height: 36, maxWidth: '100%', borderRadius: 4, border: '1px solid var(--border)' }} />
-                    <button
-                      onClick={() => setHeader(h => ({ ...h, logo_url: '' }))}
-                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center"
-                    >
+                    <button onClick={() => setHeader(h => ({ ...h, logo_url: '' }))}
+                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center">
                       <X className="w-2.5 h-2.5" />
                     </button>
                   </div>
@@ -862,64 +1149,133 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
                   </label>
                 )}
               </div>
-              <div>
-                <Lbl>Logo Height (px)</Lbl>
-                <Inp type="number" value={header.logo_height || 40} min={20} max={120}
-                  onChange={e => setHeader(h => ({ ...h, logo_height: +e.target.value }))} />
+              <div className="grid grid-cols-2 gap-2">
+                <div><Lbl>Logo Height (px)</Lbl>
+                  <Inp type="number" value={header.logo_height || 40} min={20} max={120}
+                    onChange={e => setHeader(h => ({ ...h, logo_height: +e.target.value }))} />
+                </div>
+                <div><Lbl>Logo Align</Lbl>
+                  <Sel value={header.logo_alignment || 'left'} onChange={e => setHeader(h => ({ ...h, logo_alignment: e.target.value }))}>
+                    <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+                  </Sel>
+                </div>
               </div>
+              {/* Header height */}
+              <div><Lbl>Header Height (px)</Lbl>
+                <Sel value={header.header_height || 120} onChange={e => setHeader(h => ({ ...h, header_height: +e.target.value }))}>
+                  {[80,100,120,140,160,200].map(v => <option key={v} value={v}>{v}px</option>)}
+                </Sel>
+              </div>
+              {/* Company info */}
               <div><Lbl>Company Name</Lbl><Inp value={header.company_name} onChange={e => setHeader(h => ({ ...h, company_name: e.target.value }))} placeholder="Acme Corp" /></div>
               <div><Lbl>Address</Lbl><Inp value={header.company_address} onChange={e => setHeader(h => ({ ...h, company_address: e.target.value }))} placeholder="123 Main St…" /></div>
               <div className="grid grid-cols-2 gap-2">
                 <div><Lbl>Email</Lbl><Inp value={header.company_email} onChange={e => setHeader(h => ({ ...h, company_email: e.target.value }))} placeholder="hr@co.com" /></div>
                 <div><Lbl>Phone</Lbl><Inp value={header.company_phone} onChange={e => setHeader(h => ({ ...h, company_phone: e.target.value }))} placeholder="+91 …" /></div>
               </div>
-              <div><Lbl>Website</Lbl><Inp value={header.company_website || ''} onChange={e => setHeader(h => ({ ...h, company_website: e.target.value }))} placeholder="www.company.com" /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Lbl>Website</Lbl><Inp value={header.company_website || ''} onChange={e => setHeader(h => ({ ...h, company_website: e.target.value }))} placeholder="www.co.com" /></div>
+                <div><Lbl>Company Align</Lbl>
+                  <Sel value={header.company_alignment || 'left'} onChange={e => setHeader(h => ({ ...h, company_alignment: e.target.value }))}>
+                    <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+                  </Sel>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div><Lbl>GST No.</Lbl><Inp value={header.gst_number || ''} onChange={e => setHeader(h => ({ ...h, gst_number: e.target.value }))} placeholder="GSTIN…" /></div>
                 <div><Lbl>Reg. No.</Lbl><Inp value={header.reg_number || ''} onChange={e => setHeader(h => ({ ...h, reg_number: e.target.value }))} placeholder="CIN…" /></div>
               </div>
-              <div><Lbl>Alignment</Lbl>
-                <Sel value={header.alignment} onChange={e => setHeader(h => ({ ...h, alignment: e.target.value }))}>
-                  <option value="left">Left</option>
-                  <option value="center">Center</option>
-                  <option value="right">Right</option>
-                </Sel>
-              </div>
+              {/* Fonts */}
               <div className="grid grid-cols-2 gap-2">
                 <div><Lbl>Font Size</Lbl><Inp type="number" value={header.font_size} min={8} max={24} onChange={e => setHeader(h => ({ ...h, font_size: +e.target.value }))} /></div>
+                <div><Lbl>Font Family</Lbl>
+                  <Sel value={header.font_family || 'Arial'} onChange={e => setHeader(h => ({ ...h, font_family: e.target.value }))}>
+                    {FONT_FAMILIES.map(f => <option key={f} value={f}>{f}</option>)}
+                  </Sel>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <div><Lbl>Text Color</Lbl><input type="color" value={header.font_color} onChange={e => setHeader(h => ({ ...h, font_color: e.target.value }))} className="w-full h-8 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--border)' }} /></div>
+                <div><Lbl>Background</Lbl><input type="color" value={header.background_color || '#ffffff'} onChange={e => setHeader(h => ({ ...h, background_color: e.target.value }))} className="w-full h-8 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--border)' }} /></div>
               </div>
-              <div><Lbl>Background</Lbl>
-                <input type="color" value={header.background_color || '#ffffff'} onChange={e => setHeader(h => ({ ...h, background_color: e.target.value }))} className="w-full h-8 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--border)' }} />
+              {/* Padding */}
+              <p className="text-[10px] font-bold uppercase tracking-wider pt-1" style={{ color: 'var(--text-muted)' }}>Padding (px)</p>
+              <div className="grid grid-cols-4 gap-1">
+                {['top','right','bottom','left'].map(s => (
+                  <div key={s}><p className="text-[9px] text-center mb-0.5" style={{ color: 'var(--text-muted)' }}>{s[0].toUpperCase()}</p>
+                    <Inp type="number" value={header[`padding_${s}`] ?? 12} min={0} max={80}
+                      onChange={e => setHeader(h => ({ ...h, [`padding_${s}`]: +e.target.value }))} /></div>
+                ))}
               </div>
-              <Tog label="Border Bottom" checked={header.border_bottom} onChange={v => setHeader(h => ({ ...h, border_bottom: v }))} />
+              {/* Margin */}
+              <p className="text-[10px] font-bold uppercase tracking-wider pt-1" style={{ color: 'var(--text-muted)' }}>Margin (px)</p>
+              <div className="grid grid-cols-4 gap-1">
+                {['top','right','bottom','left'].map(s => (
+                  <div key={s}><p className="text-[9px] text-center mb-0.5" style={{ color: 'var(--text-muted)' }}>{s[0].toUpperCase()}</p>
+                    <Inp type="number" value={header[`margin_${s}`] ?? 0} min={0} max={80}
+                      onChange={e => setHeader(h => ({ ...h, [`margin_${s}`]: +e.target.value }))} /></div>
+                ))}
+              </div>
+              {/* Border */}
+              <div className="grid grid-cols-2 gap-2">
+                <div><Lbl>Border Color</Lbl><input type="color" value={header.border_color || '#d1d5db'} onChange={e => setHeader(h => ({ ...h, border_color: e.target.value }))} className="w-full h-8 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--border)' }} /></div>
+                <div><Lbl>Border Width</Lbl><Inp type="number" value={header.border_width ?? 1} min={0} max={8} onChange={e => setHeader(h => ({ ...h, border_width: +e.target.value }))} /></div>
+              </div>
+              <Tog label="Show Border Bottom" checked={header.border_bottom} onChange={v => setHeader(h => ({ ...h, border_bottom: v }))} />
             </>}
           </Panel>
 
-          <Panel title="Footer">
+          <Panel title="Footer" open={openSection === 'footer'} onToggle={() => toggleSection('footer')}>
             <Tog label="Show Footer" checked={footer.show} onChange={v => setFooter(f => ({ ...f, show: v }))} />
             {footer.show && <>
               <div><Lbl>Footer Text</Lbl><Inp value={footer.text} onChange={e => setFooter(f => ({ ...f, text: e.target.value }))} placeholder="Company Confidential" /></div>
-              <div><Lbl>Description</Lbl><Inp value={footer.description || ''} onChange={e => setFooter(f => ({ ...f, description: e.target.value }))} placeholder="Extra footer line…" /></div>
+              <div><Lbl>Description Line</Lbl><Inp value={footer.description || ''} onChange={e => setFooter(f => ({ ...f, description: e.target.value }))} placeholder="Extra footer line…" /></div>
+              {/* Footer height */}
+              <div><Lbl>Footer Height (px)</Lbl>
+                <Sel value={footer.footer_height || 60} onChange={e => setFooter(f => ({ ...f, footer_height: +e.target.value }))}>
+                  {[40,50,60,80,100].map(v => <option key={v} value={v}>{v}px</option>)}
+                </Sel>
+              </div>
               <div><Lbl>Alignment</Lbl>
                 <Sel value={footer.alignment} onChange={e => setFooter(f => ({ ...f, alignment: e.target.value }))}>
-                  <option value="left">Left</option>
-                  <option value="center">Center</option>
-                  <option value="right">Right</option>
+                  <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
                 </Sel>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div><Lbl>Font Size</Lbl><Inp type="number" value={footer.font_size} min={6} max={18} onChange={e => setFooter(f => ({ ...f, font_size: +e.target.value }))} /></div>
                 <div><Lbl>Text Color</Lbl><input type="color" value={footer.font_color} onChange={e => setFooter(f => ({ ...f, font_color: e.target.value }))} className="w-full h-8 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--border)' }} /></div>
               </div>
-              <Tog label="Show Page Numbers"  checked={footer.show_page_numbers} onChange={v => setFooter(f => ({ ...f, show_page_numbers: v }))} />
-              <Tog label="Show Current Date"  checked={footer.show_date}          onChange={v => setFooter(f => ({ ...f, show_date: v }))} />
+              {/* Padding */}
+              <p className="text-[10px] font-bold uppercase tracking-wider pt-1" style={{ color: 'var(--text-muted)' }}>Padding (px)</p>
+              <div className="grid grid-cols-4 gap-1">
+                {['top','right','bottom','left'].map(s => (
+                  <div key={s}><p className="text-[9px] text-center mb-0.5" style={{ color: 'var(--text-muted)' }}>{s[0].toUpperCase()}</p>
+                    <Inp type="number" value={footer[`padding_${s}`] ?? 8} min={0} max={60}
+                      onChange={e => setFooter(f => ({ ...f, [`padding_${s}`]: +e.target.value }))} /></div>
+                ))}
+              </div>
+              {/* Margin */}
+              <p className="text-[10px] font-bold uppercase tracking-wider pt-1" style={{ color: 'var(--text-muted)' }}>Margin (px)</p>
+              <div className="grid grid-cols-4 gap-1">
+                {['top','right','bottom','left'].map(s => (
+                  <div key={s}><p className="text-[9px] text-center mb-0.5" style={{ color: 'var(--text-muted)' }}>{s[0].toUpperCase()}</p>
+                    <Inp type="number" value={footer[`margin_${s}`] ?? 0} min={0} max={60}
+                      onChange={e => setFooter(f => ({ ...f, [`margin_${s}`]: +e.target.value }))} /></div>
+                ))}
+              </div>
+              {/* Border */}
+              <div className="grid grid-cols-2 gap-2">
+                <div><Lbl>Border Color</Lbl><input type="color" value={footer.border_color || '#d1d5db'} onChange={e => setFooter(f => ({ ...f, border_color: e.target.value }))} className="w-full h-8 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--border)' }} /></div>
+                <div><Lbl>Border Width</Lbl><Inp type="number" value={footer.border_width ?? 1} min={0} max={8} onChange={e => setFooter(f => ({ ...f, border_width: +e.target.value }))} /></div>
+              </div>
+              <Tog label="Page Numbers"       checked={footer.show_page_numbers} onChange={v => setFooter(f => ({ ...f, show_page_numbers: v }))} />
+              <Tog label="Current Date"       checked={footer.show_date}          onChange={v => setFooter(f => ({ ...f, show_date: v }))} />
               <Tog label="Confidential Label" checked={footer.confidential_label} onChange={v => setFooter(f => ({ ...f, confidential_label: v }))} />
-              <Tog label="Border Top"         checked={footer.border_top}         onChange={v => setFooter(f => ({ ...f, border_top: v }))} />
+              <Tog label="Show Border Top"    checked={footer.border_top}         onChange={v => setFooter(f => ({ ...f, border_top: v }))} />
             </>}
           </Panel>
 
-          <Panel title="Paper Settings">
+          <Panel title="Paper Settings" open={openSection === 'paper'} onToggle={() => toggleSection('paper')}>
             <div><Lbl>Size</Lbl>
               <Sel value={paper.size} onChange={e => setPaper(p => ({ ...p, size: e.target.value }))}>
                 <option value="A4">A4 (210 × 297 mm)</option>
@@ -933,9 +1289,10 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
                 <option value="landscape">Landscape</option>
               </Sel>
             </div>
+            <p className="text-[10px] font-bold uppercase tracking-wider pt-1" style={{ color: 'var(--text-muted)' }}>Margins (pt)</p>
             <div className="grid grid-cols-2 gap-2">
               {['top','bottom','left','right'].map(s => (
-                <div key={s}><Lbl>Margin {s.charAt(0).toUpperCase() + s.slice(1)} (pt)</Lbl>
+                <div key={s}><Lbl>{s.charAt(0).toUpperCase() + s.slice(1)}</Lbl>
                   <Inp type="number" value={paper[`margin_${s}`]} min={0} max={200}
                     onChange={e => setPaper(p => ({ ...p, [`margin_${s}`]: +e.target.value }))} />
                 </div>
@@ -943,11 +1300,10 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
             </div>
           </Panel>
 
-          <Panel title="Watermark">
+          <Panel title="Watermark" open={openSection === 'watermark'} onToggle={() => toggleSection('watermark')}>
             <Tog label="Enable Watermark" checked={watermark.enabled} onChange={v => setWatermark(w => ({ ...w, enabled: v }))} />
             {watermark.enabled && <>
-              <div>
-                <Lbl>Preset</Lbl>
+              <div><Lbl>Preset</Lbl>
                 <div className="flex flex-wrap gap-1">
                   {WATERMARK_PRESETS.map(p => (
                     <button key={p} type="button" onClick={() => setWatermark(w => ({ ...w, text: p }))}
@@ -960,14 +1316,14 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
               </div>
               <div><Lbl>Custom Text</Lbl><Inp value={watermark.text} onChange={e => setWatermark(w => ({ ...w, text: e.target.value }))} /></div>
               <div className="grid grid-cols-2 gap-2">
-                <div><Lbl>Opacity (0–1)</Lbl><Inp type="number" value={watermark.opacity} min={0.05} max={1} step={0.05} onChange={e => setWatermark(w => ({ ...w, opacity: +e.target.value }))} /></div>
+                <div><Lbl>Opacity</Lbl><Inp type="number" value={watermark.opacity} min={0.05} max={1} step={0.05} onChange={e => setWatermark(w => ({ ...w, opacity: +e.target.value }))} /></div>
                 <div><Lbl>Rotation (°)</Lbl><Inp type="number" value={watermark.rotation} min={-180} max={180} onChange={e => setWatermark(w => ({ ...w, rotation: +e.target.value }))} /></div>
               </div>
               <div><Lbl>Font Size (px)</Lbl><Inp type="number" value={watermark.size || 72} min={20} max={200} onChange={e => setWatermark(w => ({ ...w, size: +e.target.value }))} /></div>
             </>}
           </Panel>
 
-          <Panel title="HR Fields" defaultOpen>
+          <Panel title="HR Fields" open={openSection === 'fields'} onToggle={() => toggleSection('fields')}>
             <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>Click to insert into document</p>
             {Object.entries(fieldGroups).map(([group, fields]) => (
               <div key={group} className="mb-2">
@@ -987,7 +1343,7 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
             ))}
           </Panel>
 
-          <Panel title="Insert Table">
+          <Panel title="Insert Table" open={openSection === 'tables'} onToggle={() => toggleSection('tables')}>
             <div className="space-y-1.5">
               {[
                 { key: 'employee', label: 'Employee Info Table' },
@@ -1007,7 +1363,7 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
             </div>
           </Panel>
 
-          <Panel title="Insert Element">
+          <Panel title="Insert Element" open={openSection === 'elements'} onToggle={() => toggleSection('elements')}>
             <div className="grid grid-cols-2 gap-1.5">
               {[
                 { label: 'Heading 1', fn: () => exec('formatBlock', 'h1') },
@@ -1029,10 +1385,21 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
               ))}
             </div>
           </Panel>
+          </div>
         </aside>
 
-        {/* ── Left resize divider ── */}
-        <ResizeDivider onDrag={handleLeftResize} />
+        {/* ── Left collapse toggle + resize divider ── */}
+        <div className="flex flex-col flex-shrink-0 relative">
+          <button
+            onClick={toggleLeftPanel}
+            title={leftCollapsed ? 'Show blocks panel' : 'Hide blocks panel'}
+            className="absolute top-2 -right-3 z-20 w-6 h-6 rounded-full border flex items-center justify-center hover:bg-violet-600 hover:text-white hover:border-violet-600 transition-colors"
+            style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+          >
+            {leftCollapsed ? <PanelLeftOpen className="w-3 h-3" /> : <PanelLeftClose className="w-3 h-3" />}
+          </button>
+          {!leftCollapsed && <ResizeDivider onDrag={handleLeftResize} />}
+        </div>
 
         {/* ── Center: Toolbar + Canvas ── */}
         <div className="flex-1 flex flex-col overflow-hidden select-text">
@@ -1104,102 +1471,50 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
 
           {/* Document canvas */}
           <div className="flex-1 overflow-auto py-8 px-4" style={{ background: '#e5e7eb' }}>
-            {/* Page break guide lines */}
-            <div className="mx-auto shadow-2xl relative bg-white" style={{ width: paperW, fontFamily: 'Arial, sans-serif' }}>
-
-              {/* Watermark */}
-              {watermark.enabled && (
-                <div style={{
-                  position: 'absolute', inset: 0, display: 'flex',
-                  alignItems: 'center', justifyContent: 'center',
-                  pointerEvents: 'none', zIndex: 1,
-                  transform: `rotate(${watermark.rotation}deg)`,
-                  fontSize: watermark.size, opacity: watermark.opacity,
-                  color: '#9ca3af', fontWeight: 'bold', userSelect: 'none',
-                }}>
-                  {watermark.text}
-                </div>
-              )}
-
-              {/* Header */}
-              {header.show && (
-                <div style={{
-                  paddingLeft: ml, paddingRight: mr, paddingTop: '12px', paddingBottom: '8px',
-                  borderBottom: header.border_bottom ? '1px solid #d1d5db' : 'none',
-                  textAlign: header.alignment, backgroundColor: header.background_color, color: header.font_color,
-                  fontSize: header.font_size,
-                }}>
-                  {header.logo_url && (
-                    <img src={header.logo_url} alt="Logo" style={{
-                      height: header.logo_height || 40, display: 'block',
-                      margin: header.alignment === 'center' ? '0 auto 4px'
-                            : header.alignment === 'right'  ? '0 0 4px auto'
-                            : '0 0 4px 0'
-                    }} />
-                  )}
-                  {header.company_name && <div style={{ fontWeight: 'bold', fontSize: header.font_size + 2 }}>{header.company_name}</div>}
-                  {header.company_address && <div style={{ fontSize: header.font_size - 1 }}>{header.company_address}</div>}
-                  {(header.company_email || header.company_phone) && (
-                    <div style={{ fontSize: header.font_size - 1, color: '#6b7280' }}>
-                      {[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}
-                    </div>
-                  )}
-                  {header.company_website && <div style={{ fontSize: header.font_size - 1, color: '#6b7280' }}>{header.company_website}</div>}
-                  {(header.gst_number || header.reg_number) && (
-                    <div style={{ fontSize: header.font_size - 2, color: '#6b7280', marginTop: 2 }}>
-                      {[header.gst_number && `GST: ${header.gst_number}`, header.reg_number && `Reg: ${header.reg_number}`].filter(Boolean).join('  |  ')}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Body */}
-              <div
-                ref={editorRef}
-                contentEditable={!preview}
-                suppressContentEditableWarning
+            {preview ? (
+              /* Preview mode: paginated, read-only */
+              <PaginatedDocument
+                html={editorRef.current?.innerHTML || ''}
+                header={header} footer={footer} paper={paper} watermark={watermark}
+                ml={ml} mr={mr} mt={mt} mb={mb} paperW={paperW}
+                readOnly
+              />
+            ) : (
+              /* Edit mode: single contentEditable with page-break guides */
+              <PaginatedDocument
+                html=""
+                header={header} footer={footer} paper={paper} watermark={watermark}
+                ml={ml} mr={mr} mt={mt} mb={mb} paperW={paperW}
+                editorRef={editorRef}
                 onMouseUp={saveSelection}
                 onKeyUp={() => { saveSelection(); scheduleAutoSave() }}
                 onInput={scheduleAutoSave}
-                className="focus:outline-none"
-                style={{
-                  paddingTop: mt, paddingBottom: mb, paddingLeft: ml, paddingRight: mr,
-                  minHeight: '400px', fontSize: '12pt', lineHeight: 1.6, color: '#1f2937',
-                  position: 'relative', zIndex: 2,
-                }}
-                data-placeholder={preview ? '' : 'Start typing your document content here…'}
+                readOnly={false}
               />
-
-              {/* Footer */}
-              {footer.show && (
-                <div style={{
-                  paddingLeft: ml, paddingRight: mr, paddingBottom: '12px', paddingTop: '8px',
-                  borderTop: footer.border_top ? '1px solid #d1d5db' : 'none',
-                  fontSize: footer.font_size, color: footer.font_color,
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}>
-                  <span style={{ fontSize: footer.font_size - 1 }}>
-                    {footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}
-                  </span>
-                  <span>
-                    {footer.text}{footer.confidential_label ? (footer.text ? '  |  CONFIDENTIAL' : 'CONFIDENTIAL') : ''}
-                    {footer.description ? <><br /><span style={{ fontSize: footer.font_size - 2 }}>{footer.description}</span></> : null}
-                  </span>
-                  <span>{footer.show_page_numbers ? 'Page 1' : ''}</span>
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
 
-        {/* ── Right resize divider ── */}
-        {!preview && <ResizeDivider onDrag={handleRightResize} />}
+        {/* ── Right collapse toggle + resize divider ── */}
+        {!preview && (
+          <div className="flex flex-col flex-shrink-0 relative">
+            <button
+              onClick={toggleRightPanel}
+              title={rightCollapsed ? 'Show properties panel' : 'Hide properties panel'}
+              className="absolute top-2 -left-3 z-20 w-6 h-6 rounded-full border flex items-center justify-center hover:bg-violet-600 hover:text-white hover:border-violet-600 transition-colors"
+              style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+            >
+              {rightCollapsed ? <PanelRightOpen className="w-3 h-3" /> : <PanelRightClose className="w-3 h-3" />}
+            </button>
+            {!rightCollapsed && <ResizeDivider onDrag={handleRightResize} />}
+          </div>
+        )}
 
         {/* ── Right panel: Properties ── */}
         {!preview && (
           <aside
-            className="flex-shrink-0 border-l flex flex-col overflow-hidden"
-            style={{ width: rightWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
+            className="flex-shrink-0 border-l flex flex-col overflow-hidden transition-all duration-200"
+            style={{ width: rightCollapsed ? 0 : rightWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
           >
             <RightPanel
               editorRef={editorRef}
