@@ -50,11 +50,15 @@ const createFromLibrary = (key, category_id)  =>
 const listArchive       = (params)  => api.get(`${BASE}/archive`, { params })
 const unarchiveTemplate = (id)      => api.post(`${BASE}/archive/${id}/restore`)
 
+// ─── Global Version History ───────────────────────────────────────────────────
+const listAllVersions = (params) => api.get(`${BASE}/versions`, { params })
+
 const documentCenterService = {
   listCategories, createCategory, updateCategory, deleteCategory,
   listTemplates, getTemplate, createTemplate, updateTemplate, deleteTemplate,
   toggleFavorite, duplicateTemplate,
   listVersions, restoreVersion, deleteVersion,
+  listAllVersions,
   generateDocument, listGenerated, archiveGenerated, deleteGenerated, downloadPDF, downloadDOCX,
   requestApproval, listApprovals, reviewApproval,
   importDocument,

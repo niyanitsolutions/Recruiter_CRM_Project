@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react'
 import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom'
-import { Plus, FileText, CheckSquare, Archive as ArchiveIcon, LayoutTemplate } from 'lucide-react'
+import { Plus, FileText, CheckSquare, Archive as ArchiveIcon, LayoutTemplate, FolderOpen, History } from 'lucide-react'
 import { clsx } from 'clsx'
 
 const NewTemplatePage    = lazy(() => import('./NewTemplatePage'))
@@ -11,11 +11,15 @@ const Templates          = lazy(() => import('./Templates'))
 const GeneratedDocuments = lazy(() => import('./GeneratedDocuments'))
 const Approvals          = lazy(() => import('./Approvals'))
 const Archive            = lazy(() => import('./Archive'))
+const Categories         = lazy(() => import('./Categories'))
+const VersionHistory     = lazy(() => import('./VersionHistory'))
 
 const NAV_ITEMS = [
   { key: 'templates',  label: 'Templates',           icon: LayoutTemplate, path: 'templates' },
   { key: 'generated',  label: 'Generated Documents',  icon: FileText,       path: 'generated' },
+  { key: 'categories', label: 'Categories',           icon: FolderOpen,     path: 'categories' },
   { key: 'approvals',  label: 'Approvals',            icon: CheckSquare,    path: 'approvals' },
+  { key: 'versions',   label: 'Version History',      icon: History,        path: 'versions' },
   { key: 'archive',    label: 'Archive',              icon: ArchiveIcon,    path: 'archive' },
 ]
 
@@ -96,7 +100,9 @@ export default function DocumentCenter() {
             <Route path="advanced"            element={<AdvancedDesigner />} />
             <Route path="advanced/:id"        element={<AdvancedDesigner />} />
             <Route path="generated"           element={<GeneratedDocuments />} />
+            <Route path="categories"          element={<Categories />} />
             <Route path="approvals"           element={<Approvals />} />
+            <Route path="versions"            element={<VersionHistory />} />
             <Route path="archive"             element={<Archive />} />
           </Routes>
         </Suspense>

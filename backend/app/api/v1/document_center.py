@@ -461,6 +461,25 @@ async def import_document(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# GLOBAL VERSION HISTORY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/versions")
+async def list_all_versions(
+    template_id: Optional[str] = Query(None),
+    search:      Optional[str] = Query(None),
+    skip:        int            = Query(0, ge=0),
+    limit:       int            = Query(50, le=200),
+    db   = Depends(get_company_db),
+    user = Depends(require_permissions(PERM_VIEW)),
+):
+    docs, total = await document_center_service.list_all_versions(
+        db, template_id=template_id, search=search, skip=skip, limit=limit,
+    )
+    return {"success": True, "data": {"versions": docs, "total": total}}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # TEMPLATE LIBRARY
 # ═══════════════════════════════════════════════════════════════════════════════
 

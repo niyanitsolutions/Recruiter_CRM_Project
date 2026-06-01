@@ -1173,5 +1173,35 @@ class DocumentCenterService:
         )
         return (True, "Unarchived") if result.matched_count else (False, "Not found")
 
+    # ── Global Version History ─────────────────────────────────────────────────
+
+    async def list_all_versions(
+        self,
+        db: AsyncIOMotorDatabase,
+        *,
+        template_id: Optional[str] = None,
+        search: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> Tuple[List[Dict], int]:
+        query: Dict[str, Any] = {}
+        if template_id:
+            query["template_id"] = template_id
+        if search:
+            query["$or"] = [
+                {"name":           {"$regex": search, "$options": "i"}},
+                {"change_summary": {"$regex": search, "$options": "i"}},
+                {"created_by_name":{"$regex": search, "$options": "i"}},
+            ]
+        total  = await db.doc_template_versions.count_documents(query)
+        # Exclude heavy content blob from list view
+        cursor = db.doc_template_versions.find(query, {"content": 0}).sort("created_at", -1).skip(skip).limit(limit)
+        docs   = await cursor.to_list(length=limit)
+        result = []
+        for d in docs:
+            d["id"] = str(d.pop("_id", ""))
+            result.append(d)
+        return result, total
+
 
 document_center_service = DocumentCenterService()

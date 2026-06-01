@@ -7,11 +7,12 @@ import {
   List, ListOrdered, Link2, RotateCcw, RotateCw,
   Plus, Minus, Type, Palette, Table, Image as ImageIcon,
   ChevronDown, ChevronUp, Loader2, ArrowLeft, FileText,
-  CheckSquare, Stamp,
+  Stamp, ZoomIn, ZoomOut, X, Download, Printer, GripVertical,
+  Clock, CheckCircle, AlertCircle, Upload, Maximize2,
 } from 'lucide-react'
 import documentCenterService from '../../../services/documentCenterService'
 
-// ─── HR Field Definitions ──────────────────────────────────────────────────────
+// ─── HR Fields ─────────────────────────────────────────────────────────────────
 const HR_FIELDS = [
   { group: 'Employee',  label: 'Employee Name',     field: '{{employee_name}}' },
   { group: 'Employee',  label: 'Employee ID',        field: '{{employee_id}}' },
@@ -20,22 +21,25 @@ const HR_FIELDS = [
   { group: 'Employee',  label: 'Joining Date',       field: '{{joining_date}}' },
   { group: 'Employee',  label: 'Exit Date',          field: '{{exit_date}}' },
   { group: 'Employee',  label: 'Salary',             field: '{{salary}}' },
-  { group: 'Employee',  label: 'Manager Name',       field: '{{manager_name}}' },
+  { group: 'Employee',  label: 'Manager',            field: '{{manager_name}}' },
   { group: 'Employee',  label: 'Email',              field: '{{employee_email}}' },
-  { group: 'Employee',  label: 'Address',            field: '{{employee_address}}' },
   { group: 'Employee',  label: 'Phone',              field: '{{employee_phone}}' },
+  { group: 'Employee',  label: 'Address',            field: '{{employee_address}}' },
   { group: 'Company',   label: 'Company Name',       field: '{{company_name}}' },
   { group: 'Company',   label: 'Company Address',    field: '{{company_address}}' },
   { group: 'Company',   label: 'Company Phone',      field: '{{company_phone}}' },
   { group: 'Company',   label: 'Company Email',      field: '{{company_email}}' },
+  { group: 'Company',   label: 'GST Number',         field: '{{gst_number}}' },
+  { group: 'Company',   label: 'Reg. Number',        field: '{{reg_number}}' },
   { group: 'Date',      label: 'Current Date',       field: '{{current_date}}' },
   { group: 'Date',      label: 'Month & Year',       field: '{{month_year}}' },
+  { group: 'Date',      label: 'Current Year',       field: '{{current_year}}' },
   { group: 'Payroll',   label: 'Basic Salary',       field: '{{basic}}' },
   { group: 'Payroll',   label: 'HRA',                field: '{{hra}}' },
   { group: 'Payroll',   label: 'Special Allowance',  field: '{{special_allowance}}' },
   { group: 'Payroll',   label: 'Gross Salary',       field: '{{gross}}' },
-  { group: 'Payroll',   label: 'Provident Fund',     field: '{{pf}}' },
-  { group: 'Payroll',   label: 'Professional Tax',   field: '{{pt}}' },
+  { group: 'Payroll',   label: 'PF',                 field: '{{pf}}' },
+  { group: 'Payroll',   label: 'Prof. Tax',          field: '{{pt}}' },
   { group: 'Payroll',   label: 'TDS',                field: '{{tds}}' },
   { group: 'Payroll',   label: 'Total Deductions',   field: '{{total_deductions}}' },
   { group: 'Payroll',   label: 'Net Salary',         field: '{{net_salary}}' },
@@ -77,7 +81,7 @@ const TABLE_TEMPLATES = {
 const WATERMARK_PRESETS = ['DRAFT', 'CONFIDENTIAL', 'INTERNAL', 'APPROVED', 'FOR YOUR EYES ONLY']
 const FONT_FAMILIES = ['Arial', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana', 'Trebuchet MS', 'Helvetica']
 
-// ─── Shared sub-components ─────────────────────────────────────────────────────
+// ─── Toolbar button ────────────────────────────────────────────────────────────
 const TB = ({ icon: Icon, label, onClick, active, disabled }) => (
   <button
     type="button"
@@ -93,6 +97,7 @@ const TB = ({ icon: Icon, label, onClick, active, disabled }) => (
   </button>
 )
 
+// ─── Collapsible Panel ─────────────────────────────────────────────────────────
 const Panel = ({ title, children, defaultOpen = false }) => {
   const [open, setOpen] = useState(defaultOpen)
   return (
@@ -132,25 +137,392 @@ const Tog = ({ label, checked, onChange }) => (
   </label>
 )
 
+// ─── Resize Divider ────────────────────────────────────────────────────────────
+function ResizeDivider({ onDrag, side = 'right' }) {
+  const handleMouseDown = (e) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const onMove = (ev) => onDrag(ev.clientX - startX)
+    const onUp   = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      className="flex-shrink-0 flex items-center justify-center w-1.5 cursor-col-resize hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors z-10"
+      style={{ borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)' }}
+      title="Drag to resize"
+    >
+      <GripVertical className="w-3 h-3" style={{ color: 'var(--text-muted)' }} />
+    </div>
+  )
+}
+
+// ─── Fullscreen Preview Modal ──────────────────────────────────────────────────
+function PreviewModal({ html, header, footer, paper, watermark, onClose }) {
+  const [zoom, setZoom] = useState(100)
+
+  const paperW = paper.size === 'A4' ? (paper.orientation === 'landscape' ? '297mm' : '210mm')
+               : paper.size === 'letter' ? (paper.orientation === 'landscape' ? '279mm' : '216mm')
+               : (paper.orientation === 'landscape' ? '356mm' : '216mm')
+
+  const ml = paper.margin_left   / 72 * 25.4 + 'mm'
+  const mr = paper.margin_right  / 72 * 25.4 + 'mm'
+  const mt = paper.margin_top    / 72 * 25.4 + 'mm'
+  const mb = paper.margin_bottom / 72 * 25.4 + 'mm'
+
+  const handlePrint = () => {
+    const w = window.open('', '_blank')
+    w.document.write(`<!DOCTYPE html><html><head>
+      <style>
+        body { margin: 0; font-family: Arial, sans-serif; }
+        @page { margin: ${mt} ${mr} ${mb} ${ml}; }
+        @media print { .no-print { display: none !important; } }
+        table { border-collapse: collapse; width: 100%; }
+        td, th { border: 1px solid #e5e7eb; padding: 6px 10px; }
+        blockquote { border-left: 4px solid #7c3aed; padding-left: 12px; color: #6b7280; }
+      </style>
+    </head><body>
+      ${header.show ? `<div style="text-align:${header.alignment};padding:12px ${mr} 8px ${ml};${header.border_bottom ? 'border-bottom:1px solid #d1d5db;' : ''}background:${header.background_color};color:${header.font_color};font-size:${header.font_size}px;">
+        ${header.logo_url ? `<img src="${header.logo_url}" style="height:40px;display:block;margin:${header.alignment === 'center' ? '0 auto' : header.alignment === 'right' ? '0 0 0 auto' : '0'};" />` : ''}
+        ${header.company_name ? `<div style="font-weight:bold;font-size:${header.font_size + 2}px;">${header.company_name}</div>` : ''}
+        ${header.company_address ? `<div style="font-size:${header.font_size - 1}px;">${header.company_address}</div>` : ''}
+        ${(header.company_email || header.company_phone) ? `<div style="font-size:${header.font_size - 1}px;color:#6b7280;">${[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}</div>` : ''}
+      </div>` : ''}
+      <div style="padding:${mt} ${mr} ${mb} ${ml};font-size:12pt;line-height:1.6;color:#1f2937;">${html}</div>
+      ${footer.show ? `<div style="text-align:${footer.alignment};padding:8px ${mr} 12px ${ml};${footer.border_top ? 'border-top:1px solid #d1d5db;' : ''}font-size:${footer.font_size}px;color:${footer.font_color};display:flex;justify-content:space-between;">
+        <span>${footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
+        <span>${footer.text || ''}${footer.confidential_label ? (footer.text ? '  |  CONFIDENTIAL' : 'CONFIDENTIAL') : ''}</span>
+        <span>${footer.show_page_numbers ? 'Page 1' : ''}</span>
+      </div>` : ''}
+    </body></html>`)
+    w.document.close()
+    w.print()
+  }
+
+  const handleExportHTML = () => {
+    const fullHtml = `<!DOCTYPE html><html><head>
+<meta charset="UTF-8">
+<style>
+  body { margin: 40px auto; max-width: 800px; font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.6; color: #1f2937; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border: 1px solid #e5e7eb; padding: 6px 10px; }
+  th { background: #7c3aed; color: white; }
+  blockquote { border-left: 4px solid #7c3aed; padding-left: 12px; color: #6b7280; margin: 8px 0; }
+  .header { border-bottom: 1px solid #d1d5db; padding-bottom: 12px; margin-bottom: 24px; text-align: ${header.alignment}; }
+  .footer { border-top: 1px solid #d1d5db; padding-top: 8px; margin-top: 24px; display: flex; justify-content: space-between; color: #6b7280; font-size: 10pt; }
+</style>
+</head><body>
+${header.show ? `<div class="header">
+  ${header.logo_url ? `<img src="${header.logo_url}" style="height:40px;" />` : ''}
+  ${header.company_name ? `<h2 style="margin:4px 0;">${header.company_name}</h2>` : ''}
+  ${header.company_address ? `<p style="margin:2px 0;">${header.company_address}</p>` : ''}
+</div>` : ''}
+${html}
+${footer.show ? `<div class="footer">
+  <span>${footer.show_date ? new Date().toLocaleDateString() : ''}</span>
+  <span>${footer.text || ''}${footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
+  <span>${footer.show_page_numbers ? 'Page 1' : ''}</span>
+</div>` : ''}
+</body></html>`
+    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url; a.download = 'document.html'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.85)' }}>
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 px-4 py-2.5 flex-shrink-0"
+        style={{ background: '#1e1e2e', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        <span className="text-white text-sm font-semibold flex-1">Preview</span>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setZoom(z => Math.max(50, z - 25))}
+            className="p-1.5 rounded text-white hover:bg-white/10"><ZoomOut className="w-4 h-4" /></button>
+          <span className="text-white text-xs w-10 text-center">{zoom}%</span>
+          <button onClick={() => setZoom(z => Math.min(200, z + 25))}
+            className="p-1.5 rounded text-white hover:bg-white/10"><ZoomIn className="w-4 h-4" /></button>
+          <select value={zoom} onChange={e => setZoom(+e.target.value)}
+            className="text-xs px-2 py-1 rounded"
+            style={{ background: '#2d2d3d', color: 'white', border: '1px solid rgba(255,255,255,0.2)' }}>
+            {[50, 75, 100, 125, 150, 175, 200].map(z => <option key={z} value={z}>{z}%</option>)}
+          </select>
+        </div>
+        <div className="w-px h-5 bg-white/20" />
+        <button onClick={handlePrint}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs text-white hover:bg-white/10">
+          <Printer className="w-3.5 h-3.5" /> Print
+        </button>
+        <button onClick={handleExportHTML}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs text-white hover:bg-white/10">
+          <Download className="w-3.5 h-3.5" /> HTML
+        </button>
+        <div className="w-px h-5 bg-white/20" />
+        <button onClick={onClose}
+          className="p-1.5 rounded text-white hover:bg-white/10">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Canvas */}
+      <div className="flex-1 overflow-auto py-8 px-4 flex justify-center" style={{ background: '#2d2d3d' }}>
+        <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', transition: 'transform 0.2s' }}>
+          <div className="bg-white shadow-2xl relative" style={{ width: paperW, minHeight: '297mm', fontFamily: 'Arial, sans-serif' }}>
+            {/* Watermark */}
+            {watermark.enabled && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                pointerEvents: 'none', zIndex: 1,
+                transform: `rotate(${watermark.rotation}deg)`,
+                fontSize: watermark.size, opacity: watermark.opacity,
+                color: '#9ca3af', fontWeight: 'bold', userSelect: 'none',
+              }}>
+                {watermark.text}
+              </div>
+            )}
+
+            {/* Header */}
+            {header.show && (
+              <div style={{
+                paddingLeft: ml, paddingRight: mr, paddingTop: '12px', paddingBottom: '8px',
+                borderBottom: header.border_bottom ? '1px solid #d1d5db' : 'none',
+                textAlign: header.alignment, backgroundColor: header.background_color, color: header.font_color,
+                fontSize: header.font_size,
+              }}>
+                {header.logo_url && (
+                  <img src={header.logo_url} alt="Logo"
+                    style={{ height: 40, display: 'block', margin: header.alignment === 'center' ? '0 auto 4px' : header.alignment === 'right' ? '0 0 4px auto' : '0 0 4px 0' }} />
+                )}
+                {header.company_name && <div style={{ fontWeight: 'bold', fontSize: header.font_size + 2 }}>{header.company_name}</div>}
+                {header.company_address && <div style={{ fontSize: header.font_size - 1 }}>{header.company_address}</div>}
+                {(header.company_email || header.company_phone) && (
+                  <div style={{ fontSize: header.font_size - 1, color: '#6b7280' }}>
+                    {[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Body */}
+            <div style={{
+              paddingTop: mt, paddingBottom: mb, paddingLeft: ml, paddingRight: mr,
+              fontSize: '12pt', lineHeight: 1.6, color: '#1f2937', position: 'relative', zIndex: 2,
+            }}
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+
+            {/* Footer */}
+            {footer.show && (
+              <div style={{
+                paddingLeft: ml, paddingRight: mr, paddingBottom: '12px', paddingTop: '8px',
+                borderTop: footer.border_top ? '1px solid #d1d5db' : 'none',
+                fontSize: footer.font_size, color: footer.font_color,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+                <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
+                <span>{footer.text}{footer.confidential_label ? (footer.text ? '  |  CONFIDENTIAL' : 'CONFIDENTIAL') : ''}</span>
+                <span>{footer.show_page_numbers ? 'Page 1' : ''}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Right Properties Panel ────────────────────────────────────────────────────
+function RightPanel({ editorRef, exec, insertField, insertHtml }) {
+  const [bold,      setBold]      = useState(false)
+  const [italic,    setItalic]    = useState(false)
+  const [underline, setUnderline] = useState(false)
+  const [strike,    setStrike]    = useState(false)
+  const [align,     setAlign]     = useState('left')
+  const [wordCount, setWordCount] = useState(0)
+  const [charCount, setCharCount] = useState(0)
+
+  const refresh = useCallback(() => {
+    try {
+      setBold(document.queryCommandState('bold'))
+      setItalic(document.queryCommandState('italic'))
+      setUnderline(document.queryCommandState('underline'))
+      setStrike(document.queryCommandState('strikeThrough'))
+      const al = document.queryCommandValue('justifyLeft')   === 'true' ? 'left'
+               : document.queryCommandValue('justifyCenter') === 'true' ? 'center'
+               : document.queryCommandValue('justifyRight')  === 'true' ? 'right'
+               : document.queryCommandValue('justifyFull')   === 'true' ? 'justify'
+               : 'left'
+      setAlign(al)
+    } catch {}
+
+    const text = editorRef.current?.innerText || ''
+    const words = text.trim().split(/\s+/).filter(w => w.length > 0)
+    setWordCount(words.length)
+    setCharCount(text.length)
+  }, [editorRef])
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', refresh)
+    const interval = setInterval(refresh, 1000)
+    return () => {
+      document.removeEventListener('selectionchange', refresh)
+      clearInterval(interval)
+    }
+  }, [refresh])
+
+  const pBtn = (label, active, fn, danger = false) => (
+    <button
+      type="button"
+      onClick={fn}
+      className={`flex-1 py-1.5 rounded text-xs font-semibold border transition-all ${
+        active ? 'bg-violet-600 text-white border-violet-600' : danger ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20' : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+      }`}
+      style={active || danger ? {} : { borderColor: 'var(--border)', color: 'var(--text-body)' }}
+    >
+      {label}
+    </button>
+  )
+
+  const alignBtn = (a, label) => (
+    <button
+      key={a}
+      type="button"
+      onClick={() => exec(`justify${a.charAt(0).toUpperCase() + a.slice(1)}`)}
+      className={`flex-1 py-1.5 rounded text-xs border transition-all ${align === a ? 'bg-violet-600 text-white border-violet-600' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+      style={align !== a ? { borderColor: 'var(--border)', color: 'var(--text-body)' } : {}}
+    >
+      {label}
+    </button>
+  )
+
+  return (
+    <div className="flex flex-col h-full overflow-y-auto">
+      <div className="px-3 py-2.5 border-b flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
+        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Properties</p>
+      </div>
+
+      {/* Text Style */}
+      <div className="p-3 border-b space-y-2" style={{ borderColor: 'var(--border)' }}>
+        <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Text Style</p>
+        <div className="flex gap-1">
+          {pBtn('B', bold,      () => exec('bold'))}
+          {pBtn('I', italic,    () => exec('italic'))}
+          {pBtn('U', underline, () => exec('underline'))}
+          {pBtn('S̶', strike,   () => exec('strikeThrough'))}
+        </div>
+        <div className="flex gap-1">
+          {alignBtn('left', 'L')}
+          {alignBtn('center', 'C')}
+          {alignBtn('right', 'R')}
+          {alignBtn('full', 'J')}
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          <div>
+            <p className="text-[10px] mb-1" style={{ color: 'var(--text-muted)' }}>Text Color</p>
+            <input type="color" defaultValue="#000000"
+              onChange={e => exec('foreColor', e.target.value)}
+              className="w-full h-7 rounded border cursor-pointer" style={{ borderColor: 'var(--border)' }} />
+          </div>
+          <div>
+            <p className="text-[10px] mb-1" style={{ color: 'var(--text-muted)' }}>Highlight</p>
+            <input type="color" defaultValue="#ffff00"
+              onChange={e => exec('hiliteColor', e.target.value)}
+              className="w-full h-7 rounded border cursor-pointer" style={{ borderColor: 'var(--border)' }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Insert */}
+      <div className="p-3 border-b space-y-1.5" style={{ borderColor: 'var(--border)' }}>
+        <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Insert</p>
+        {[
+          { label: 'Page Break', fn: () => insertHtml('<div style="page-break-after:always;text-align:center;color:#9ca3af;font-size:11px;border-top:2px dashed #d1d5db;margin:16px 0;padding:6px 0;">— Page Break —</div>') },
+          { label: 'Divider',    fn: () => insertHtml('<hr style="border:none;border-top:2px solid #e5e7eb;margin:12px 0;" />') },
+          { label: 'Signature',  fn: () => insertHtml(`<table style="width:100%;margin:16px 0;border-collapse:collapse;"><tr><td style="width:45%;padding:8px;vertical-align:bottom;"><div style="border-top:2px solid #1f2937;padding-top:4px;font-size:11px;color:#374151;">Employee Signature<br>Name: {{employee_name}}<br>Date: ____________</div></td><td style="width:10%;"></td><td style="width:45%;padding:8px;vertical-align:bottom;"><div style="border-top:2px solid #1f2937;padding-top:4px;font-size:11px;color:#374151;">Authorized Signatory<br>Name: ____________<br>Date: ____________</div></td></tr></table>`) },
+        ].map(item => (
+          <button key={item.label} type="button" onClick={item.fn}
+            className="w-full text-left text-xs px-2.5 py-1.5 rounded-lg border transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Quick Fields */}
+      <div className="p-3 border-b" style={{ borderColor: 'var(--border)' }}>
+        <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Quick Fields</p>
+        <div className="flex flex-wrap gap-1">
+          {[
+            { label: 'Name',     field: '{{employee_name}}' },
+            { label: 'Dept',     field: '{{department}}' },
+            { label: 'Role',     field: '{{designation}}' },
+            { label: 'Date',     field: '{{current_date}}' },
+            { label: 'Company',  field: '{{company_name}}' },
+            { label: 'Salary',   field: '{{salary}}' },
+          ].map(f => (
+            <button key={f.field} type="button" onClick={() => insertField(f.field)}
+              className="text-[10px] px-1.5 py-0.5 rounded-full border font-mono hover:bg-violet-600 hover:text-white hover:border-violet-600 transition-colors"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Document Stats */}
+      <div className="p-3 space-y-2 mt-auto">
+        <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Document</p>
+        {[
+          { label: 'Words',    value: wordCount.toLocaleString() },
+          { label: 'Characters', value: charCount.toLocaleString() },
+          { label: 'Est. Pages', value: Math.max(1, Math.ceil(wordCount / 300)).toString() },
+        ].map(stat => (
+          <div key={stat.label} className="flex items-center justify-between">
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{stat.label}</span>
+            <span className="text-xs font-semibold" style={{ color: 'var(--text-heading)' }}>{stat.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function QuickBuilder({ initialHtml, onSaved }) {
   const { id }    = useParams()
   const navigate  = useNavigate()
   const editorRef = useRef(null)
   const savedSel  = useRef(null)
+  const autoSaveTimer = useRef(null)
 
-  const [loading, setLoading]   = useState(!!id)
-  const [saving,  setSaving]    = useState(false)
-  const [preview, setPreview]   = useState(false)
+  const [loading,  setLoading]  = useState(!!id)
+  const [saving,   setSaving]   = useState(false)
+  const [preview,  setPreview]  = useState(false)
+  const [showFullPreview, setShowFullPreview] = useState(false)
+  const [autoSaveStatus, setAutoSaveStatus]   = useState('saved') // saved | saving | unsaved | error
+
   const [name,        setName]        = useState('Untitled Template')
   const [description, setDescription] = useState('')
   const [categoryId,  setCategoryId]  = useState('')
   const [tags,        setTags]        = useState('')
   const [categories,  setCategories]  = useState([])
 
+  // Panel widths (persisted to localStorage)
+  const [leftWidth,  setLeftWidth]  = useState(() => parseInt(localStorage.getItem('qb_left_w')  || '256'))
+  const [rightWidth, setRightWidth] = useState(() => parseInt(localStorage.getItem('qb_right_w') || '220'))
+
   const [header, setHeader] = useState({
-    show: true, company_name: '', company_address: '', company_email: '',
-    company_phone: '', company_website: '', alignment: 'left',
+    show: true, logo_url: '', logo_height: 40,
+    company_name: '', company_address: '', company_email: '',
+    company_phone: '', company_website: '', gst_number: '', reg_number: '',
+    alignment: 'left', font_family: 'Arial',
     font_size: 12, font_color: '#000000', background_color: '#ffffff', border_bottom: true,
   })
   const [footer, setFooter] = useState({
@@ -196,10 +568,56 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
             editorRef.current.innerHTML = t.content.body_html
           }
         }
+        setAutoSaveStatus('saved')
       })
       .catch(() => toast.error('Failed to load template'))
       .finally(() => setLoading(false))
   }, [id, initialHtml])
+
+  // Panel resize handlers
+  const handleLeftResize  = useCallback((dx) => {
+    setLeftWidth(prev => {
+      const next = Math.max(180, Math.min(420, prev + dx))
+      localStorage.setItem('qb_left_w', next)
+      return next
+    })
+  }, [])
+  const handleRightResize = useCallback((dx) => {
+    setRightWidth(prev => {
+      const next = Math.max(160, Math.min(360, prev - dx))
+      localStorage.setItem('qb_right_w', next)
+      return next
+    })
+  }, [])
+
+  // Auto-save (only for existing templates)
+  const scheduleAutoSave = useCallback(() => {
+    if (!id) return
+    setAutoSaveStatus('unsaved')
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(async () => {
+      setAutoSaveStatus('saving')
+      try {
+        const html = editorRef.current?.innerHTML || ''
+        const payload = {
+          name, description,
+          category_id: categoryId || null,
+          template_type: 'simple',
+          tags: tags.split(',').map(t => t.trim()).filter(Boolean),
+          change_summary: 'Auto-saved',
+          content: { header, body_html: html, footer, paper, watermark, canvas_elements: [] },
+          dynamic_fields: [...new Set([...html.matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]))],
+        }
+        await documentCenterService.updateTemplate(id, payload)
+        setAutoSaveStatus('saved')
+      } catch {
+        setAutoSaveStatus('error')
+      }
+    }, 3000)
+  }, [id, name, description, categoryId, tags, header, footer, paper, watermark])
+
+  // Trigger auto-save on settings changes
+  useEffect(() => { scheduleAutoSave() }, [header, footer, paper, watermark, name, description, categoryId, tags])
 
   const exec = useCallback((cmd, value = null) => {
     editorRef.current?.focus()
@@ -220,12 +638,13 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
     editorRef.current?.focus()
     restoreSelection()
     document.execCommand('insertHTML', false, html)
+    scheduleAutoSave()
   }
   const insertField = (field) => insertHtml(
     `<span class="doc-field" style="background:#ede9fe;color:#7c3aed;padding:1px 4px;border-radius:3px;font-family:monospace;font-size:0.85em;">${field}</span>`
   )
   const insertTable  = (key) => insertHtml(TABLE_TEMPLATES[key] || TABLE_TEMPLATES.custom3)
-  const insertDivider = () => insertHtml('<hr style="border:none;border-top:2px solid #e5e7eb;margin:12px 0;" />')
+  const insertDivider   = () => insertHtml('<hr style="border:none;border-top:2px solid #e5e7eb;margin:12px 0;" />')
   const insertPageBreak = () => insertHtml('<div style="page-break-after:always;text-align:center;color:#9ca3af;font-size:11px;border-top:2px dashed #d1d5db;margin:16px 0;padding:6px 0;">— Page Break —</div>')
   const insertSignatureBlock = () => insertHtml(`
     <table style="width:100%;margin:16px 0;border-collapse:collapse;">
@@ -244,14 +663,27 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
       </tr>
     </table>`)
 
+  // Logo upload → base64 data URL
+  const handleLogoUpload = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return }
+    if (file.size > 2 * 1024 * 1024) { toast.error('Logo must be under 2 MB'); return }
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setHeader(h => ({ ...h, logo_url: ev.target.result }))
+    }
+    reader.readAsDataURL(file)
+  }
+
   const getBodyHtml = () => editorRef.current?.innerHTML || ''
-  const buildPayload = () => ({
+  const buildPayload = (summary) => ({
     name,
     description,
     category_id: categoryId || null,
     template_type: 'simple',
     tags: tags.split(',').map(t => t.trim()).filter(Boolean),
-    change_summary: id ? 'Updated via Quick Builder' : 'Created via Quick Builder',
+    change_summary: summary || (id ? 'Updated via Quick Builder' : 'Created via Quick Builder'),
     content: { header, body_html: getBodyHtml(), footer, paper, watermark, canvas_elements: [] },
     dynamic_fields: [...new Set([...getBodyHtml().matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]))],
   })
@@ -259,10 +691,12 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
   const handleSave = async () => {
     if (!name.trim()) { toast.error('Template name is required'); return }
     setSaving(true)
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     try {
       if (id) {
         await documentCenterService.updateTemplate(id, buildPayload())
         toast.success('Template saved')
+        setAutoSaveStatus('saved')
         onSaved?.()
       } else {
         const r = await documentCenterService.createTemplate(buildPayload())
@@ -297,6 +731,15 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
     return acc
   }, {})
 
+  const AutoSaveIcon = autoSaveStatus === 'saved'  ? CheckCircle
+    : autoSaveStatus === 'saving'  ? Loader2
+    : autoSaveStatus === 'error'   ? AlertCircle
+    : Clock
+  const autoSaveColor = autoSaveStatus === 'saved' ? 'text-green-500'
+    : autoSaveStatus === 'error' ? 'text-red-400'
+    : 'text-gray-400'
+  const autoSaveLabel = { saved: 'Saved', saving: 'Saving…', unsaved: 'Unsaved changes', error: 'Save failed' }
+
   return (
     <div className="flex flex-col h-full" style={{ background: 'var(--bg-primary)' }}>
 
@@ -311,22 +754,38 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
         <div className="flex-1 min-w-0">
           <input
             value={name}
-            onChange={e => setName(e.target.value)}
+            onChange={e => { setName(e.target.value); scheduleAutoSave() }}
             className="bg-transparent border-none outline-none text-sm font-semibold w-full"
             style={{ color: 'var(--text-heading)' }}
             placeholder="Template Name"
           />
         </div>
+
+        {/* Auto-save status */}
+        {id && (
+          <div className={`flex items-center gap-1 text-xs flex-shrink-0 ${autoSaveColor}`}>
+            <AutoSaveIcon className={`w-3 h-3 ${autoSaveStatus === 'saving' ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{autoSaveLabel[autoSaveStatus]}</span>
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setShowFullPreview(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}
+            title="Fullscreen Preview"
+          >
+            <Maximize2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Preview</span>
+          </button>
+          <button
             onClick={() => setPreview(p => !p)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-              preview ? 'bg-violet-600 text-white border-violet-600' : ''
-            }`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${preview ? 'bg-violet-600 text-white border-violet-600' : ''}`}
             style={preview ? {} : { borderColor: 'var(--border)', color: 'var(--text-body)' }}
           >
             <Eye className="w-4 h-4" />
-            {preview ? 'Edit' : 'Preview'}
+            {preview ? 'Edit' : 'Quick Preview'}
           </button>
           {id && (
             <button
@@ -349,43 +808,76 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden select-none">
 
         {/* ── Left panel ── */}
-        <aside className="w-64 flex-shrink-0 border-r overflow-y-auto flex flex-col"
-          style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-
+        <aside
+          className="flex-shrink-0 border-r overflow-y-auto flex flex-col"
+          style={{ width: leftWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
+        >
           <Panel title="Template Info" defaultOpen>
             <div>
               <Lbl>Description</Lbl>
-              <textarea value={description} onChange={e => setDescription(e.target.value)}
+              <textarea value={description} onChange={e => { setDescription(e.target.value); scheduleAutoSave() }}
                 rows={2} placeholder="Optional description…"
                 className="w-full px-2.5 py-1.5 text-sm rounded-lg border resize-none focus:outline-none focus:ring-1 focus:ring-violet-500"
                 style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
             </div>
             <div>
               <Lbl>Category</Lbl>
-              <Sel value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+              <Sel value={categoryId} onChange={e => { setCategoryId(e.target.value); scheduleAutoSave() }}>
                 <option value="">— No Category —</option>
                 {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
               </Sel>
             </div>
             <div>
               <Lbl>Tags (comma separated)</Lbl>
-              <Inp value={tags} onChange={e => setTags(e.target.value)} placeholder="HR, Offer, Legal…" />
+              <Inp value={tags} onChange={e => { setTags(e.target.value); scheduleAutoSave() }} placeholder="HR, Offer, Legal…" />
             </div>
           </Panel>
 
           <Panel title="Header" defaultOpen>
             <Tog label="Show Header" checked={header.show} onChange={v => setHeader(h => ({ ...h, show: v }))} />
             {header.show && <>
+              {/* Logo upload */}
+              <div>
+                <Lbl>Logo</Lbl>
+                {header.logo_url ? (
+                  <div className="relative inline-block">
+                    <img src={header.logo_url} alt="Logo"
+                      style={{ height: 36, maxWidth: '100%', borderRadius: 4, border: '1px solid var(--border)' }} />
+                    <button
+                      onClick={() => setHeader(h => ({ ...h, logo_url: '' }))}
+                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                    <Upload className="w-3.5 h-3.5" />
+                    <span className="text-xs">Upload Logo</span>
+                    <input type="file" accept="image/*" className="sr-only" onChange={handleLogoUpload} />
+                  </label>
+                )}
+              </div>
+              <div>
+                <Lbl>Logo Height (px)</Lbl>
+                <Inp type="number" value={header.logo_height || 40} min={20} max={120}
+                  onChange={e => setHeader(h => ({ ...h, logo_height: +e.target.value }))} />
+              </div>
               <div><Lbl>Company Name</Lbl><Inp value={header.company_name} onChange={e => setHeader(h => ({ ...h, company_name: e.target.value }))} placeholder="Acme Corp" /></div>
               <div><Lbl>Address</Lbl><Inp value={header.company_address} onChange={e => setHeader(h => ({ ...h, company_address: e.target.value }))} placeholder="123 Main St…" /></div>
               <div className="grid grid-cols-2 gap-2">
                 <div><Lbl>Email</Lbl><Inp value={header.company_email} onChange={e => setHeader(h => ({ ...h, company_email: e.target.value }))} placeholder="hr@co.com" /></div>
-                <div><Lbl>Phone</Lbl><Inp value={header.company_phone} onChange={e => setHeader(h => ({ ...h, company_phone: e.target.value }))} placeholder="+1 234…" /></div>
+                <div><Lbl>Phone</Lbl><Inp value={header.company_phone} onChange={e => setHeader(h => ({ ...h, company_phone: e.target.value }))} placeholder="+91 …" /></div>
               </div>
               <div><Lbl>Website</Lbl><Inp value={header.company_website || ''} onChange={e => setHeader(h => ({ ...h, company_website: e.target.value }))} placeholder="www.company.com" /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Lbl>GST No.</Lbl><Inp value={header.gst_number || ''} onChange={e => setHeader(h => ({ ...h, gst_number: e.target.value }))} placeholder="GSTIN…" /></div>
+                <div><Lbl>Reg. No.</Lbl><Inp value={header.reg_number || ''} onChange={e => setHeader(h => ({ ...h, reg_number: e.target.value }))} placeholder="CIN…" /></div>
+              </div>
               <div><Lbl>Alignment</Lbl>
                 <Sel value={header.alignment} onChange={e => setHeader(h => ({ ...h, alignment: e.target.value }))}>
                   <option value="left">Left</option>
@@ -397,6 +889,9 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
                 <div><Lbl>Font Size</Lbl><Inp type="number" value={header.font_size} min={8} max={24} onChange={e => setHeader(h => ({ ...h, font_size: +e.target.value }))} /></div>
                 <div><Lbl>Text Color</Lbl><input type="color" value={header.font_color} onChange={e => setHeader(h => ({ ...h, font_color: e.target.value }))} className="w-full h-8 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--border)' }} /></div>
               </div>
+              <div><Lbl>Background</Lbl>
+                <input type="color" value={header.background_color || '#ffffff'} onChange={e => setHeader(h => ({ ...h, background_color: e.target.value }))} className="w-full h-8 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--border)' }} />
+              </div>
               <Tog label="Border Bottom" checked={header.border_bottom} onChange={v => setHeader(h => ({ ...h, border_bottom: v }))} />
             </>}
           </Panel>
@@ -406,9 +901,21 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
             {footer.show && <>
               <div><Lbl>Footer Text</Lbl><Inp value={footer.text} onChange={e => setFooter(f => ({ ...f, text: e.target.value }))} placeholder="Company Confidential" /></div>
               <div><Lbl>Description</Lbl><Inp value={footer.description || ''} onChange={e => setFooter(f => ({ ...f, description: e.target.value }))} placeholder="Extra footer line…" /></div>
+              <div><Lbl>Alignment</Lbl>
+                <Sel value={footer.alignment} onChange={e => setFooter(f => ({ ...f, alignment: e.target.value }))}>
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                </Sel>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Lbl>Font Size</Lbl><Inp type="number" value={footer.font_size} min={6} max={18} onChange={e => setFooter(f => ({ ...f, font_size: +e.target.value }))} /></div>
+                <div><Lbl>Text Color</Lbl><input type="color" value={footer.font_color} onChange={e => setFooter(f => ({ ...f, font_color: e.target.value }))} className="w-full h-8 rounded-lg border cursor-pointer" style={{ borderColor: 'var(--border)' }} /></div>
+              </div>
               <Tog label="Show Page Numbers"  checked={footer.show_page_numbers} onChange={v => setFooter(f => ({ ...f, show_page_numbers: v }))} />
               <Tog label="Show Current Date"  checked={footer.show_date}          onChange={v => setFooter(f => ({ ...f, show_date: v }))} />
               <Tog label="Confidential Label" checked={footer.confidential_label} onChange={v => setFooter(f => ({ ...f, confidential_label: v }))} />
+              <Tog label="Border Top"         checked={footer.border_top}         onChange={v => setFooter(f => ({ ...f, border_top: v }))} />
             </>}
           </Panel>
 
@@ -444,9 +951,7 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
                 <div className="flex flex-wrap gap-1">
                   {WATERMARK_PRESETS.map(p => (
                     <button key={p} type="button" onClick={() => setWatermark(w => ({ ...w, text: p }))}
-                      className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
-                        watermark.text === p ? 'bg-violet-600 text-white border-violet-600' : ''
-                      }`}
+                      className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${watermark.text === p ? 'bg-violet-600 text-white border-violet-600' : ''}`}
                       style={watermark.text !== p ? { borderColor: 'var(--border)', color: 'var(--text-body)' } : {}}>
                       {p}
                     </button>
@@ -458,6 +963,7 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
                 <div><Lbl>Opacity (0–1)</Lbl><Inp type="number" value={watermark.opacity} min={0.05} max={1} step={0.05} onChange={e => setWatermark(w => ({ ...w, opacity: +e.target.value }))} /></div>
                 <div><Lbl>Rotation (°)</Lbl><Inp type="number" value={watermark.rotation} min={-180} max={180} onChange={e => setWatermark(w => ({ ...w, rotation: +e.target.value }))} /></div>
               </div>
+              <div><Lbl>Font Size (px)</Lbl><Inp type="number" value={watermark.size || 72} min={20} max={200} onChange={e => setWatermark(w => ({ ...w, size: +e.target.value }))} /></div>
             </>}
           </Panel>
 
@@ -468,7 +974,9 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
                 <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>{group}</p>
                 <div className="flex flex-wrap gap-1">
                   {fields.map(f => (
-                    <button key={f.field} type="button" onClick={() => insertField(f.field)}
+                    <button key={f.field} type="button"
+                      onMouseDown={saveSelection}
+                      onClick={() => insertField(f.field)}
                       className="text-[11px] px-2 py-0.5 rounded-full border font-mono transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
                       style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }} title={f.field}>
                       {f.label}
@@ -487,7 +995,9 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
                 { key: 'custom2',  label: '2-Column Table' },
                 { key: 'custom3',  label: '3-Column Table' },
               ].map(t => (
-                <button key={t.key} type="button" onClick={() => insertTable(t.key)}
+                <button key={t.key} type="button"
+                  onMouseDown={saveSelection}
+                  onClick={() => insertTable(t.key)}
                   className="w-full text-left text-xs px-3 py-2 rounded-lg border transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:border-violet-400 flex items-center gap-2"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
                   <Table className="w-3.5 h-3.5 flex-shrink-0 text-violet-500" />
@@ -509,7 +1019,9 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
                 { label: 'Page Break', fn: insertPageBreak },
                 { label: 'Signature',  fn: insertSignatureBlock },
               ].map(el => (
-                <button key={el.label} type="button" onClick={el.fn}
+                <button key={el.label} type="button"
+                  onMouseDown={saveSelection}
+                  onClick={el.fn}
                   className="text-xs px-2 py-1.5 rounded-lg border transition-colors text-center hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:border-violet-400"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
                   {el.label}
@@ -519,8 +1031,11 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
           </Panel>
         </aside>
 
+        {/* ── Left resize divider ── */}
+        <ResizeDivider onDrag={handleLeftResize} />
+
         {/* ── Center: Toolbar + Canvas ── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden select-text">
 
           {/* Formatting toolbar */}
           {!preview && (
@@ -528,11 +1043,13 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
               style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
               <select className="text-xs px-1.5 py-1 rounded-lg border" defaultValue="Arial"
                 style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
+                onMouseDown={saveSelection}
                 onChange={e => exec('fontName', e.target.value)}>
                 {FONT_FAMILIES.map(f => <option key={f} value={f}>{f}</option>)}
               </select>
-              <select className="text-xs px-1.5 py-1 rounded-lg border w-14" defaultValue="3"
+              <select className="text-xs px-1.5 py-1 rounded-lg border w-16" defaultValue="3"
                 style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
+                onMouseDown={saveSelection}
                 onChange={e => exec('fontSize', e.target.value)}>
                 {[1,2,3,4,5,6,7].map(s => <option key={s} value={s}>{[8,10,12,14,18,24,36][s-1]}px</option>)}
               </select>
@@ -544,11 +1061,11 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
               <div className="w-px h-5 bg-gray-300 dark:bg-gray-600" />
               <label title="Text Color" className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
                 <Palette className="w-4 h-4" style={{ color: 'var(--text-body)' }} />
-                <input type="color" className="sr-only" onChange={e => exec('foreColor', e.target.value)} />
+                <input type="color" className="sr-only" onMouseDown={saveSelection} onChange={e => exec('foreColor', e.target.value)} />
               </label>
               <label title="Highlight" className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
                 <Type className="w-4 h-4" style={{ color: 'var(--text-body)' }} />
-                <input type="color" className="sr-only" onChange={e => exec('backColor', e.target.value)} />
+                <input type="color" className="sr-only" onMouseDown={saveSelection} onChange={e => exec('hiliteColor', e.target.value)} />
               </label>
               <div className="w-px h-5 bg-gray-300 dark:bg-gray-600" />
               <TB icon={AlignLeft}    label="Left"    onClick={() => exec('justifyLeft')} />
@@ -564,13 +1081,31 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
               <TB icon={RotateCcw} label="Undo"     onClick={() => exec('undo')} />
               <TB icon={RotateCw}  label="Redo"     onClick={() => exec('redo')} />
               <div className="w-px h-5 bg-gray-300 dark:bg-gray-600" />
-              <TB icon={Link2} label="Insert Link" onClick={() => { const u = prompt('URL:'); if (u) exec('createLink', u) }} />
+              <TB icon={Link2} label="Insert Link" onClick={() => {
+                saveSelection()
+                const u = prompt('Enter URL:')
+                if (u) { restoreSelection(); exec('createLink', u) }
+              }} />
+              <div className="w-px h-5 bg-gray-300 dark:bg-gray-600" />
+              <label title="Insert Image" className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                <ImageIcon className="w-4 h-4" style={{ color: 'var(--text-body)' }} />
+                <input type="file" accept="image/*" className="sr-only"
+                  onChange={e => {
+                    const file = e.target.files[0]
+                    if (!file) return
+                    const reader = new FileReader()
+                    reader.onload = ev => insertHtml(`<img src="${ev.target.result}" style="max-width:100%;height:auto;" />`)
+                    reader.readAsDataURL(file)
+                    e.target.value = ''
+                  }} />
+              </label>
             </div>
           )}
 
           {/* Document canvas */}
           <div className="flex-1 overflow-auto py-8 px-4" style={{ background: '#e5e7eb' }}>
-            <div className="mx-auto shadow-2xl relative bg-white" style={{ width: paperW, minHeight: '297mm', fontFamily: 'Arial, sans-serif' }}>
+            {/* Page break guide lines */}
+            <div className="mx-auto shadow-2xl relative bg-white" style={{ width: paperW, fontFamily: 'Arial, sans-serif' }}>
 
               {/* Watermark */}
               {watermark.enabled && (
@@ -594,6 +1129,14 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
                   textAlign: header.alignment, backgroundColor: header.background_color, color: header.font_color,
                   fontSize: header.font_size,
                 }}>
+                  {header.logo_url && (
+                    <img src={header.logo_url} alt="Logo" style={{
+                      height: header.logo_height || 40, display: 'block',
+                      margin: header.alignment === 'center' ? '0 auto 4px'
+                            : header.alignment === 'right'  ? '0 0 4px auto'
+                            : '0 0 4px 0'
+                    }} />
+                  )}
                   {header.company_name && <div style={{ fontWeight: 'bold', fontSize: header.font_size + 2 }}>{header.company_name}</div>}
                   {header.company_address && <div style={{ fontSize: header.font_size - 1 }}>{header.company_address}</div>}
                   {(header.company_email || header.company_phone) && (
@@ -602,6 +1145,11 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
                     </div>
                   )}
                   {header.company_website && <div style={{ fontSize: header.font_size - 1, color: '#6b7280' }}>{header.company_website}</div>}
+                  {(header.gst_number || header.reg_number) && (
+                    <div style={{ fontSize: header.font_size - 2, color: '#6b7280', marginTop: 2 }}>
+                      {[header.gst_number && `GST: ${header.gst_number}`, header.reg_number && `Reg: ${header.reg_number}`].filter(Boolean).join('  |  ')}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -611,7 +1159,8 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
                 contentEditable={!preview}
                 suppressContentEditableWarning
                 onMouseUp={saveSelection}
-                onKeyUp={saveSelection}
+                onKeyUp={() => { saveSelection(); scheduleAutoSave() }}
+                onInput={scheduleAutoSave}
                 className="focus:outline-none"
                 style={{
                   paddingTop: mt, paddingBottom: mb, paddingLeft: ml, paddingRight: mr,
@@ -626,11 +1175,11 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
                 <div style={{
                   paddingLeft: ml, paddingRight: mr, paddingBottom: '12px', paddingTop: '8px',
                   borderTop: footer.border_top ? '1px solid #d1d5db' : 'none',
-                  textAlign: footer.alignment, fontSize: footer.font_size, color: footer.font_color,
+                  fontSize: footer.font_size, color: footer.font_color,
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 }}>
                   <span style={{ fontSize: footer.font_size - 1 }}>
-                    {footer.show_date ? new Date().toLocaleDateString('en-US', { year:'numeric',month:'long',day:'numeric' }) : ''}
+                    {footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}
                   </span>
                   <span>
                     {footer.text}{footer.confidential_label ? (footer.text ? '  |  CONFIDENTIAL' : 'CONFIDENTIAL') : ''}
@@ -642,7 +1191,37 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
             </div>
           </div>
         </div>
+
+        {/* ── Right resize divider ── */}
+        {!preview && <ResizeDivider onDrag={handleRightResize} />}
+
+        {/* ── Right panel: Properties ── */}
+        {!preview && (
+          <aside
+            className="flex-shrink-0 border-l flex flex-col overflow-hidden"
+            style={{ width: rightWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}
+          >
+            <RightPanel
+              editorRef={editorRef}
+              exec={(cmd, val) => { restoreSelection(); exec(cmd, val) }}
+              insertField={(f) => { restoreSelection(); insertField(f) }}
+              insertHtml={(h) => { restoreSelection(); insertHtml(h) }}
+            />
+          </aside>
+        )}
       </div>
+
+      {/* ── Fullscreen Preview Modal ── */}
+      {showFullPreview && (
+        <PreviewModal
+          html={getBodyHtml()}
+          header={header}
+          footer={footer}
+          paper={paper}
+          watermark={watermark}
+          onClose={() => setShowFullPreview(false)}
+        />
+      )}
 
       <style>{`
         [data-placeholder]:empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; }
@@ -650,6 +1229,7 @@ export default function QuickBuilder({ initialHtml, onSaved }) {
         blockquote { border-left: 4px solid #7c3aed; padding-left: 12px; color: #6b7280; margin: 8px 0; }
         table { border-collapse: collapse; width: 100%; }
         table td, table th { border: 1px solid #e5e7eb; padding: 6px 10px; }
+        a { color: #7c3aed; }
       `}</style>
     </div>
   )
