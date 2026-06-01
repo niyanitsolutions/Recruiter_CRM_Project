@@ -42,13 +42,15 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn }
     setLoading(true)
     try {
       // employee_id intentionally omitted — backend resolves via JWT → DB → email match
-      await hrmService.checkIn({
+      const res = await hrmService.checkIn({
         work_mode: workMode,
         latitude:  geo?.latitude  ?? null,
         longitude: geo?.longitude ?? null,
       })
       toast.success('Punched in! Have a productive day.')
-      onPunchedIn()
+      // Pass the API response directly so the banner can update its state
+      // immediately without an extra round-trip (fixes timer race condition).
+      onPunchedIn(res?.data ?? null)
       onClose()
     } catch (err) {
       const msg = err?.response?.data?.detail || 'Failed to punch in'

@@ -1,9 +1,11 @@
 """Midnight auto punch-out background loop.
 
-Runs once per hour. At the hour closest to midnight (00:00–00:59) it
+Runs once per hour.  At the hour closest to midnight (00:00–00:59 UTC) it
 auto-punches-out any employee still clocked in across ALL tenant databases.
-This ensures no attendance record stays open past midnight regardless of
-whether a scheduled task was set up per company.
+
+Key fix: the loop queries for records from PREVIOUS days (date < today), not
+today's records.  When this runs at 00:00 UTC the open records belong to
+yesterday — querying "today" (the new calendar day) would find nothing.
 """
 import asyncio
 import logging
@@ -37,7 +39,11 @@ async def hrm_auto_checkout_loop() -> None:
 
 
 async def _run_auto_checkout() -> None:
-    """Punch out all open attendance records across every active tenant DB."""
+    """Punch out all open attendance records from previous days across every active tenant DB.
+
+    auto_checkout_all() now queries for records with date < today, which is the
+    correct set when this runs just after midnight UTC.
+    """
     try:
         from app.core.database import get_master_db, DatabaseManager
         from app.services.attendance_service import AttendanceService

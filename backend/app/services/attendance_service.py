@@ -167,9 +167,11 @@ class AttendanceService:
     ) -> dict:
         today = _today_dt()  # naive datetime at midnight — PyMongo 4.x requires datetime, not date
         now = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC — Motor returns naive datetimes
+
         existing = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
         if existing and existing.get("check_in"):
-            return self._serialize(existing)
+            # Already punched in today — return existing record unchanged
+            return self._serialize(dict(existing))
 
         settings = await self._get_settings()
 
@@ -216,11 +218,16 @@ class AttendanceService:
         late_by = max(0, int((now - late_threshold).total_seconds() / 60)) if is_late else 0
 
         # ── Status determination ─────────────────────────────────────────────
-        # Priority: holiday_worked > wfh > late > present
+        # Work mode takes priority for status; is_late is stored independently
+        # so wfh/hybrid/field employees can also be marked late.
         if holiday_name:
-            initial_status = AttendanceStatus.HOLIDAY  # "holiday_worked" logically
+            initial_status = AttendanceStatus.HOLIDAY
         elif work_mode == "wfh":
             initial_status = AttendanceStatus.WORK_FROM_HOME
+        elif work_mode == "hybrid":
+            initial_status = AttendanceStatus.HYBRID
+        elif work_mode == "field":
+            initial_status = AttendanceStatus.FIELD_WORK
         elif is_late:
             initial_status = AttendanceStatus.LATE
         else:
@@ -230,13 +237,9 @@ class AttendanceService:
         if latitude is not None or longitude is not None:
             geo = {"latitude": latitude, "longitude": longitude, "city": geo_city, "country": geo_country}
 
-        doc_id = str(existing["_id"]) if existing else str(ObjectId())
-        update = {
-            "_id": doc_id,
-            "company_id": company_id,
-            "employee_id": employee_id,
-            "employee_name": emp.get("full_name", "") if emp else "",
-            "date": today,
+        emp_name = emp.get("full_name", "") if emp else ""
+
+        checkin_fields = {
             "check_in": now,
             "status": initial_status,
             "is_late": is_late,
@@ -246,18 +249,40 @@ class AttendanceService:
             "work_mode": work_mode,
             "check_in_ip": client_ip,
             "check_in_geo": geo,
-            "breaks": [],
-            "total_break_minutes": 0.0,
-            "work_hours": 0.0,
-            "is_half_day": False,
-            "overtime_hours": 0.0,
             "auto_punched_out": False,
             "notes": notes,
             "marked_by": marked_by,
-            "created_at": now,
             "updated_at": now,
         }
-        await self.col.replace_one({"_id": doc_id}, update, upsert=True)
+
+        if existing:
+            # Existing record without check_in (e.g., a leave placeholder).
+            # Update it in place using the original MongoDB _id to avoid
+            # string/ObjectId type mismatch that caused upsert failures.
+            await self.col.update_one(
+                {"_id": existing["_id"]},
+                {"$set": checkin_fields},
+            )
+            result = dict(existing)
+            result.update(checkin_fields)
+        else:
+            # No record yet — create a fresh one via insert_one.
+            doc_id = str(ObjectId())
+            result = {
+                "_id": doc_id,
+                "company_id": company_id,
+                "employee_id": employee_id,
+                "employee_name": emp_name,
+                "date": today,
+                "breaks": [],
+                "total_break_minutes": 0.0,
+                "work_hours": 0.0,
+                "is_half_day": False,
+                "overtime_hours": 0.0,
+                "created_at": now,
+                **checkin_fields,
+            }
+            await self.col.insert_one(result)
 
         # Fire punch-in notification (non-blocking)
         crm_user_id = emp.get("crm_user_id") if emp else None
@@ -275,7 +300,7 @@ class AttendanceService:
             except Exception:
                 pass
 
-        return self._serialize(update)
+        return self._serialize(result)
 
     # ── Check Out ─────────────────────────────────────────────────────────────
 
@@ -293,15 +318,36 @@ class AttendanceService:
     ) -> dict:
         today = _today_dt()
         now = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC — Motor returns naive datetimes
-        record = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
-        if not record or record.get("check_out"):
-            return self._serialize(record) if record else {}
+
+        # Try today's record first (most common path).
+        # Fall back to yesterday's record to handle midnight-boundary edge cases
+        # where the client fires the punch-out just after midnight local time but
+        # the open record lives on the previous calendar day.
+        record = await self.col.find_one({
+            "employee_id": employee_id,
+            "company_id": company_id,
+            "date": today,
+            "check_in": {"$ne": None},
+            "check_out": None,
+        })
+        if not record:
+            yesterday = today - timedelta(days=1)
+            record = await self.col.find_one({
+                "employee_id": employee_id,
+                "company_id": company_id,
+                "date": yesterday,
+                "check_in": {"$ne": None},
+                "check_out": None,
+            })
+
+        if not record:
+            return {}
 
         settings = await self._get_settings()
 
         # Close any open break
-        breaks = record.get("breaks", [])
-        total_break_minutes = record.get("total_break_minutes", 0.0)
+        breaks = list(record.get("breaks", []))
+        total_break_minutes = float(record.get("total_break_minutes", 0.0))
         if breaks and not breaks[-1].get("end"):
             br_start = breaks[-1]["start"]
             dur = (now - br_start).total_seconds() / 60
@@ -332,11 +378,21 @@ class AttendanceService:
             "auto_punched_out": auto,
             "updated_at": now,
         }
-        # Update status on checkout: half_day overrides present/late (but not on_leave/wfh)
-        if is_half_day and record.get("status") not in [AttendanceStatus.ON_LEAVE, AttendanceStatus.WORK_FROM_HOME]:
+        # Update status on checkout:
+        # half_day overrides present/late but not on_leave, wfh, hybrid, field_work
+        _PRESERVE_STATUS = {
+            AttendanceStatus.ON_LEAVE,
+            AttendanceStatus.WORK_FROM_HOME,
+            AttendanceStatus.HYBRID,
+            AttendanceStatus.FIELD_WORK,
+            AttendanceStatus.HOLIDAY,
+        }
+        current_status = record.get("status")
+        if is_half_day and current_status not in _PRESERVE_STATUS:
             upd["status"] = AttendanceStatus.HALF_DAY
 
         await self.col.update_one({"_id": record["_id"]}, {"$set": upd})
+        record = dict(record)
         record.update(upd)
 
         # Fire punch-out notification (non-blocking)
@@ -363,12 +419,13 @@ class AttendanceService:
         record = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
         if not record or not record.get("check_in") or record.get("check_out"):
             return {}
-        breaks = record.get("breaks", [])
+        breaks = list(record.get("breaks", []))
         if breaks and not breaks[-1].get("end"):
-            return self._serialize(record)  # already on break
+            return self._serialize(dict(record))  # already on break
         breaks.append({"start": now, "end": None, "duration_minutes": None, "reason": reason})
         await self.col.update_one({"_id": record["_id"]},
             {"$set": {"breaks": breaks, "updated_at": now}})
+        record = dict(record)
         record["breaks"] = breaks
         return self._serialize(record)
 
@@ -378,10 +435,10 @@ class AttendanceService:
         record = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
         if not record:
             return {}
-        breaks = record.get("breaks", [])
-        total_break_minutes = record.get("total_break_minutes", 0.0)
+        breaks = list(record.get("breaks", []))
+        total_break_minutes = float(record.get("total_break_minutes", 0.0))
         if not breaks or breaks[-1].get("end"):
-            return self._serialize(record)  # not on break
+            return self._serialize(dict(record))  # not on break
         br_start = breaks[-1]["start"]
         dur = round((now - br_start).total_seconds() / 60, 1)
         breaks[-1]["end"] = now
@@ -389,37 +446,140 @@ class AttendanceService:
         total_break_minutes += dur
         await self.col.update_one({"_id": record["_id"]},
             {"$set": {"breaks": breaks, "total_break_minutes": total_break_minutes, "updated_at": now}})
+        record = dict(record)
         record["breaks"] = breaks
         record["total_break_minutes"] = total_break_minutes
         return self._serialize(record)
 
-    # ── Auto punch-out at midnight (called by scheduler) ─────────────────────
+    # ── Auto punch-out (called by scheduler / midnight loop) ─────────────────
 
     async def auto_checkout_all(self, company_id: str) -> int:
-        """Punch out all employees who are still checked in at midnight."""
+        """Close all open attendance records from PREVIOUS days.
+
+        This is intentionally NOT limited to today.  The midnight loop runs at
+        00:00 UTC which is already 'tomorrow' from the perspective of the open
+        records (which were created on 'yesterday').  Filtering by yesterday
+        (and any older un-closed records) is correct; filtering by today would
+        miss every open record.
+
+        check_out time is set to 23:59:00 of the record's own date so work-hours
+        and overtime are calculated relative to the actual working day.
+        Status is set to AUTO_CLOSED to distinguish from normal check-outs.
+        """
         today = _today_dt()
+        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+        settings = await self._get_settings()
+
         cursor = self.col.find({
             "company_id": company_id,
-            "date": today,
+            "date": {"$lt": today},      # Only PREVIOUS days — not the current day
             "check_in": {"$ne": None},
             "check_out": None,
         })
+
         count = 0
         async for rec in cursor:
-            await self.check_out(
-                employee_id=rec["employee_id"],
-                company_id=company_id,
-                marked_by="system",
-                auto=True,
+            rec_date = rec["date"]
+            # Set checkout to 23:59:00 of the record's calendar date
+            if isinstance(rec_date, datetime):
+                checkout_time = rec_date.replace(hour=23, minute=59, second=0, microsecond=0)
+            else:
+                checkout_time = datetime(rec_date.year, rec_date.month, rec_date.day, 23, 59, 0)
+
+            # Close any open break
+            breaks = list(rec.get("breaks", []))
+            total_break_minutes = float(rec.get("total_break_minutes", 0.0))
+            if breaks and not breaks[-1].get("end"):
+                br_start = breaks[-1]["start"]
+                if isinstance(br_start, datetime):
+                    break_dur = max(0.0, (checkout_time - br_start).total_seconds() / 60)
+                else:
+                    break_dur = 0.0
+                breaks[-1]["end"] = checkout_time
+                breaks[-1]["duration_minutes"] = round(break_dur, 1)
+                total_break_minutes += break_dur
+
+            work_hours = self._compute_work_hours(rec["check_in"], checkout_time, total_break_minutes)
+            is_half_day = work_hours < settings["half_day_hours"]
+
+            await self.col.update_one(
+                {"_id": rec["_id"]},
+                {"$set": {
+                    "check_out": checkout_time,
+                    "work_hours": work_hours,
+                    "total_break_minutes": total_break_minutes,
+                    "breaks": breaks,
+                    "is_half_day": is_half_day,
+                    "auto_punched_out": True,
+                    "status": AttendanceStatus.AUTO_CLOSED,
+                    "updated_at": now_utc,
+                }},
             )
             count += 1
+
         return count
+
+    # ── Today's status (used by /me/today to decide popup visibility) ─────────
+
+    async def get_today_context(self, employee_id: str, company_id: str) -> dict:
+        """Return context needed to decide whether to show the punch-in popup.
+
+        Checks (in priority order):
+          1. Is today a company holiday?
+          2. Is today a weekend?
+          3. Does the employee have approved leave covering today?
+          4. Does the employee already have an attendance record today?
+        """
+        today_date = date.today()
+        today_str = today_date.isoformat()
+        today_dt = _today_dt()
+
+        is_weekend = today_date.weekday() >= 5  # Saturday=5, Sunday=6
+
+        emp = await self._get_employee(employee_id, company_id)
+        dept = emp.get("department") if emp else None
+        holiday_name = await self._check_today_holiday(company_id, dept)
+
+        attendance = await self.col.find_one({
+            "employee_id": employee_id,
+            "company_id": company_id,
+            "date": today_dt,
+        })
+
+        # Only check leave if no active check-in (employee may have come to work
+        # despite a leave approval — their check-in takes priority)
+        leave = None
+        if not (attendance and attendance.get("check_in")):
+            leave_doc = await self.db["hrm_leaves"].find_one({
+                "company_id": company_id,
+                "employee_id": employee_id,
+                "status": "approved",
+                "from_date": {"$lte": today_str},
+                "to_date": {"$gte": today_str},
+            })
+            if leave_doc:
+                leave = {
+                    "id": str(leave_doc.get("_id", "")),
+                    "leave_type": leave_doc.get("leave_type", ""),
+                    "from_date": leave_doc.get("from_date", ""),
+                    "to_date": leave_doc.get("to_date", ""),
+                    "status": leave_doc.get("status", ""),
+                    "duration": leave_doc.get("duration", "full_day"),
+                }
+
+        return {
+            "is_weekend": is_weekend,
+            "is_holiday": bool(holiday_name),
+            "holiday_name": holiday_name or None,
+            "is_on_leave": bool(leave),
+            "leave": leave,
+        }
 
     # ── Read queries ──────────────────────────────────────────────────────────
 
     async def get_today(self, employee_id: str, company_id: str) -> Optional[dict]:
         doc = await self.col.find_one({"employee_id": employee_id, "date": _today_dt(), "company_id": company_id})
-        return self._serialize(doc) if doc else None
+        return self._serialize(dict(doc)) if doc else None
 
     async def get_monthly(self, employee_id: str, company_id: str, year: int, month: int) -> List[dict]:
         start = datetime(year, month, 1)
@@ -429,11 +589,11 @@ class AttendanceService:
             "company_id": company_id,
             "date": {"$gte": start, "$lt": end},
         }).sort("date", 1)
-        return [self._serialize(d) async for d in cursor]
+        return [self._serialize(dict(d)) async for d in cursor]
 
     async def get_team_today(self, company_id: str) -> List[dict]:
         cursor = self.col.find({"company_id": company_id, "date": _today_dt()})
-        return [self._serialize(d) async for d in cursor]
+        return [self._serialize(dict(d)) async for d in cursor]
 
     async def manual_update(self, company_id: str, update_data: dict) -> dict:
         now = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC — Motor returns naive datetimes
@@ -452,6 +612,7 @@ class AttendanceService:
         existing = await self.col.find_one({"employee_id": emp_id, "date": d, "company_id": company_id})
         if existing:
             await self.col.update_one({"_id": existing["_id"]}, {"$set": update_data})
+            existing = dict(existing)
             existing.update(update_data)
             return self._serialize(existing)
         update_data["_id"] = str(ObjectId())
@@ -462,13 +623,7 @@ class AttendanceService:
     # ── Counters ──────────────────────────────────────────────────────────────
 
     async def count_present_today(self, company_id: str) -> int:
-        """Count employees who punched in today — regardless of punch-out status.
-
-        'Present' means the employee showed up (has a check_in record), not that
-        they are currently clocked in.  Previously used status-based counting
-        which dropped to 0 once employees punched out during testing sessions
-        (work_hours < half_day_threshold → status = 'half_day').
-        """
+        """Count employees who punched in today — regardless of punch-out status."""
         return await self.col.count_documents({
             "company_id": company_id,
             "date": _today_dt(),
@@ -564,7 +719,7 @@ class AttendanceService:
             .skip(skip)
             .limit(page_size)
         )
-        items = [self._serialize(d) async for d in cursor]
+        items = [self._serialize(dict(d)) async for d in cursor]
         return {
             "items": items,
             "total": total,
@@ -592,7 +747,7 @@ class AttendanceService:
         total = await self.col.count_documents(query)
         skip = (page - 1) * page_size
         cursor = self.col.find(query).sort("date", -1).skip(skip).limit(page_size)
-        items = [self._serialize(d) async for d in cursor]
+        items = [self._serialize(dict(d)) async for d in cursor]
         return {
             "items": items,
             "total": total,
@@ -620,7 +775,7 @@ class AttendanceService:
         if status:
             query["status"] = status
         cursor = self.col.find(query).sort([("date", 1), ("employee_name", 1)])
-        return [self._serialize(d) async for d in cursor]
+        return [self._serialize(dict(d)) async for d in cursor]
 
     async def get_range_stats(self, company_id: str, start_date: datetime, end_date: datetime) -> dict:
         """Aggregated attendance counters + daily trend for a date range."""
@@ -628,23 +783,25 @@ class AttendanceService:
         match: dict = {"company_id": company_id, "date": {"$gte": start_date, "$lt": end_inclusive}}
 
         # Statuses that mean the employee attended work (present in any form)
-        _ATTENDED = ["present", "late", "half_day", "wfh"]
+        _ATTENDED = ["present", "late", "half_day", "wfh", "hybrid", "field_work"]
 
         pipeline_totals = [
             {"$match": match},
             {"$group": {
                 "_id": None,
                 "total_records":         {"$sum": 1},
-                # attended = any status where employee actually showed up
                 "attended":              {"$sum": {"$cond": [{"$in": ["$status", _ATTENDED]}, 1, 0]}},
-                "present":               {"$sum": {"$cond": [{"$eq": ["$status", "present"]},  1, 0]}},
-                "late":                  {"$sum": {"$cond": [{"$eq": ["$status", "late"]},     1, 0]}},
-                "absent":                {"$sum": {"$cond": [{"$eq": ["$status", "absent"]},   1, 0]}},
-                "half_day":              {"$sum": {"$cond": [{"$eq": ["$status", "half_day"]}, 1, 0]}},
-                "on_leave":              {"$sum": {"$cond": [{"$eq": ["$status", "on_leave"]}, 1, 0]}},
-                "wfh":                   {"$sum": {"$cond": [{"$eq": ["$status", "wfh"]},      1, 0]}},
-                "holiday":               {"$sum": {"$cond": [{"$eq": ["$status", "holiday"]},  1, 0]}},
-                "weekend":               {"$sum": {"$cond": [{"$eq": ["$status", "weekend"]},  1, 0]}},
+                "present":               {"$sum": {"$cond": [{"$eq": ["$status", "present"]},     1, 0]}},
+                "late":                  {"$sum": {"$cond": [{"$eq": ["$status", "late"]},        1, 0]}},
+                "absent":                {"$sum": {"$cond": [{"$eq": ["$status", "absent"]},      1, 0]}},
+                "half_day":              {"$sum": {"$cond": [{"$eq": ["$status", "half_day"]},    1, 0]}},
+                "on_leave":              {"$sum": {"$cond": [{"$eq": ["$status", "on_leave"]},    1, 0]}},
+                "wfh":                   {"$sum": {"$cond": [{"$eq": ["$status", "wfh"]},         1, 0]}},
+                "hybrid":                {"$sum": {"$cond": [{"$eq": ["$status", "hybrid"]},      1, 0]}},
+                "field_work":            {"$sum": {"$cond": [{"$eq": ["$status", "field_work"]},  1, 0]}},
+                "holiday":               {"$sum": {"$cond": [{"$eq": ["$status", "holiday"]},     1, 0]}},
+                "weekend":               {"$sum": {"$cond": [{"$eq": ["$status", "weekend"]},     1, 0]}},
+                "auto_closed":           {"$sum": {"$cond": [{"$eq": ["$status", "auto_closed"]}, 1, 0]}},
                 "total_work_hours":      {"$sum": {"$ifNull": ["$work_hours",      0]}},
                 "total_overtime_hours":  {"$sum": {"$ifNull": ["$overtime_hours",  0]}},
             }},
@@ -654,7 +811,6 @@ class AttendanceService:
             {"$match": match},
             {"$group": {
                 "_id": "$date",
-                # present bar = all who attended (present + late + half_day + wfh)
                 "present": {"$sum": {"$cond": [{"$in": ["$status", _ATTENDED]},   1, 0]}},
                 "absent":  {"$sum": {"$cond": [{"$eq":  ["$status", "absent"]},   1, 0]}},
                 "late":    {"$sum": {"$cond": [{"$eq":  ["$status", "late"]},     1, 0]}},

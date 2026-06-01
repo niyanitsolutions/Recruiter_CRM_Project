@@ -1,10 +1,13 @@
 """HRM — Leave Service (enhanced: holiday overlap, weekend exclusion, policy validation)"""
+import logging
 from datetime import datetime, timezone, date, timedelta
 from typing import Optional, List
 from bson import ObjectId
 import math
 
 from app.models.company.leave import LeaveStatus, LeaveType, LeaveDuration
+
+logger = logging.getLogger(__name__)
 
 
 class LeaveService:
@@ -300,6 +303,13 @@ class LeaveService:
                 leave["employee_id"], company_id,
                 leave.get("leave_type"), float(leave.get("total_days", 1)),
             )
+            # Create attendance placeholder records for each working day of the leave.
+            # Runs after deduct_balance so the leave is logically committed first.
+            try:
+                leave_for_attendance = {**leave, "id": leave_id}
+                await self.create_attendance_for_leave(leave_for_attendance, company_id)
+            except Exception as exc:
+                logger.warning("create_attendance_for_leave failed for leave %s: %s", leave_id, exc)
 
         await self.col.update_one({"_id": leave_id, "company_id": company_id}, {"$set": update})
 
@@ -336,6 +346,12 @@ class LeaveService:
                 employee_id, company_id,
                 leave.get("leave_type"), float(leave.get("total_days", 1)),
             )
+            # Remove attendance placeholder records created for this leave
+            try:
+                await self.remove_attendance_for_leave(leave_id, company_id)
+            except Exception as exc:
+                logger.warning("remove_attendance_for_leave failed for leave %s: %s", leave_id, exc)
+
         leave["status"] = LeaveStatus.CANCELLED
         return self._serialize(leave)
 
@@ -445,6 +461,138 @@ class LeaveService:
                 "negative_balance_allowed": bool(pol.get("negative_balance_allowed", False)),
             })
         return result
+
+    # ── Attendance integration ────────────────────────────────────────────────
+
+    async def create_attendance_for_leave(self, leave: dict, company_id: str) -> int:
+        """Create placeholder attendance records for each working day of an approved leave.
+
+        Skips days where the employee already has an attendance record with check_in
+        set (they came to work — their actual attendance takes priority).
+        Idempotent: safe to call multiple times for the same leave.
+        """
+        from_date_str = leave.get("from_date", "")
+        to_date_str   = leave.get("to_date", "")
+        if not from_date_str or not to_date_str:
+            return 0
+
+        from_date = date.fromisoformat(from_date_str) if isinstance(from_date_str, str) else from_date_str
+        to_date   = date.fromisoformat(to_date_str)   if isinstance(to_date_str,   str) else to_date_str
+
+        employee_id   = leave.get("employee_id", "")
+        leave_id      = str(leave.get("id") or leave.get("_id") or "")
+        employee_name = leave.get("employee_name", "")
+        leave_type    = leave.get("leave_type", "")
+
+        # Get employee department for department-specific holiday filtering
+        emp_doc = await self.db["hrm_employees"].find_one(
+            {"_id": employee_id, "company_id": company_id, "is_deleted": False},
+            {"department": 1},
+        )
+        dept = emp_doc.get("department") if emp_doc else None
+
+        # Collect holiday dates in the leave range
+        holiday_dates: set = set()
+        cursor = self.db[self.HOL_COL].find({
+            "company_id": company_id,
+            "date": {"$gte": from_date_str, "$lte": to_date_str},
+            "is_active": True,
+            "is_deleted": False,
+        })
+        async for h in cursor:
+            depts = h.get("applicable_departments", [])
+            if not depts or (dept and dept in depts):
+                holiday_dates.add(h["date"])
+
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        count = 0
+        current = from_date
+
+        while current <= to_date:
+            # Skip weekends and holidays — leave days are only working days
+            if current.weekday() >= 5 or current.isoformat() in holiday_dates:
+                current += timedelta(days=1)
+                continue
+
+            day_dt = datetime(current.year, current.month, current.day)
+
+            existing = await self.db["hrm_attendance"].find_one({
+                "employee_id": employee_id,
+                "company_id": company_id,
+                "date": day_dt,
+            })
+
+            if existing and existing.get("check_in"):
+                # Employee worked this day — don't overwrite actual attendance
+                current += timedelta(days=1)
+                continue
+
+            if (existing
+                    and existing.get("status") == "on_leave"
+                    and existing.get("leave_id") == leave_id):
+                # Already a placeholder for this exact leave — idempotent skip
+                current += timedelta(days=1)
+                continue
+
+            leave_attendance = {
+                "company_id":          company_id,
+                "employee_id":         employee_id,
+                "employee_name":       employee_name,
+                "date":                day_dt,
+                "status":              "on_leave",
+                "leave_id":            leave_id,
+                "leave_type":          leave_type,
+                "check_in":            None,
+                "check_out":           None,
+                "work_mode":           "office",
+                "breaks":              [],
+                "total_break_minutes": 0.0,
+                "work_hours":          0.0,
+                "is_late":             False,
+                "late_by_minutes":     0,
+                "is_half_day":         False,
+                "overtime_hours":      0.0,
+                "auto_punched_out":    False,
+                "notes":               f"Approved {leave_type.replace('_', ' ')} leave",
+                "marked_by":           "system",
+                "created_at":          now,
+                "updated_at":          now,
+            }
+
+            if existing:
+                # Update existing placeholder without check_in
+                await self.db["hrm_attendance"].update_one(
+                    {"_id": existing["_id"]},
+                    {"$set": {
+                        "status":    "on_leave",
+                        "leave_id":  leave_id,
+                        "leave_type": leave_type,
+                        "notes":     leave_attendance["notes"],
+                        "marked_by": "system",
+                        "updated_at": now,
+                    }},
+                )
+            else:
+                leave_attendance["_id"] = str(ObjectId())
+                await self.db["hrm_attendance"].insert_one(leave_attendance)
+
+            count += 1
+            current += timedelta(days=1)
+
+        return count
+
+    async def remove_attendance_for_leave(self, leave_id: str, company_id: str) -> int:
+        """Delete attendance placeholder records created for a cancelled/rejected leave.
+
+        Only removes records where check_in is None (employee didn't actually work).
+        Records where the employee came to work despite having leave are preserved.
+        """
+        result = await self.db["hrm_attendance"].delete_many({
+            "company_id": company_id,
+            "leave_id":   leave_id,
+            "check_in":   None,
+        })
+        return result.deleted_count
 
     async def count_on_leave_today(self, company_id: str) -> int:
         today_str = date.today().isoformat()

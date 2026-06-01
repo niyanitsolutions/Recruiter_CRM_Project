@@ -15,6 +15,9 @@ class AttendanceStatus(str, Enum):
     HOLIDAY = "holiday"
     WEEKEND = "weekend"
     WORK_FROM_HOME = "wfh"
+    HYBRID = "hybrid"
+    FIELD_WORK = "field_work"
+    AUTO_CLOSED = "auto_closed"
 
 
 class WorkMode(str, Enum):

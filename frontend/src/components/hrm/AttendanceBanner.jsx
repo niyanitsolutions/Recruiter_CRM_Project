@@ -1,10 +1,7 @@
 /**
  * AttendanceBanner — persistent top banner showing punch-in/out status.
  *
- * Shows for ALL non-partner internal users:
- *   - Users with an employee profile: full punch-in/out + break controls.
- *   - Users without a profile: shows "Punch In" anyway; backend auto-creates
- *     a minimal employee profile on first punch-in (path 5 in _resolve_emp_id).
+ * Shows for ALL non-partner internal users.
  *
  * Timer correctness:
  *   - Backend stores datetimes as naive UTC and _serialize appends 'Z' so
@@ -12,9 +9,20 @@
  *   - Work timer ticks every second (HH:MM:SS display).
  *   - Break timer runs independently while on break.
  *   - Net work time = gross elapsed − completed breaks − current break.
+ *
+ * Timer fix (Issue 1):
+ *   - After a successful punch-in, the check-in API response is used directly
+ *     to set the record state — no second round-trip to /me/today.
+ *     This eliminates the race condition where the extra GET could return stale
+ *     data before MongoDB propagates the write.
+ *
+ * Leave/holiday/weekend suppression (Issue 2):
+ *   - /me/today now returns is_holiday, is_weekend, is_on_leave, and leave fields.
+ *   - The punch-in modal is not shown for any of these conditions.
+ *   - A context-aware status message is shown in the banner instead.
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Clock, Coffee, LogOut, Loader2, AlertCircle } from 'lucide-react'
+import { Clock, Coffee, LogOut, Loader2, AlertCircle, Calendar, Sun, Umbrella } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
@@ -51,6 +59,11 @@ function parseUTC(str) {
   return isNaN(d.getTime()) ? null : d
 }
 
+function leaveTypeLabel(lt) {
+  if (!lt) return 'Leave'
+  return lt.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 export default function AttendanceBanner() {
   const user = useSelector(selectUser)
 
@@ -60,6 +73,12 @@ export default function AttendanceBanner() {
   const [resolvedEmpId, setResolvedEmpId] = useState(null)
   const [showModal,     setShowModal]     = useState(false)
   const [loading,       setLoading]       = useState(false)
+
+  // Today's context — determines whether to show punch-in modal
+  const [isHoliday,   setIsHoliday]   = useState(false)
+  const [holidayName, setHolidayName] = useState(null)
+  const [isWeekend,   setIsWeekend]   = useState(false)
+  const [leaveInfo,   setLeaveInfo]   = useState(null)  // approved leave doc or null
 
   // Live timers — tracked in refs + state for second-level precision
   const [workSecs,  setWorkSecs]  = useState(0)   // net work seconds
@@ -76,22 +95,29 @@ export default function AttendanceBanner() {
       const res  = await hrmService.getMyTodayAttendance()
       const data = res.data
 
-      // null / non-object → no response (shouldn't normally happen)
       if (!data || typeof data !== 'object') {
         setResolvedEmpId(null)
         setRecord(null)
+        setLeaveInfo(null)
         return
       }
 
       // Backend returns { awaiting_profile: true } when no employee profile exists.
-      // We show the banner anyway — profile auto-created on first punch-in.
       if (data.awaiting_profile) {
         setResolvedEmpId('__PENDING__')
         setRecord(null)
+        setLeaveInfo(null)
         return
       }
 
       setResolvedEmpId(data.employee_id || null)
+
+      // Extract leave/holiday/weekend context from the extended /me/today response
+      setIsHoliday(!!data.is_holiday)
+      setHolidayName(data.holiday_name || null)
+      setIsWeekend(!!data.is_weekend)
+      setLeaveInfo(data.is_on_leave ? (data.leave || null) : null)
+
       const hasRecord = !!(data.check_in || (data.id && data.id !== data.employee_id))
       setRecord(hasRecord ? data : null)
     } catch {
@@ -99,6 +125,7 @@ export default function AttendanceBanner() {
       const fallback = user?.hrmEmployeeId || null
       setResolvedEmpId(prev => prev || fallback || '__PENDING__')
       setRecord(null)
+      setLeaveInfo(null)
     } finally {
       setRecordLoaded(true)
     }
@@ -160,14 +187,16 @@ export default function AttendanceBanner() {
   }, [onBreak, lastBreak?.start])
 
   // ── Auto-show punch-in modal once per day ───────────────────────────────────
+  // Do NOT show the modal if: on holiday, weekend, approved leave, or already punched in.
   useEffect(() => {
     if (!recordLoaded || !resolvedEmpId) return
-    if (record !== null) return
+    if (record !== null) return                          // already punched in
+    if (isHoliday || isWeekend || leaveInfo) return     // no punch needed today
     if (localStorage.getItem(DISMISS_KEY) === todayStr()) return
     setShowModal(true)
-  }, [recordLoaded, resolvedEmpId, record])
+  }, [recordLoaded, resolvedEmpId, record, isHoliday, isWeekend, leaveInfo])
 
-  // ── Auto punch-out at midnight ──────────────────────────────────────────────
+  // ── Auto punch-out at midnight (client-side safety net) ─────────────────────
   useEffect(() => {
     const checkIn  = parseUTC(record?.check_in)
     const checkOut = parseUTC(record?.check_out)
@@ -189,9 +218,22 @@ export default function AttendanceBanner() {
     setShowModal(false)
   }
 
-  const handlePunchedIn = useCallback(() => {
+  // After a successful punch-in, use the API response directly to set the record.
+  // This eliminates the extra round-trip to /me/today and the race condition it caused
+  // (where the GET could return stale data before MongoDB propagates the insert).
+  const handlePunchedIn = useCallback((checkInData) => {
     localStorage.removeItem(DISMISS_KEY)
-    loadRecord()
+    if (checkInData && checkInData.check_in) {
+      // The check-in response is the attendance record — use it directly.
+      setRecord(checkInData)
+      if (checkInData.employee_id) {
+        setResolvedEmpId(checkInData.employee_id)
+      }
+      // Leave/holiday state doesn't change on punch-in, no need to reset context
+    } else {
+      // Fallback: reload from server if response is incomplete
+      loadRecord()
+    }
   }, [loadRecord])
 
   const handlePunchOut = async () => {
@@ -226,7 +268,6 @@ export default function AttendanceBanner() {
   }
 
   // ── Render guard ─────────────────────────────────────────────────────────────
-  // Hide for: not loaded, partner, or no resolved ID (truly no profile AND fallback unavailable)
   if (!recordLoaded || isPartner || !resolvedEmpId) return null
 
   const checkedIn  = !!record?.check_in
@@ -243,6 +284,12 @@ export default function AttendanceBanner() {
     ? { background: 'var(--bg-warning)',  color: 'var(--text-warning)',  borderBottom: '1px solid var(--border)' }
     : checkedIn
     ? { background: 'var(--bg-success)',  color: 'var(--text-success)',  borderBottom: '1px solid var(--border)' }
+    : leaveInfo
+    ? { background: 'var(--bg-info)',     color: 'var(--text-info)',     borderBottom: '1px solid var(--border)' }
+    : isHoliday
+    ? { background: 'var(--bg-info)',     color: 'var(--text-info)',     borderBottom: '1px solid var(--border)' }
+    : isWeekend
+    ? { background: 'var(--bg-card-alt)', color: 'var(--text-muted)',   borderBottom: '1px solid var(--border)' }
     : { background: 'var(--bg-danger)',   color: 'var(--text-danger)',   borderBottom: '1px solid var(--border)' }
 
   return (
@@ -286,7 +333,7 @@ export default function AttendanceBanner() {
 
             {record.work_mode && record.work_mode !== 'office' && (
               <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-white/60 capitalize flex-shrink-0">
-                {record.work_mode.replace('_', ' ')}
+                {record.work_mode.replace(/_/g, ' ')}
               </span>
             )}
 
@@ -313,8 +360,39 @@ export default function AttendanceBanner() {
             </div>
           </>
 
+        ) : leaveInfo ? (
+          /* ── Approved leave state — no punch-in required ── */
+          <>
+            <Calendar className="w-4 h-4 flex-shrink-0" />
+            <span>
+              You are on <strong>{leaveTypeLabel(leaveInfo.leave_type)}</strong> today.
+              {leaveInfo.from_date !== leaveInfo.to_date && (
+                <span className="ml-1 text-xs opacity-75">
+                  ({leaveInfo.from_date} – {leaveInfo.to_date})
+                </span>
+              )}
+            </span>
+            <span className="ml-auto text-xs opacity-75 flex-shrink-0">No punch-in required</span>
+          </>
+
+        ) : isHoliday ? (
+          /* ── Holiday state — no punch-in required ── */
+          <>
+            <Sun className="w-4 h-4 flex-shrink-0" />
+            <span>Today is a holiday: <strong>{holidayName}</strong></span>
+            <span className="ml-auto text-xs opacity-75 flex-shrink-0">No punch-in required</span>
+          </>
+
+        ) : isWeekend ? (
+          /* ── Weekend state — no punch-in required ── */
+          <>
+            <Umbrella className="w-4 h-4 flex-shrink-0" />
+            <span>Enjoy your weekend!</span>
+            <span className="ml-auto text-xs opacity-75 flex-shrink-0">No punch-in required</span>
+          </>
+
         ) : (
-          /* ── Not punched in state (includes awaiting_profile) ── */
+          /* ── Not punched in — normal working day ── */
           <>
             {resolvedEmpId === '__PENDING__' ? (
               <span className="flex items-center gap-1.5">

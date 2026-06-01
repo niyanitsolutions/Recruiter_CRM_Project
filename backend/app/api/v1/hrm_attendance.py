@@ -176,10 +176,10 @@ async def get_me_today(
     cu: dict = Depends(require_non_partner),
     db=Depends(get_company_db),
 ):
-    """Return today's attendance record for the calling user.
+    """Return today's attendance record plus context for the calling user.
 
-    Also exposes the resolved employee_id so the frontend can use it for
-    subsequent punch-in/out calls even when it is absent from the JWT.
+    Extended response includes holiday / weekend / leave flags so the frontend
+    can decide whether to show the punch-in modal without an extra round-trip.
 
     Returns {"employee_id": null, "awaiting_profile": true} when the user has
     no linked employee profile yet (profile is auto-created on first punch-in).
@@ -187,12 +187,27 @@ async def get_me_today(
     emp_id = await _resolve_emp_id_optional(cu, db)
     if not emp_id:
         return {"employee_id": None, "awaiting_profile": True}
+
+    svc = AttendanceService(db)
+
     try:
-        record = await AttendanceService(db).get_today(emp_id, cu["company_id"])
+        record = await svc.get_today(emp_id, cu["company_id"])
     except Exception as e:
         logger.error("get_today failed for employee %s: %s", emp_id, e, exc_info=True)
         record = None
-    return {"employee_id": emp_id, **(record or {})}
+
+    try:
+        context = await svc.get_today_context(emp_id, cu["company_id"])
+    except Exception as e:
+        logger.warning("get_today_context failed for employee %s: %s", emp_id, e)
+        context = {"is_weekend": False, "is_holiday": False, "holiday_name": None,
+                   "is_on_leave": False, "leave": None}
+
+    return {
+        "employee_id": emp_id,
+        **context,
+        **(record or {}),
+    }
 
 
 # ── Punch In ──────────────────────────────────────────────────────────────────
