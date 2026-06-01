@@ -384,19 +384,22 @@ def _csv_response(rows: list, fieldnames: list, filename: str) -> StreamingRespo
 
 
 def _flatten_row(r: dict, include_employee: bool = True) -> dict:
+    # Use `or ""` so None values (e.g. check_in on leave records) render as
+    # empty strings in the CSV instead of the literal word "None".
     row = {
-        "Date":              r.get("date", ""),
-        "Status":            (r.get("status") or "").replace("_", " ").title(),
-        "Check In":          r.get("check_in", ""),
-        "Check Out":         r.get("check_out", ""),
-        "Work Hours":        r.get("work_hours", ""),
-        "Break (min)":       round(r.get("total_break_minutes") or 0),
-        "Overtime (h)":      r.get("overtime_hours", ""),
-        "Late By (min)":     r.get("late_by_minutes", 0),
-        "Is Half Day":       "Yes" if r.get("is_half_day") else "No",
-        "Work Mode":         (r.get("work_mode") or "").title(),
-        "Auto Checkout":     "Yes" if r.get("auto_punched_out") else "No",
-        "Notes":             r.get("notes", ""),
+        "Date":          r.get("date", ""),
+        "Status":        (r.get("status") or "").replace("_", " ").title(),
+        "Leave Type":    (r.get("leave_type") or "").replace("_", " ").title(),
+        "Check In":      r.get("check_in") or "",
+        "Check Out":     r.get("check_out") or "",
+        "Work Hours":    r.get("work_hours") or "",
+        "Break (min)":   round(r.get("total_break_minutes") or 0),
+        "Overtime (h)":  r.get("overtime_hours") or "",
+        "Late By (min)": r.get("late_by_minutes") or 0,
+        "Is Half Day":   "Yes" if r.get("is_half_day") else "No",
+        "Work Mode":     (r.get("work_mode") or "").title(),
+        "Auto Checkout": "Yes" if r.get("auto_punched_out") else "No",
+        "Notes":         r.get("notes", ""),
     }
     if include_employee:
         row = {"Employee": r.get("employee_name", ""), **row}
@@ -481,12 +484,12 @@ async def get_my_history(
 # ── CSV exports ───────────────────────────────────────────────────────────────
 
 _TEAM_FIELDS = [
-    "Employee", "Date", "Status", "Check In", "Check Out",
+    "Employee", "Date", "Status", "Leave Type", "Check In", "Check Out",
     "Work Hours", "Break (min)", "Overtime (h)", "Late By (min)",
     "Is Half Day", "Work Mode", "Auto Checkout", "Notes",
 ]
 _MY_FIELDS = [
-    "Date", "Status", "Check In", "Check Out",
+    "Date", "Status", "Leave Type", "Check In", "Check Out",
     "Work Hours", "Break (min)", "Overtime (h)", "Late By (min)",
     "Is Half Day", "Work Mode", "Notes",
 ]

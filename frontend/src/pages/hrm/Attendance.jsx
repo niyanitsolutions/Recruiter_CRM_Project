@@ -43,24 +43,31 @@ function formatMinutes(minutes) {
 }
 
 const STATUS_LABEL = {
-  present:  'Present',
-  late:     'Late',
-  absent:   'Absent',
-  on_leave: 'On Leave',
-  wfh:      'WFH',
-  half_day: 'Half Day',
-  holiday:  'Holiday',
-  weekend:  'Weekend',
+  present:    'Present',
+  late:       'Late',
+  absent:     'Absent',
+  on_leave:   'On Leave',
+  wfh:        'WFH',
+  hybrid:     'Hybrid',
+  field_work: 'Field Work',
+  half_day:   'Half Day',
+  holiday:    'Holiday',
+  weekend:    'Weekend',
+  auto_closed:'Auto Closed',
 }
 
 const STATUS_STYLE = {
-  present:  { background: 'var(--bg-success)',  color: 'var(--text-success)' },
-  late:     { background: 'var(--bg-warning)',  color: 'var(--text-warning)' },
-  absent:   { background: 'var(--bg-danger)',   color: 'var(--text-danger)' },
-  on_leave: { background: 'var(--bg-info)',     color: 'var(--text-info)' },
-  wfh:      { background: 'var(--bg-info)',     color: 'var(--text-info)' },
-  half_day: { background: 'var(--bg-warning)',  color: 'var(--text-warning)' },
-  holiday:  { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' },
+  present:    { background: 'var(--bg-success)',  color: 'var(--text-success)' },
+  late:       { background: 'var(--bg-warning)',  color: 'var(--text-warning)' },
+  absent:     { background: 'var(--bg-danger)',   color: 'var(--text-danger)' },
+  on_leave:   { background: 'var(--bg-info)',     color: 'var(--text-info)' },
+  wfh:        { background: 'var(--bg-info)',     color: 'var(--text-info)' },
+  hybrid:     { background: 'var(--bg-info)',     color: 'var(--text-info)' },
+  field_work: { background: 'var(--bg-warning)',  color: 'var(--text-warning)' },
+  half_day:   { background: 'var(--bg-warning)',  color: 'var(--text-warning)' },
+  holiday:    { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' },
+  weekend:    { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' },
+  auto_closed:{ background: 'var(--bg-card-alt)', color: 'var(--text-muted)' },
 }
 
 // ── Stat card ──────────────────────────────────────────────────────────────────

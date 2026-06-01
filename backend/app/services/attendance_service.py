@@ -575,6 +575,102 @@ class AttendanceService:
             "leave": leave,
         }
 
+    # ── Leave-attendance backfill ─────────────────────────────────────────────
+
+    async def _backfill_leave_attendance(
+        self,
+        employee_id: str,
+        company_id: str,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> None:
+        """Create on_leave attendance placeholders for approved leave days that have no record.
+
+        Idempotent — safe to call on every attendance read.  Only inserts records
+        for working days (Mon-Fri) within each approved leave that fall inside
+        [start_date, end_date] and have no existing hrm_attendance document.
+
+        This covers two gaps:
+          1. Leaves approved before create_attendance_for_leave was deployed.
+          2. Any silent exception in the approval-time creation path.
+        """
+        start_str = start_date.strftime("%Y-%m-%d")
+        end_str = end_date.strftime("%Y-%m-%d")
+
+        cursor = self.db["hrm_leaves"].find({
+            "company_id": company_id,
+            "employee_id": employee_id,
+            "status": "approved",
+            "from_date": {"$lte": end_str},
+            "to_date":   {"$gte": start_str},
+        })
+
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        async for leave in cursor:
+            from_str = leave.get("from_date", "")
+            to_str   = leave.get("to_date",   "")
+            if not from_str or not to_str:
+                continue
+            try:
+                leave_from = date.fromisoformat(from_str)
+                leave_to   = date.fromisoformat(to_str)
+            except (ValueError, TypeError):
+                continue
+
+            leave_id      = str(leave.get("_id") or "")
+            leave_type    = leave.get("leave_type", "")
+            employee_name = leave.get("employee_name", "")
+
+            # Clamp to the requested date window
+            current = max(leave_from, start_date.date())
+            end_day = min(leave_to,   end_date.date())
+
+            while current <= end_day:
+                if current.weekday() >= 5:          # skip Saturday / Sunday
+                    current += timedelta(days=1)
+                    continue
+
+                day_dt = datetime(current.year, current.month, current.day)
+
+                existing = await self.col.find_one({
+                    "employee_id": employee_id,
+                    "company_id":  company_id,
+                    "date":        day_dt,
+                })
+
+                if not existing:
+                    try:
+                        await self.col.insert_one({
+                            "_id":                str(ObjectId()),
+                            "company_id":          company_id,
+                            "employee_id":         employee_id,
+                            "employee_name":       employee_name,
+                            "date":                day_dt,
+                            "status":              AttendanceStatus.ON_LEAVE,
+                            "leave_id":            leave_id,
+                            "leave_type":          leave_type,
+                            "check_in":            None,
+                            "check_out":           None,
+                            "work_mode":           "office",
+                            "breaks":              [],
+                            "total_break_minutes": 0.0,
+                            "work_hours":          0.0,
+                            "is_late":             False,
+                            "late_by_minutes":     0,
+                            "is_half_day":         False,
+                            "overtime_hours":      0.0,
+                            "auto_punched_out":    False,
+                            "notes":               f"Approved {leave_type.replace('_', ' ')} leave",
+                            "marked_by":           "system",
+                            "created_at":          now,
+                            "updated_at":          now,
+                        })
+                    except Exception:
+                        pass  # DuplicateKey race — harmless, another writer created it first
+
+                current += timedelta(days=1)
+
     # ── Read queries ──────────────────────────────────────────────────────────
 
     async def get_today(self, employee_id: str, company_id: str) -> Optional[dict]:
@@ -695,7 +791,17 @@ class AttendanceService:
         page: int = 1,
         page_size: int = 50,
     ) -> dict:
-        """Paginated attendance records across a date range for HR/team view."""
+        """Paginated attendance records across a date range for HR/team view.
+
+        When a specific employee_id is provided, runs a lazy backfill so
+        approved leave days appear as on_leave entries in the HR view.
+        """
+        if employee_id:
+            try:
+                await self._backfill_leave_attendance(employee_id, company_id, start_date, end_date)
+            except Exception:
+                pass
+
         end_inclusive = end_date + timedelta(days=1)
         query: dict = {
             "company_id": company_id,
@@ -737,7 +843,17 @@ class AttendanceService:
         page: int = 1,
         page_size: int = 62,
     ) -> dict:
-        """Paginated attendance records for a single employee across a date range."""
+        """Paginated attendance records for a single employee across a date range.
+
+        Runs a lazy backfill first so approved leave days always appear as
+        on_leave attendance entries even if they were approved before the
+        approval-time creation was deployed.
+        """
+        try:
+            await self._backfill_leave_attendance(employee_id, company_id, start_date, end_date)
+        except Exception:
+            pass  # never block a read because the backfill failed
+
         end_inclusive = end_date + timedelta(days=1)
         query = {
             "employee_id": employee_id,
@@ -764,7 +880,17 @@ class AttendanceService:
         employee_id: Optional[str] = None,
         status: Optional[str] = None,
     ) -> List[dict]:
-        """Return all rows in a date range (no pagination) for CSV export."""
+        """Return all rows in a date range (no pagination) for CSV export.
+
+        Backfills leave attendance for a specific employee so the CSV
+        always includes on_leave rows for approved leaves.
+        """
+        if employee_id:
+            try:
+                await self._backfill_leave_attendance(employee_id, company_id, start_date, end_date)
+            except Exception:
+                pass
+
         end_inclusive = end_date + timedelta(days=1)
         query: dict = {
             "company_id": company_id,

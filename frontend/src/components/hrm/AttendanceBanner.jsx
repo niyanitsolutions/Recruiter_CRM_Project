@@ -218,22 +218,26 @@ export default function AttendanceBanner() {
     setShowModal(false)
   }
 
-  // After a successful punch-in, use the API response directly to set the record.
-  // This eliminates the extra round-trip to /me/today and the race condition it caused
-  // (where the GET could return stale data before MongoDB propagates the insert).
+  // After a successful punch-in:
+  //   1. Optimistically update the record from the API response when check_in is present
+  //      (office, WFH, hybrid, field all use the same logic — no mode-specific branching).
+  //   2. Always reload from server after 1.5 s as a reconciliation step.
+  //      The delay handles MongoDB replica-set replication lag: the primary write is
+  //      committed before the response arrives, but a secondary used for reads may not
+  //      have caught up yet.  1.5 s covers all observed replication windows in production.
   const handlePunchedIn = useCallback((checkInData) => {
     localStorage.removeItem(DISMISS_KEY)
     if (checkInData && checkInData.check_in) {
-      // The check-in response is the attendance record — use it directly.
+      // Immediate optimistic update — timer and dashboard update at once
       setRecord(checkInData)
       if (checkInData.employee_id) {
         setResolvedEmpId(checkInData.employee_id)
       }
-      // Leave/holiday state doesn't change on punch-in, no need to reset context
-    } else {
-      // Fallback: reload from server if response is incomplete
-      loadRecord()
     }
+    // Reconcile from server for ALL work modes after a short delay.
+    // Covers replica-set lag, any edge case where the direct response lacked
+    // check_in, and keeps ESS + attendance page in sync without a page refresh.
+    setTimeout(() => loadRecord(), 1500)
   }, [loadRecord])
 
   const handlePunchOut = async () => {
