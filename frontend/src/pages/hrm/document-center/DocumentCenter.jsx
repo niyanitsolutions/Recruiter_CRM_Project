@@ -1,6 +1,6 @@
 import { Suspense, lazy } from 'react'
 import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom'
-import { Plus, FileText, CheckSquare, Archive, Clock, LayoutTemplate } from 'lucide-react'
+import { Plus, FileText, CheckSquare, Archive as ArchiveIcon, LayoutTemplate } from 'lucide-react'
 import { clsx } from 'clsx'
 
 const NewTemplatePage    = lazy(() => import('./NewTemplatePage'))
@@ -16,7 +16,7 @@ const NAV_ITEMS = [
   { key: 'templates',  label: 'Templates',           icon: LayoutTemplate, path: 'templates' },
   { key: 'generated',  label: 'Generated Documents',  icon: FileText,       path: 'generated' },
   { key: 'approvals',  label: 'Approvals',            icon: CheckSquare,    path: 'approvals' },
-  { key: 'archive',    label: 'Archive',              icon: Archive,        path: 'archive' },
+  { key: 'archive',    label: 'Archive',              icon: ArchiveIcon,    path: 'archive' },
 ]
 
 const Spinner = () => (
