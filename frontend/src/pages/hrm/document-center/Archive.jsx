@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { Archive, RotateCcw, Trash2, Loader2, FileText, Search, RefreshCw } from 'lucide-react'
+import { Archive as ArchiveIcon, RotateCcw, Trash2, Loader2, FileText, Search, RefreshCw } from 'lucide-react'
 import documentCenterService from '../../../services/documentCenterService'
 
 export default function Archive() {
@@ -78,7 +78,7 @@ export default function Archive() {
         {/* Info banner */}
         <div className="flex items-center gap-2 p-3 rounded-xl mb-4"
           style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-          <Archive className="w-4 h-4 flex-shrink-0 text-violet-500" />
+          <ArchiveIcon className="w-4 h-4 flex-shrink-0 text-violet-500" />
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
             Archived templates are hidden from the main Templates list but preserved here.
             Restore them to make them active again.
@@ -103,7 +103,7 @@ export default function Archive() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
-            <Archive className="w-12 h-12 mb-3" style={{ color: 'var(--text-muted)' }} />
+            <ArchiveIcon className="w-12 h-12 mb-3" style={{ color: 'var(--text-muted)' }} />
             <p className="font-medium mb-1" style={{ color: 'var(--text-heading)' }}>
               {search ? 'No matching archived templates' : 'No archived templates'}
             </p>

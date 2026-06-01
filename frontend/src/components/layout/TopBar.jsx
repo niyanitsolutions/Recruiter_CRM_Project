@@ -70,7 +70,6 @@ const PATH_LABELS = {
   edit: 'Edit',
   trash: 'Deleted History',
   integrations: 'Integrations',
-  analytics: 'Analytics',
 }
 
 const isIdSegment = (seg) => /^[0-9a-f-]{20,}$|^\d{5,}$/.test(seg)

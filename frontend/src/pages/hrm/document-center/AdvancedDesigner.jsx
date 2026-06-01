@@ -404,7 +404,6 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
         style={{ borderLeft: '4px solid #7c3aed', paddingLeft: 12, margin: '4px 0' }}>
         <p contentEditable suppressContentEditableWarning ref={ref}
           onBlur={e => updateContent(e.target.innerHTML)}
-          suppressContentEditableWarning
           style={{ ...baseStyle, color: '#6b7280', fontStyle: 'italic' }}>
           {block.content || 'Quote text…'}
         </p>
