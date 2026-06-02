@@ -1263,6 +1263,24 @@ ${footer.show ? `<div class="doc-footer">
         <aside className="flex-shrink-0 border-r flex flex-col overflow-hidden transition-all duration-200"
           style={{ width: leftCollapsed ? 0 : leftWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
 
+          {/* Panel header with collapse button at top-right */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0"
+            style={{ borderColor: 'var(--border)' }}>
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded-md bg-violet-600 flex items-center justify-center">
+                <Layers className="w-3 h-3 text-white" />
+              </div>
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                Design Tools
+              </span>
+            </div>
+            <button onClick={toggleLeftPanel} title="Collapse Panel"
+              className="p-1.5 rounded-lg border transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+              <PanelLeftClose className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Scrollable left panel content */}
           <div className="flex-1 overflow-y-auto">
 
@@ -1451,22 +1469,23 @@ ${footer.show ? `<div class="doc-footer">
           </div>{/* end scrollable */}
         </aside>
 
-        {/* ── Left collapse toggle ── */}
-        <div className="flex flex-col flex-shrink-0 relative">
-          <button onClick={toggleLeftPanel}
-            title={leftCollapsed ? 'Show blocks panel' : 'Hide blocks panel'}
-            className="absolute top-2 -right-3 z-20 w-6 h-6 rounded-full border flex items-center justify-center hover:bg-violet-600 hover:text-white hover:border-violet-600 transition-colors"
-            style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
-            {leftCollapsed ? <PanelLeftOpen className="w-3 h-3" /> : <PanelLeftClose className="w-3 h-3" />}
-          </button>
+        {/* ── Left resize / expand strip ── */}
+        <div className="relative flex-shrink-0 flex flex-col"
+          style={{ width: 12, background: 'var(--bg-secondary)', borderLeft: '1px solid var(--border)' }}>
+          {leftCollapsed && (
+            <button onClick={toggleLeftPanel} title="Expand Panel"
+              className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-7 h-7 rounded-full border shadow-sm flex items-center justify-center transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+              style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+              <PanelLeftOpen className="w-3.5 h-3.5" />
+            </button>
+          )}
           {!leftCollapsed && (
-            <div className="w-1.5 h-full cursor-col-resize hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors"
-              style={{ borderLeft: '1px solid var(--border)' }}
+            <div className="mt-2 flex-1 cursor-col-resize hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors"
               onMouseDown={e => {
                 e.preventDefault()
                 const startX = e.clientX, startW = leftWidth
                 const onMove = (ev) => {
-                  const n = Math.max(200, Math.min(400, startW + (ev.clientX - startX)))
+                  const n = Math.max(200, Math.min(420, startW + (ev.clientX - startX)))
                   setLeftWidth(n); localStorage.setItem('ad_left_w', n)
                 }
                 const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
@@ -1617,23 +1636,24 @@ ${footer.show ? `<div class="doc-footer">
           </div>
         </div>
 
-        {/* ── Right collapse toggle ── */}
+        {/* ── Right resize / expand strip ── */}
         {!preview && (
-          <div className="flex flex-col flex-shrink-0 relative">
-            <button onClick={toggleRightPanel}
-              title={rightCollapsed ? 'Show properties panel' : 'Hide properties panel'}
-              className="absolute top-2 -left-3 z-20 w-6 h-6 rounded-full border flex items-center justify-center hover:bg-violet-600 hover:text-white hover:border-violet-600 transition-colors"
-              style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
-              {rightCollapsed ? <PanelRightOpen className="w-3 h-3" /> : <PanelRightClose className="w-3 h-3" />}
-            </button>
+          <div className="relative flex-shrink-0 flex flex-col"
+            style={{ width: 12, background: 'var(--bg-secondary)', borderRight: '1px solid var(--border)' }}>
+            {rightCollapsed && (
+              <button onClick={toggleRightPanel} title="Expand Properties"
+                className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-7 h-7 rounded-full border shadow-sm flex items-center justify-center transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+                style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                <PanelRightOpen className="w-3.5 h-3.5" />
+              </button>
+            )}
             {!rightCollapsed && (
-              <div className="w-1.5 h-full cursor-col-resize hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors"
-                style={{ borderLeft: '1px solid var(--border)' }}
+              <div className="mt-2 flex-1 cursor-col-resize hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors"
                 onMouseDown={e => {
                   e.preventDefault()
                   const startX = e.clientX, startW = rightWidth
                   const onMove = (ev) => {
-                    const n = Math.max(200, Math.min(420, startW - (ev.clientX - startX)))
+                    const n = Math.max(200, Math.min(440, startW - (ev.clientX - startX)))
                     setRightWidth(n); localStorage.setItem('ad_right_w', n)
                   }
                   const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
@@ -1645,11 +1665,19 @@ ${footer.show ? `<div class="doc-footer">
 
         {/* ── Right panel: Properties ── */}
         {!preview && (
-          <aside className="flex-shrink-0 border-l overflow-y-auto transition-all duration-200"
+          <aside className="flex-shrink-0 border-l flex flex-col overflow-hidden transition-all duration-200"
             style={{ width: rightCollapsed ? 0 : rightWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-            <div className="px-4 py-3 border-b flex-shrink-0" style={{ borderColor: 'var(--border)' }}>
-              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Properties</p>
+            {/* Panel header with collapse button at top-right */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0"
+              style={{ borderColor: 'var(--border)' }}>
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Properties</span>
+              <button onClick={toggleRightPanel} title="Collapse Properties"
+                className="p-1.5 rounded-lg border transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+                <PanelRightClose className="w-3.5 h-3.5" />
+              </button>
             </div>
+            <div className="flex-1 overflow-y-auto">
             <PropsPanel
               block={selectedBlock}
               onChange={updateBlock}
@@ -1671,6 +1699,7 @@ ${footer.show ? `<div class="doc-footer">
                 ))}
               </div>
             </div>
+            </div>{/* end overflow-y-auto */}
           </aside>
         )}
       </div>

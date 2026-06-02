@@ -118,7 +118,8 @@
       "Bash(Select-Object -First 20)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('scripts',{}\\)\\)\")"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",
