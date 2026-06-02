@@ -374,41 +374,64 @@ function buildSigHtml(sigCfg) {
 }
 
 // ─── Paginated Doc Preview ────────────────────────────────────────────────────
+// MS Word-style: header area → [top margin] → text area → [bottom margin] → footer area
+// Each page is exactly ph px tall. Content is windowed per page via overflow:hidden + negative margin.
 function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyHtml, sigCfg }) {
   const measureRef = useRef(null)
   const [measuredH, setMeasuredH] = useState(0)
 
+  // Paper pixel dimensions at 96 dpi
   const base = PAPER_PX[paper.size] || PAPER_PX.A4
   const [pw, ph] = paper.orientation === 'landscape' ? [base[1], base[0]] : base
 
-  const headerH = header.show ? Math.max(header.header_height || 80, 40) : 0
-  const footerH = footer.show ? Math.max(footer.footer_height || 50, 30) : 0
-  const mt      = (paper.margin_top    || 72) / 72 * 96
-  const mb      = (paper.margin_bottom || 72) / 72 * 96
-  const ml      = (paper.margin_left   || 72) / 72 * 96
-  const mr      = (paper.margin_right  || 72) / 72 * 96
-  const contentW    = pw - ml - mr
-  const contentAreaH = ph - headerH - footerH
+  // Header / footer reserved space (px)
+  const headerH = header.show ? Math.max(header.header_height || 100, 40) : 0
+  const footerH = footer.show ? Math.max(footer.footer_height || 40,  20) : 0
 
-  const titleHtml   = buildTitleHtml(docTitle)
-  const sigHtml     = buildSigHtml(sigCfg)
+  // Document margins (convert points to px: 1pt = 96/72 px)
+  const mt = Math.round((paper.margin_top    || 72) / 72 * 96)
+  const mb = Math.round((paper.margin_bottom || 72) / 72 * 96)
+  const ml = Math.round((paper.margin_left   || 72) / 72 * 96)
+  const mr = Math.round((paper.margin_right  || 72) / 72 * 96)
+
+  // Content width for the measurement div (same as actual text column width)
+  const contentW = Math.max(pw - ml - mr, 200)
+
+  // Usable text height per page = page - header - footer - top margin - bottom margin
+  const usableH = Math.max(ph - headerH - footerH - mt - mb, 100)
+
+  // Build full body HTML (title + body + signature)
+  const titleHtml    = buildTitleHtml(docTitle)
+  const sigHtml      = buildSigHtml(sigCfg)
   const fullBodyHtml = titleHtml + (bodyHtml || '') + sigHtml
 
+  // Measure actual rendered height using ResizeObserver for accuracy
   useEffect(() => {
     const el = measureRef.current
     if (!el) return
-    requestAnimationFrame(() => {
-      if (el) setMeasuredH(el.scrollHeight)
-    })
-  }, [fullBodyHtml])
+    const measure = () => {
+      const h = el.scrollHeight
+      if (h > 0) setMeasuredH(h)
+    }
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    // Initial measurement after paint
+    requestAnimationFrame(measure)
+    return () => ro.disconnect()
+  }, [fullBodyHtml, contentW])
 
-  const pageCount = Math.max(1, Math.ceil((measuredH + mt) / contentAreaH))
+  // Number of pages needed (at least 1)
+  const pageCount = Math.max(1, Math.ceil(measuredH / usableH))
 
-  const renderHeader = () => (
+  // ── Reusable header renderer ──────────────────────────────────────────────
+  const renderDocHeader = () => (
     <div style={{
-      position: 'absolute', top: 0, left: 0, right: 0, height: headerH, zIndex: 2,
-      padding: `${header.padding_top ?? 12}px ${header.padding_right ?? 20}px ${header.padding_bottom ?? 8}px ${header.padding_left ?? 20}px`,
-      borderBottom: header.border_bottom ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}` : 'none',
+      position: 'absolute', top: 0, left: 0, right: 0,
+      height: headerH, zIndex: 2, overflow: 'hidden',
+      padding: `${header.padding_top ?? 20}px ${header.padding_right ?? 30}px ${header.padding_bottom ?? 8}px ${header.padding_left ?? 30}px`,
+      borderBottom: header.border_bottom
+        ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}`
+        : 'none',
       backgroundColor: header.background_color || '#fff',
       fontFamily: header.font_family || 'Arial',
       fontSize: header.font_size || 11,
@@ -453,89 +476,143 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
     </div>
   )
 
-  const renderFooter = (pageNum) => (
+  // ── Reusable footer renderer ──────────────────────────────────────────────
+  const renderDocFooter = (pageNum) => (
     <div style={{
-      position: 'absolute', bottom: 0, left: 0, right: 0, height: footerH, zIndex: 2,
-      padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 16}px ${footer.padding_bottom ?? 12}px ${footer.padding_left ?? 16}px`,
-      borderTop: footer.border_top ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}` : 'none',
+      position: 'absolute', bottom: 0, left: 0, right: 0,
+      height: footerH, zIndex: 2,
+      padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 20}px ${footer.padding_bottom ?? 8}px ${footer.padding_left ?? 20}px`,
+      borderTop: footer.border_top
+        ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}`
+        : 'none',
       fontSize: footer.font_size || 10, color: footer.font_color || '#666',
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       boxSizing: 'border-box',
     }}>
-      <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
+      <span>
+        {footer.show_date
+          ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+          : ''}
+      </span>
       <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
-      <span>{footer.show_page_numbers ? `Page ${pageNum}${pageCount > 1 ? ` of ${pageCount}` : ''}` : ''}</span>
+      <span>
+        {footer.show_page_numbers
+          ? `Page ${pageNum}${pageCount > 1 ? ` of ${pageCount}` : ''}`
+          : ''}
+      </span>
     </div>
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32 }}>
-      {/* Hidden measurement div */}
-      <div ref={measureRef} aria-hidden="true"
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, paddingBottom: 32 }}>
+
+      {/*
+        Hidden measurement div — rendered off-screen at exact content width.
+        ResizeObserver fires setMeasuredH whenever content height changes
+        (e.g., after images load or HTML updates).
+      */}
+      <div
+        ref={measureRef}
+        aria-hidden="true"
         style={{
-          position: 'absolute', top: -9999, left: -9999, width: contentW,
-          fontSize: '12pt', lineHeight: 1.7, fontFamily: 'Arial, sans-serif', color: '#1f2937',
+          position: 'absolute', top: -9999, left: -9999,
+          width: contentW,
+          fontSize: '12pt', lineHeight: 1.7,
+          fontFamily: 'Arial, sans-serif', color: '#1f2937',
+          pointerEvents: 'none',
         }}
         dangerouslySetInnerHTML={{ __html: fullBodyHtml }}
       />
 
-      {Array.from({ length: pageCount }, (_, i) => (
-        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          {/* Page label */}
-          <div style={{
-            fontSize: 11, fontWeight: 600, color: '#6b7280',
-            marginBottom: 8, letterSpacing: '0.05em', textTransform: 'uppercase',
-          }}>
-            Page {i + 1}{pageCount > 1 ? ` of ${pageCount}` : ''}
-          </div>
+      {/* ── One div per page ── */}
+      {Array.from({ length: pageCount }, (_, i) => {
+        // Content offset: page i shows HTML from pixel [i*usableH] to [(i+1)*usableH]
+        // marginTop shifts the full content div UP so the right window is visible.
+        const contentOffset = i * usableH
 
-          {/* A4 page with shadow */}
-          <div style={{
-            width: pw, height: ph, background: 'white',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08), 0 8px 40px rgba(0,0,0,0.14)',
-            borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0,
-          }}>
-            {/* Watermark */}
-            {watermark.enabled && (
-              <div style={{
-                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transform: `rotate(${watermark.rotation || -45}deg)`,
-                fontSize: watermark.size || 72, opacity: watermark.opacity || 0.12,
-                color: watermark.color || '#9ca3af', fontWeight: 'bold',
-                userSelect: 'none', pointerEvents: 'none', zIndex: 1,
-              }}>
-                {watermark.text || 'CONFIDENTIAL'}
-              </div>
-            )}
-
-            {/* Header */}
-            {header.show && renderHeader()}
-
-            {/* Content area — clipped per page */}
+        return (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {/* Page number label above each page */}
             <div style={{
-              position: 'absolute', top: headerH, left: 0, right: 0,
-              height: contentAreaH, overflow: 'hidden',
-              paddingLeft: ml, paddingRight: mr, boxSizing: 'border-box', zIndex: 2,
+              fontSize: 10, fontWeight: 600, color: '#9ca3af',
+              marginBottom: 6, letterSpacing: '0.08em', textTransform: 'uppercase',
             }}>
-              {fullBodyHtml.trim()
-                ? (
-                  <div style={{
-                    marginTop: i === 0 ? mt : -(i * contentAreaH - mt),
-                    fontSize: '12pt', lineHeight: 1.7, color: '#1f2937', fontFamily: 'Arial, sans-serif',
-                  }} dangerouslySetInnerHTML={{ __html: fullBodyHtml }} />
-                ) : (
-                  <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '11pt', textAlign: 'center', paddingTop: 40 }}>
-                    Fill in the form on the left — your document preview will appear here.
-                  </div>
-                )
-              }
+              Page {i + 1}{pageCount > 1 ? ` / ${pageCount}` : ''}
             </div>
 
-            {/* Footer */}
-            {footer.show && renderFooter(i + 1)}
+            {/* A4 page card */}
+            <div style={{
+              width: pw, height: ph,
+              background: 'white',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.10), 0 12px 40px rgba(0,0,0,0.08)',
+              borderRadius: 2,
+              overflow: 'hidden',
+              position: 'relative',
+              flexShrink: 0,
+            }}>
+              {/* Watermark — z-index 1, below content */}
+              {watermark.enabled && (
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transform: `rotate(${watermark.rotation ?? -45}deg)`,
+                  fontSize: watermark.size || 72,
+                  opacity: Math.min(watermark.opacity || 0.12, 1),
+                  color: watermark.color || '#9ca3af',
+                  fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
+                }}>
+                  {watermark.text || 'CONFIDENTIAL'}
+                </div>
+              )}
+
+              {/* Header — fixed at top of each page */}
+              {header.show && renderDocHeader()}
+
+              {/*
+                Text content area:
+                  top    = headerH + mt   (header height + top margin)
+                  height = usableH        (pure text area, no margins)
+                  overflow = hidden       (clips to this page's window)
+
+                Inside: full HTML shifted up by contentOffset so page i
+                shows the correct slice. No top margin added inside since
+                mt is already encoded in the container's top position.
+              */}
+              <div style={{
+                position: 'absolute',
+                top: headerH + mt,
+                left: ml, right: mr,
+                height: usableH,
+                overflow: 'hidden',
+                zIndex: 2,
+              }}>
+                {fullBodyHtml.trim() ? (
+                  <div
+                    style={{
+                      marginTop: -contentOffset,
+                      fontSize: '12pt', lineHeight: 1.7,
+                      color: '#1f2937', fontFamily: 'Arial, sans-serif',
+                    }}
+                    dangerouslySetInnerHTML={{ __html: fullBodyHtml }}
+                  />
+                ) : (
+                  i === 0 && (
+                    <div style={{
+                      color: '#9ca3af', fontStyle: 'italic', fontSize: '11pt',
+                      textAlign: 'center', paddingTop: 40,
+                    }}>
+                      Fill in the form on the left — your document preview will appear here.
+                    </div>
+                  )
+                )}
+              </div>
+
+              {/* Footer — fixed at bottom of each page */}
+              {footer.show && renderDocFooter(i + 1)}
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -882,7 +959,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
   )
 
   return (
-    <div className="flex flex-col h-full" style={{ background: 'var(--bg-primary)' }}>
+    <div className="flex flex-col" style={{ height: '100%', minHeight: 0, overflow: 'hidden', background: 'var(--bg-primary)' }}>
 
       {/* ── Top Bar ── */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b flex-shrink-0"
@@ -951,13 +1028,16 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
       </div>
 
       {/* ── Main Layout ── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
 
         {/* ── Left Panel ── */}
         <div className="flex-shrink-0 overflow-hidden transition-all duration-200"
           style={{ width: leftCollapsed ? 0 : leftWidth }}>
-          <div className="h-full flex flex-col border-r"
-            style={{ width: leftWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)', overflowY: 'auto' }}>
+          <div className="flex flex-col border-r"
+            style={{
+              width: leftWidth, height: '100%', minHeight: 0,
+              background: 'var(--bg-secondary)', borderColor: 'var(--border)', overflowY: 'auto',
+            }}>
 
             {/* Panel header with collapse button */}
             <div className="flex items-center gap-3 px-5 py-3 border-b flex-shrink-0"
@@ -1455,7 +1535,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
         </div>
 
         {/* ── Right: Live Preview ── */}
-        <div className="flex-1 overflow-auto py-8 px-6 flex flex-col items-center"
+        <div className="flex-1 min-h-0 overflow-auto py-8 px-6 flex flex-col items-center"
           style={{ background: '#e8e8ed' }}>
           <div className="flex items-center gap-2 mb-5 self-start flex-shrink-0">
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />

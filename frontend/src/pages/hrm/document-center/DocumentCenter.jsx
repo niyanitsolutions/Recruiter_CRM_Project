@@ -45,8 +45,27 @@ export default function DocumentCenter() {
     return next
   })
 
+  // Builder routes need full-height, overflow-hidden layout
+  const isBuilder = ['quick', 'advanced', 'import'].includes(activeKey)
+
   return (
-    <div className="flex h-full min-h-[calc(100vh-68px)]" style={{ background: 'var(--bg-primary)' }}>
+    <div
+      className="flex"
+      style={{
+        background: 'var(--bg-primary)',
+        ...(isBuilder
+          ? {
+              // Break out of Layout's p-6 (24px) padding to own the full viewport below TopBar (h-16=64px)
+              height:      'calc(100vh - 64px)',
+              marginTop:   '-24px',
+              marginLeft:  '-24px',
+              marginRight: '-24px',
+              width:       'calc(100% + 48px)',
+              overflow:    'hidden',
+            }
+          : { minHeight: 'calc(100vh - 68px)' }),
+      }}
+    >
 
       {/* ── Left sidebar ── */}
       <aside
@@ -111,19 +130,26 @@ export default function DocumentCenter() {
           })}
         </nav>
 
-        {/* Collapse toggle button */}
+        {/* Collapse toggle — matches main HireFlow sidebar style */}
         <button
           onClick={toggle}
-          className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border flex items-center justify-center z-10 hover:bg-violet-600 hover:text-white hover:border-violet-600 transition-colors"
-          style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+          className="absolute -right-3 top-20 w-6 h-6 rounded-full flex items-center justify-center z-10 shadow-lg transition-all duration-200"
+          style={{
+            background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+            border: '1px solid rgba(124,58,237,0.4)',
+            boxShadow: '0 0 10px rgba(124,58,237,0.4)',
+          }}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+          {collapsed
+            ? <ChevronRight className="w-3 h-3 text-white" />
+            : <ChevronLeft className="w-3 h-3 text-white" />
+          }
         </button>
       </aside>
 
       {/* ── Right content ── */}
-      <main className="flex-1 overflow-auto">
+      <main className={`flex-1 ${isBuilder ? 'overflow-hidden flex flex-col' : 'overflow-auto'}`}>
         <Suspense fallback={<Spinner />}>
           <Routes>
             <Route index element={<Navigate to="templates" replace />} />

@@ -1167,7 +1167,7 @@ ${footer.show ? `<div class="doc-footer">
   const autoSaveLabel = { saved: 'Saved', saving: 'Saving…', unsaved: 'Unsaved', error: 'Error' }
 
   return (
-    <div className="flex flex-col h-full" style={{ background: 'var(--bg-primary)' }}>
+    <div className="flex flex-col" style={{ height: '100%', minHeight: 0, overflow: 'hidden', background: 'var(--bg-primary)' }}>
 
       {/* ── Top bar ── */}
       <div className="flex items-center gap-3 px-4 py-2.5 border-b flex-shrink-0"
@@ -1257,11 +1257,11 @@ ${footer.show ? `<div class="doc-footer">
         </div>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
 
         {/* ── Left panel ── */}
         <aside className="flex-shrink-0 border-r flex flex-col overflow-hidden transition-all duration-200"
-          style={{ width: leftCollapsed ? 0 : leftWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+          style={{ width: leftCollapsed ? 0 : leftWidth, minHeight: 0, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
 
           {/* Panel header with collapse button at top-right */}
           <div className="flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0"
@@ -1500,7 +1500,7 @@ ${footer.show ? `<div class="doc-footer">
           <Ruler width={900} />
 
           {/* Canvas */}
-          <div className="flex-1 overflow-auto py-8 px-4" style={{ background: '#d1d5db' }}
+          <div className="flex-1 min-h-0 overflow-auto py-8 px-4" style={{ background: '#d1d5db' }}
             onClick={() => setSelectedId(null)}>
             <div className="flex flex-col items-center gap-0">
               {(() => {
@@ -1665,7 +1665,7 @@ ${footer.show ? `<div class="doc-footer">
 
         {/* ── Right panel: Properties ── */}
         {!preview && (
-          <aside className="flex-shrink-0 border-l flex flex-col overflow-hidden transition-all duration-200"
+          <aside className="flex-shrink-0 border-l flex flex-col overflow-hidden transition-all duration-200" style={{ minHeight: 0 }}
             style={{ width: rightCollapsed ? 0 : rightWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
             {/* Panel header with collapse button at top-right */}
             <div className="flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0"
