@@ -58,6 +58,24 @@ const TEMPLATE_TYPES = [
 const FONT_FAMILIES = ['Arial','Times New Roman','Georgia','Courier New','Verdana','Trebuchet MS','Helvetica']
 const WATERMARK_PRESETS = ['DRAFT','CONFIDENTIAL','INTERNAL','APPROVED','FOR YOUR EYES ONLY']
 
+const HEADER_LAYOUTS = [
+  { value: 'company_left_logo_right', label: 'Company Left / Logo Right' },
+  { value: 'logo_left_company_right', label: 'Logo Left / Company Right' },
+  { value: 'logo_top_company_bottom', label: 'Logo Top / Company Bottom (Centered)' },
+  { value: 'company_top_logo_bottom', label: 'Company Top / Logo Bottom (Centered)' },
+  { value: 'logo_only',               label: 'Logo Only' },
+  { value: 'company_only',            label: 'Company Only' },
+]
+
+const DOCUMENT_PRESETS = [
+  { id: 'offer_letter',   name: 'Offer Letter',       headerLayout: 'company_left_logo_right', headerSpacing: 20, titleAlign: 'center', titleMt: 20, titleMb: 16, marginTop: 72, marginBottom: 72 },
+  { id: 'appointment',   name: 'Appointment Letter', headerLayout: 'company_left_logo_right', headerSpacing: 20, titleAlign: 'left',   titleMt: 20, titleMb: 14, marginTop: 72, marginBottom: 72 },
+  { id: 'experience',    name: 'Experience Letter',  headerLayout: 'company_left_logo_right', headerSpacing: 24, titleAlign: 'center', titleMt: 24, titleMb: 16, marginTop: 72, marginBottom: 72 },
+  { id: 'relieving',     name: 'Relieving Letter',   headerLayout: 'company_left_logo_right', headerSpacing: 24, titleAlign: 'center', titleMt: 24, titleMb: 16, marginTop: 72, marginBottom: 72 },
+  { id: 'certificate',   name: 'Certificate',        headerLayout: 'logo_top_company_bottom', headerSpacing: 30, titleAlign: 'center', titleMt: 30, titleMb: 20, marginTop: 72, marginBottom: 72 },
+  { id: 'general_letter',name: 'General Letter',     headerLayout: 'company_left_logo_right', headerSpacing: 16, titleAlign: 'left',   titleMt: 16, titleMb: 12, marginTop: 72, marginBottom: 72 },
+]
+
 // ─── Shared atoms ────────────────────────────────────────────────────────────
 const Lbl = ({ children }) => (
   <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>{children}</p>
@@ -384,8 +402,10 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   const base = PAPER_PX[paper.size] || PAPER_PX.A4
   const [pw, ph] = paper.orientation === 'landscape' ? [base[1], base[0]] : base
 
+  // Header visible when show=true OR when branding (logo/company) is set (Issue 6: Header OFF mode)
+  const headerVisible = header.show || !!(header.logo_url || header.company_name)
   // Header / footer reserved space (px)
-  const headerH = header.show ? Math.max(header.header_height || 100, 40) : 0
+  const headerH = headerVisible ? Math.max(header.header_height || 100, 40) : 0
   const footerH = footer.show ? Math.max(footer.footer_height || 40,  20) : 0
 
   // Document margins (convert points to px: 1pt = 96/72 px)
@@ -397,8 +417,11 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   // Content width for the measurement div (same as actual text column width)
   const contentW = Math.max(pw - ml - mr, 200)
 
-  // Usable text height per page = page - header - footer - top margin - bottom margin
-  const usableH = Math.max(ph - headerH - footerH - mt - mb, 100)
+  // Spacing from header bottom to content (Issue 9); falls back to paper top margin when no header
+  const headerSpacing = headerVisible ? (header.header_spacing ?? 20) : mt
+
+  // Usable text height per page = page - header - footer - header spacing - bottom margin
+  const usableH = Math.max(ph - headerH - footerH - headerSpacing - mb, 100)
 
   // Build full body HTML (title + body + signature)
   const titleHtml    = buildTitleHtml(docTitle)
@@ -424,57 +447,106 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   const pageCount = Math.max(1, Math.ceil(measuredH / usableH))
 
   // ── Reusable header renderer ──────────────────────────────────────────────
-  const renderDocHeader = () => (
-    <div style={{
+  const renderDocHeader = () => {
+    const layout    = header.header_layout || 'company_left_logo_right'
+    const padL      = Math.max(32, header.padding_left  ?? 32)
+    const padR      = Math.max(32, header.padding_right ?? 32)
+    const padT      = header.padding_top    ?? 20
+    const padB      = header.padding_bottom ?? 8
+    const fs        = header.font_size || 11
+    const textColor = header.font_color || '#000'
+    const showBand  = header.show
+    const isCentered = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
+    const companyAlign = isCentered ? 'center' : (header.company_alignment || 'left')
+
+    const containerStyle = {
       position: 'absolute', top: 0, left: 0, right: 0,
       height: headerH, zIndex: 2, overflow: 'hidden',
-      padding: `${header.padding_top ?? 20}px ${header.padding_right ?? 30}px ${header.padding_bottom ?? 8}px ${header.padding_left ?? 30}px`,
-      borderBottom: header.border_bottom
+      paddingTop: padT, paddingRight: padR, paddingBottom: padB, paddingLeft: padL,
+      borderBottom: showBand && header.border_bottom
         ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}`
         : 'none',
-      backgroundColor: header.background_color || '#fff',
+      backgroundColor: showBand ? (header.background_color || '#fff') : 'transparent',
       fontFamily: header.font_family || 'Arial',
-      fontSize: header.font_size || 11,
-      color: header.font_color || '#000',
+      fontSize: fs,
+      color: textColor,
       boxSizing: 'border-box',
-    }}>
-      {header.logo_url && (
-        <img src={header.logo_url} alt="Logo" style={{
-          height: header.logo_height || 40,
-          width: header.logo_width ? header.logo_width : 'auto',
-          display: 'block', objectFit: 'contain',
-          margin: (header.logo_alignment || 'left') === 'center' ? '0 auto 4px'
-                : (header.logo_alignment || 'left') === 'right'  ? '0 0 4px auto' : '0 0 4px 0',
-        }} />
-      )}
-      {header.company_name && (
-        <div style={{
-          fontWeight: 'bold',
-          fontFamily: header.company_name_font || header.font_family || 'Arial',
-          fontSize: header.company_name_size || ((header.font_size || 11) + 2),
-          color: header.company_name_color || header.font_color || '#000',
-          textAlign: header.company_name_alignment || header.company_alignment || 'left',
-        }}>
-          {header.company_name}
+    }
+
+    const logoEl = header.logo_url ? (
+      <img src={header.logo_url} alt="Logo" style={{
+        height: header.logo_height || 40,
+        width: header.logo_width ? header.logo_width : 'auto',
+        objectFit: 'contain',
+        display: 'block',
+        flexShrink: 0,
+      }} />
+    ) : null
+
+    const hasCompany = !!(header.company_name || header.company_address || header.company_email || header.company_phone || header.company_website)
+    const companyBlockEl = hasCompany ? (
+      <div style={{ lineHeight: 1.4 }}>
+        {header.company_name && (
+          <div style={{
+            fontWeight: 'bold',
+            fontFamily: header.company_name_font || header.font_family || 'Arial',
+            fontSize: header.company_name_size || (fs + 2),
+            color: header.company_name_color || textColor,
+            textAlign: companyAlign,
+          }}>{header.company_name}</div>
+        )}
+        {header.company_address && (
+          <div style={{ fontSize: fs - 1, textAlign: companyAlign, color: textColor }}>{header.company_address}</div>
+        )}
+        {(header.company_email || header.company_phone) && (
+          <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: companyAlign }}>
+            {[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}
+          </div>
+        )}
+        {header.company_website && (
+          <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: companyAlign }}>{header.company_website}</div>
+        )}
+      </div>
+    ) : null
+
+    if (layout === 'logo_only') {
+      return <div style={{ ...containerStyle, display: 'flex', alignItems: 'center' }}>{logoEl}</div>
+    }
+    if (layout === 'company_only') {
+      return <div style={{ ...containerStyle, display: 'flex', alignItems: 'center' }}>{companyBlockEl}</div>
+    }
+    if (layout === 'logo_top_company_bottom') {
+      return (
+        <div style={{ ...containerStyle, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {logoEl}
+          {companyBlockEl}
         </div>
-      )}
-      {header.company_address && (
-        <div style={{ fontSize: (header.font_size || 11) - 1, textAlign: header.company_alignment || 'left' }}>
-          {header.company_address}
+      )
+    }
+    if (layout === 'company_top_logo_bottom') {
+      return (
+        <div style={{ ...containerStyle, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {companyBlockEl}
+          {logoEl}
         </div>
-      )}
-      {(header.company_email || header.company_phone) && (
-        <div style={{ fontSize: (header.font_size || 11) - 1, color: '#6b7280', textAlign: header.company_alignment || 'left' }}>
-          {[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}
+      )
+    }
+    if (layout === 'logo_left_company_right') {
+      return (
+        <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          {logoEl}
+          {companyBlockEl}
         </div>
-      )}
-      {header.company_website && (
-        <div style={{ fontSize: (header.font_size || 11) - 1, color: '#6b7280', textAlign: header.company_alignment || 'left' }}>
-          {header.company_website}
-        </div>
-      )}
-    </div>
-  )
+      )
+    }
+    // default: company_left_logo_right
+    return (
+      <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+        {companyBlockEl}
+        {logoEl}
+      </div>
+    )
+  }
 
   // ── Reusable footer renderer ──────────────────────────────────────────────
   const renderDocFooter = (pageNum) => (
@@ -565,8 +637,8 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
                 </div>
               )}
 
-              {/* Header — fixed at top of each page */}
-              {header.show && renderDocHeader()}
+              {/* Header — fixed at top of each page (also renders when header OFF but branding set) */}
+              {headerVisible && renderDocHeader()}
 
               {/*
                 Text content area:
@@ -580,7 +652,7 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
               */}
               <div style={{
                 position: 'absolute',
-                top: headerH + mt,
+                top: headerH + headerSpacing,
                 left: ml, right: mr,
                 height: usableH,
                 overflow: 'hidden',
@@ -693,13 +765,16 @@ export default function QuickBuilder() {
     margin_top: 12, margin_bottom: 14,
   })
 
-  // Header (20px defaults for padding per spec)
+  // Header (32px min horizontal padding; header_layout and header_spacing per spec)
   const [header, setHeader] = useState({
-    show: true, logo_url: '', logo_height: 40, logo_width: 0, logo_alignment: 'left',
+    show: true,
+    header_layout: 'company_left_logo_right',
+    header_spacing: 20,
+    logo_url: '', logo_height: 40, logo_width: 0, logo_alignment: 'left',
     company_alignment: 'left',
     company_name_font: '', company_name_size: 0, company_name_color: '', company_name_alignment: '',
     header_height: 120,
-    padding_top: 20, padding_right: 30, padding_bottom: 20, padding_left: 30,
+    padding_top: 20, padding_right: 32, padding_bottom: 20, padding_left: 32,
     company_name: '', company_address: '', company_email: '',
     company_phone: '', company_website: '', gst_number: '', reg_number: '',
     font_family: 'Arial', font_size: 11, font_color: '#000000', background_color: '#ffffff',
@@ -855,6 +930,15 @@ export default function QuickBuilder() {
     }
   }
 
+  // Apply document preset (Issue 12)
+  const applyPreset = (preset) => {
+    setHeader(h => ({ ...h, header_layout: preset.headerLayout, header_spacing: preset.headerSpacing }))
+    setDocTitle(d => ({ ...d, alignment: preset.titleAlign, margin_top: preset.titleMt, margin_bottom: preset.titleMb }))
+    setPaper(p => ({ ...p, margin_top: preset.marginTop, margin_bottom: preset.marginBottom }))
+    scheduleAutoSave()
+    toast.success(`Applied "${preset.name}" preset`)
+  }
+
   // Logo upload
   const handleLogoUpload = (e) => {
     const file = e.target.files[0]
@@ -888,24 +972,66 @@ export default function QuickBuilder() {
     const titleBlock = buildTitleHtml(dt)
     const sigBlock   = buildSigHtml(sig)
 
+    // ── Build header HTML string respecting header_layout ──────────────────
+    const buildHeaderHtmlBlock = (h) => {
+      if (!h.show && !h.logo_url && !h.company_name) return ''
+      const layout   = h.header_layout || 'company_left_logo_right'
+      const padL     = Math.max(32, h.padding_left  ?? 32)
+      const padR     = Math.max(32, h.padding_right ?? 32)
+      const padT     = h.padding_top    ?? 20
+      const padB     = h.padding_bottom ?? 8
+      const fs       = h.font_size || 11
+      const tc       = h.font_color || '#000'
+      const showBand = h.show
+      const isCen    = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
+      const ca       = isCen ? 'center' : (h.company_alignment || 'left')
+      const border   = showBand && h.border_bottom ? `border-bottom:${h.border_width ?? 1}px solid ${h.border_color || '#d1d5db'};` : ''
+      const bg       = showBand ? `background:${h.background_color || '#fff'};` : ''
+      const base     = `padding:${padT}px ${padR}px ${padB}px ${padL}px;min-height:${h.header_height || 120}px;${bg}color:${tc};font-family:${h.font_family || 'Arial'},sans-serif;font-size:${fs}px;${border}box-sizing:border-box;`
+
+      const logoHtml = h.logo_url
+        ? `<img src="${h.logo_url}" style="height:${h.logo_height || 40}px;${h.logo_width ? `width:${h.logo_width}px;` : ''}object-fit:contain;display:block;flex-shrink:0;" />`
+        : ''
+      const compHtml = `<div style="line-height:1.4;">
+        ${h.company_name ? `<div style="font-weight:bold;font-family:${h.company_name_font || h.font_family || 'Arial'},sans-serif;font-size:${h.company_name_size || (fs + 2)}px;color:${h.company_name_color || tc};text-align:${ca};">${h.company_name}</div>` : ''}
+        ${h.company_address ? `<div style="font-size:${fs - 1}px;text-align:${ca};color:${tc};">${h.company_address}</div>` : ''}
+        ${(h.company_email || h.company_phone) ? `<div style="font-size:${fs - 1}px;color:#6b7280;text-align:${ca};">${[h.company_email, h.company_phone].filter(Boolean).join(' | ')}</div>` : ''}
+        ${h.company_website ? `<div style="font-size:${fs - 1}px;color:#6b7280;text-align:${ca};">${h.company_website}</div>` : ''}
+      </div>`
+
+      if (layout === 'logo_only')
+        return `<div style="${base}display:flex;align-items:center;">${logoHtml}</div>`
+      if (layout === 'company_only')
+        return `<div style="${base}display:flex;align-items:center;">${compHtml}</div>`
+      if (layout === 'logo_top_company_bottom')
+        return `<div style="${base}display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;">${logoHtml}${compHtml}</div>`
+      if (layout === 'company_top_logo_bottom')
+        return `<div style="${base}display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;">${compHtml}${logoHtml}</div>`
+      if (layout === 'logo_left_company_right')
+        return `<div style="${base}display:flex;align-items:center;justify-content:space-between;gap:16px;">${logoHtml}${compHtml}</div>`
+      // default: company_left_logo_right
+      return `<div style="${base}display:flex;align-items:center;justify-content:space-between;gap:16px;">${compHtml}${logoHtml}</div>`
+    }
+
+    const headerSpacingPx = (h.show || h.logo_url || h.company_name) ? (h.header_spacing ?? 20) : 0
+    const contentTopPad   = headerSpacingPx ? `${headerSpacingPx}px` : mt
+
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${s.name}</title>
 <style>
   *{box-sizing:border-box}
   body{margin:0;font-family:Arial,sans-serif;font-size:12pt;line-height:1.7;color:#1f2937}
   @page{size:${s.paper.size} ${s.paper.orientation};margin:${mt} ${mr} ${mb} ${ml}}
-  table{border-collapse:collapse;width:100%}
+  table{border-collapse:collapse;width:100%;page-break-inside:avoid;break-inside:avoid;}
   td,th{border:1px solid #e5e7eb;padding:6px 10px}
   th{background:#7c3aed;color:white}
   blockquote{border-left:4px solid #7c3aed;padding-left:12px;color:#6b7280;margin:8px 0}
+  p{page-break-inside:avoid;break-inside:avoid;}
+  ul,ol{page-break-inside:avoid;break-inside:avoid;}
+  li{break-inside:avoid;}
+  .sig-block{page-break-inside:avoid;break-inside:avoid;}
 </style></head><body>
-${h.show ? `<div style="padding:${h.padding_top}px ${h.padding_right}px ${h.padding_bottom}px ${h.padding_left}px;min-height:${h.header_height}px;background:${h.background_color};color:${h.font_color};border-bottom:${h.border_bottom ? `${h.border_width}px solid ${h.border_color}` : 'none'};font-family:${h.font_family},sans-serif;font-size:${h.font_size}px;">
-  ${h.logo_url ? `<img src="${h.logo_url}" style="height:${h.logo_height}px;${h.logo_width ? `width:${h.logo_width}px;` : ''}display:block;margin:${h.logo_alignment === 'center' ? '0 auto 4px' : h.logo_alignment === 'right' ? '0 0 4px auto' : '0 0 4px 0'};" />` : ''}
-  ${h.company_name ? `<div style="font-weight:bold;font-family:${h.company_name_font || h.font_family},sans-serif;font-size:${h.company_name_size || h.font_size + 2}px;color:${h.company_name_color || h.font_color};text-align:${h.company_name_alignment || h.company_alignment};">${h.company_name}</div>` : ''}
-  ${h.company_address ? `<div style="font-size:${h.font_size - 1}px;text-align:${h.company_alignment};">${h.company_address}</div>` : ''}
-  ${(h.company_email || h.company_phone) ? `<div style="font-size:${h.font_size - 1}px;color:#6b7280;text-align:${h.company_alignment};">${[h.company_email, h.company_phone].filter(Boolean).join(' | ')}</div>` : ''}
-  ${h.company_website ? `<div style="font-size:${h.font_size - 1}px;color:#6b7280;text-align:${h.company_alignment};">${h.company_website}</div>` : ''}
-</div>` : ''}
-<div style="padding:${mt} ${mr} ${mb} ${ml};">${titleBlock}${html}${sigBlock}</div>
+${buildHeaderHtmlBlock(h)}
+<div style="padding:${contentTopPad} ${mr} ${mb} ${ml};">${titleBlock}${html}${sigBlock}</div>
 ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padding_bottom}px ${f.padding_left}px;border-top:${f.border_top ? `${f.border_width}px solid ${f.border_color}` : 'none'};font-size:${f.font_size}px;color:${f.font_color};display:flex;justify-content:space-between;align-items:center;min-height:${f.footer_height}px;">
   <span>${f.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
   <span>${f.text || ''}${f.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
@@ -1093,6 +1219,20 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
               badge={header.show ? 'ON' : 'OFF'}>
               <Tog label="Show Header" checked={header.show} onChange={v => setHeader(h => ({ ...h, show: v }))} />
               {header.show && <>
+                {/* Layout */}
+                <div><Lbl>Header Layout</Lbl>
+                  <Sel value={header.header_layout || 'company_left_logo_right'} onChange={e => setHeader(h => ({ ...h, header_layout: e.target.value }))}>
+                    {HEADER_LAYOUTS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                  </Sel>
+                </div>
+
+                {/* Header → Content spacing (Issue 9) */}
+                <div><Lbl>Header → Content Spacing (px)</Lbl>
+                  <Sel value={header.header_spacing ?? 20} onChange={e => setHeader(h => ({ ...h, header_spacing: +e.target.value }))}>
+                    {[0, 10, 20, 30, 40, 50].map(v => <option key={v} value={v}>{v}px</option>)}
+                  </Sel>
+                </div>
+
                 {/* Logo */}
                 <div><Lbl>Company Logo</Lbl>
                   {header.logo_url ? (
@@ -1277,16 +1417,25 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
                   </Sel>
                 </div>
               </div>
+              {/* Issue 10: Title position controls */}
               <div className="grid grid-cols-2 gap-2">
-                <div><Lbl>Margin Top (px)</Lbl>
-                  <Inp type="number" value={docTitle.margin_top ?? 12} min={0} max={60}
-                    onChange={e => setDocTitle(d => ({ ...d, margin_top: +e.target.value }))} />
+                <div><Lbl>Title Margin Top (px)</Lbl>
+                  <Sel value={docTitle.margin_top ?? 12} onChange={e => setDocTitle(d => ({ ...d, margin_top: +e.target.value }))}>
+                    {[0, 10, 20, 30, 40].map(v => <option key={v} value={v}>{v}px</option>)}
+                    <option value={12}>12px</option>
+                  </Sel>
                 </div>
-                <div><Lbl>Margin Bottom (px)</Lbl>
-                  <Inp type="number" value={docTitle.margin_bottom ?? 14} min={0} max={60}
-                    onChange={e => setDocTitle(d => ({ ...d, margin_bottom: +e.target.value }))} />
+                <div><Lbl>Title Margin Bottom (px)</Lbl>
+                  <Sel value={docTitle.margin_bottom ?? 14} onChange={e => setDocTitle(d => ({ ...d, margin_bottom: +e.target.value }))}>
+                    {[0, 10, 20, 30, 40].map(v => <option key={v} value={v}>{v}px</option>)}
+                    <option value={14}>14px</option>
+                  </Sel>
                 </div>
               </div>
+              {/* Issue 11: Body content start — uses title margin_bottom above */}
+              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                Title Margin Bottom controls the gap between title and body content.
+              </p>
               <div className="flex gap-4">
                 <Tog label="Bold"      checked={docTitle.bold}      onChange={v => setDocTitle(d => ({ ...d, bold: v }))} />
                 <Tog label="Italic"    checked={docTitle.italic}    onChange={v => setDocTitle(d => ({ ...d, italic: v }))} />
@@ -1506,6 +1655,23 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
                     <Inp type="number" value={paper[`margin_${s}`]} min={0} max={200}
                       onChange={e => setPaper(p => ({ ...p, [`margin_${s}`]: +e.target.value }))} />
                   </div>
+                ))}
+              </div>
+            </Section>
+
+            {/* ── Section 9: Document Presets ── */}
+            <Section id="presets" title="Document Presets" icon={Wand2}
+              open={openSection === 'presets'} onToggle={toggleSection}>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                One-click layouts that set header, spacing, and title alignment for common HR documents.
+              </p>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                {DOCUMENT_PRESETS.map(preset => (
+                  <button key={preset.id} type="button" onClick={() => applyPreset(preset)}
+                    className="py-2 px-3 rounded-lg text-xs font-semibold border transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:border-violet-400 text-left"
+                    style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+                    {preset.name}
+                  </button>
                 ))}
               </div>
             </Section>

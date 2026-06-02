@@ -758,16 +758,36 @@ function FullPreview({ blocks, header, footer, paper, watermark, onClose }) {
                 {watermark.text}
               </div>
             )}
-            {header.show && (
-              <div style={{ paddingLeft: ml, paddingRight: mr, paddingTop: '12px', paddingBottom: '8px',
-                borderBottom: header.border_bottom ? '1px solid #d1d5db' : 'none',
-                textAlign: header.alignment, backgroundColor: header.background_color || '#fff',
-                color: header.font_color || '#000', fontSize: header.font_size }}>
-                {header.logo_url && <img src={header.logo_url} style={{ height: 40, display: 'block', margin: header.alignment === 'center' ? '0 auto 4px' : '0 0 4px' }} alt="Logo" />}
-                {header.company_name && <div style={{ fontWeight: 'bold' }}>{header.company_name}</div>}
-                {header.company_address && <div style={{ fontSize: (header.font_size || 12) - 1 }}>{header.company_address}</div>}
-              </div>
-            )}
+            {(() => {
+              const hv = header.show || !!(header.logo_url || header.company_name)
+              if (!hv) return null
+              const lay  = header.header_layout || 'company_left_logo_right'
+              const fs   = header.font_size || 12
+              const tc   = header.font_color || '#000'
+              const padL = Math.max(32, header.padding_left ?? 32)
+              const padR = Math.max(32, header.padding_right ?? 32)
+              const isCen = lay === 'logo_top_company_bottom' || lay === 'company_top_logo_bottom'
+              const ca   = isCen ? 'center' : (header.company_alignment || 'left')
+              const st   = {
+                paddingLeft: padL, paddingRight: padR, paddingTop: header.padding_top ?? 12, paddingBottom: header.padding_bottom ?? 8,
+                borderBottom: header.show && header.border_bottom ? `1px solid ${header.border_color||'#d1d5db'}` : 'none',
+                backgroundColor: header.show ? (header.background_color || '#fff') : 'transparent',
+                color: tc, fontSize: fs, fontFamily: header.font_family || 'Arial', minHeight: `${header.header_height||120}px`, boxSizing: 'border-box',
+              }
+              const logoEl = header.logo_url ? <img src={header.logo_url} style={{ height: header.logo_height||40, display: 'block', objectFit: 'contain', flexShrink: 0 }} alt="Logo" /> : null
+              const compEl = (header.company_name || header.company_address) ? (
+                <div style={{ lineHeight: 1.4 }}>
+                  {header.company_name && <div style={{ fontWeight: 'bold', fontSize: fs+2, textAlign: ca }}>{header.company_name}</div>}
+                  {header.company_address && <div style={{ fontSize: fs-1, textAlign: ca }}>{header.company_address}</div>}
+                </div>
+              ) : null
+              if (lay === 'logo_only')        return <div style={{ ...st, display: 'flex', alignItems: 'center' }}>{logoEl}</div>
+              if (lay === 'company_only')     return <div style={{ ...st, display: 'flex', alignItems: 'center' }}>{compEl}</div>
+              if (lay === 'logo_top_company_bottom') return <div style={{ ...st, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{logoEl}{compEl}</div>
+              if (lay === 'company_top_logo_bottom') return <div style={{ ...st, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{compEl}{logoEl}</div>
+              if (lay === 'logo_left_company_right') return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{logoEl}{compEl}</div>
+              return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{compEl}{logoEl}</div>
+            })()}
             <div style={{ paddingTop: mt, paddingBottom: mb, paddingLeft: ml, paddingRight: mr, fontSize: 13, lineHeight: 1.6, color: '#1f2937', position: 'relative', zIndex: 2 }}
               dangerouslySetInnerHTML={{ __html: html }} />
             {footer.show && (
@@ -854,10 +874,13 @@ export default function AdvancedDesigner() {
   }, [])
 
   const [header, setHeader] = useState({
-    show: true, logo_url: '', logo_height: 40,
+    show: true,
+    header_layout: 'company_left_logo_right',
+    header_spacing: 20,
+    logo_url: '', logo_height: 40,
     logo_alignment: 'left', company_alignment: 'left',
     header_height: 120,
-    padding_top: 12, padding_right: 16, padding_bottom: 8, padding_left: 16,
+    padding_top: 12, padding_right: 32, padding_bottom: 8, padding_left: 32,
     margin_top: 0, margin_right: 0, margin_bottom: 0, margin_left: 0,
     company_name: '', company_address: '', company_email: '',
     company_phone: '', company_website: '', gst_number: '', reg_number: '',
@@ -1065,26 +1088,53 @@ export default function AdvancedDesigner() {
     const html = getBodyHtml()
     const hPt = `${header.padding_top??12}px ${header.padding_right??16}px ${header.padding_bottom??8}px ${header.padding_left??16}px`
     const fPt = `${footer.padding_top??8}px ${footer.padding_right??16}px ${footer.padding_bottom??12}px ${footer.padding_left??16}px`
+    // Build header block with layout support
+    const buildADHeaderHtml = (h) => {
+      if (!h.show && !h.logo_url && !h.company_name) return ''
+      const lay  = h.header_layout || 'company_left_logo_right'
+      const padL = Math.max(32, h.padding_left  ?? 32)
+      const padR = Math.max(32, h.padding_right ?? 32)
+      const padT = h.padding_top    ?? 12
+      const padB = h.padding_bottom ?? 8
+      const fs   = h.font_size || 12
+      const tc   = h.font_color || '#000'
+      const isCen = lay === 'logo_top_company_bottom' || lay === 'company_top_logo_bottom'
+      const ca   = isCen ? 'center' : (h.company_alignment || 'left')
+      const border = h.show && h.border_bottom ? `border-bottom:${h.border_width??1}px solid ${h.border_color||'#d1d5db'};` : ''
+      const bgStr  = h.show ? `background:${h.background_color||'#fff'};` : ''
+      const base  = `padding:${padT}px ${padR}px ${padB}px ${padL}px;min-height:${h.header_height||120}px;${bgStr}color:${tc};font-family:${h.font_family||'Arial'},sans-serif;font-size:${fs}px;${border}box-sizing:border-box;`
+      const logoHtml = h.logo_url ? `<img src="${h.logo_url}" style="height:${h.logo_height||40}px;object-fit:contain;display:block;flex-shrink:0;" />` : ''
+      const compHtml = `<div style="line-height:1.4;">
+        ${h.company_name ? `<div style="font-weight:bold;font-size:${fs+2}px;text-align:${ca};">${h.company_name}</div>` : ''}
+        ${h.company_address ? `<div style="font-size:${fs-1}px;text-align:${ca};">${h.company_address}</div>` : ''}
+      </div>`
+      if (lay === 'logo_only')        return `<div style="${base}display:flex;align-items:center;">${logoHtml}</div>`
+      if (lay === 'company_only')     return `<div style="${base}display:flex;align-items:center;">${compHtml}</div>`
+      if (lay === 'logo_top_company_bottom') return `<div style="${base}display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;">${logoHtml}${compHtml}</div>`
+      if (lay === 'company_top_logo_bottom') return `<div style="${base}display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;">${compHtml}${logoHtml}</div>`
+      if (lay === 'logo_left_company_right') return `<div style="${base}display:flex;align-items:center;justify-content:space-between;gap:16px;">${logoHtml}${compHtml}</div>`
+      return `<div style="${base}display:flex;align-items:center;justify-content:space-between;gap:16px;">${compHtml}${logoHtml}</div>`
+    }
+
+    const hSpacingPx = (header.show || header.logo_url || header.company_name) ? (header.header_spacing ?? 20) : 20
+
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
   body { margin: 0; font-family: Arial; font-size: 12pt; line-height: 1.6; color: #1f2937; }
   @media print { .no-print { display:none!important; } }
-  table { border-collapse: collapse; width: 100%; } td,th { border: 1px solid #e5e7eb; padding: 6px 10px; }
+  table { border-collapse: collapse; width: 100%; page-break-inside: avoid; break-inside: avoid; }
+  td,th { border: 1px solid #e5e7eb; padding: 6px 10px; }
   th { background: #7c3aed; color: white; }
-  .doc-header { background: ${header.background_color}; color: ${header.font_color}; padding: ${hPt};
-    border-bottom: ${header.border_bottom ? `${header.border_width??1}px solid ${header.border_color||'#d1d5db'}` : 'none'};
-    min-height: ${header.header_height||120}px; box-sizing: border-box; text-align: ${header.company_alignment||'left'}; }
+  p { page-break-inside: avoid; break-inside: avoid; }
+  ul,ol { page-break-inside: avoid; break-inside: avoid; }
+  li { break-inside: avoid; }
   .doc-footer { color: ${footer.font_color}; font-size: ${footer.font_size}px; padding: ${fPt};
     border-top: ${footer.border_top ? `${footer.border_width??1}px solid ${footer.border_color||'#d1d5db'}` : 'none'};
     min-height: ${footer.footer_height||60}px; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; }
   .page-break { page-break-after: always; }
 </style></head><body>
-${header.show ? `<div class="doc-header">
-  ${header.logo_url ? `<img src="${header.logo_url}" style="height:${header.logo_height||40}px;display:block;margin:${(header.logo_alignment||'left')==='center'?'0 auto 4px':(header.logo_alignment||'left')==='right'?'0 0 4px auto':'0 0 4px 0'};" />` : ''}
-  ${header.company_name ? `<div style="font-weight:bold;font-size:${header.font_size+2}px;">${header.company_name}</div>` : ''}
-  ${header.company_address ? `<div style="font-size:${header.font_size-1}px;">${header.company_address}</div>` : ''}
-</div>` : ''}
-<div style="padding: 20px;">${html}</div>
+${buildADHeaderHtml(header)}
+<div style="padding: ${hSpacingPx}px 20px 20px;">${html}</div>
 ${footer.show ? `<div class="doc-footer">
   <span>${footer.show_date ? new Date().toLocaleDateString() : ''}</span>
   <span>${footer.text||''}${footer.confidential_label?' | CONFIDENTIAL':''}</span>
@@ -1343,6 +1393,21 @@ ${footer.show ? `<div class="doc-footer">
           <Panel title="Header" open={openSection === 'header'} onToggle={() => toggleSection('header')}>
             <Tog label="Show Header" checked={header.show} onChange={v => setHeader(h => ({ ...h, show: v }))} />
             {header.show && <>
+              <div><Lbl>Header Layout</Lbl>
+                <Sel value={header.header_layout || 'company_left_logo_right'} onChange={e => setHeader(h => ({ ...h, header_layout: e.target.value }))}>
+                  <option value="company_left_logo_right">Company Left / Logo Right</option>
+                  <option value="logo_left_company_right">Logo Left / Company Right</option>
+                  <option value="logo_top_company_bottom">Logo Top / Company Bottom</option>
+                  <option value="company_top_logo_bottom">Company Top / Logo Bottom</option>
+                  <option value="logo_only">Logo Only</option>
+                  <option value="company_only">Company Only</option>
+                </Sel>
+              </div>
+              <div><Lbl>Header → Content Spacing (px)</Lbl>
+                <Sel value={header.header_spacing ?? 20} onChange={e => setHeader(h => ({ ...h, header_spacing: +e.target.value }))}>
+                  {[0, 10, 20, 30, 40, 50].map(v => <option key={v} value={v}>{v}px</option>)}
+                </Sel>
+              </div>
               <div>
                 <Lbl>Logo</Lbl>
                 {header.logo_url ? (
@@ -1505,27 +1570,54 @@ ${footer.show ? `<div class="doc-footer">
             <div className="flex flex-col items-center gap-0">
               {(() => {
                 // Shared header/footer renderer
-                const PageHeader = ({ pageNum }) => header.show ? (
-                  <div style={{
-                    padding: `${header.padding_top??12}px ${header.padding_right??16}px ${header.padding_bottom??8}px ${header.padding_left??16}px`,
-                    margin: `${header.margin_top??0}px ${header.margin_right??0}px ${header.margin_bottom??0}px ${header.margin_left??0}px`,
-                    minHeight: `${header.header_height||120}px`,
-                    borderBottom: header.border_bottom ? `${header.border_width??1}px solid ${header.border_color||'#d1d5db'}` : 'none',
-                    textAlign: header.company_alignment || 'left',
-                    backgroundColor: header.background_color || '#fff', color: header.font_color || '#000',
-                    fontSize: header.font_size, fontFamily: header.font_family || 'Arial', boxSizing: 'border-box',
-                  }}>
-                    {header.logo_url && <img src={header.logo_url} alt="Logo" style={{ height: header.logo_height||40, display: 'block',
-                      margin: (header.logo_alignment||'left')==='center'?'0 auto 4px':(header.logo_alignment||'left')==='right'?'0 0 4px auto':'0 0 4px 0' }} />}
-                    {header.company_name && <div style={{ fontWeight: 'bold', fontSize: (header.font_size||12)+2 }}>{header.company_name}</div>}
-                    {header.company_address && <div style={{ fontSize: (header.font_size||12)-1 }}>{header.company_address}</div>}
-                    {(header.company_email||header.company_phone) && (
-                      <div style={{ fontSize: (header.font_size||12)-1, color: '#6b7280' }}>
-                        {[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}
-                      </div>
-                    )}
-                  </div>
-                ) : null
+                const PageHeader = ({ pageNum }) => {
+                  const headerVisible = header.show || !!(header.logo_url || header.company_name)
+                  if (!headerVisible) return null
+                  const layout    = header.header_layout || 'company_left_logo_right'
+                  const padL      = Math.max(32, header.padding_left  ?? 32)
+                  const padR      = Math.max(32, header.padding_right ?? 32)
+                  const padT      = header.padding_top    ?? 12
+                  const padB      = header.padding_bottom ?? 8
+                  const fs        = header.font_size || 12
+                  const tc        = header.font_color || '#000'
+                  const showBand  = header.show
+                  const isCen     = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
+                  const ca        = isCen ? 'center' : (header.company_alignment || 'left')
+                  const base      = {
+                    paddingTop: padT, paddingRight: padR, paddingBottom: padB, paddingLeft: padL,
+                    minHeight: `${header.header_height || 120}px`,
+                    borderBottom: showBand && header.border_bottom ? `${header.border_width??1}px solid ${header.border_color||'#d1d5db'}` : 'none',
+                    backgroundColor: showBand ? (header.background_color || '#fff') : 'transparent',
+                    color: tc, fontSize: fs, fontFamily: header.font_family || 'Arial', boxSizing: 'border-box',
+                  }
+                  const logoEl = header.logo_url ? (
+                    <img src={header.logo_url} alt="Logo" style={{ height: header.logo_height||40, display: 'block', objectFit: 'contain', flexShrink: 0 }} />
+                  ) : null
+                  const hasComp = !!(header.company_name || header.company_address || header.company_email || header.company_phone)
+                  const compEl = hasComp ? (
+                    <div style={{ lineHeight: 1.4 }}>
+                      {header.company_name && <div style={{ fontWeight: 'bold', fontSize: (fs+2), textAlign: ca }}>{header.company_name}</div>}
+                      {header.company_address && <div style={{ fontSize: fs-1, textAlign: ca }}>{header.company_address}</div>}
+                      {(header.company_email||header.company_phone) && (
+                        <div style={{ fontSize: fs-1, color: '#6b7280', textAlign: ca }}>
+                          {[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}
+                        </div>
+                      )}
+                    </div>
+                  ) : null
+
+                  if (layout === 'logo_only')
+                    return <div style={{ ...base, display: 'flex', alignItems: 'center' }}>{logoEl}</div>
+                  if (layout === 'company_only')
+                    return <div style={{ ...base, display: 'flex', alignItems: 'center' }}>{compEl}</div>
+                  if (layout === 'logo_top_company_bottom')
+                    return <div style={{ ...base, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{logoEl}{compEl}</div>
+                  if (layout === 'company_top_logo_bottom')
+                    return <div style={{ ...base, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{compEl}{logoEl}</div>
+                  if (layout === 'logo_left_company_right')
+                    return <div style={{ ...base, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{logoEl}{compEl}</div>
+                  return <div style={{ ...base, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{compEl}{logoEl}</div>
+                }
 
                 const PageFooter = ({ pageNum, totalPages }) => footer.show ? (
                   <div style={{
@@ -1555,7 +1647,7 @@ ${footer.show ? `<div class="doc-footer">
                         </div>
                       )}
                       <PageHeader pageNum={pageIndex + 1} />
-                      <div style={{ paddingTop: mt, paddingBottom: mb, paddingLeft: ml, paddingRight: mr, position: 'relative', zIndex: 2 }}
+                      <div style={{ paddingTop: (header.show||header.logo_url||header.company_name) ? `${header.header_spacing??20}px` : mt, paddingBottom: mb, paddingLeft: ml, paddingRight: mr, position: 'relative', zIndex: 2 }}
                         dangerouslySetInnerHTML={{ __html: pageBlocks.map(blockToHtml).join('\n') }} />
                       <PageFooter pageNum={pageIndex + 1} totalPages={pages.length} />
                     </div>
@@ -1597,7 +1689,7 @@ ${footer.show ? `<div class="doc-footer">
                       <PageHeader pageNum={pageIndex + 1} />
 
                       {/* Blocks */}
-                      <div className="relative z-10" style={{ paddingTop: pageIndex === 0 ? mt : '20px', paddingBottom: mb, paddingLeft: ml, paddingRight: mr }}>
+                      <div className="relative z-10" style={{ paddingTop: pageIndex === 0 ? ((header.show||header.logo_url||header.company_name) ? `${header.header_spacing??20}px` : mt) : '20px', paddingBottom: mb, paddingLeft: ml, paddingRight: mr }}>
                         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                           <SortableContext items={pageBlocks.map(b => b.id)} strategy={verticalListSortingStrategy}>
                             <div className="space-y-3 pl-7 pr-7">

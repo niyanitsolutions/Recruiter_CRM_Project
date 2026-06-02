@@ -119,7 +119,10 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('scripts',{}\\)\\)\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('scripts',{}\\)\\)\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\\\\hrm\\\\document-center\" -File -Recurse)",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\\\\hrm\\\\document-center\" -Recurse | Where-Object {$_.PSIsContainer} | Select-Object FullName)",
+      "Bash(npx --no-install react-scripts --version)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",
