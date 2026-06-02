@@ -152,13 +152,17 @@ class CanvasElement(BaseModel):
 
 class TemplateContent(BaseModel):
     """Full document layout — header + body + footer + paper + watermark + canvas."""
-    header:          HeaderContent   = Field(default_factory=HeaderContent)
-    body_html:       str             = ""   # Rich-text HTML for simple builder
-    footer:          FooterContent   = Field(default_factory=FooterContent)
-    paper:           PaperSettings   = Field(default_factory=PaperSettings)
-    watermark:       WatermarkContent = Field(default_factory=WatermarkContent)
-    canvas_elements: List[CanvasElement] = []   # Advanced designer
-    custom_css:      str             = ""
+    model_config = ConfigDict(extra="allow")
+    header:           HeaderContent    = Field(default_factory=HeaderContent)
+    body_html:        str              = ""   # Rich-text HTML body
+    footer:           FooterContent    = Field(default_factory=FooterContent)
+    paper:            PaperSettings    = Field(default_factory=PaperSettings)
+    watermark:        WatermarkContent = Field(default_factory=WatermarkContent)
+    canvas_elements:  List[CanvasElement] = []   # Advanced designer only
+    custom_css:       str              = ""
+    # Quick Builder specific
+    doc_title:        Optional[Dict[str, Any]] = None   # {text, font_family, font_size, color, alignment, bold, italic, underline}
+    signature_config: Optional[Dict[str, Any]] = None   # {enabled, type, authorized_person, designation, department, position, image_url}
 
 
 # ─── Core Documents ───────────────────────────────────────────────────────────
