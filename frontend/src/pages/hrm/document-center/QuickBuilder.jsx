@@ -163,7 +163,7 @@ function TableDialog({ onInsert, onClose }) {
         `<td style="padding:8px 10px;border:1px solid #e5e7eb;background:${ri % 2 === 0 ? 'white' : '#f9fafb'};">Cell ${ri + 1}.${ci + 1}</td>`
       ).join('')}</tr>`
     ).join('')
-    return `<table border="1" style="border-collapse:collapse;width:100%;margin:8px 0;"><tr>${headerCells}</tr>${bodyRows}</table>`
+    return `<table border="1" style="border-collapse:collapse;width:100%;margin:8px 0;"><tr>${headerCells}</tr>${bodyRows}</table><p><br></p>`
   }
 
   const previewR = Math.min(rows, 4)
@@ -835,45 +835,127 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   )
 }
 
-// ─── WYSIWYG Document ─────────────────────────────────────────────────────────
-// Always-editable Word-style view: header (config) + editable body + footer (config)
+// ─── Helper: ensure editable div never ends with a table/list (cursor-trap fix) ──
+function ensureTrailingP(el) {
+  if (!el) return
+  const last = el.lastElementChild
+  if (!last || ['TABLE', 'UL', 'OL'].includes(last.tagName)) {
+    const p = document.createElement('p')
+    p.innerHTML = '<br>'
+    el.appendChild(p)
+  }
+}
+
+// ─── WYSIWYG Document Editor ─────────────────────────────────────────────────
+// Single contentEditable body with page-break indicators at the EXACT same
+// positions PaginatedDocPreview uses — same page count, same break algorithm.
+// No cursor-position issues. Correct header/footer spacing.
 function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle, sigCfg, bodyHtml, onBodyChange }) {
+  // ── Dimensions — identical to PaginatedDocPreview ─────────────────────────
   const base = PAPER_PX[paper.size] || PAPER_PX.A4
-  const [pw]  = paper.orientation === 'landscape' ? [base[1], base[0]] : base
+  const [pw, ph] = paper.orientation === 'landscape' ? [base[1], base[0]] : base
 
   const headerVisible = header.show || !!(header.logo_url || header.company_name)
   const headerH       = headerVisible ? Math.max(header.header_height || 100, 40) : 0
   const footerH       = footer.show   ? Math.max(footer.footer_height || 40,  20) : 0
-  const headerSpacing = headerVisible ? (header.header_spacing ?? 20) : 0
-
   const ml = Math.round((paper.margin_left   || 72) / 72 * 96)
   const mr = Math.round((paper.margin_right  || 72) / 72 * 96)
   const mt = Math.round((paper.margin_top    || 72) / 72 * 96)
   const mb = Math.round((paper.margin_bottom || 72) / 72 * 96)
+  // headerSpacing: gap between header bottom and text — same calc as PaginatedDocPreview
+  const headerSpacing = headerVisible ? (header.header_spacing ?? 20) : mt
+  // usableH: lines of text per page — exactly as PaginatedDocPreview
+  const usableH  = Math.max(ph - headerH - footerH - headerSpacing - mb, 100)
+  const contentW = Math.max(pw - ml - mr, 200)
 
-  const [selectedImg,   setSelectedImg]   = useState(null)
-  const [tableCtx,      setTableCtx]      = useState(null)
-  const [imgToolbarVis, setImgToolbarVis] = useState(false)
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [pageCount,    setPageCount]    = useState(1)
+  const [breakYs,      setBreakYs]      = useState([])   // px offsets of page breaks within content area
+  const [tableCtx,     setTableCtx]     = useState(null)
+  const [selectedImg,  setSelectedImg]  = useState(null)
+  const [imgToolbarVis,setImgToolbarVis]= useState(false)
+  const repagTimer = useRef(null)
 
-  // Initialise editable body from prop once on mount
+  // ── Same block-aware pagination algorithm as PaginatedDocPreview ──────────
+  const repaginate = useCallback((rawHtml) => {
+    const fullHtml = buildTitleHtml(docTitle) + (rawHtml || '') + buildSigHtml(sigCfg)
+    if (!fullHtml.trim()) { setPageCount(1); setBreakYs([]); return }
+
+    const container = document.createElement('div')
+    container.setAttribute('aria-hidden', 'true')
+    Object.assign(container.style, {
+      position: 'absolute', top: '-99999px', left: '-99999px',
+      width: `${contentW}px`, fontSize: '12pt', lineHeight: '1.7',
+      fontFamily: 'Arial, sans-serif', color: '#1f2937',
+      visibility: 'hidden', pointerEvents: 'none',
+    })
+    container.innerHTML = fullHtml
+    document.body.appendChild(container)
+
+    requestAnimationFrame(() => {
+      const children = Array.from(container.children)
+      const blocks = children.length === 0
+        ? [{ height: container.scrollHeight || 40 }]
+        : children.map(el => {
+            const cs = window.getComputedStyle(el)
+            const extra = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
+            return { height: (el.offsetHeight || 20) + extra }
+          })
+      document.body.removeChild(container)
+
+      // Same distribution loop as PaginatedDocPreview
+      const breaks = []  // y-offsets within the content area where page breaks occur
+      let usedH = 0
+      for (const block of blocks) {
+        const bh = Math.max(block.height, 4)
+        if (usedH + bh > usableH && usedH > 0) {
+          breaks.push(usedH)  // break at current accumulated height
+          usedH = 0
+        }
+        usedH += bh
+      }
+      setPageCount(breaks.length + 1)
+      setBreakYs(breaks)
+    })
+  }, [contentW, usableH, docTitle, sigCfg])
+
+  // ── Initialise ────────────────────────────────────────────────────────────
   useLayoutEffect(() => {
-    if (editorRef.current) editorRef.current.innerHTML = bodyHtml || ''
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (editorRef.current) { editorRef.current.innerHTML = bodyHtml || ''; ensureTrailingP(editorRef.current) }
+  }, []) // eslint-disable-line
 
-  // Image click detection
+  useEffect(() => { repaginate(bodyHtml || '') }, []) // eslint-disable-line
+
+  // Re-paginate when layout changes (header, footer, paper etc.)
+  useEffect(() => { repaginate(editorRef.current?.innerHTML || bodyHtml || '') }, // eslint-disable-line
+    [header.header_height, header.header_spacing, header.show, footer.show, footer.footer_height,
+     paper.size, paper.orientation, paper.margin_top, paper.margin_bottom, paper.margin_left, paper.margin_right,
+     docTitle?.text, docTitle?.font_size, sigCfg?.enabled]) // eslint-disable-line
+
+  // ── Input handler ─────────────────────────────────────────────────────────
+  const handleInput = useCallback(() => {
+    const el = editorRef.current
+    if (!el) return
+    ensureTrailingP(el)
+    const html = el.innerHTML || ''
+    onBodyChange(html)
+    if (repagTimer.current) clearTimeout(repagTimer.current)
+    repagTimer.current = setTimeout(() => repaginate(html), 1200)
+  }, [onBodyChange, repaginate, editorRef])
+
+  // ── Image click ───────────────────────────────────────────────────────────
   useEffect(() => {
     const el = editorRef.current
     if (!el) return
-    const handler = (e) => {
+    const h = (e) => {
       if (e.target.tagName === 'IMG') { setSelectedImg(e.target); setImgToolbarVis(true) }
-      else { setSelectedImg(null); setImgToolbarVis(false) }
+      else if (!e.target.closest?.('[data-img-toolbar]')) { setSelectedImg(null); setImgToolbarVis(false) }
     }
-    el.addEventListener('click', handler)
-    return () => el.removeEventListener('click', handler)
+    el.addEventListener('click', h)
+    return () => el.removeEventListener('click', h)
   }, [editorRef])
 
-  // Table cursor detection
+  // ── Table cursor detection ────────────────────────────────────────────────
   useEffect(() => {
     const onSel = () => {
       const sel = window.getSelection()
@@ -889,23 +971,17 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     return () => document.removeEventListener('selectionchange', onSel)
   }, [editorRef])
 
-  const handleInput = useCallback(() => {
-    onBodyChange(editorRef.current?.innerHTML || '')
-  }, [onBodyChange, editorRef])
-
   // ── Table operations ──────────────────────────────────────────────────────
   const tableOp = useCallback((op) => {
     const table = tableCtx?.table
     if (!table) return
-    const sel  = window.getSelection()
-    let cell = null
-    let n = sel?.anchorNode
+    const sel = window.getSelection()
+    let cell = null, n = sel?.anchorNode
     while (n && n !== table) {
       if (n.nodeName === 'TD' || n.nodeName === 'TH') { cell = n; break }
       n = n.parentNode
     }
     const cols = table.rows[0]?.cells?.length || 1
-
     if (op === 'addRow') {
       const refRow = cell?.closest?.('tr') || table.rows[table.rows.length - 1]
       const newRow = document.createElement('tr')
@@ -935,139 +1011,172 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     handleInput()
   }, [tableCtx, handleInput])
 
-  // ── Header renderer ───────────────────────────────────────────────────────
-  const renderHeader = () => {
-    const layout    = header.header_layout || 'company_left_logo_right'
-    const padL      = Math.max(32, header.padding_left  ?? 32)
-    const padR      = Math.max(32, header.padding_right ?? 32)
-    const fs        = header.font_size || 11
-    const textColor = header.font_color || '#000'
-    const isCen     = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
-    const ca        = isCen ? 'center' : (header.company_alignment || 'left')
-    const base2     = {
-      height: headerH, overflow: 'hidden',
-      paddingTop:    header.padding_top    ?? 20,
-      paddingRight:  padR, paddingBottom: header.padding_bottom ?? 8, paddingLeft: padL,
-      borderBottom:  header.show && header.border_bottom ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}` : 'none',
+  // ── Header renderer (identical to PaginatedDocPreview) ───────────────────
+  const renderDocHeader = () => {
+    const layout = header.header_layout || 'company_left_logo_right'
+    const padL   = Math.max(32, header.padding_left  ?? 32)
+    const padR   = Math.max(32, header.padding_right ?? 32)
+    const fs     = header.font_size || 11
+    const tc     = header.font_color || '#000'
+    const isCen  = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
+    const ca     = isCen ? 'center' : (header.company_alignment || 'left')
+    const st = {
+      position: 'absolute', top: 0, left: 0, right: 0, height: headerH, zIndex: 2, overflow: 'hidden',
+      paddingTop: header.padding_top ?? 20, paddingRight: padR, paddingBottom: header.padding_bottom ?? 8, paddingLeft: padL,
+      borderBottom: header.show && header.border_bottom ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}` : 'none',
       backgroundColor: header.show ? (header.background_color || '#fff') : 'transparent',
-      fontFamily: header.font_family || 'Arial', fontSize: fs, color: textColor, boxSizing: 'border-box',
+      fontFamily: header.font_family || 'Arial', fontSize: fs, color: tc, boxSizing: 'border-box',
     }
-    const logoEl = header.logo_url ? (
-      <img src={header.logo_url} alt="Logo" style={{ height: header.logo_height || 40, width: header.logo_width || 'auto', objectFit: 'contain', display: 'block', flexShrink: 0 }} />
-    ) : null
+    const logoEl = header.logo_url
+      ? <img src={header.logo_url} alt="Logo" style={{ height: header.logo_height || 40, width: header.logo_width || 'auto', objectFit: 'contain', display: 'block', flexShrink: 0 }} />
+      : null
     const hasComp = !!(header.company_name || header.company_address || header.company_email || header.company_phone)
     const compEl = hasComp ? (
       <div style={{ lineHeight: 1.4 }}>
-        {header.company_name && <div style={{ fontWeight: 'bold', fontSize: (header.company_name_size || fs + 2), color: header.company_name_color || textColor, textAlign: ca }}>{header.company_name}</div>}
-        {header.company_address && <div style={{ fontSize: fs - 1, textAlign: ca, color: textColor }}>{header.company_address}</div>}
+        {header.company_name && <div style={{ fontWeight: 'bold', fontSize: header.company_name_size || fs + 2, color: header.company_name_color || tc, textAlign: ca }}>{header.company_name}</div>}
+        {header.company_address && <div style={{ fontSize: fs - 1, textAlign: ca, color: tc }}>{header.company_address}</div>}
         {(header.company_email || header.company_phone) && <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: ca }}>{[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}</div>}
         {header.company_website && <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: ca }}>{header.company_website}</div>}
       </div>
     ) : null
-
-    if (layout === 'logo_only')        return <div style={{ ...base2, display: 'flex', alignItems: 'center' }}>{logoEl}</div>
-    if (layout === 'company_only')     return <div style={{ ...base2, display: 'flex', alignItems: 'center' }}>{compEl}</div>
-    if (layout === 'logo_top_company_bottom') return <div style={{ ...base2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{logoEl}{compEl}</div>
-    if (layout === 'company_top_logo_bottom') return <div style={{ ...base2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{compEl}{logoEl}</div>
-    if (layout === 'logo_left_company_right') return <div style={{ ...base2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{logoEl}{compEl}</div>
-    if (layout === 'center')           return <div style={{ ...base2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>{logoEl}{compEl}</div>
-    return <div style={{ ...base2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{compEl}{logoEl}</div>
+    if (layout === 'logo_only')        return <div style={{ ...st, display: 'flex', alignItems: 'center' }}>{logoEl}</div>
+    if (layout === 'company_only')     return <div style={{ ...st, display: 'flex', alignItems: 'center' }}>{compEl}</div>
+    if (layout === 'logo_top_company_bottom') return <div style={{ ...st, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{logoEl}{compEl}</div>
+    if (layout === 'company_top_logo_bottom') return <div style={{ ...st, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{compEl}{logoEl}</div>
+    if (layout === 'logo_left_company_right') return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{logoEl}{compEl}</div>
+    if (layout === 'center')           return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>{logoEl}{compEl}</div>
+    return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{compEl}{logoEl}</div>
   }
 
   const titleHtml = buildTitleHtml(docTitle)
   const sigHtml   = buildSigHtml(sigCfg)
+  // Minimum document height = 1 full page
+  const docMinH   = headerH + headerSpacing + usableH + footerH
 
   return (
-    <div style={{
-      width: pw, background: 'white',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.10),0 12px 40px rgba(0,0,0,0.08)',
-      borderRadius: 2, position: 'relative', flexShrink: 0,
-    }}>
-      {/* Watermark */}
-      {watermark.enabled && (
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transform: `rotate(${watermark.rotation ?? -45}deg)`,
-          fontSize: watermark.size || 72, opacity: Math.min(watermark.opacity || 0.12, 1),
-          color: watermark.color || '#9ca3af', fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
-        }}>{watermark.text || 'CONFIDENTIAL'}</div>
-      )}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingBottom: 32 }}>
 
-      {/* Header */}
-      {headerVisible && renderHeader()}
-
-      {/* Table toolbar — sticky, appears when cursor is inside a table */}
+      {/* Table toolbar — sticky at top */}
       {tableCtx && (
-        <div className="sticky top-0 z-30 flex items-center gap-1.5 px-3 py-1.5 border-b"
+        <div className="sticky top-0 z-50 self-stretch flex items-center gap-1.5 px-4 py-2 border-b shadow-sm mb-4"
           style={{ background: '#f5f3ff', borderColor: '#ddd6fe' }}>
-          <span className="text-xs font-bold text-violet-700 mr-1">Table:</span>
-          {[
-            { label: '+ Row',    op: 'addRow'    },
-            { label: '- Row',    op: 'deleteRow' },
-            { label: '+ Column', op: 'addCol'    },
-            { label: '- Column', op: 'deleteCol' },
-          ].map(({ label, op }) => (
-            <button key={op} onMouseDown={e => { e.preventDefault(); tableOp(op) }}
-              className="px-2 py-0.5 text-xs rounded border border-violet-300 text-violet-700 hover:bg-violet-100 transition-colors">
-              {label}
-            </button>
-          ))}
+          <span className="text-xs font-bold text-violet-700 mr-2">Table:</span>
+          {[{ label: '+ Row', op: 'addRow' }, { label: '- Row', op: 'deleteRow' },
+            { label: '+ Column', op: 'addCol' }, { label: '- Column', op: 'deleteCol' }]
+            .map(({ label, op }) => (
+              <button key={op} onMouseDown={e => { e.preventDefault(); tableOp(op) }}
+                className="px-2.5 py-1 text-xs rounded border border-violet-300 text-violet-700 hover:bg-violet-100 transition-colors">
+                {label}
+              </button>
+            ))}
         </div>
       )}
 
-      {/* Content area */}
-      <div style={{ paddingLeft: ml, paddingRight: mr }}>
-        {/* Document title */}
-        {docTitle?.text && (
-          <div dangerouslySetInnerHTML={{ __html: titleHtml }}
-            style={{ marginTop: headerH + headerSpacing }} />
-        )}
+      {/* Image toolbar */}
+      {imgToolbarVis && selectedImg && (
+        <div data-img-toolbar="1" className="self-stretch border rounded-lg px-3 py-2 shadow-sm mb-4"
+          style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+          <ImageResizeToolbar img={selectedImg} onClose={() => { setImgToolbarVis(false); setSelectedImg(null) }} />
+        </div>
+      )}
 
-        {/* Editable body — this is the WYSIWYG editor */}
-        <div
-          ref={editorRef}
-          contentEditable
-          suppressContentEditableWarning
-          onInput={handleInput}
-          className="focus:outline-none"
-          style={{
-            fontSize: '12pt', lineHeight: 1.7,
-            fontFamily: 'Arial, sans-serif', color: '#1f2937',
-            minHeight: 300,
-            paddingTop: docTitle?.text ? 0 : headerH + headerSpacing,
-            paddingBottom: mb,
-            outline: 'none',
-          }}
-          data-placeholder="Click here and start typing your document…"
-        />
-
-        {/* Image resize toolbar — inline below selected image */}
-        {imgToolbarVis && selectedImg && (
-          <div className="border-t px-3 py-2" style={{ borderColor: 'var(--border)' }}>
-            <ImageResizeToolbar img={selectedImg} onClose={() => { setImgToolbarVis(false); setSelectedImg(null) }} />
-          </div>
-        )}
-
-        {/* Signature */}
-        {sigCfg?.enabled && (
-          <div dangerouslySetInnerHTML={{ __html: sigHtml }} />
-        )}
+      {/* Page counter */}
+      <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 8, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        {pageCount > 1 ? `${pageCount} pages` : 'Page 1'}
       </div>
 
-      {/* Footer */}
-      {footer.show && (
-        <div style={{
-          height: footerH, flexShrink: 0,
-          padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 20}px ${footer.padding_bottom ?? 8}px ${footer.padding_left ?? 20}px`,
-          borderTop: footer.border_top ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}` : 'none',
-          fontSize: footer.font_size || 10, color: footer.font_color || '#666',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box',
-        }}>
-          <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
-          <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
-          <span>{footer.show_page_numbers ? 'Page 1' : ''}</span>
+      {/* ── Document box — same width as PaginatedDocPreview, grows with content ── */}
+      <div style={{
+        width: pw, minHeight: docMinH,
+        background: 'white',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.10),0 12px 40px rgba(0,0,0,0.08)',
+        borderRadius: 2, position: 'relative', flexShrink: 0,
+      }}>
+        {/* Watermark */}
+        {watermark.enabled && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72,
+            opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af',
+            fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
+          }}>{watermark.text || 'CONFIDENTIAL'}</div>
+        )}
+
+        {/* Header (absolute, sits in the header zone) */}
+        {headerVisible && renderDocHeader()}
+
+        {/* Content area — starts EXACTLY at headerH+headerSpacing, same as PaginatedDocPreview */}
+        <div style={{ paddingTop: headerH + headerSpacing, paddingLeft: ml, paddingRight: mr, paddingBottom: footerH + mb, position: 'relative', zIndex: 2 }}>
+
+          {/* Document title (non-editable, from left panel settings) */}
+          {docTitle?.text && (
+            <div dangerouslySetInnerHTML={{ __html: titleHtml }} style={{ pointerEvents: 'none' }} />
+          )}
+
+          {/* ── Single editable body ── */}
+          <div
+            ref={editorRef}
+            contentEditable
+            suppressContentEditableWarning
+            onInput={handleInput}
+            className="focus:outline-none"
+            style={{
+              fontSize: '12pt', lineHeight: 1.7,
+              fontFamily: 'Arial, sans-serif', color: '#1f2937',
+              minHeight: 200, outline: 'none',
+            }}
+            data-placeholder="Click here and start typing…"
+          />
+
+          {/* Signature (non-editable, from left panel settings) */}
+          {sigCfg?.enabled && (
+            <div dangerouslySetInnerHTML={{ __html: sigHtml }} style={{ pointerEvents: 'none' }} />
+          )}
+
+          {/* ── Page-break indicators at EXACT same positions as PaginatedDocPreview ── */}
+          {breakYs.map((y, i) => (
+            <div key={i} style={{
+              position: 'absolute',
+              top: y,
+              left: -ml, right: -mr,
+              pointerEvents: 'none', zIndex: 10,
+            }}>
+              {/* Dashed page-break line */}
+              <div style={{
+                borderTop: '2px dashed #c7d2fe',
+                marginBottom: 0,
+              }} />
+              {/* Page N label */}
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 12, padding: '2px 0',
+                background: 'rgba(238,242,255,0.9)',
+                fontSize: 9, fontWeight: 700, color: '#818cf8',
+                letterSpacing: '0.1em', textTransform: 'uppercase',
+              }}>
+                <div style={{ flex: 1, height: 1, background: '#e0e7ff' }} />
+                Page {i + 2} of {pageCount}
+                <div style={{ flex: 1, height: 1, background: '#e0e7ff' }} />
+              </div>
+            </div>
+          ))}
         </div>
-      )}
+
+        {/* Footer (always at the very bottom of the doc box) */}
+        {footer.show && (
+          <div style={{
+            paddingLeft: ml, paddingRight: mr,
+            padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 20}px ${footer.padding_bottom ?? 8}px ${footer.padding_left ?? 20}px`,
+            borderTop: footer.border_top ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}` : 'none',
+            fontSize: footer.font_size || 10, color: footer.font_color || '#666',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box',
+          }}>
+            <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
+            <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
+            <span>{footer.show_page_numbers ? `Page 1${pageCount > 1 ? ` of ${pageCount}` : ''}` : ''}</span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

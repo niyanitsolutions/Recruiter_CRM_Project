@@ -690,10 +690,13 @@ class DocumentCenterService:
             updated_by=user_id,
         )
         doc = tmpl.model_dump(by_alias=True)
+        # Guarantee _id is present in the dict (Motor does not mutate the dict after insert)
+        if "_id" not in doc:
+            doc["_id"] = tmpl.id
         await db.doc_templates.insert_one(doc)
 
-        # Save initial version
-        await self._save_version(db, doc["_id"], 1, data.name, content, data.change_summary, user_id, user_name)
+        # Save initial version — use tmpl.id (Python field) not doc["_id"] to avoid alias issues
+        await self._save_version(db, tmpl.id, 1, data.name, content, data.change_summary, user_id, user_name)
         return doc
 
     async def update_template(
@@ -719,9 +722,10 @@ class DocumentCenterService:
             updates["content"]    = data.content.model_dump()
             new_version = existing.get("version", 1) + 1
             updates["version"]    = new_version
+            resolved_name = data.name or existing.get("name", "Untitled")
             await self._save_version(
                 db, template_id, new_version,
-                data.name or existing["name"],
+                resolved_name,
                 data.content,
                 data.change_summary,
                 user_id, user_name,
