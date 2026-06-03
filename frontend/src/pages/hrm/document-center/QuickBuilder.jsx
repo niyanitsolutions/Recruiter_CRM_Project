@@ -12,7 +12,7 @@ import {
   ZoomIn, ZoomOut, X, Download, Printer, Clock, CheckCircle,
   AlertCircle, Upload, Maximize2, Wand2, Type, Settings,
   PenLine, Building2, LayoutTemplate, PanelLeftClose, PanelLeftOpen,
-  Scissors,
+  Scissors, Indent, Outdent, Subscript, Superscript, RemoveFormatting,
 } from 'lucide-react'
 import documentCenterService from '../../../services/documentCenterService'
 
@@ -143,10 +143,10 @@ function Section({ id, title, icon: Icon, open, onToggle, children, badge, keepM
 }
 
 // ─── Toolbar button ───────────────────────────────────────────────────────────
-const TB = ({ icon: Icon, label, onClick }) => (
+const TB = ({ icon: Icon, label, onClick, active }) => (
   <button type="button" title={label} onMouseDown={e => { e.preventDefault(); onClick() }}
-    className="p-1.5 rounded transition-colors hover:bg-gray-200 dark:hover:bg-gray-600"
-    style={{ color: 'var(--text-body)' }}>
+    className={`p-1.5 rounded transition-colors ${active ? 'bg-violet-600' : 'hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+    style={{ color: active ? 'white' : 'var(--text-body)' }}>
     <Icon className="w-3.5 h-3.5" />
   </button>
 )
@@ -384,9 +384,18 @@ function ImageDragResize({ img, onUpdate, onClose }) {
 }
 
 // ─── Body Editor (Formatting Toolbar only — editable div is in WysiwygDocument) ──
+// Exact font size list mapped to CSS pt values via the font-size-7 marker technique
+const FONT_SIZES_PT = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32, 36, 48, 72]
+
 function BodyEditor({ editorRef, onInput }) {
   const savedSel = useRef(null)
   const [showTableDialog, setShowTableDialog] = useState(false)
+  // Active formatting state — updated on every selection change
+  const [fmt, setFmt] = useState({
+    bold: false, italic: false, underline: false, strike: false,
+    alignLeft: true, alignCenter: false, alignRight: false, alignJustify: false,
+  })
+  const [currentFontSize, setCurrentFontSize] = useState('12')
 
   const saveSel = () => {
     const sel = window.getSelection()
@@ -404,6 +413,23 @@ function BodyEditor({ editorRef, onInput }) {
     document.execCommand(cmd, false, val)
     onInput?.()
   }
+
+  // Apply exact pt font size using the size-7 marker trick
+  const applyFontSizePt = (pts) => {
+    editorRef.current?.focus()
+    restoreSel()
+    document.execCommand('fontSize', false, '7')
+    if (editorRef.current) {
+      editorRef.current.querySelectorAll('font[size="7"]').forEach(m => {
+        const span = document.createElement('span')
+        span.style.fontSize = `${pts}pt`
+        while (m.firstChild) span.appendChild(m.firstChild)
+        m.replaceWith(span)
+      })
+    }
+    onInput?.()
+  }
+
   const insertHtml = (html) => {
     editorRef.current?.focus()
     restoreSel()
@@ -418,53 +444,98 @@ function BodyEditor({ editorRef, onInput }) {
     `<span style="font-size:10px;color:#9ca3af;background:white;padding:0 8px;">— Page Break —</span></div>`
   )
 
+  // Track active formatting state on every selection change
+  useEffect(() => {
+    const updateFmt = () => {
+      try {
+        setFmt({
+          bold:         document.queryCommandState('bold'),
+          italic:       document.queryCommandState('italic'),
+          underline:    document.queryCommandState('underline'),
+          strike:       document.queryCommandState('strikeThrough'),
+          alignLeft:    document.queryCommandState('justifyLeft'),
+          alignCenter:  document.queryCommandState('justifyCenter'),
+          alignRight:   document.queryCommandState('justifyRight'),
+          alignJustify: document.queryCommandState('justifyFull'),
+        })
+        // Detect current font size from the selection's computed style
+        const sel = window.getSelection()
+        if (sel?.anchorNode) {
+          const el = sel.anchorNode.nodeType === 3
+            ? sel.anchorNode.parentElement
+            : sel.anchorNode
+          if (el) {
+            const pxSize = parseFloat(window.getComputedStyle(el).fontSize) || 16
+            const ptSize = Math.round(pxSize * 0.75)
+            setCurrentFontSize(String(ptSize))
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    document.addEventListener('selectionchange', updateFmt)
+    return () => document.removeEventListener('selectionchange', updateFmt)
+  }, [])
+
   const fieldGroups = HR_FIELDS.reduce((acc, f) => {
     if (!acc[f.group]) acc[f.group] = []
     acc[f.group].push(f)
     return acc
   }, {})
 
+  const sep = <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
+
   return (
     <div className="border rounded-xl overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-      {/* Toolbar */}
+      {/* Toolbar row 1: font controls + basic formatting */}
       <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b"
         style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+        {/* Font family */}
         <select className="text-xs px-1.5 py-1 rounded border mr-1"
-          style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
+          style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)', maxWidth: 110 }}
           onMouseDown={saveSel} onChange={e => exec('fontName', e.target.value)}>
           {FONT_FAMILIES.map(f => <option key={f} value={f}>{f}</option>)}
         </select>
-        <select className="text-xs px-1.5 py-1 rounded border w-14 mr-1"
+        {/* Font size — exact pt values */}
+        <select className="text-xs px-1 py-1 rounded border w-14 mr-1"
           style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
-          defaultValue="3" onMouseDown={saveSel} onChange={e => exec('fontSize', e.target.value)}>
-          {[1,2,3,4,5,6,7].map(s => <option key={s} value={s}>{[8,10,12,14,18,24,36][s-1]}</option>)}
+          value={FONT_SIZES_PT.includes(+currentFontSize) ? currentFontSize : '12'}
+          onMouseDown={saveSel}
+          onChange={e => applyFontSizePt(+e.target.value)}>
+          {FONT_SIZES_PT.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
-        <TB icon={Bold}          label="Bold"          onClick={() => exec('bold')} />
-        <TB icon={Italic}        label="Italic"        onClick={() => exec('italic')} />
-        <TB icon={Underline}     label="Underline"     onClick={() => exec('underline')} />
-        <TB icon={Strikethrough} label="Strikethrough" onClick={() => exec('strikeThrough')} />
-        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
-        <label title="Text Color" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
+        {sep}
+        <TB icon={Bold}          label="Bold (Ctrl+B)"          onClick={() => exec('bold')}          active={fmt.bold} />
+        <TB icon={Italic}        label="Italic (Ctrl+I)"        onClick={() => exec('italic')}        active={fmt.italic} />
+        <TB icon={Underline}     label="Underline (Ctrl+U)"     onClick={() => exec('underline')}     active={fmt.underline} />
+        <TB icon={Strikethrough} label="Strikethrough"          onClick={() => exec('strikeThrough')} active={fmt.strike} />
+        <TB icon={Superscript}   label="Superscript"            onClick={() => exec('superscript')} />
+        <TB icon={Subscript}     label="Subscript"              onClick={() => exec('subscript')} />
+        {sep}
+        <label title="Text Color" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
+          onMouseDown={saveSel}>
           <Palette className="w-3.5 h-3.5" style={{ color: 'var(--text-body)' }} />
-          <input type="color" className="sr-only" onMouseDown={saveSel} onChange={e => exec('foreColor', e.target.value)} />
+          <input type="color" className="sr-only" onChange={e => exec('foreColor', e.target.value)} />
         </label>
-        <label title="Highlight" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
+        <label title="Highlight Color" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
+          onMouseDown={saveSel}>
           <span className="w-3.5 h-3.5 inline-flex items-center justify-center text-[10px] font-bold" style={{ color: 'var(--text-body)' }}>H</span>
-          <input type="color" className="sr-only" onMouseDown={saveSel} onChange={e => exec('hiliteColor', e.target.value)} />
+          <input type="color" className="sr-only" onChange={e => exec('hiliteColor', e.target.value)} />
         </label>
-        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
-        <TB icon={AlignLeft}    label="Left"    onClick={() => exec('justifyLeft')} />
-        <TB icon={AlignCenter}  label="Center"  onClick={() => exec('justifyCenter')} />
-        <TB icon={AlignRight}   label="Right"   onClick={() => exec('justifyRight')} />
-        <TB icon={AlignJustify} label="Justify" onClick={() => exec('justifyFull')} />
-        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
-        <TB icon={List}        label="Bullet List"   onClick={() => exec('insertUnorderedList')} />
-        <TB icon={ListOrdered} label="Numbered List" onClick={() => exec('insertOrderedList')} />
-        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
-        <TB icon={RotateCcw} label="Undo" onClick={() => exec('undo')} />
-        <TB icon={RotateCw}  label="Redo" onClick={() => exec('redo')} />
-        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
+        <TB icon={RemoveFormatting} label="Clear Formatting" onClick={() => exec('removeFormat')} />
+        {sep}
+        <TB icon={AlignLeft}    label="Align Left"    onClick={() => exec('justifyLeft')}   active={fmt.alignLeft} />
+        <TB icon={AlignCenter}  label="Align Center"  onClick={() => exec('justifyCenter')} active={fmt.alignCenter} />
+        <TB icon={AlignRight}   label="Align Right"   onClick={() => exec('justifyRight')}  active={fmt.alignRight} />
+        <TB icon={AlignJustify} label="Justify"       onClick={() => exec('justifyFull')}   active={fmt.alignJustify} />
+        {sep}
+        <TB icon={List}        label="Bullet List"      onClick={() => exec('insertUnorderedList')} />
+        <TB icon={ListOrdered} label="Numbered List"    onClick={() => exec('insertOrderedList')} />
+        <TB icon={Indent}      label="Indent (Tab)"     onClick={() => exec('indent')} />
+        <TB icon={Outdent}     label="Outdent (Shift+Tab)" onClick={() => exec('outdent')} />
+        {sep}
+        <TB icon={RotateCcw} label="Undo (Ctrl+Z)" onClick={() => exec('undo')} />
+        <TB icon={RotateCw}  label="Redo (Ctrl+Y)" onClick={() => exec('redo')} />
+        {sep}
         <TB icon={Link2} label="Insert Link" onClick={() => {
           saveSel()
           const u = prompt('Enter URL:')
@@ -472,12 +543,19 @@ function BodyEditor({ editorRef, onInput }) {
         }} />
         <TB icon={TableIcon}  label="Insert Table"      onClick={() => { saveSel(); setShowTableDialog(true) }} />
         <TB icon={Scissors}   label="Insert Page Break" onClick={insertPageBreak} />
-        <label title="Insert Image" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
+        {/* Image insert — saveSel on mousedown so async file read can restore selection */}
+        <label title="Insert Image" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
+          onMouseDown={saveSel}>
           <ImageIcon className="w-3.5 h-3.5" style={{ color: 'var(--text-body)' }} />
           <input type="file" accept="image/*" className="sr-only"
             onChange={e => {
               const file = e.target.files[0]
               if (!file) return
+              if (file.size > 4 * 1024 * 1024) {
+                toast.error('Image must be under 4 MB')
+                e.target.value = ''
+                return
+              }
               const reader = new FileReader()
               reader.onload = ev => insertHtml(`<img src="${ev.target.result}" style="max-width:100%;height:auto;" />`)
               reader.readAsDataURL(file)
@@ -768,7 +846,7 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   )
 }
 
-// ─── Cursor-trap fix: contentEditable must never end with a table/list ───────
+// ─── Cursor-trap fixes: ensure typing space before AND after tables/lists ────
 function ensureTrailingP(el) {
   if (!el) return
   const last = el.lastElementChild
@@ -777,6 +855,16 @@ function ensureTrailingP(el) {
     const p = document.createElement('p')
     p.innerHTML = '<br>'
     el.appendChild(p)
+  }
+}
+function ensureLeadingP(el) {
+  if (!el) return
+  const first = el.firstElementChild
+  if (first && (['TABLE', 'UL', 'OL'].includes(first.tagName) ||
+      first.getAttribute?.('contenteditable') === 'false')) {
+    const p = document.createElement('p')
+    p.innerHTML = '<br>'
+    el.insertBefore(p, first)
   }
 }
 
@@ -905,7 +993,7 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
   // ── Init: load template content, then paginate ────────────────────────────
   useLayoutEffect(() => {
     const el = pageRefs.current[0]
-    if (el) { el.innerHTML = bodyHtml || ''; ensureTrailingP(el) }
+    if (el) { el.innerHTML = bodyHtml || ''; ensureTrailingP(el); ensureLeadingP(el) }
     if (editorRef) editorRef.current = el || null
     lastBody.current = bodyHtml
     runPag(bodyHtml || '')
@@ -920,7 +1008,7 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
       const el = pageRefs.current[+k]
       if (!el) return
       el.innerHTML = (+k === 0) ? (bodyHtml || '') : ''
-      if (+k === 0) ensureTrailingP(el)
+      if (+k === 0) { ensureTrailingP(el); ensureLeadingP(el) }
     })
     pcRef.current = 1; setPageCount(1)
     runPag(bodyHtml || '')
@@ -934,13 +1022,18 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     footer.show, footer.footer_height,
     paper.size, paper.orientation,
     paper.margin_top, paper.margin_bottom, paper.margin_left, paper.margin_right,
-    docTitle?.text, docTitle?.font_size, sigCfg?.enabled,
+    // Full docTitle coverage so every visual change (bold/italic/color/align/font/margins) updates editor
+    docTitle?.text, docTitle?.font_size, docTitle?.font_family,
+    docTitle?.color, docTitle?.alignment, docTitle?.bold,
+    docTitle?.italic, docTitle?.underline, docTitle?.margin_top, docTitle?.margin_bottom,
+    // Full sigCfg coverage so position/height changes repaginate
+    sigCfg?.enabled, sigCfg?.position, sigCfg?.height, sigCfg?.authorized_person,
   ])
 
   // ── Input handler — minimal work per keystroke for < 16ms latency ─────────
   const handleInput = useCallback((i) => {
     const el = pageRefs.current[i]
-    if (el) ensureTrailingP(el)
+    if (el) { ensureTrailingP(el); ensureLeadingP(el) }
     if (editorRef) editorRef.current = el
 
     // Debounce parent state update (prevents re-render on every keypress)
@@ -963,7 +1056,7 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     if (el && el !== prev) {
       // New div just mounted — initialize with latest pagesData
       const html = pagesData.current[i]?.map(b => b.html).join('') || ''
-      el.innerHTML = html; ensureTrailingP(el)
+      el.innerHTML = html; ensureTrailingP(el); ensureLeadingP(el)
       if (i === 0 && editorRef && !editorRef.current) editorRef.current = el
     }
     if (!el) delete pageRefs.current[i]
@@ -1288,7 +1381,8 @@ export default function QuickBuilder() {
       if (draft.sigCfg)       setSigCfg(s => ({ ...s, ...draft.sigCfg }))
       const html = draft.bodyHtml || ''
       setBodyHtml(html)
-      if (editorRef.current) { editorRef.current.innerHTML = html }
+      // Do NOT write directly to editorRef — setBodyHtml already triggers
+      // WysiwygDocument's bodyHtml effect which does a proper paginated reset.
     } catch (_) {}
   }, [])
 
@@ -1583,6 +1677,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
   const handleExportPDF = () => {
     setShowExport(false)
     const w = window.open('', '_blank')
+    if (!w) { toast.error('Popup blocked — allow popups for this site to export PDF'); return }
     w.document.write(buildFullHtml()); w.document.close(); w.focus()
     toast.success('Print dialog opening — select "Save as PDF"')
     setTimeout(() => { w.print(); w.close() }, 500)
@@ -1590,6 +1685,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
   const handlePrint = () => {
     setShowExport(false)
     const w = window.open('', '_blank')
+    if (!w) { toast.error('Popup blocked — allow popups for this site to print'); return }
     w.document.write(buildFullHtml()); w.document.close(); w.focus()
     setTimeout(() => { w.print(); w.close() }, 400)
   }
@@ -1982,9 +2078,10 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
               </div>
             </Section>
 
-            {/* ── Section 4: Formatting Toolbar ── */}
+            {/* ── Section 4: Formatting Toolbar — keepMounted preserves savedSel ref ── */}
             <Section id="body" title="Formatting Toolbar" icon={AlignLeft}
-              open={openSection === 'body'} onToggle={toggleSection}>
+              open={openSection === 'body'} onToggle={toggleSection}
+              keepMounted>
               <p className="text-xs mb-2 px-0.5" style={{ color: 'var(--text-muted)' }}>
                 Click inside the document on the right to position your cursor, then use these tools.
               </p>
