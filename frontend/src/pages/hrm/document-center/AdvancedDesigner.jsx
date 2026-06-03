@@ -10,7 +10,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  Save, Eye, ArrowLeft, Loader2, Wand2, Plus, Trash2, GripVertical,
+  Save, ArrowLeft, Loader2, Wand2, Plus, Trash2, GripVertical,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
   Bold, Italic, Underline, AlignLeft, AlignCenter,
   AlignRight, AlignJustify, List, ListOrdered, Link2, Palette, Type,
@@ -814,7 +814,6 @@ export default function AdvancedDesigner() {
 
   const [loading,  setLoading]  = useState(!!id)
   const [saving,   setSaving]   = useState(false)
-  const [preview,  setPreview]  = useState(false)
   const [showFullPreview, setShowFullPreview] = useState(false)
   const [autoSaveStatus, setAutoSaveStatus]   = useState('saved')
   const [showExport, setShowExport] = useState(false)
@@ -1254,13 +1253,6 @@ ${footer.show ? `<div class="doc-footer">
             style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
             <Maximize2 className="w-4 h-4" /> <span className="hidden sm:inline">Preview</span>
           </button>
-          <button onClick={() => setPreview(p => !p)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border ${preview ? 'bg-violet-600 text-white border-violet-600' : ''}`}
-            style={preview ? {} : { borderColor: 'var(--border)', color: 'var(--text-body)' }}>
-            <Eye className="w-4 h-4" />
-            {preview ? 'Edit' : 'Quick View'}
-          </button>
-
           {/* Export dropdown */}
           <div className="relative" ref={exportRef}>
             <button onClick={() => setShowExport(v => !v)}
@@ -1634,33 +1626,7 @@ ${footer.show ? `<div class="doc-footer">
                   </div>
                 ) : null
 
-                return preview ? (
-                /* Preview mode: paginated pages */
-                pages.map((pageBlocks, pageIndex) => (
-                  <div key={pageIndex} className="mb-8">
-                    <div className="bg-white shadow-2xl relative" style={{ width: paperW, fontFamily: 'Arial, sans-serif', minHeight: '297mm', boxSizing: 'border-box' }}>
-                      {watermark.enabled && (
-                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          pointerEvents: 'none', zIndex: 1, transform: `rotate(${watermark.rotation}deg)`,
-                          fontSize: watermark.size, opacity: watermark.opacity, color: '#9ca3af', fontWeight: 'bold', userSelect: 'none' }}>
-                          {watermark.text}
-                        </div>
-                      )}
-                      <PageHeader pageNum={pageIndex + 1} />
-                      <div style={{ paddingTop: (header.show||header.logo_url||header.company_name) ? `${header.header_spacing??20}px` : mt, paddingBottom: mb, paddingLeft: ml, paddingRight: mr, position: 'relative', zIndex: 2 }}
-                        dangerouslySetInnerHTML={{ __html: pageBlocks.map(blockToHtml).join('\n') }} />
-                      <PageFooter pageNum={pageIndex + 1} totalPages={pages.length} />
-                    </div>
-                    {pageIndex < pages.length - 1 && (
-                      <div className="flex items-center justify-center my-3 gap-3">
-                        <div className="h-px flex-1 bg-gray-300" />
-                        <span className="text-xs text-gray-400 font-medium px-2">Page {pageIndex + 1}</span>
-                        <div className="h-px flex-1 bg-gray-300" />
-                      </div>
-                    )}
-                  </div>
-                ))
-                ) : (
+                return (
                 /* Edit mode: multiple pages with header/footer on every page */
                 pages.map((pageBlocks, pageIndex) => (
                   <div key={pageIndex} className="mb-8">
@@ -1729,36 +1695,33 @@ ${footer.show ? `<div class="doc-footer">
         </div>
 
         {/* ── Right resize / expand strip ── */}
-        {!preview && (
-          <div className="relative flex-shrink-0 flex flex-col"
-            style={{ width: 12, background: 'var(--bg-secondary)', borderRight: '1px solid var(--border)' }}>
-            {rightCollapsed && (
-              <button onClick={toggleRightPanel} title="Expand Properties"
-                className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-7 h-7 rounded-full border shadow-sm flex items-center justify-center transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
-                style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
-                <PanelRightOpen className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {!rightCollapsed && (
-              <div className="mt-2 flex-1 cursor-col-resize hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors"
-                onMouseDown={e => {
-                  e.preventDefault()
-                  const startX = e.clientX, startW = rightWidth
-                  const onMove = (ev) => {
-                    const n = Math.max(200, Math.min(440, startW - (ev.clientX - startX)))
-                    setRightWidth(n); localStorage.setItem('ad_right_w', n)
-                  }
-                  const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
-                  document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp)
-                }} />
-            )}
-          </div>
-        )}
+        <div className="relative flex-shrink-0 flex flex-col"
+          style={{ width: 12, background: 'var(--bg-secondary)', borderRight: '1px solid var(--border)' }}>
+          {rightCollapsed && (
+            <button onClick={toggleRightPanel} title="Expand Properties"
+              className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-7 h-7 rounded-full border shadow-sm flex items-center justify-center transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+              style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
+              <PanelRightOpen className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {!rightCollapsed && (
+            <div className="mt-2 flex-1 cursor-col-resize hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors"
+              onMouseDown={e => {
+                e.preventDefault()
+                const startX = e.clientX, startW = rightWidth
+                const onMove = (ev) => {
+                  const n = Math.max(200, Math.min(440, startW - (ev.clientX - startX)))
+                  setRightWidth(n); localStorage.setItem('ad_right_w', n)
+                }
+                const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+                document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp)
+              }} />
+          )}
+        </div>
 
         {/* ── Right panel: Properties ── */}
-        {!preview && (
-          <aside className="flex-shrink-0 border-l flex flex-col overflow-hidden transition-all duration-200" style={{ minHeight: 0 }}
-            style={{ width: rightCollapsed ? 0 : rightWidth, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+        <aside className="flex-shrink-0 border-l flex flex-col overflow-hidden transition-all duration-200"
+          style={{ width: rightCollapsed ? 0 : rightWidth, minHeight: 0, background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
             {/* Panel header with collapse button at top-right */}
             <div className="flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0"
               style={{ borderColor: 'var(--border)' }}>
@@ -1793,7 +1756,6 @@ ${footer.show ? `<div class="doc-footer">
             </div>
             </div>{/* end overflow-y-auto */}
           </aside>
-        )}
       </div>
 
       {/* Fullscreen preview */}

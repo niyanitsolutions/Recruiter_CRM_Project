@@ -287,31 +287,10 @@ function ImageResizeToolbar({ img, onClose }) {
   )
 }
 
-// ─── Body Editor ──────────────────────────────────────────────────────────────
-function BodyEditor({ editorRef, onInput, initialHtml }) {
+// ─── Body Editor (Formatting Toolbar only — editable div is in WysiwygDocument) ──
+function BodyEditor({ editorRef, onInput }) {
   const savedSel = useRef(null)
   const [showTableDialog, setShowTableDialog] = useState(false)
-  const [selectedImg, setSelectedImg]         = useState(null)
-
-  // Restore content on mount — keeps editor populated when section re-opens (keepMounted)
-  useLayoutEffect(() => {
-    if (editorRef.current && initialHtml && !editorRef.current.innerHTML.trim()) {
-      editorRef.current.innerHTML = initialHtml
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Image click detection inside editor
-  useEffect(() => {
-    const el = editorRef.current
-    if (!el) return
-    const handler = (e) => {
-      if (e.target.tagName === 'IMG') setSelectedImg(e.target)
-      else setSelectedImg(null)
-    }
-    el.addEventListener('click', handler)
-    return () => el.removeEventListener('click', handler)
-  }, [editorRef])
 
   const saveSel = () => {
     const sel = window.getSelection()
@@ -410,20 +389,6 @@ function BodyEditor({ editorRef, onInput, initialHtml }) {
             }} />
         </label>
       </div>
-
-      {/* Editable area */}
-      <div ref={editorRef} contentEditable suppressContentEditableWarning
-        onInput={onInput} onMouseUp={saveSel} onKeyUp={saveSel}
-        className="focus:outline-none px-4 py-3"
-        style={{ minHeight: 220, maxHeight: 360, overflowY: 'auto', fontSize: '12pt', lineHeight: 1.7, color: '#1f2937', fontFamily: 'Arial, sans-serif' }}
-        data-placeholder="Type your document body content here…" />
-
-      {/* Image resize toolbar (appears when an image is selected in editor) */}
-      {selectedImg && (
-        <div className="border-t px-3 py-2" style={{ borderColor: 'var(--border)' }}>
-          <ImageResizeToolbar img={selectedImg} onClose={() => setSelectedImg(null)} />
-        </div>
-      )}
 
       {/* HR Field strip */}
       <div className="border-t px-3 py-2.5" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
@@ -870,6 +835,243 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   )
 }
 
+// ─── WYSIWYG Document ─────────────────────────────────────────────────────────
+// Always-editable Word-style view: header (config) + editable body + footer (config)
+function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle, sigCfg, bodyHtml, onBodyChange }) {
+  const base = PAPER_PX[paper.size] || PAPER_PX.A4
+  const [pw]  = paper.orientation === 'landscape' ? [base[1], base[0]] : base
+
+  const headerVisible = header.show || !!(header.logo_url || header.company_name)
+  const headerH       = headerVisible ? Math.max(header.header_height || 100, 40) : 0
+  const footerH       = footer.show   ? Math.max(footer.footer_height || 40,  20) : 0
+  const headerSpacing = headerVisible ? (header.header_spacing ?? 20) : 0
+
+  const ml = Math.round((paper.margin_left   || 72) / 72 * 96)
+  const mr = Math.round((paper.margin_right  || 72) / 72 * 96)
+  const mt = Math.round((paper.margin_top    || 72) / 72 * 96)
+  const mb = Math.round((paper.margin_bottom || 72) / 72 * 96)
+
+  const [selectedImg,   setSelectedImg]   = useState(null)
+  const [tableCtx,      setTableCtx]      = useState(null)
+  const [imgToolbarVis, setImgToolbarVis] = useState(false)
+
+  // Initialise editable body from prop once on mount
+  useLayoutEffect(() => {
+    if (editorRef.current) editorRef.current.innerHTML = bodyHtml || ''
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Image click detection
+  useEffect(() => {
+    const el = editorRef.current
+    if (!el) return
+    const handler = (e) => {
+      if (e.target.tagName === 'IMG') { setSelectedImg(e.target); setImgToolbarVis(true) }
+      else { setSelectedImg(null); setImgToolbarVis(false) }
+    }
+    el.addEventListener('click', handler)
+    return () => el.removeEventListener('click', handler)
+  }, [editorRef])
+
+  // Table cursor detection
+  useEffect(() => {
+    const onSel = () => {
+      const sel = window.getSelection()
+      if (!sel?.anchorNode || !editorRef.current?.contains(sel.anchorNode)) { setTableCtx(null); return }
+      let n = sel.anchorNode
+      while (n && n !== editorRef.current) {
+        if (n.nodeName === 'TABLE') { setTableCtx({ table: n }); return }
+        n = n.parentNode
+      }
+      setTableCtx(null)
+    }
+    document.addEventListener('selectionchange', onSel)
+    return () => document.removeEventListener('selectionchange', onSel)
+  }, [editorRef])
+
+  const handleInput = useCallback(() => {
+    onBodyChange(editorRef.current?.innerHTML || '')
+  }, [onBodyChange, editorRef])
+
+  // ── Table operations ──────────────────────────────────────────────────────
+  const tableOp = useCallback((op) => {
+    const table = tableCtx?.table
+    if (!table) return
+    const sel  = window.getSelection()
+    let cell = null
+    let n = sel?.anchorNode
+    while (n && n !== table) {
+      if (n.nodeName === 'TD' || n.nodeName === 'TH') { cell = n; break }
+      n = n.parentNode
+    }
+    const cols = table.rows[0]?.cells?.length || 1
+
+    if (op === 'addRow') {
+      const refRow = cell?.closest?.('tr') || table.rows[table.rows.length - 1]
+      const newRow = document.createElement('tr')
+      for (let i = 0; i < cols; i++) {
+        const td = document.createElement('td')
+        td.style.cssText = 'padding:8px 10px;border:1px solid #e5e7eb;background:white;'
+        newRow.appendChild(td)
+      }
+      refRow.insertAdjacentElement('afterend', newRow)
+    } else if (op === 'deleteRow') {
+      const row = cell?.closest?.('tr')
+      if (row && table.rows.length > 1) row.remove()
+    } else if (op === 'addCol') {
+      const ci = cell ? Array.from(cell.closest?.('tr')?.cells || []).indexOf(cell) : cols - 1
+      Array.from(table.rows).forEach((row, ri) => {
+        const nc = document.createElement(ri === 0 ? 'th' : 'td')
+        nc.style.cssText = ri === 0
+          ? 'padding:8px 10px;background:#7c3aed;color:white;border:1px solid #e5e7eb;text-align:left;'
+          : 'padding:8px 10px;border:1px solid #e5e7eb;background:white;'
+        if (ci >= 0 && row.cells[ci]) row.cells[ci].insertAdjacentElement('afterend', nc)
+        else row.appendChild(nc)
+      })
+    } else if (op === 'deleteCol') {
+      const ci = cell ? Array.from(cell.closest?.('tr')?.cells || []).indexOf(cell) : -1
+      if (ci >= 0 && cols > 1) Array.from(table.rows).forEach(row => { if (row.cells[ci]) row.cells[ci].remove() })
+    }
+    handleInput()
+  }, [tableCtx, handleInput])
+
+  // ── Header renderer ───────────────────────────────────────────────────────
+  const renderHeader = () => {
+    const layout    = header.header_layout || 'company_left_logo_right'
+    const padL      = Math.max(32, header.padding_left  ?? 32)
+    const padR      = Math.max(32, header.padding_right ?? 32)
+    const fs        = header.font_size || 11
+    const textColor = header.font_color || '#000'
+    const isCen     = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
+    const ca        = isCen ? 'center' : (header.company_alignment || 'left')
+    const base2     = {
+      height: headerH, overflow: 'hidden',
+      paddingTop:    header.padding_top    ?? 20,
+      paddingRight:  padR, paddingBottom: header.padding_bottom ?? 8, paddingLeft: padL,
+      borderBottom:  header.show && header.border_bottom ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}` : 'none',
+      backgroundColor: header.show ? (header.background_color || '#fff') : 'transparent',
+      fontFamily: header.font_family || 'Arial', fontSize: fs, color: textColor, boxSizing: 'border-box',
+    }
+    const logoEl = header.logo_url ? (
+      <img src={header.logo_url} alt="Logo" style={{ height: header.logo_height || 40, width: header.logo_width || 'auto', objectFit: 'contain', display: 'block', flexShrink: 0 }} />
+    ) : null
+    const hasComp = !!(header.company_name || header.company_address || header.company_email || header.company_phone)
+    const compEl = hasComp ? (
+      <div style={{ lineHeight: 1.4 }}>
+        {header.company_name && <div style={{ fontWeight: 'bold', fontSize: (header.company_name_size || fs + 2), color: header.company_name_color || textColor, textAlign: ca }}>{header.company_name}</div>}
+        {header.company_address && <div style={{ fontSize: fs - 1, textAlign: ca, color: textColor }}>{header.company_address}</div>}
+        {(header.company_email || header.company_phone) && <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: ca }}>{[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}</div>}
+        {header.company_website && <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: ca }}>{header.company_website}</div>}
+      </div>
+    ) : null
+
+    if (layout === 'logo_only')        return <div style={{ ...base2, display: 'flex', alignItems: 'center' }}>{logoEl}</div>
+    if (layout === 'company_only')     return <div style={{ ...base2, display: 'flex', alignItems: 'center' }}>{compEl}</div>
+    if (layout === 'logo_top_company_bottom') return <div style={{ ...base2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{logoEl}{compEl}</div>
+    if (layout === 'company_top_logo_bottom') return <div style={{ ...base2, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{compEl}{logoEl}</div>
+    if (layout === 'logo_left_company_right') return <div style={{ ...base2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{logoEl}{compEl}</div>
+    if (layout === 'center')           return <div style={{ ...base2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>{logoEl}{compEl}</div>
+    return <div style={{ ...base2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{compEl}{logoEl}</div>
+  }
+
+  const titleHtml = buildTitleHtml(docTitle)
+  const sigHtml   = buildSigHtml(sigCfg)
+
+  return (
+    <div style={{
+      width: pw, background: 'white',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.10),0 12px 40px rgba(0,0,0,0.08)',
+      borderRadius: 2, position: 'relative', flexShrink: 0,
+    }}>
+      {/* Watermark */}
+      {watermark.enabled && (
+        <div style={{
+          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transform: `rotate(${watermark.rotation ?? -45}deg)`,
+          fontSize: watermark.size || 72, opacity: Math.min(watermark.opacity || 0.12, 1),
+          color: watermark.color || '#9ca3af', fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
+        }}>{watermark.text || 'CONFIDENTIAL'}</div>
+      )}
+
+      {/* Header */}
+      {headerVisible && renderHeader()}
+
+      {/* Table toolbar — sticky, appears when cursor is inside a table */}
+      {tableCtx && (
+        <div className="sticky top-0 z-30 flex items-center gap-1.5 px-3 py-1.5 border-b"
+          style={{ background: '#f5f3ff', borderColor: '#ddd6fe' }}>
+          <span className="text-xs font-bold text-violet-700 mr-1">Table:</span>
+          {[
+            { label: '+ Row',    op: 'addRow'    },
+            { label: '- Row',    op: 'deleteRow' },
+            { label: '+ Column', op: 'addCol'    },
+            { label: '- Column', op: 'deleteCol' },
+          ].map(({ label, op }) => (
+            <button key={op} onMouseDown={e => { e.preventDefault(); tableOp(op) }}
+              className="px-2 py-0.5 text-xs rounded border border-violet-300 text-violet-700 hover:bg-violet-100 transition-colors">
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Content area */}
+      <div style={{ paddingLeft: ml, paddingRight: mr }}>
+        {/* Document title */}
+        {docTitle?.text && (
+          <div dangerouslySetInnerHTML={{ __html: titleHtml }}
+            style={{ marginTop: headerH + headerSpacing }} />
+        )}
+
+        {/* Editable body — this is the WYSIWYG editor */}
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={handleInput}
+          className="focus:outline-none"
+          style={{
+            fontSize: '12pt', lineHeight: 1.7,
+            fontFamily: 'Arial, sans-serif', color: '#1f2937',
+            minHeight: 300,
+            paddingTop: docTitle?.text ? 0 : headerH + headerSpacing,
+            paddingBottom: mb,
+            outline: 'none',
+          }}
+          data-placeholder="Click here and start typing your document…"
+        />
+
+        {/* Image resize toolbar — inline below selected image */}
+        {imgToolbarVis && selectedImg && (
+          <div className="border-t px-3 py-2" style={{ borderColor: 'var(--border)' }}>
+            <ImageResizeToolbar img={selectedImg} onClose={() => { setImgToolbarVis(false); setSelectedImg(null) }} />
+          </div>
+        )}
+
+        {/* Signature */}
+        {sigCfg?.enabled && (
+          <div dangerouslySetInnerHTML={{ __html: sigHtml }} />
+        )}
+      </div>
+
+      {/* Footer */}
+      {footer.show && (
+        <div style={{
+          height: footerH, flexShrink: 0,
+          padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 20}px ${footer.padding_bottom ?? 8}px ${footer.padding_left ?? 20}px`,
+          borderTop: footer.border_top ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}` : 'none',
+          fontSize: footer.font_size || 10, color: footer.font_color || '#666',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box',
+        }}>
+          <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
+          <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
+          <span>{footer.show_page_numbers ? 'Page 1' : ''}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Full Preview Modal ───────────────────────────────────────────────────────
 function PreviewModal({ onClose, header, footer, paper, watermark, docTitle, bodyHtml, sigCfg }) {
   const [zoom, setZoom] = useState(60)
@@ -930,8 +1132,6 @@ export default function QuickBuilder() {
   const [autoSaveStatus,   setAutoSaveStatus]   = useState('saved')
   const [categories,       setCategories]       = useState([])
   const [bodyHtml,         setBodyHtml]         = useState('')
-  const [inlineEditMode,   setInlineEditMode]   = useState(false)
-  const previewEditRef     = useRef(null)
 
   // Template metadata
   const [name,         setName]         = useState('Untitled Template')
@@ -1026,7 +1226,7 @@ export default function QuickBuilder() {
       if (draft.sigCfg)       setSigCfg(s => ({ ...s, ...draft.sigCfg }))
       const html = draft.bodyHtml || ''
       setBodyHtml(html)
-      if (editorRef.current) editorRef.current.innerHTML = html
+      if (editorRef.current) { editorRef.current.innerHTML = html }
     } catch (_) {}
   }, [])
 
@@ -1720,13 +1920,13 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
               </div>
             </Section>
 
-            {/* ── Section 4: Body Content ── keepMounted so editor never unmounts */}
-            <Section id="body" title="Body Content" icon={AlignLeft}
-              open={openSection === 'body'} onToggle={toggleSection} keepMounted>
-              <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>
-                Use the toolbar for formatting. Insert HR fields below for dynamic content.
+            {/* ── Section 4: Formatting Toolbar ── */}
+            <Section id="body" title="Formatting Toolbar" icon={AlignLeft}
+              open={openSection === 'body'} onToggle={toggleSection}>
+              <p className="text-xs mb-2 px-0.5" style={{ color: 'var(--text-muted)' }}>
+                Click inside the document on the right to position your cursor, then use these tools.
               </p>
-              <BodyEditor editorRef={editorRef} onInput={handleEditorInput} initialHtml={bodyHtml} />
+              <BodyEditor editorRef={editorRef} onInput={handleEditorInput} />
             </Section>
 
             {/* ── Section 5: Signature ── */}
@@ -2023,82 +2223,24 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
           )}
         </div>
 
-        {/* ── Right: Live Preview ── */}
+        {/* ── Right: WYSIWYG Document Editor ── */}
         <div className="flex-1 min-h-0 overflow-auto py-8 px-6 flex flex-col items-center"
           style={{ background: '#e8e8ed' }}>
-          <div className="flex items-center gap-3 mb-5 self-start flex-shrink-0 flex-wrap">
+          <div className="flex items-center gap-3 mb-5 self-start flex-shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                {inlineEditMode ? 'Inline Edit' : 'Live Preview'}
-              </span>
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Live Edit</span>
             </div>
-            <button
-              onClick={() => {
-                if (!inlineEditMode) {
-                  // entering inline edit: sync current bodyHtml to preview editor
-                  setInlineEditMode(true)
-                  setTimeout(() => {
-                    if (previewEditRef.current) previewEditRef.current.innerHTML = editorRef.current?.innerHTML || bodyHtml || ''
-                  }, 0)
-                } else {
-                  // leaving inline edit: sync back to body editor
-                  const html = previewEditRef.current?.innerHTML || ''
-                  setBodyHtml(html)
-                  if (editorRef.current) editorRef.current.innerHTML = html
-                  setInlineEditMode(false)
-                  scheduleAutoSave()
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors"
-              style={inlineEditMode
-                ? { background: '#7c3aed', color: 'white', borderColor: '#7c3aed' }
-                : { borderColor: '#d1d5db', color: '#374151', background: 'white' }}>
-              {inlineEditMode ? '✓ Done Editing' : '✎ Edit in Preview'}
-            </button>
+            <span className="text-xs text-gray-400">Click anywhere in the document to edit</span>
           </div>
 
-          {inlineEditMode ? (
-            /* ── Inline edit view: single page, full content editable ── */
-            (() => {
-              const base = PAPER_PX[paper.size] || PAPER_PX.A4
-              const [pw2] = paper.orientation === 'landscape' ? [base[1], base[0]] : base
-              const ml2 = Math.round((paper.margin_left  || 72) / 72 * 96)
-              const mr2 = Math.round((paper.margin_right || 72) / 72 * 96)
-              const mt2 = Math.round((paper.margin_top   || 72) / 72 * 96)
-              const mb2 = Math.round((paper.margin_bottom|| 72) / 72 * 96)
-              return (
-                <div style={{ width: pw2, background: 'white', borderRadius: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.15)', minHeight: 400, position: 'relative' }}>
-                  <div
-                    ref={previewEditRef}
-                    contentEditable
-                    suppressContentEditableWarning
-                    onInput={() => {
-                      const html = previewEditRef.current?.innerHTML || ''
-                      setBodyHtml(html)
-                      if (editorRef.current) editorRef.current.innerHTML = html
-                      scheduleAutoSave()
-                    }}
-                    style={{
-                      padding: `${mt2}px ${mr2}px ${mb2}px ${ml2}px`,
-                      fontSize: '12pt', lineHeight: 1.7,
-                      fontFamily: 'Arial, sans-serif', color: '#1f2937',
-                      outline: 'none', minHeight: 300,
-                      cursor: 'text',
-                    }}
-                  />
-                  <p style={{ position: 'absolute', bottom: 8, right: 12, fontSize: 10, color: '#9ca3af', pointerEvents: 'none' }}>
-                    Click anywhere to edit — click "Done Editing" to return to preview
-                  </p>
-                </div>
-              )
-            })()
-          ) : (
-            <PaginatedDocPreview
-              header={header} footer={footer} paper={paper} watermark={watermark}
-              docTitle={docTitle} bodyHtml={bodyHtml} sigCfg={sigCfg}
-            />
-          )}
+          <WysiwygDocument
+            editorRef={editorRef}
+            header={header} footer={footer} paper={paper}
+            watermark={watermark} docTitle={docTitle} sigCfg={sigCfg}
+            bodyHtml={bodyHtml}
+            onBodyChange={(html) => { setBodyHtml(html); scheduleAutoSave() }}
+          />
         </div>
 
       </div>
