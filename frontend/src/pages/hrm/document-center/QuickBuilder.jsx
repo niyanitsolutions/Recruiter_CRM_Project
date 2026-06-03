@@ -387,11 +387,10 @@ function ImageDragResize({ img, onUpdate, onClose }) {
 // Exact font size list mapped to CSS pt values via the font-size-7 marker technique
 const FONT_SIZES_PT = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32, 36, 48, 72]
 
-function BodyEditor({ editorRef, onInput, bodyHtml, onBodyChange }) {
-  const savedSel       = useRef(null)
-  const sideEditorRef  = useRef(null)
-  const lastSideHtml   = useRef('')
-  const sideInputTimer = useRef(null)
+function BodyEditor({ editorRef, onInput, bodyHtml, sidebarWriteRef }) {
+  const savedSel      = useRef(null)
+  const sideEditorRef = useRef(null)
+  const lastSideHtml  = useRef('')
   const [showTableDialog, setShowTableDialog] = useState(false)
   // Active formatting state — updated on every selection change
   const [fmt, setFmt] = useState({
@@ -410,13 +409,12 @@ function BodyEditor({ editorRef, onInput, bodyHtml, onBodyChange }) {
     sel?.removeAllRanges()
     sel?.addRange(savedSel.current)
   }
-  // Routes change notifications to the correct editor path
+  // Routes toolbar/insert actions to the right editor path
   const notifyChange = () => {
     if (sideEditorRef.current && editorRef.current === sideEditorRef.current) {
       const html = sideEditorRef.current.innerHTML
       lastSideHtml.current = html
-      if (sideInputTimer.current) clearTimeout(sideInputTimer.current)
-      sideInputTimer.current = setTimeout(() => onBodyChange?.(html), 300)
+      sidebarWriteRef?.current?.(html)
     } else {
       onInput?.()
     }
@@ -600,8 +598,7 @@ function BodyEditor({ editorRef, onInput, bodyHtml, onBodyChange }) {
           if (!el) return
           const html = el.innerHTML
           lastSideHtml.current = html
-          if (sideInputTimer.current) clearTimeout(sideInputTimer.current)
-          sideInputTimer.current = setTimeout(() => onBodyChange?.(html), 300)
+          sidebarWriteRef?.current?.(html)
         }}
         data-placeholder="Type your document body content here…"
         style={{
@@ -961,7 +958,7 @@ function DocHeaderEl({ header, headerH }) {
 // ─── TRUE PAGE LAYOUT EDITOR ──────────────────────────────────────────────────
 // KEY INVARIANT: We NEVER call el.innerHTML on a div that has DOM focus.
 // That single rule eliminates all cursor corruption and reversed-typing bugs.
-function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle, sigCfg, bodyHtml, onBodyChange, getMergedHtmlRef }) {
+function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle, sigCfg, bodyHtml, onBodyChange, getMergedHtmlRef, sidebarWriteRef }) {
   // ── Page dimensions ───────────────────────────────────────────────────────
   const base = PAPER_PX[paper.size] || PAPER_PX.A4
   const [pw, ph] = paper.orientation === 'landscape' ? [base[1], base[0]] : base
@@ -1082,6 +1079,39 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     // Full sigCfg coverage so position/height changes repaginate
     sigCfg?.enabled, sigCfg?.position, sigCfg?.height, sigCfg?.authorized_person,
   ])
+
+  // ── Direct-write path for sidebar editor (avoids bodyHtml state race) ─────
+  // Sidebar calls this instead of setBodyHtml so there is no competing update cycle.
+  useEffect(() => {
+    if (!sidebarWriteRef) return
+    sidebarWriteRef.current = (html) => {
+      // Write to page 0; clear pages 1+ to prevent getMerged duplication
+      Object.keys(pageRefs.current).forEach(k => {
+        const el = pageRefs.current[+k]
+        if (!el) return
+        const focused = el === document.activeElement || el.contains(document.activeElement)
+        if (+k === 0) {
+          if (!focused && el.innerHTML !== (html || '')) {
+            el.innerHTML = html || ''
+            ensureTrailingP(el)
+            ensureLeadingP(el)
+          }
+        } else {
+          if (el.innerHTML !== '') el.innerHTML = ''
+        }
+      })
+      // Debounce state sync (same cadence as handleInput)
+      if (mergeTimer.current) clearTimeout(mergeTimer.current)
+      mergeTimer.current = setTimeout(() => {
+        const m = getMerged()
+        lastBody.current = m
+        onBodyChange(m)
+      }, 150)
+      // Debounce pagination
+      if (repagTimer.current) clearTimeout(repagTimer.current)
+      repagTimer.current = setTimeout(() => runPag(html || ''), 1500)
+    }
+  }, [getMerged, onBodyChange, runPag]) // eslint-disable-line
 
   // ── Input handler — minimal work per keystroke for < 16ms latency ─────────
   const handleInput = useCallback((i) => {
@@ -1313,6 +1343,7 @@ export default function QuickBuilder() {
   // Ref to WysiwygDocument's getMerged function — returns body HTML from ALL pages.
   // Used by save, autosave, draft, export so we always get the full document.
   const getMergedBodyRef = useRef(null)
+  const sidebarWriteRef  = useRef(null)
 
   // Panel state
   const [leftWidth,     setLeftWidth]     = useState(() => parseInt(localStorage.getItem('qb_left_w')   || '400'))
@@ -2147,7 +2178,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
                 editorRef={editorRef}
                 onInput={handleEditorInput}
                 bodyHtml={bodyHtml}
-                onBodyChange={(html) => { setBodyHtml(html); scheduleAutoSave() }}
+                sidebarWriteRef={sidebarWriteRef}
               />
             </Section>
 
@@ -2463,6 +2494,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
             bodyHtml={bodyHtml}
             onBodyChange={(html) => { setBodyHtml(html); scheduleAutoSave() }}
             getMergedHtmlRef={getMergedBodyRef}
+            sidebarWriteRef={sidebarWriteRef}
           />
         </div>
 
