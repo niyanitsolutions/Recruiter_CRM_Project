@@ -818,16 +818,16 @@ function DocHeaderEl({ header, headerH }) {
 }
 
 // ─── TRUE PAGE LAYOUT EDITOR ──────────────────────────────────────────────────
-// Real A4/Letter page containers, same pagination engine as preview & export.
-// Each page is an actual DOM div with header + editable body + footer.
-function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle, sigCfg, bodyHtml, onBodyChange }) {
-  // ── Page dimensions — identical to PaginatedDocPreview ──────────────────
+// KEY INVARIANT: We NEVER call el.innerHTML on a div that has DOM focus.
+// That single rule eliminates all cursor corruption and reversed-typing bugs.
+function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle, sigCfg, bodyHtml, onBodyChange, getMergedHtmlRef }) {
+  // ── Page dimensions ───────────────────────────────────────────────────────
   const base = PAPER_PX[paper.size] || PAPER_PX.A4
   const [pw, ph] = paper.orientation === 'landscape' ? [base[1], base[0]] : base
 
   const headerVisible = header.show || !!(header.logo_url || header.company_name)
-  const headerH       = headerVisible ? Math.max(header.header_height || 100, 40) : 0
-  const footerH       = footer.show   ? Math.max(footer.footer_height || 40,  20) : 0
+  const headerH    = headerVisible ? Math.max(header.header_height || 100, 40) : 0
+  const footerH    = footer.show   ? Math.max(footer.footer_height || 40,  20) : 0
   const ml = Math.round((paper.margin_left   || 72) / 72 * 96)
   const mr = Math.round((paper.margin_right  || 72) / 72 * 96)
   const mt = Math.round((paper.margin_top    || 72) / 72 * 96)
@@ -836,51 +836,99 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
   const usableH  = Math.max(ph - headerH - footerH - headerSpacing - mb, 100)
   const contentW = Math.max(pw - ml - mr, 200)
 
-  // ── State ─────────────────────────────────────────────────────────────────
-  const [pages,        setPages]        = useState([[]])  // array of pages → each is [{html,height}]
-  const [activeIdx,    setActiveIdx]    = useState(0)
-  const [resizeImg,    setResizeImg]    = useState(null)  // image with drag handles
-  const [tableCtx,     setTableCtx]    = useState(null)
+  // ── State (only what drives React rendering) ──────────────────────────────
+  const [pageCount,  setPageCount]  = useState(1)
+  const [resizeImg,  setResizeImg]  = useState(null)
+  const [tableCtx,   setTableCtx]   = useState(null)
 
-  const pageRefs   = useRef({})     // pageIdx → contentEditable div
-  const repagTimer = useRef(null)
-  const isTyping   = useRef(false)
-  const didInit    = useRef(false)
+  // ── Refs (no re-render, fast) ─────────────────────────────────────────────
+  const pageRefs   = useRef({})      // {pageIdx: contentEditableDiv}
+  const pagesData  = useRef([[]])    // latest pagination result (not React state)
+  const pcRef      = useRef(1)       // mirror of pageCount (avoids closure staleness)
+  const repagTimer = useRef(null)    // 1.5s debounce for pagination
+  const mergeTimer = useRef(null)    // 150ms debounce for parent bodyHtml update
+  const lastBody   = useRef(bodyHtml)// prevent reacting to own changes
 
-  // ── Build full HTML for pagination measurement ────────────────────────────
-  // Wrap title and sig as non-editable islands so they paginate correctly
-  // but are filtered out of getMergedHtml.
-  const buildFullHtml = useCallback((rawBody) => {
-    const tH = buildTitleHtml(docTitle)
-    const sH = buildSigHtml(sigCfg)
-    const t  = tH ? `<div contenteditable="false" data-noedit="1">${tH}</div>` : ''
-    const s  = sH ? `<div contenteditable="false" data-noedit="1">${sH}</div>` : ''
-    return t + (rawBody || '') + s
+  // ── THE CRITICAL RULE: never write innerHTML to a focused element ─────────
+  const safeSetHTML = (el, html) => {
+    if (!el) return
+    // If this element is focused (user is typing in it), NEVER touch its DOM.
+    if (el === document.activeElement || el.contains(document.activeElement)) return
+    if (el.innerHTML !== html) { el.innerHTML = html; ensureTrailingP(el) }
+  }
+
+  // ── Build full HTML (title + body + sig) for measurement ─────────────────
+  const buildFull = useCallback((raw) => {
+    const t = buildTitleHtml(docTitle)
+    const s = buildSigHtml(sigCfg)
+    const tB = t ? `<div contenteditable="false" data-noedit="1">${t}</div>` : ''
+    const sB = s ? `<div contenteditable="false" data-noedit="1">${s}</div>` : ''
+    return tB + (raw || '') + sB
   }, [docTitle, sigCfg])
 
-  // ── Collect body HTML from all page divs (exclude title/sig) ─────────────
-  const getMergedHtml = useCallback(() =>
+  // ── Collect body HTML from all page divs (exclude title/sig islands) ──────
+  const getMerged = useCallback(() =>
     Object.keys(pageRefs.current)
       .sort((a, b) => +a - +b)
-      .flatMap(i => Array.from(pageRefs.current[+i]?.children || [])
+      .flatMap(k => Array.from(pageRefs.current[+k]?.children || [])
         .filter(ch => !ch.hasAttribute('data-noedit')))
       .map(ch => ch.outerHTML)
       .join('')
   , [])
 
-  // ── Run shared pagination engine ──────────────────────────────────────────
-  const repaginate = useCallback((rawBody) => {
-    paginateEngine(buildFullHtml(rawBody), { contentW, usableH }).then(pageList => {
-      setPages(pageList.length ? pageList : [[]])
-    })
-  }, [buildFullHtml, contentW, usableH])
-
-  // ── Initial pagination ────────────────────────────────────────────────────
-  useEffect(() => { repaginate(bodyHtml || '') }, []) // eslint-disable-line
-
-  // ── Re-paginate when layout settings change ───────────────────────────────
+  // Expose getMerged to parent (for payload building)
   useEffect(() => {
-    if (!isTyping.current) repaginate(getMergedHtml() || bodyHtml || '')
+    if (getMergedHtmlRef) getMergedHtmlRef.current = getMerged
+  }, [getMerged, getMergedHtmlRef])
+
+  // ── Apply pagination result to page divs (respects safeSetHTML) ──────────
+  const applyPages = useCallback((pages) => {
+    pages.forEach((blocks, i) => {
+      safeSetHTML(pageRefs.current[i], blocks.map(b => b.html).join(''))
+    })
+  }, []) // eslint-disable-line
+
+  // ── Run shared pagination engine ──────────────────────────────────────────
+  const runPag = useCallback((raw) => {
+    paginateEngine(buildFull(raw), { contentW, usableH }).then(pages => {
+      pagesData.current = pages
+      const nc = Math.max(1, pages.length)
+      pcRef.current = nc
+      if (nc !== pageCount) setPageCount(nc)  // triggers re-render (new page divs)
+      else applyPages(pages)                   // same count: just update content
+    })
+  }, [buildFull, contentW, usableH, pageCount, applyPages])
+
+  // ── After page count changes, apply pagesData to newly-created divs ───────
+  useLayoutEffect(() => { applyPages(pagesData.current) }, [pageCount, applyPages])
+
+  // ── Init: load template content, then paginate ────────────────────────────
+  useLayoutEffect(() => {
+    const el = pageRefs.current[0]
+    if (el) { el.innerHTML = bodyHtml || ''; ensureTrailingP(el) }
+    if (editorRef) editorRef.current = el || null
+    lastBody.current = bodyHtml
+    runPag(bodyHtml || '')
+  }, []) // eslint-disable-line
+
+  // ── External bodyHtml change (template load / draft restore) ─────────────
+  useEffect(() => {
+    if (bodyHtml === lastBody.current) return  // our own change — skip
+    lastBody.current = bodyHtml
+    // Full reset: put content on page 0, clear the rest
+    Object.keys(pageRefs.current).forEach(k => {
+      const el = pageRefs.current[+k]
+      if (!el) return
+      el.innerHTML = (+k === 0) ? (bodyHtml || '') : ''
+      if (+k === 0) ensureTrailingP(el)
+    })
+    pcRef.current = 1; setPageCount(1)
+    runPag(bodyHtml || '')
+  }, [bodyHtml]) // eslint-disable-line
+
+  // ── Re-paginate on layout config changes ─────────────────────────────────
+  useEffect(() => {
+    runPag(getMerged() || bodyHtml || '')
   }, [ // eslint-disable-line
     header.header_height, header.header_spacing, header.show,
     footer.show, footer.footer_height,
@@ -889,47 +937,43 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     docTitle?.text, docTitle?.font_size, sigCfg?.enabled,
   ])
 
-  // ── Populate page divs when pagination result changes ────────────────────
-  useLayoutEffect(() => {
-    pages.forEach((pageBlocks, i) => {
-      const el = pageRefs.current[i]
-      if (!el) return
-      // Don't overwrite the active page while the user is still typing
-      if (i === activeIdx && isTyping.current && didInit.current) return
-      const html = pageBlocks.map(b => b.html).join('')
-      if (el.innerHTML !== html) { el.innerHTML = html; ensureTrailingP(el) }
-    })
-    didInit.current = true
-  }, [pages]) // eslint-disable-line
-
-  // ── editorRef always points to active page (for toolbar) ─────────────────
-  useEffect(() => {
-    if (editorRef) editorRef.current = pageRefs.current[activeIdx] || pageRefs.current[0]
-  }, [activeIdx, editorRef, pages]) // eslint-disable-line
-
-  // ── Handle input ─────────────────────────────────────────────────────────
-  const handlePageInput = useCallback((i) => {
-    setActiveIdx(i)
+  // ── Input handler — minimal work per keystroke for < 16ms latency ─────────
+  const handleInput = useCallback((i) => {
     const el = pageRefs.current[i]
     if (el) ensureTrailingP(el)
-    const merged = getMergedHtml()
-    onBodyChange(merged)
-    isTyping.current = true
+    if (editorRef) editorRef.current = el
+
+    // Debounce parent state update (prevents re-render on every keypress)
+    if (mergeTimer.current) clearTimeout(mergeTimer.current)
+    mergeTimer.current = setTimeout(() => {
+      const m = getMerged()
+      lastBody.current = m     // mark as our own change
+      onBodyChange(m)
+    }, 150)
+
+    // Debounce pagination recalculation
     if (repagTimer.current) clearTimeout(repagTimer.current)
-    repagTimer.current = setTimeout(() => {
-      isTyping.current = false
-      repaginate(merged)
-    }, 1500)
-  }, [getMergedHtml, onBodyChange, repaginate])
+    repagTimer.current = setTimeout(() => runPag(getMerged()), 1500)
+  }, [getMerged, onBodyChange, runPag, editorRef]) // eslint-disable-line
+
+  // ── Page div ref callback ─────────────────────────────────────────────────
+  const setPageRef = useCallback((i, el) => {
+    const prev = pageRefs.current[i]
+    pageRefs.current[i] = el
+    if (el && el !== prev) {
+      // New div just mounted — initialize with latest pagesData
+      const html = pagesData.current[i]?.map(b => b.html).join('') || ''
+      el.innerHTML = html; ensureTrailingP(el)
+      if (i === 0 && editorRef && !editorRef.current) editorRef.current = el
+    }
+    if (!el) delete pageRefs.current[i]
+  }, [editorRef])
 
   // ── Image drag-resize ─────────────────────────────────────────────────────
   useEffect(() => {
     const onDown = (e) => {
-      const img = e.target.tagName === 'IMG' &&
-        Object.values(pageRefs.current).some(el => el?.contains(e.target))
-          ? e.target : null
-      // Only update if clicking a new image, don't clear when clicking handles
-      if (img) setResizeImg(img)
+      const isInPage = Object.values(pageRefs.current).some(el => el?.contains(e.target))
+      if (e.target.tagName === 'IMG' && isInPage) setResizeImg(e.target)
       else if (!e.target.closest?.('.img-resize-handle')) setResizeImg(null)
     }
     document.addEventListener('mousedown', onDown)
@@ -941,8 +985,8 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     const onSel = () => {
       const sel = window.getSelection()
       if (!sel?.anchorNode) { setTableCtx(null); return }
-      const inAnyPage = Object.values(pageRefs.current).some(el => el?.contains(sel.anchorNode))
-      if (!inAnyPage) { setTableCtx(null); return }
+      const inPage = Object.values(pageRefs.current).some(el => el?.contains(sel.anchorNode))
+      if (!inPage) { setTableCtx(null); return }
       let n = sel.anchorNode
       while (n) {
         if (n.nodeName === 'TABLE') { setTableCtx({ table: n }); return }
@@ -970,38 +1014,30 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
       const refRow = cell?.closest?.('tr') || table.rows[table.rows.length - 1]
       const row = document.createElement('tr')
       for (let i = 0; i < cols; i++) {
-        const td = document.createElement('td')
-        td.style.cssText = 'padding:8px 10px;border:1px solid #e5e7eb;background:white;'
-        row.appendChild(td)
+        const td = document.createElement('td'); td.style.cssText = 'padding:8px 10px;border:1px solid #e5e7eb;background:white;'; row.appendChild(td)
       }
       refRow.insertAdjacentElement('afterend', row)
     } else if (op === 'deleteRow') {
-      const row = cell?.closest?.('tr')
-      if (row && table.rows.length > 1) row.remove()
+      const row = cell?.closest?.('tr'); if (row && table.rows.length > 1) row.remove()
     } else if (op === 'addCol') {
       const ci = cell ? Array.from(cell.closest?.('tr')?.cells || []).indexOf(cell) : cols - 1
       Array.from(table.rows).forEach((row, ri) => {
         const nc = document.createElement(ri === 0 ? 'th' : 'td')
-        nc.style.cssText = ri === 0
-          ? 'padding:8px 10px;background:#7c3aed;color:white;border:1px solid #e5e7eb;text-align:left;'
-          : 'padding:8px 10px;border:1px solid #e5e7eb;background:white;'
-        if (ci >= 0 && row.cells[ci]) row.cells[ci].insertAdjacentElement('afterend', nc)
-        else row.appendChild(nc)
+        nc.style.cssText = ri === 0 ? 'padding:8px 10px;background:#7c3aed;color:white;border:1px solid #e5e7eb;text-align:left;' : 'padding:8px 10px;border:1px solid #e5e7eb;background:white;'
+        if (ci >= 0 && row.cells[ci]) row.cells[ci].insertAdjacentElement('afterend', nc); else row.appendChild(nc)
       })
     } else if (op === 'deleteCol') {
       const ci = cell ? Array.from(cell.closest?.('tr')?.cells || []).indexOf(cell) : -1
       if (ci >= 0 && cols > 1) Array.from(table.rows).forEach(row => { if (row.cells[ci]) row.cells[ci].remove() })
     }
-    const ownerEntry = Object.entries(pageRefs.current).find(([, el]) => el?.contains(table))
-    if (ownerEntry) handlePageInput(+ownerEntry[0])
-  }, [tableCtx, handlePageInput])
-
-  const pageCount = pages.length
+    const owner = Object.entries(pageRefs.current).find(([, el]) => el?.contains(table))
+    if (owner) handleInput(+owner[0])
+  }, [tableCtx, handleInput])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, paddingBottom: 40 }}>
 
-      {/* Table context toolbar — sticky */}
+      {/* Table toolbar — sticky */}
       {tableCtx && (
         <div className="sticky top-0 z-50 self-stretch flex items-center gap-2 px-4 py-2 border-b shadow"
           style={{ background: '#f5f3ff', borderColor: '#ddd6fe' }}>
@@ -1017,34 +1053,27 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
         </div>
       )}
 
-      {/* Image drag-resize overlay (portal, fixed positioning) */}
+      {/* Image drag-resize overlay */}
       {resizeImg && (
         <ImageDragResize
           img={resizeImg}
           onUpdate={() => {
-            const ownerEntry = Object.entries(pageRefs.current).find(([, el]) => el?.contains(resizeImg))
-            if (ownerEntry) handlePageInput(+ownerEntry[0])
+            const owner = Object.entries(pageRefs.current).find(([, el]) => el?.contains(resizeImg))
+            if (owner) handleInput(+owner[0])
           }}
           onClose={() => setResizeImg(null)}
         />
       )}
 
-      {/* ── TRUE PAGE CONTAINERS ────────────────────────────────────────────── */}
-      {pages.map((pageBlocks, pageIdx) => (
+      {/* ── Page boxes ──────────────────────────────────────────────────────── */}
+      {Array.from({ length: pageCount }, (_, pageIdx) => (
         <div key={pageIdx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-
-          {/* Page label above each page box */}
-          <div style={{
-            fontSize: 10, fontWeight: 600, color: '#9ca3af',
-            marginBottom: 6, letterSpacing: '0.1em', textTransform: 'uppercase',
-          }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 6, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
             Page {pageIdx + 1}{pageCount > 1 ? ` / ${pageCount}` : ''}
           </div>
 
-          {/* ── Page box — exact A4/Letter size, same as PaginatedDocPreview ── */}
           <div style={{
-            width: pw, height: ph,
-            background: 'white',
+            width: pw, height: ph, background: 'white',
             boxShadow: '0 1px 4px rgba(0,0,0,0.06),0 4px 20px rgba(0,0,0,0.12),0 8px 40px rgba(0,0,0,0.08)',
             borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0,
           }}>
@@ -1052,36 +1081,22 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
             {watermark.enabled && (
               <div style={{
                 position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transform: `rotate(${watermark.rotation ?? -45}deg)`,
-                fontSize: watermark.size || 72, opacity: Math.min(watermark.opacity || 0.12, 1),
-                color: watermark.color || '#9ca3af', fontWeight: 'bold',
-                userSelect: 'none', pointerEvents: 'none', zIndex: 1,
+                transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72,
+                opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af',
+                fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
               }}>{watermark.text || 'CONFIDENTIAL'}</div>
             )}
 
-            {/* Header — appears on EVERY page, same as Word */}
+            {/* Header on every page */}
             {headerVisible && <DocHeaderEl header={header} headerH={headerH} />}
 
-            {/* Editable content area — positioned identically to PaginatedDocPreview */}
+            {/* Editable content area */}
             <div
-              ref={el => {
-                const prev = pageRefs.current[pageIdx]
-                pageRefs.current[pageIdx] = el
-                if (el && el !== prev) {
-                  // New page mounted — populate from current pages state
-                  const html = pages[pageIdx]?.map(b => b.html).join('') || ''
-                  el.innerHTML = html; ensureTrailingP(el)
-                  if (pageIdx === 0 && editorRef && !editorRef.current) editorRef.current = el
-                }
-                if (!el) delete pageRefs.current[pageIdx]
-              }}
+              ref={el => setPageRef(pageIdx, el)}
               contentEditable
               suppressContentEditableWarning
-              onInput={() => handlePageInput(pageIdx)}
-              onFocus={() => {
-                setActiveIdx(pageIdx)
-                if (editorRef) editorRef.current = pageRefs.current[pageIdx]
-              }}
+              onInput={() => handleInput(pageIdx)}
+              onFocus={() => { if (editorRef) editorRef.current = pageRefs.current[pageIdx] }}
               style={{
                 position: 'absolute',
                 top: headerH + headerSpacing,
@@ -1093,10 +1108,9 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
                 fontFamily: 'Arial, sans-serif', color: '#1f2937',
                 outline: 'none',
               }}
-              data-placeholder="Click to type…"
             />
 
-            {/* Footer — appears on EVERY page */}
+            {/* Footer on every page */}
             {footer.show && (
               <div style={{
                 position: 'absolute', bottom: 0, left: 0, right: 0, height: footerH, zIndex: 2,
@@ -1146,10 +1160,13 @@ function PreviewModal({ onClose, header, footer, paper, watermark, docTitle, bod
 export default function QuickBuilder() {
   const { id }   = useParams()
   const navigate = useNavigate()
-  const editorRef      = useRef(null)
-  const autoSaveTimer  = useRef(null)
-  const exportRef      = useRef(null)
-  const latestRef      = useRef({})
+  const editorRef       = useRef(null)
+  const autoSaveTimer   = useRef(null)
+  const exportRef       = useRef(null)
+  const latestRef       = useRef({})
+  // Ref to WysiwygDocument's getMerged function — returns body HTML from ALL pages.
+  // Used by save, autosave, draft, export so we always get the full document.
+  const getMergedBodyRef = useRef(null)
 
   // Panel state
   const [leftWidth,     setLeftWidth]     = useState(() => parseInt(localStorage.getItem('qb_left_w')   || '400'))
@@ -1245,7 +1262,7 @@ export default function QuickBuilder() {
 
   const saveDraft = useCallback(() => {
     try {
-      const html = editorRef.current?.innerHTML || bodyHtml || ''
+      const html = getMergedBodyRef.current?.() ?? editorRef.current?.innerHTML ?? bodyHtml ?? ''
       const draft = {
         name, description, categoryId, tags, templateType,
         header, footer, paper, watermark, docTitle, sigCfg,
@@ -1355,7 +1372,7 @@ export default function QuickBuilder() {
   // Build payload
   const buildPayload = useCallback((summary) => {
     const s = latestRef.current
-    const html = editorRef.current?.innerHTML ?? bodyHtml ?? ''
+    const html = getMergedBodyRef.current?.() ?? editorRef.current?.innerHTML ?? bodyHtml ?? ''
     return {
       name:           s.name,
       description:    s.description,
@@ -1397,7 +1414,7 @@ export default function QuickBuilder() {
   useEffect(() => { scheduleAutoSave() }, [header, footer, paper, watermark, name, description, categoryId, tags, docTitle, sigCfg])
 
   const handleEditorInput = useCallback(() => {
-    const html = editorRef.current?.innerHTML || ''
+    const html = getMergedBodyRef.current?.() ?? editorRef.current?.innerHTML ?? ''
     setBodyHtml(html)
     scheduleAutoSave()
   }, [scheduleAutoSave])
@@ -1476,7 +1493,7 @@ export default function QuickBuilder() {
   // Build full HTML for export/print
   const buildFullHtml = useCallback(() => {
     const s   = latestRef.current
-    const html = editorRef.current?.innerHTML || bodyHtml || ''
+    const html = getMergedBodyRef.current?.() ?? editorRef.current?.innerHTML ?? bodyHtml ?? ''
     const ml  = `${(s.paper.margin_left  || 72) / 72 * 25.4}mm`
     const mr  = `${(s.paper.margin_right || 72) / 72 * 25.4}mm`
     const mt  = `${(s.paper.margin_top   || 72) / 72 * 25.4}mm`
@@ -2285,6 +2302,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
             watermark={watermark} docTitle={docTitle} sigCfg={sigCfg}
             bodyHtml={bodyHtml}
             onBodyChange={(html) => { setBodyHtml(html); scheduleAutoSave() }}
+            getMergedHtmlRef={getMergedBodyRef}
           />
         </div>
 
