@@ -897,19 +897,29 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
 }
 
 // ─── Cursor-trap fixes: ensure typing space before AND after tables/lists ────
+// IMPORTANT: skip data-noedit blocks (title/sig injected by pagination).
+// Without this guard every keystroke inserts a new <p> before the title or after
+// the signature, causing the cursor to jump and content to disappear.
 function ensureTrailingP(el) {
   if (!el) return
-  const last = el.lastElementChild
+  // Walk back past any trailing data-noedit blocks (signature, etc.)
+  let last = el.lastElementChild
+  while (last && last.hasAttribute?.('data-noedit')) last = last.previousElementSibling
   if (!last || ['TABLE', 'UL', 'OL'].includes(last.tagName) ||
       last.getAttribute?.('contenteditable') === 'false') {
     const p = document.createElement('p')
     p.innerHTML = '<br>'
-    el.appendChild(p)
+    // Insert before the first trailing noedit block, or append if none
+    const trailNoedit = el.lastElementChild?.hasAttribute?.('data-noedit') ? el.lastElementChild : null
+    if (trailNoedit) el.insertBefore(p, trailNoedit)
+    else el.appendChild(p)
   }
 }
 function ensureLeadingP(el) {
   if (!el) return
-  const first = el.firstElementChild
+  // Walk forward past any leading data-noedit blocks (title, etc.)
+  let first = el.firstElementChild
+  while (first && first.hasAttribute?.('data-noedit')) first = first.nextElementSibling
   if (first && (['TABLE', 'UL', 'OL'].includes(first.tagName) ||
       first.getAttribute?.('contenteditable') === 'false')) {
     const p = document.createElement('p')
@@ -992,7 +1002,7 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     if (!el) return
     // If this element is focused (user is typing in it), NEVER touch its DOM.
     if (el === document.activeElement || el.contains(document.activeElement)) return
-    if (el.innerHTML !== html) { el.innerHTML = html; ensureTrailingP(el) }
+    if (el.innerHTML !== html) { el.innerHTML = html; ensureLeadingP(el); ensureTrailingP(el) }
   }
 
   // ── Build full HTML (title + body + sig) for measurement ─────────────────
@@ -1598,6 +1608,13 @@ export default function QuickBuilder() {
 
   const handleEditorInput = useCallback(() => {
     const html = getMergedBodyRef.current?.() ?? editorRef.current?.innerHTML ?? ''
+    setBodyHtml(html)
+    scheduleAutoSave()
+  }, [scheduleAutoSave])
+
+  // Stable callback so WysiwygDocument's handleInput/sidebarWriteRef don't
+  // get recreated on every QuickBuilder render (which was causing mid-type disruption).
+  const handleBodyChange = useCallback((html) => {
     setBodyHtml(html)
     scheduleAutoSave()
   }, [scheduleAutoSave])
@@ -2492,7 +2509,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
             header={header} footer={footer} paper={paper}
             watermark={watermark} docTitle={docTitle} sigCfg={sigCfg}
             bodyHtml={bodyHtml}
-            onBodyChange={(html) => { setBodyHtml(html); scheduleAutoSave() }}
+            onBodyChange={handleBodyChange}
             getMergedHtmlRef={getMergedBodyRef}
             sidebarWriteRef={sidebarWriteRef}
           />
