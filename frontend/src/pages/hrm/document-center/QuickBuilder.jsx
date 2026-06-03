@@ -1,6 +1,8 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import { paginate as paginateEngine } from './paginationEngine'
 import {
   Save, Eye, Bold, Italic, Underline, Strikethrough,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
@@ -287,6 +289,100 @@ function ImageResizeToolbar({ img, onClose }) {
   )
 }
 
+// ─── Image Drag-Resize Overlay ────────────────────────────────────────────────
+// Renders via React portal (position:fixed) so it works inside any overflow container.
+function ImageDragResize({ img, onUpdate, onClose }) {
+  const getRectState = () => {
+    const r = img.getBoundingClientRect()
+    return { left: r.left, top: r.top, width: r.width, height: r.height }
+  }
+  const [rect, setRect] = useState(getRectState)
+  const dragRef         = useRef(null)
+
+  // Sync overlay position whenever the image or viewport moves
+  const syncRect = useCallback(() => setRect(getRectState()), [img]) // eslint-disable-line
+
+  useEffect(() => {
+    syncRect()
+    window.addEventListener('scroll', syncRect, true)
+    window.addEventListener('resize', syncRect)
+    return () => {
+      window.removeEventListener('scroll', syncRect, true)
+      window.removeEventListener('resize', syncRect)
+    }
+  }, [syncRect])
+
+  const startDrag = useCallback((e, corner) => {
+    e.preventDefault(); e.stopPropagation()
+    const r     = img.getBoundingClientRect()
+    const ratio = (img.naturalWidth || r.width) / Math.max(img.naturalHeight || r.height, 1)
+    dragRef.current = { corner, startX: e.clientX, startW: r.width, ratio }
+
+    const onMove = (mv) => {
+      const { corner, startX, startW, ratio } = dragRef.current
+      const dx = mv.clientX - startX
+      const nw = Math.max(40, corner === 'nw' || corner === 'sw' ? startW - dx : startW + dx)
+      const nh = Math.round(nw / ratio)
+      img.style.width    = nw + 'px'
+      img.style.height   = nh + 'px'
+      img.style.maxWidth = '100%'
+      syncRect()
+      onUpdate?.()
+    }
+    const onUp = () => {
+      dragRef.current = null
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      onUpdate?.()
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }, [img, syncRect, onUpdate])
+
+  const corners = [
+    { id: 'nw', cursor: 'nw-resize', style: { top: -6, left: -6 } },
+    { id: 'ne', cursor: 'ne-resize', style: { top: -6, right: -6 } },
+    { id: 'sw', cursor: 'sw-resize', style: { bottom: -6, left: -6 } },
+    { id: 'se', cursor: 'se-resize', style: { bottom: -6, right: -6 } },
+  ]
+  const edges = [
+    { id: 'ne', cursor: 'e-resize', style: { top: '50%', right: -5, transform: 'translateY(-50%)', width: 8, height: 20, borderRadius: 4 } },
+    { id: 'nw', cursor: 'w-resize', style: { top: '50%', left: -5,  transform: 'translateY(-50%)', width: 8, height: 20, borderRadius: 4 } },
+  ]
+
+  return createPortal(
+    <div style={{ position: 'fixed', left: rect.left, top: rect.top, width: rect.width, height: rect.height, zIndex: 99999, pointerEvents: 'none' }}>
+      {/* Selection border */}
+      <div style={{ position: 'absolute', inset: -2, border: '2px solid #7c3aed', borderRadius: 2, pointerEvents: 'none' }} />
+      {/* Corner handles */}
+      {corners.map(h => (
+        <div key={h.id} onMouseDown={e => startDrag(e, h.id)} style={{
+          position: 'absolute', width: 12, height: 12,
+          background: 'white', border: '2px solid #7c3aed', borderRadius: 2,
+          cursor: h.cursor, pointerEvents: 'all', ...h.style,
+        }} />
+      ))}
+      {/* Side handles */}
+      {edges.map(h => (
+        <div key={h.id + '_edge'} onMouseDown={e => startDrag(e, h.id)} style={{
+          position: 'absolute', width: 10, height: 24,
+          background: 'white', border: '2px solid #7c3aed',
+          cursor: h.cursor, pointerEvents: 'all', ...h.style,
+        }} />
+      ))}
+      {/* Dismiss */}
+      <button onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onClose?.() }}
+        style={{
+          position: 'absolute', top: -22, right: 0,
+          background: '#7c3aed', color: 'white', border: 'none',
+          borderRadius: 4, padding: '1px 7px', fontSize: 10,
+          cursor: 'pointer', pointerEvents: 'all',
+        }}>Done</button>
+    </div>,
+    document.body
+  )
+}
+
 // ─── Body Editor (Formatting Toolbar only — editable div is in WysiwygDocument) ──
 function BodyEditor({ editorRef, onInput }) {
   const savedSel = useRef(null)
@@ -562,181 +658,18 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   const sigHtml      = buildSigHtml(sigCfg)
   const fullBodyHtml = titleHtml + (bodyHtml || '') + sigHtml
 
-  // Block-aware page distribution: measure each top-level element, never split blocks
-  const [pageBlocks, setPageBlocks] = useState([[]]) // array of pages, each page is array of {html, height}
+  // ── Use the SAME pagination engine as the editor ─────────────────────────
+  const [pageBlocks, setPageBlocks] = useState([[]])
 
   useEffect(() => {
     if (!fullBodyHtml.trim()) { setPageBlocks([[]]); return }
-
-    const container = document.createElement('div')
-    container.setAttribute('aria-hidden', 'true')
-    Object.assign(container.style, {
-      position: 'absolute', top: '-99999px', left: '-99999px',
-      width: `${contentW}px`,
-      fontSize: '12pt', lineHeight: '1.7',
-      fontFamily: 'Arial, sans-serif', color: '#1f2937',
-      visibility: 'hidden', pointerEvents: 'none',
-    })
-    container.innerHTML = fullBodyHtml
-    document.body.appendChild(container)
-
-    requestAnimationFrame(() => {
-      const children = Array.from(container.children)
-      let blocks
-      if (children.length === 0) {
-        blocks = [{ html: fullBodyHtml, height: container.scrollHeight || 40 }]
-      } else {
-        blocks = children.map(el => {
-          const cs = window.getComputedStyle(el)
-          const extra = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
-          return { html: el.outerHTML, height: (el.offsetHeight || 20) + extra }
-        })
-      }
-      document.body.removeChild(container)
-
-      // Distribute blocks across pages without splitting any block
-      const pages = [[]]
-      let usedH = 0, pi = 0
-      for (const block of blocks) {
-        const bh = Math.max(block.height, 4)
-        if (usedH + bh > usableH && usedH > 0) {
-          pages.push([]); pi++; usedH = 0
-        }
-        pages[pi].push(block)
-        usedH += bh
-      }
-      setPageBlocks(pages)
-    })
+    paginateEngine(fullBodyHtml, { contentW, usableH }).then(pages => setPageBlocks(pages))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullBodyHtml, contentW, usableH])
 
   const pageCount = Math.max(1, pageBlocks.length)
 
-  // ── Reusable header renderer ──────────────────────────────────────────────
-  const renderDocHeader = () => {
-    const layout    = header.header_layout || 'company_left_logo_right'
-    const padL      = Math.max(32, header.padding_left  ?? 32)
-    const padR      = Math.max(32, header.padding_right ?? 32)
-    const padT      = header.padding_top    ?? 20
-    const padB      = header.padding_bottom ?? 8
-    const fs        = header.font_size || 11
-    const textColor = header.font_color || '#000'
-    const showBand  = header.show
-    const isCentered = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
-    const companyAlign = isCentered ? 'center' : (header.company_alignment || 'left')
-
-    const containerStyle = {
-      position: 'absolute', top: 0, left: 0, right: 0,
-      height: headerH, zIndex: 2, overflow: 'hidden',
-      paddingTop: padT, paddingRight: padR, paddingBottom: padB, paddingLeft: padL,
-      borderBottom: showBand && header.border_bottom
-        ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}`
-        : 'none',
-      backgroundColor: showBand ? (header.background_color || '#fff') : 'transparent',
-      fontFamily: header.font_family || 'Arial',
-      fontSize: fs,
-      color: textColor,
-      boxSizing: 'border-box',
-    }
-
-    const logoEl = header.logo_url ? (
-      <img src={header.logo_url} alt="Logo" style={{
-        height: header.logo_height || 40,
-        width: header.logo_width ? header.logo_width : 'auto',
-        objectFit: 'contain',
-        display: 'block',
-        flexShrink: 0,
-      }} />
-    ) : null
-
-    const hasCompany = !!(header.company_name || header.company_address || header.company_email || header.company_phone || header.company_website)
-    const companyBlockEl = hasCompany ? (
-      <div style={{ lineHeight: 1.4 }}>
-        {header.company_name && (
-          <div style={{
-            fontWeight: 'bold',
-            fontFamily: header.company_name_font || header.font_family || 'Arial',
-            fontSize: header.company_name_size || (fs + 2),
-            color: header.company_name_color || textColor,
-            textAlign: companyAlign,
-          }}>{header.company_name}</div>
-        )}
-        {header.company_address && (
-          <div style={{ fontSize: fs - 1, textAlign: companyAlign, color: textColor }}>{header.company_address}</div>
-        )}
-        {(header.company_email || header.company_phone) && (
-          <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: companyAlign }}>
-            {[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}
-          </div>
-        )}
-        {header.company_website && (
-          <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: companyAlign }}>{header.company_website}</div>
-        )}
-      </div>
-    ) : null
-
-    if (layout === 'logo_only') {
-      return <div style={{ ...containerStyle, display: 'flex', alignItems: 'center' }}>{logoEl}</div>
-    }
-    if (layout === 'company_only') {
-      return <div style={{ ...containerStyle, display: 'flex', alignItems: 'center' }}>{companyBlockEl}</div>
-    }
-    if (layout === 'logo_top_company_bottom') {
-      return (
-        <div style={{ ...containerStyle, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          {logoEl}
-          {companyBlockEl}
-        </div>
-      )
-    }
-    if (layout === 'company_top_logo_bottom') {
-      return (
-        <div style={{ ...containerStyle, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          {companyBlockEl}
-          {logoEl}
-        </div>
-      )
-    }
-    if (layout === 'logo_left_company_right') {
-      return (
-        <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          {logoEl}
-          {companyBlockEl}
-        </div>
-      )
-    }
-    if (layout === 'center') {
-      return (
-        <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-          {logoEl}
-          {companyBlockEl}
-        </div>
-      )
-    }
-    if (layout === 'split_3') {
-      const contactEl = (header.company_email || header.company_phone || header.company_website) ? (
-        <div style={{ lineHeight: 1.4, textAlign: 'right', fontSize: fs - 1, color: textColor }}>
-          {header.company_email && <div>{header.company_email}</div>}
-          {header.company_phone && <div>{header.company_phone}</div>}
-          {header.company_website && <div style={{ color: '#6b7280' }}>{header.company_website}</div>}
-        </div>
-      ) : null
-      return (
-        <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          {logoEl}
-          <div style={{ flex: 1, textAlign: 'center' }}>{companyBlockEl}</div>
-          {contactEl}
-        </div>
-      )
-    }
-    // default: company_left_logo_right
-    return (
-      <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-        {companyBlockEl}
-        {logoEl}
-      </div>
-    )
-  }
+  // Uses shared DocHeaderEl component (same as editor)
 
   // ── Reusable footer renderer ──────────────────────────────────────────────
   const renderDocFooter = (pageNum) => (
@@ -800,7 +733,7 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
             )}
 
             {/* Header */}
-            {headerVisible && renderDocHeader()}
+            {headerVisible && <DocHeaderEl header={header} headerH={headerH} />}
 
             {/* Content area — renders only this page's blocks */}
             <div style={{
@@ -835,23 +768,60 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   )
 }
 
-// ─── Helper: ensure editable div never ends with a table/list (cursor-trap fix) ──
+// ─── Cursor-trap fix: contentEditable must never end with a table/list ───────
 function ensureTrailingP(el) {
   if (!el) return
   const last = el.lastElementChild
-  if (!last || ['TABLE', 'UL', 'OL'].includes(last.tagName)) {
+  if (!last || ['TABLE', 'UL', 'OL'].includes(last.tagName) ||
+      last.getAttribute?.('contenteditable') === 'false') {
     const p = document.createElement('p')
     p.innerHTML = '<br>'
     el.appendChild(p)
   }
 }
 
-// ─── WYSIWYG Document Editor ─────────────────────────────────────────────────
-// Single contentEditable body with page-break indicators at the EXACT same
-// positions PaginatedDocPreview uses — same page count, same break algorithm.
-// No cursor-position issues. Correct header/footer spacing.
+// ─── Shared header renderer (used by editor + preview) ────────────────────────
+function DocHeaderEl({ header, headerH }) {
+  const layout = header.header_layout || 'company_left_logo_right'
+  const padL   = Math.max(32, header.padding_left  ?? 32)
+  const padR   = Math.max(32, header.padding_right ?? 32)
+  const fs     = header.font_size || 11
+  const tc     = header.font_color || '#000'
+  const isCen  = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
+  const ca     = isCen ? 'center' : (header.company_alignment || 'left')
+  const st = {
+    position: 'absolute', top: 0, left: 0, right: 0, height: headerH, zIndex: 2, overflow: 'hidden',
+    paddingTop: header.padding_top ?? 20, paddingRight: padR, paddingBottom: header.padding_bottom ?? 8, paddingLeft: padL,
+    borderBottom: header.show && header.border_bottom ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}` : 'none',
+    backgroundColor: header.show ? (header.background_color || '#fff') : 'transparent',
+    fontFamily: header.font_family || 'Arial', fontSize: fs, color: tc, boxSizing: 'border-box',
+  }
+  const logoEl = header.logo_url
+    ? <img src={header.logo_url} alt="Logo" style={{ height: header.logo_height || 40, width: header.logo_width || 'auto', objectFit: 'contain', display: 'block', flexShrink: 0 }} />
+    : null
+  const hasComp = !!(header.company_name || header.company_address || header.company_email || header.company_phone)
+  const compEl = hasComp ? (
+    <div style={{ lineHeight: 1.4 }}>
+      {header.company_name && <div style={{ fontWeight: 'bold', fontSize: header.company_name_size || fs + 2, color: header.company_name_color || tc, textAlign: ca }}>{header.company_name}</div>}
+      {header.company_address && <div style={{ fontSize: fs - 1, textAlign: ca, color: tc }}>{header.company_address}</div>}
+      {(header.company_email || header.company_phone) && <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: ca }}>{[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}</div>}
+      {header.company_website && <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: ca }}>{header.company_website}</div>}
+    </div>
+  ) : null
+  if (layout === 'logo_only')        return <div style={{ ...st, display: 'flex', alignItems: 'center' }}>{logoEl}</div>
+  if (layout === 'company_only')     return <div style={{ ...st, display: 'flex', alignItems: 'center' }}>{compEl}</div>
+  if (layout === 'logo_top_company_bottom') return <div style={{ ...st, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{logoEl}{compEl}</div>
+  if (layout === 'company_top_logo_bottom') return <div style={{ ...st, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{compEl}{logoEl}</div>
+  if (layout === 'logo_left_company_right') return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{logoEl}{compEl}</div>
+  if (layout === 'center')           return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>{logoEl}{compEl}</div>
+  return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{compEl}{logoEl}</div>
+}
+
+// ─── TRUE PAGE LAYOUT EDITOR ──────────────────────────────────────────────────
+// Real A4/Letter page containers, same pagination engine as preview & export.
+// Each page is an actual DOM div with header + editable body + footer.
 function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle, sigCfg, bodyHtml, onBodyChange }) {
-  // ── Dimensions — identical to PaginatedDocPreview ─────────────────────────
+  // ── Page dimensions — identical to PaginatedDocPreview ──────────────────
   const base = PAPER_PX[paper.size] || PAPER_PX.A4
   const [pw, ph] = paper.orientation === 'landscape' ? [base[1], base[0]] : base
 
@@ -862,114 +832,128 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
   const mr = Math.round((paper.margin_right  || 72) / 72 * 96)
   const mt = Math.round((paper.margin_top    || 72) / 72 * 96)
   const mb = Math.round((paper.margin_bottom || 72) / 72 * 96)
-  // headerSpacing: gap between header bottom and text — same calc as PaginatedDocPreview
   const headerSpacing = headerVisible ? (header.header_spacing ?? 20) : mt
-  // usableH: lines of text per page — exactly as PaginatedDocPreview
   const usableH  = Math.max(ph - headerH - footerH - headerSpacing - mb, 100)
   const contentW = Math.max(pw - ml - mr, 200)
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const [pageCount,    setPageCount]    = useState(1)
-  const [breakYs,      setBreakYs]      = useState([])   // px offsets of page breaks within content area
-  const [tableCtx,     setTableCtx]     = useState(null)
-  const [selectedImg,  setSelectedImg]  = useState(null)
-  const [imgToolbarVis,setImgToolbarVis]= useState(false)
+  const [pages,        setPages]        = useState([[]])  // array of pages → each is [{html,height}]
+  const [activeIdx,    setActiveIdx]    = useState(0)
+  const [resizeImg,    setResizeImg]    = useState(null)  // image with drag handles
+  const [tableCtx,     setTableCtx]    = useState(null)
+
+  const pageRefs   = useRef({})     // pageIdx → contentEditable div
   const repagTimer = useRef(null)
+  const isTyping   = useRef(false)
+  const didInit    = useRef(false)
 
-  // ── Same block-aware pagination algorithm as PaginatedDocPreview ──────────
-  const repaginate = useCallback((rawHtml) => {
-    const fullHtml = buildTitleHtml(docTitle) + (rawHtml || '') + buildSigHtml(sigCfg)
-    if (!fullHtml.trim()) { setPageCount(1); setBreakYs([]); return }
+  // ── Build full HTML for pagination measurement ────────────────────────────
+  // Wrap title and sig as non-editable islands so they paginate correctly
+  // but are filtered out of getMergedHtml.
+  const buildFullHtml = useCallback((rawBody) => {
+    const tH = buildTitleHtml(docTitle)
+    const sH = buildSigHtml(sigCfg)
+    const t  = tH ? `<div contenteditable="false" data-noedit="1">${tH}</div>` : ''
+    const s  = sH ? `<div contenteditable="false" data-noedit="1">${sH}</div>` : ''
+    return t + (rawBody || '') + s
+  }, [docTitle, sigCfg])
 
-    const container = document.createElement('div')
-    container.setAttribute('aria-hidden', 'true')
-    Object.assign(container.style, {
-      position: 'absolute', top: '-99999px', left: '-99999px',
-      width: `${contentW}px`, fontSize: '12pt', lineHeight: '1.7',
-      fontFamily: 'Arial, sans-serif', color: '#1f2937',
-      visibility: 'hidden', pointerEvents: 'none',
+  // ── Collect body HTML from all page divs (exclude title/sig) ─────────────
+  const getMergedHtml = useCallback(() =>
+    Object.keys(pageRefs.current)
+      .sort((a, b) => +a - +b)
+      .flatMap(i => Array.from(pageRefs.current[+i]?.children || [])
+        .filter(ch => !ch.hasAttribute('data-noedit')))
+      .map(ch => ch.outerHTML)
+      .join('')
+  , [])
+
+  // ── Run shared pagination engine ──────────────────────────────────────────
+  const repaginate = useCallback((rawBody) => {
+    paginateEngine(buildFullHtml(rawBody), { contentW, usableH }).then(pageList => {
+      setPages(pageList.length ? pageList : [[]])
     })
-    container.innerHTML = fullHtml
-    document.body.appendChild(container)
+  }, [buildFullHtml, contentW, usableH])
 
-    requestAnimationFrame(() => {
-      const children = Array.from(container.children)
-      const blocks = children.length === 0
-        ? [{ height: container.scrollHeight || 40 }]
-        : children.map(el => {
-            const cs = window.getComputedStyle(el)
-            const extra = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
-            return { height: (el.offsetHeight || 20) + extra }
-          })
-      document.body.removeChild(container)
-
-      // Same distribution loop as PaginatedDocPreview
-      const breaks = []  // y-offsets within the content area where page breaks occur
-      let usedH = 0
-      for (const block of blocks) {
-        const bh = Math.max(block.height, 4)
-        if (usedH + bh > usableH && usedH > 0) {
-          breaks.push(usedH)  // break at current accumulated height
-          usedH = 0
-        }
-        usedH += bh
-      }
-      setPageCount(breaks.length + 1)
-      setBreakYs(breaks)
-    })
-  }, [contentW, usableH, docTitle, sigCfg])
-
-  // ── Initialise ────────────────────────────────────────────────────────────
-  useLayoutEffect(() => {
-    if (editorRef.current) { editorRef.current.innerHTML = bodyHtml || ''; ensureTrailingP(editorRef.current) }
-  }, []) // eslint-disable-line
-
+  // ── Initial pagination ────────────────────────────────────────────────────
   useEffect(() => { repaginate(bodyHtml || '') }, []) // eslint-disable-line
 
-  // Re-paginate when layout changes (header, footer, paper etc.)
-  useEffect(() => { repaginate(editorRef.current?.innerHTML || bodyHtml || '') }, // eslint-disable-line
-    [header.header_height, header.header_spacing, header.show, footer.show, footer.footer_height,
-     paper.size, paper.orientation, paper.margin_top, paper.margin_bottom, paper.margin_left, paper.margin_right,
-     docTitle?.text, docTitle?.font_size, sigCfg?.enabled]) // eslint-disable-line
-
-  // ── Input handler ─────────────────────────────────────────────────────────
-  const handleInput = useCallback(() => {
-    const el = editorRef.current
-    if (!el) return
-    ensureTrailingP(el)
-    const html = el.innerHTML || ''
-    onBodyChange(html)
-    if (repagTimer.current) clearTimeout(repagTimer.current)
-    repagTimer.current = setTimeout(() => repaginate(html), 1200)
-  }, [onBodyChange, repaginate, editorRef])
-
-  // ── Image click ───────────────────────────────────────────────────────────
+  // ── Re-paginate when layout settings change ───────────────────────────────
   useEffect(() => {
-    const el = editorRef.current
-    if (!el) return
-    const h = (e) => {
-      if (e.target.tagName === 'IMG') { setSelectedImg(e.target); setImgToolbarVis(true) }
-      else if (!e.target.closest?.('[data-img-toolbar]')) { setSelectedImg(null); setImgToolbarVis(false) }
+    if (!isTyping.current) repaginate(getMergedHtml() || bodyHtml || '')
+  }, [ // eslint-disable-line
+    header.header_height, header.header_spacing, header.show,
+    footer.show, footer.footer_height,
+    paper.size, paper.orientation,
+    paper.margin_top, paper.margin_bottom, paper.margin_left, paper.margin_right,
+    docTitle?.text, docTitle?.font_size, sigCfg?.enabled,
+  ])
+
+  // ── Populate page divs when pagination result changes ────────────────────
+  useLayoutEffect(() => {
+    pages.forEach((pageBlocks, i) => {
+      const el = pageRefs.current[i]
+      if (!el) return
+      // Don't overwrite the active page while the user is still typing
+      if (i === activeIdx && isTyping.current && didInit.current) return
+      const html = pageBlocks.map(b => b.html).join('')
+      if (el.innerHTML !== html) { el.innerHTML = html; ensureTrailingP(el) }
+    })
+    didInit.current = true
+  }, [pages]) // eslint-disable-line
+
+  // ── editorRef always points to active page (for toolbar) ─────────────────
+  useEffect(() => {
+    if (editorRef) editorRef.current = pageRefs.current[activeIdx] || pageRefs.current[0]
+  }, [activeIdx, editorRef, pages]) // eslint-disable-line
+
+  // ── Handle input ─────────────────────────────────────────────────────────
+  const handlePageInput = useCallback((i) => {
+    setActiveIdx(i)
+    const el = pageRefs.current[i]
+    if (el) ensureTrailingP(el)
+    const merged = getMergedHtml()
+    onBodyChange(merged)
+    isTyping.current = true
+    if (repagTimer.current) clearTimeout(repagTimer.current)
+    repagTimer.current = setTimeout(() => {
+      isTyping.current = false
+      repaginate(merged)
+    }, 1500)
+  }, [getMergedHtml, onBodyChange, repaginate])
+
+  // ── Image drag-resize ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const onDown = (e) => {
+      const img = e.target.tagName === 'IMG' &&
+        Object.values(pageRefs.current).some(el => el?.contains(e.target))
+          ? e.target : null
+      // Only update if clicking a new image, don't clear when clicking handles
+      if (img) setResizeImg(img)
+      else if (!e.target.closest?.('.img-resize-handle')) setResizeImg(null)
     }
-    el.addEventListener('click', h)
-    return () => el.removeEventListener('click', h)
-  }, [editorRef])
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [])
 
   // ── Table cursor detection ────────────────────────────────────────────────
   useEffect(() => {
     const onSel = () => {
       const sel = window.getSelection()
-      if (!sel?.anchorNode || !editorRef.current?.contains(sel.anchorNode)) { setTableCtx(null); return }
+      if (!sel?.anchorNode) { setTableCtx(null); return }
+      const inAnyPage = Object.values(pageRefs.current).some(el => el?.contains(sel.anchorNode))
+      if (!inAnyPage) { setTableCtx(null); return }
       let n = sel.anchorNode
-      while (n && n !== editorRef.current) {
+      while (n) {
         if (n.nodeName === 'TABLE') { setTableCtx({ table: n }); return }
+        if (n.dataset?.noedit) break
         n = n.parentNode
       }
       setTableCtx(null)
     }
     document.addEventListener('selectionchange', onSel)
     return () => document.removeEventListener('selectionchange', onSel)
-  }, [editorRef])
+  }, [])
 
   // ── Table operations ──────────────────────────────────────────────────────
   const tableOp = useCallback((op) => {
@@ -984,13 +968,13 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     const cols = table.rows[0]?.cells?.length || 1
     if (op === 'addRow') {
       const refRow = cell?.closest?.('tr') || table.rows[table.rows.length - 1]
-      const newRow = document.createElement('tr')
+      const row = document.createElement('tr')
       for (let i = 0; i < cols; i++) {
         const td = document.createElement('td')
         td.style.cssText = 'padding:8px 10px;border:1px solid #e5e7eb;background:white;'
-        newRow.appendChild(td)
+        row.appendChild(td)
       }
-      refRow.insertAdjacentElement('afterend', newRow)
+      refRow.insertAdjacentElement('afterend', row)
     } else if (op === 'deleteRow') {
       const row = cell?.closest?.('tr')
       if (row && table.rows.length > 1) row.remove()
@@ -1008,175 +992,127 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
       const ci = cell ? Array.from(cell.closest?.('tr')?.cells || []).indexOf(cell) : -1
       if (ci >= 0 && cols > 1) Array.from(table.rows).forEach(row => { if (row.cells[ci]) row.cells[ci].remove() })
     }
-    handleInput()
-  }, [tableCtx, handleInput])
+    const ownerEntry = Object.entries(pageRefs.current).find(([, el]) => el?.contains(table))
+    if (ownerEntry) handlePageInput(+ownerEntry[0])
+  }, [tableCtx, handlePageInput])
 
-  // ── Header renderer (identical to PaginatedDocPreview) ───────────────────
-  const renderDocHeader = () => {
-    const layout = header.header_layout || 'company_left_logo_right'
-    const padL   = Math.max(32, header.padding_left  ?? 32)
-    const padR   = Math.max(32, header.padding_right ?? 32)
-    const fs     = header.font_size || 11
-    const tc     = header.font_color || '#000'
-    const isCen  = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
-    const ca     = isCen ? 'center' : (header.company_alignment || 'left')
-    const st = {
-      position: 'absolute', top: 0, left: 0, right: 0, height: headerH, zIndex: 2, overflow: 'hidden',
-      paddingTop: header.padding_top ?? 20, paddingRight: padR, paddingBottom: header.padding_bottom ?? 8, paddingLeft: padL,
-      borderBottom: header.show && header.border_bottom ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}` : 'none',
-      backgroundColor: header.show ? (header.background_color || '#fff') : 'transparent',
-      fontFamily: header.font_family || 'Arial', fontSize: fs, color: tc, boxSizing: 'border-box',
-    }
-    const logoEl = header.logo_url
-      ? <img src={header.logo_url} alt="Logo" style={{ height: header.logo_height || 40, width: header.logo_width || 'auto', objectFit: 'contain', display: 'block', flexShrink: 0 }} />
-      : null
-    const hasComp = !!(header.company_name || header.company_address || header.company_email || header.company_phone)
-    const compEl = hasComp ? (
-      <div style={{ lineHeight: 1.4 }}>
-        {header.company_name && <div style={{ fontWeight: 'bold', fontSize: header.company_name_size || fs + 2, color: header.company_name_color || tc, textAlign: ca }}>{header.company_name}</div>}
-        {header.company_address && <div style={{ fontSize: fs - 1, textAlign: ca, color: tc }}>{header.company_address}</div>}
-        {(header.company_email || header.company_phone) && <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: ca }}>{[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}</div>}
-        {header.company_website && <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: ca }}>{header.company_website}</div>}
-      </div>
-    ) : null
-    if (layout === 'logo_only')        return <div style={{ ...st, display: 'flex', alignItems: 'center' }}>{logoEl}</div>
-    if (layout === 'company_only')     return <div style={{ ...st, display: 'flex', alignItems: 'center' }}>{compEl}</div>
-    if (layout === 'logo_top_company_bottom') return <div style={{ ...st, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{logoEl}{compEl}</div>
-    if (layout === 'company_top_logo_bottom') return <div style={{ ...st, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{compEl}{logoEl}</div>
-    if (layout === 'logo_left_company_right') return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{logoEl}{compEl}</div>
-    if (layout === 'center')           return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>{logoEl}{compEl}</div>
-    return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{compEl}{logoEl}</div>
-  }
-
-  const titleHtml = buildTitleHtml(docTitle)
-  const sigHtml   = buildSigHtml(sigCfg)
-  // Minimum document height = 1 full page
-  const docMinH   = headerH + headerSpacing + usableH + footerH
+  const pageCount = pages.length
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingBottom: 32 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, paddingBottom: 40 }}>
 
-      {/* Table toolbar — sticky at top */}
+      {/* Table context toolbar — sticky */}
       {tableCtx && (
-        <div className="sticky top-0 z-50 self-stretch flex items-center gap-1.5 px-4 py-2 border-b shadow-sm mb-4"
+        <div className="sticky top-0 z-50 self-stretch flex items-center gap-2 px-4 py-2 border-b shadow"
           style={{ background: '#f5f3ff', borderColor: '#ddd6fe' }}>
-          <span className="text-xs font-bold text-violet-700 mr-2">Table:</span>
+          <span className="text-xs font-bold text-violet-700 mr-1">Table:</span>
           {[{ label: '+ Row', op: 'addRow' }, { label: '- Row', op: 'deleteRow' },
             { label: '+ Column', op: 'addCol' }, { label: '- Column', op: 'deleteCol' }]
             .map(({ label, op }) => (
               <button key={op} onMouseDown={e => { e.preventDefault(); tableOp(op) }}
-                className="px-2.5 py-1 text-xs rounded border border-violet-300 text-violet-700 hover:bg-violet-100 transition-colors">
+                className="px-3 py-1 text-xs rounded border border-violet-300 text-violet-700 hover:bg-violet-100 transition-colors font-semibold">
                 {label}
               </button>
             ))}
         </div>
       )}
 
-      {/* Image toolbar */}
-      {imgToolbarVis && selectedImg && (
-        <div data-img-toolbar="1" className="self-stretch border rounded-lg px-3 py-2 shadow-sm mb-4"
-          style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-          <ImageResizeToolbar img={selectedImg} onClose={() => { setImgToolbarVis(false); setSelectedImg(null) }} />
-        </div>
+      {/* Image drag-resize overlay (portal, fixed positioning) */}
+      {resizeImg && (
+        <ImageDragResize
+          img={resizeImg}
+          onUpdate={() => {
+            const ownerEntry = Object.entries(pageRefs.current).find(([, el]) => el?.contains(resizeImg))
+            if (ownerEntry) handlePageInput(+ownerEntry[0])
+          }}
+          onClose={() => setResizeImg(null)}
+        />
       )}
 
-      {/* Page counter */}
-      <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 8, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-        {pageCount > 1 ? `${pageCount} pages` : 'Page 1'}
-      </div>
+      {/* ── TRUE PAGE CONTAINERS ────────────────────────────────────────────── */}
+      {pages.map((pageBlocks, pageIdx) => (
+        <div key={pageIdx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
 
-      {/* ── Document box — same width as PaginatedDocPreview, grows with content ── */}
-      <div style={{
-        width: pw, minHeight: docMinH,
-        background: 'white',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.10),0 12px 40px rgba(0,0,0,0.08)',
-        borderRadius: 2, position: 'relative', flexShrink: 0,
-      }}>
-        {/* Watermark */}
-        {watermark.enabled && (
+          {/* Page label above each page box */}
           <div style={{
-            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72,
-            opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af',
-            fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
-          }}>{watermark.text || 'CONFIDENTIAL'}</div>
-        )}
-
-        {/* Header (absolute, sits in the header zone) */}
-        {headerVisible && renderDocHeader()}
-
-        {/* Content area — starts EXACTLY at headerH+headerSpacing, same as PaginatedDocPreview */}
-        <div style={{ paddingTop: headerH + headerSpacing, paddingLeft: ml, paddingRight: mr, paddingBottom: footerH + mb, position: 'relative', zIndex: 2 }}>
-
-          {/* Document title (non-editable, from left panel settings) */}
-          {docTitle?.text && (
-            <div dangerouslySetInnerHTML={{ __html: titleHtml }} style={{ pointerEvents: 'none' }} />
-          )}
-
-          {/* ── Single editable body ── */}
-          <div
-            ref={editorRef}
-            contentEditable
-            suppressContentEditableWarning
-            onInput={handleInput}
-            className="focus:outline-none"
-            style={{
-              fontSize: '12pt', lineHeight: 1.7,
-              fontFamily: 'Arial, sans-serif', color: '#1f2937',
-              minHeight: 200, outline: 'none',
-            }}
-            data-placeholder="Click here and start typing…"
-          />
-
-          {/* Signature (non-editable, from left panel settings) */}
-          {sigCfg?.enabled && (
-            <div dangerouslySetInnerHTML={{ __html: sigHtml }} style={{ pointerEvents: 'none' }} />
-          )}
-
-          {/* ── Page-break indicators at EXACT same positions as PaginatedDocPreview ── */}
-          {breakYs.map((y, i) => (
-            <div key={i} style={{
-              position: 'absolute',
-              top: y,
-              left: -ml, right: -mr,
-              pointerEvents: 'none', zIndex: 10,
-            }}>
-              {/* Dashed page-break line */}
-              <div style={{
-                borderTop: '2px dashed #c7d2fe',
-                marginBottom: 0,
-              }} />
-              {/* Page N label */}
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                gap: 12, padding: '2px 0',
-                background: 'rgba(238,242,255,0.9)',
-                fontSize: 9, fontWeight: 700, color: '#818cf8',
-                letterSpacing: '0.1em', textTransform: 'uppercase',
-              }}>
-                <div style={{ flex: 1, height: 1, background: '#e0e7ff' }} />
-                Page {i + 2} of {pageCount}
-                <div style={{ flex: 1, height: 1, background: '#e0e7ff' }} />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Footer (always at the very bottom of the doc box) */}
-        {footer.show && (
-          <div style={{
-            paddingLeft: ml, paddingRight: mr,
-            padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 20}px ${footer.padding_bottom ?? 8}px ${footer.padding_left ?? 20}px`,
-            borderTop: footer.border_top ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}` : 'none',
-            fontSize: footer.font_size || 10, color: footer.font_color || '#666',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box',
+            fontSize: 10, fontWeight: 600, color: '#9ca3af',
+            marginBottom: 6, letterSpacing: '0.1em', textTransform: 'uppercase',
           }}>
-            <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
-            <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
-            <span>{footer.show_page_numbers ? `Page 1${pageCount > 1 ? ` of ${pageCount}` : ''}` : ''}</span>
+            Page {pageIdx + 1}{pageCount > 1 ? ` / ${pageCount}` : ''}
           </div>
-        )}
-      </div>
+
+          {/* ── Page box — exact A4/Letter size, same as PaginatedDocPreview ── */}
+          <div style={{
+            width: pw, height: ph,
+            background: 'white',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.06),0 4px 20px rgba(0,0,0,0.12),0 8px 40px rgba(0,0,0,0.08)',
+            borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0,
+          }}>
+            {/* Watermark */}
+            {watermark.enabled && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transform: `rotate(${watermark.rotation ?? -45}deg)`,
+                fontSize: watermark.size || 72, opacity: Math.min(watermark.opacity || 0.12, 1),
+                color: watermark.color || '#9ca3af', fontWeight: 'bold',
+                userSelect: 'none', pointerEvents: 'none', zIndex: 1,
+              }}>{watermark.text || 'CONFIDENTIAL'}</div>
+            )}
+
+            {/* Header — appears on EVERY page, same as Word */}
+            {headerVisible && <DocHeaderEl header={header} headerH={headerH} />}
+
+            {/* Editable content area — positioned identically to PaginatedDocPreview */}
+            <div
+              ref={el => {
+                const prev = pageRefs.current[pageIdx]
+                pageRefs.current[pageIdx] = el
+                if (el && el !== prev) {
+                  // New page mounted — populate from current pages state
+                  const html = pages[pageIdx]?.map(b => b.html).join('') || ''
+                  el.innerHTML = html; ensureTrailingP(el)
+                  if (pageIdx === 0 && editorRef && !editorRef.current) editorRef.current = el
+                }
+                if (!el) delete pageRefs.current[pageIdx]
+              }}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={() => handlePageInput(pageIdx)}
+              onFocus={() => {
+                setActiveIdx(pageIdx)
+                if (editorRef) editorRef.current = pageRefs.current[pageIdx]
+              }}
+              style={{
+                position: 'absolute',
+                top: headerH + headerSpacing,
+                left: ml, right: mr,
+                height: usableH,
+                overflow: 'hidden',
+                zIndex: 2,
+                fontSize: '12pt', lineHeight: 1.7,
+                fontFamily: 'Arial, sans-serif', color: '#1f2937',
+                outline: 'none',
+              }}
+              data-placeholder="Click to type…"
+            />
+
+            {/* Footer — appears on EVERY page */}
+            {footer.show && (
+              <div style={{
+                position: 'absolute', bottom: 0, left: 0, right: 0, height: footerH, zIndex: 2,
+                padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 20}px ${footer.padding_bottom ?? 8}px ${footer.padding_left ?? 20}px`,
+                borderTop: footer.border_top ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}` : 'none',
+                fontSize: footer.font_size || 10, color: footer.font_color || '#666',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box',
+              }}>
+                <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
+                <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
+                <span>{footer.show_page_numbers ? `Page ${pageIdx + 1}${pageCount > 1 ? ` of ${pageCount}` : ''}` : ''}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
