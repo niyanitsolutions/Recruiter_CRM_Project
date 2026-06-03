@@ -387,8 +387,11 @@ function ImageDragResize({ img, onUpdate, onClose }) {
 // Exact font size list mapped to CSS pt values via the font-size-7 marker technique
 const FONT_SIZES_PT = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32, 36, 48, 72]
 
-function BodyEditor({ editorRef, onInput }) {
-  const savedSel = useRef(null)
+function BodyEditor({ editorRef, onInput, bodyHtml, onBodyChange }) {
+  const savedSel       = useRef(null)
+  const sideEditorRef  = useRef(null)
+  const lastSideHtml   = useRef('')
+  const sideInputTimer = useRef(null)
   const [showTableDialog, setShowTableDialog] = useState(false)
   // Active formatting state — updated on every selection change
   const [fmt, setFmt] = useState({
@@ -407,11 +410,23 @@ function BodyEditor({ editorRef, onInput }) {
     sel?.removeAllRanges()
     sel?.addRange(savedSel.current)
   }
+  // Routes change notifications to the correct editor path
+  const notifyChange = () => {
+    if (sideEditorRef.current && editorRef.current === sideEditorRef.current) {
+      const html = sideEditorRef.current.innerHTML
+      lastSideHtml.current = html
+      if (sideInputTimer.current) clearTimeout(sideInputTimer.current)
+      sideInputTimer.current = setTimeout(() => onBodyChange?.(html), 300)
+    } else {
+      onInput?.()
+    }
+  }
+
   const exec = (cmd, val = null) => {
     editorRef.current?.focus()
     restoreSel()
     document.execCommand(cmd, false, val)
-    onInput?.()
+    notifyChange()
   }
 
   // Apply exact pt font size using the size-7 marker trick
@@ -427,14 +442,14 @@ function BodyEditor({ editorRef, onInput }) {
         m.replaceWith(span)
       })
     }
-    onInput?.()
+    notifyChange()
   }
 
   const insertHtml = (html) => {
     editorRef.current?.focus()
     restoreSel()
     document.execCommand('insertHTML', false, html)
-    onInput?.()
+    notifyChange()
   }
   const insertField = (field) => insertHtml(
     `<span style="background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-family:monospace;font-size:0.85em;">${field}</span>`
@@ -475,6 +490,16 @@ function BodyEditor({ editorRef, onInput }) {
     document.addEventListener('selectionchange', updateFmt)
     return () => document.removeEventListener('selectionchange', updateFmt)
   }, [])
+
+  // Sync WysiwygDocument → sidebar editor (skip when sidebar is focused to avoid caret disruption)
+  useEffect(() => {
+    const el = sideEditorRef.current
+    if (!el) return
+    if (el === document.activeElement || el.contains(document.activeElement)) return
+    if ((bodyHtml || '') === lastSideHtml.current) return
+    lastSideHtml.current = bodyHtml || ''
+    el.innerHTML = bodyHtml || ''
+  }, [bodyHtml])
 
   const fieldGroups = HR_FIELDS.reduce((acc, f) => {
     if (!acc[f.group]) acc[f.group] = []
@@ -563,6 +588,34 @@ function BodyEditor({ editorRef, onInput }) {
             }} />
         </label>
       </div>
+
+      {/* Body Editor — syncs bidirectionally with the right-panel WysiwygDocument */}
+      <div
+        ref={sideEditorRef}
+        contentEditable
+        suppressContentEditableWarning
+        onFocus={() => { if (editorRef) editorRef.current = sideEditorRef.current }}
+        onInput={() => {
+          const el = sideEditorRef.current
+          if (!el) return
+          const html = el.innerHTML
+          lastSideHtml.current = html
+          if (sideInputTimer.current) clearTimeout(sideInputTimer.current)
+          sideInputTimer.current = setTimeout(() => onBodyChange?.(html), 300)
+        }}
+        data-placeholder="Type your document body content here…"
+        style={{
+          minHeight: 120,
+          padding: '10px 12px',
+          fontSize: '11pt',
+          lineHeight: 1.7,
+          color: 'var(--text-body)',
+          outline: 'none',
+          borderTop: '1px solid var(--border)',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--bg-primary)',
+        }}
+      />
 
       {/* HR Field strip */}
       <div className="border-t px-3 py-2.5" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
@@ -2090,7 +2143,12 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
               <p className="text-xs mb-2 px-0.5" style={{ color: 'var(--text-muted)' }}>
                 Click inside the document on the right to position your cursor, then use these tools.
               </p>
-              <BodyEditor editorRef={editorRef} onInput={handleEditorInput} />
+              <BodyEditor
+                editorRef={editorRef}
+                onInput={handleEditorInput}
+                bodyHtml={bodyHtml}
+                onBodyChange={(html) => { setBodyHtml(html); scheduleAutoSave() }}
+              />
             </Section>
 
             {/* ── Section 5: Signature ── */}
