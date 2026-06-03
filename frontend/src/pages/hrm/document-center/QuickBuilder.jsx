@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
@@ -57,14 +57,17 @@ const TEMPLATE_TYPES = [
 ]
 const FONT_FAMILIES = ['Arial','Times New Roman','Georgia','Courier New','Verdana','Trebuchet MS','Helvetica']
 const WATERMARK_PRESETS = ['DRAFT','CONFIDENTIAL','INTERNAL','APPROVED','FOR YOUR EYES ONLY']
+const DRAFT_LS_PREFIX = 'qb_draft_'
 
 const HEADER_LAYOUTS = [
-  { value: 'company_left_logo_right', label: 'Company Left / Logo Right' },
-  { value: 'logo_left_company_right', label: 'Logo Left / Company Right' },
-  { value: 'logo_top_company_bottom', label: 'Logo Top / Company Bottom (Centered)' },
-  { value: 'company_top_logo_bottom', label: 'Company Top / Logo Bottom (Centered)' },
-  { value: 'logo_only',               label: 'Logo Only' },
-  { value: 'company_only',            label: 'Company Only' },
+  { value: 'company_left_logo_right',  label: 'Company Left / Logo Right' },
+  { value: 'logo_left_company_right',  label: 'Logo Left / Company Right' },
+  { value: 'logo_top_company_bottom',  label: 'Logo Top / Company Bottom (Centered)' },
+  { value: 'company_top_logo_bottom',  label: 'Company Top / Logo Bottom (Centered)' },
+  { value: 'logo_only',                label: 'Logo Only' },
+  { value: 'company_only',             label: 'Company Only' },
+  { value: 'center',                   label: 'Logo + Company Centered (Side by Side)' },
+  { value: 'split_3',                  label: 'Logo | Company | Contact (3-Column)' },
 ]
 
 const DOCUMENT_PRESETS = [
@@ -103,7 +106,8 @@ const Tog = ({ label, checked, onChange }) => (
 )
 
 // ─── Accordion Section ────────────────────────────────────────────────────────
-function Section({ id, title, icon: Icon, open, onToggle, children, badge }) {
+// keepMounted=true renders children but hides with CSS — prevents editor unmount
+function Section({ id, title, icon: Icon, open, onToggle, children, badge, keepMounted }) {
   return (
     <div className="border-b last:border-b-0" style={{ borderColor: 'var(--border)' }}>
       <button type="button" onClick={() => onToggle(id)}
@@ -123,11 +127,15 @@ function Section({ id, title, icon: Icon, open, onToggle, children, badge }) {
         {open ? <ChevronUp className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-muted)' }} />
                : <ChevronDown className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-muted)' }} />}
       </button>
-      {open && (
+      {keepMounted ? (
+        <div className="px-5 pb-5 pt-2 space-y-3" style={{ background: 'var(--bg-primary)', display: open ? undefined : 'none' }}>
+          {children}
+        </div>
+      ) : open ? (
         <div className="px-5 pb-5 pt-2 space-y-3" style={{ background: 'var(--bg-primary)' }}>
           {children}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }
@@ -141,9 +149,169 @@ const TB = ({ icon: Icon, label, onClick }) => (
   </button>
 )
 
+// ─── Table Dialog ─────────────────────────────────────────────────────────────
+function TableDialog({ onInsert, onClose }) {
+  const [rows, setCols_r] = useState(3)
+  const [cols, setCols_c] = useState(3)
+
+  const buildHtml = (r, c) => {
+    const headerCells = Array.from({ length: c }, (_, i) =>
+      `<th style="padding:8px 10px;background:#7c3aed;color:white;border:1px solid #e5e7eb;text-align:left;">Header ${i + 1}</th>`
+    ).join('')
+    const bodyRows = Array.from({ length: r - 1 }, (_, ri) =>
+      `<tr>${Array.from({ length: c }, (_, ci) =>
+        `<td style="padding:8px 10px;border:1px solid #e5e7eb;background:${ri % 2 === 0 ? 'white' : '#f9fafb'};">Cell ${ri + 1}.${ci + 1}</td>`
+      ).join('')}</tr>`
+    ).join('')
+    return `<table border="1" style="border-collapse:collapse;width:100%;margin:8px 0;"><tr>${headerCells}</tr>${bodyRows}</table>`
+  }
+
+  const previewR = Math.min(rows, 4)
+  const previewC = Math.min(cols, 5)
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.55)' }}>
+      <div className="rounded-xl border shadow-2xl p-6" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', width: 420 }}>
+        <h3 className="text-sm font-bold mb-4" style={{ color: 'var(--text-heading)' }}>Insert Custom Table</h3>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Rows (1–20)</p>
+            <input type="number" min={1} max={20} value={rows}
+              onChange={e => setCols_r(Math.max(1, Math.min(20, +e.target.value || 1)))}
+              className="w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-violet-500"
+              style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
+          </div>
+          <div>
+            <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Columns (1–10)</p>
+            <input type="number" min={1} max={10} value={cols}
+              onChange={e => setCols_c(Math.max(1, Math.min(10, +e.target.value || 1)))}
+              className="w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-violet-500"
+              style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
+          </div>
+        </div>
+
+        {/* Mini preview */}
+        <div className="mb-3 overflow-auto rounded border" style={{ borderColor: 'var(--border)', maxHeight: 140 }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11 }}>
+            <tbody>
+              {Array.from({ length: previewR }, (_, ri) => (
+                <tr key={ri}>
+                  {Array.from({ length: previewC }, (_, ci) => (
+                    <td key={ci} style={{
+                      border: '1px solid #e5e7eb', padding: '3px 6px',
+                      background: ri === 0 ? '#7c3aed' : ri % 2 ? '#f9fafb' : 'white',
+                      color: ri === 0 ? 'white' : '#374151',
+                    }}>
+                      {ri === 0 ? `H${ci + 1}` : `${ri}.${ci + 1}`}
+                    </td>
+                  ))}
+                  {cols > 5 && <td style={{ padding: '2px 4px', color: '#9ca3af', fontSize: 10 }}>…</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows > 4 && <p style={{ fontSize: 10, color: '#9ca3af', textAlign: 'center', padding: 4 }}>…{rows - 4} more rows</p>}
+        </div>
+
+        <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>{rows} × {cols} table</p>
+        <div className="flex gap-2">
+          <button onClick={onClose}
+            className="flex-1 py-2 rounded-lg text-sm font-medium border transition-colors"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+            Cancel
+          </button>
+          <button onClick={() => { onInsert(buildHtml(rows, cols)); onClose() }}
+            className="flex-1 py-2 rounded-lg text-sm font-semibold text-white"
+            style={{ background: 'linear-gradient(135deg,#7c3aed,#4f46e5)' }}>
+            Insert {rows}×{cols} Table
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Image Resize Toolbar ─────────────────────────────────────────────────────
+function ImageResizeToolbar({ img, onClose }) {
+  const [w, setW] = useState(() => img.width || img.naturalWidth || 200)
+  const [lock, setLock] = useState(true)
+  const ratio = img.naturalWidth / (img.naturalHeight || 1)
+
+  const apply = (newW, newH) => {
+    img.style.width  = newW + 'px'
+    img.style.height = newH ? newH + 'px' : 'auto'
+    img.style.maxWidth = '100%'
+  }
+
+  const handleW = (v) => {
+    const nw = Math.max(20, Math.min(800, +v || 20))
+    setW(nw)
+    apply(nw, lock ? Math.round(nw / ratio) : null)
+  }
+
+  const handleAlign = (align) => {
+    if (align === 'center') { img.style.display = 'block'; img.style.margin = '0 auto' }
+    else if (align === 'right') { img.style.display = 'block'; img.style.marginLeft = 'auto'; img.style.marginRight = '0' }
+    else { img.style.display = 'inline'; img.style.margin = '0' }
+  }
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border shadow-lg flex-wrap"
+      style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', fontSize: 12 }}>
+      <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Image:</span>
+      <label style={{ color: 'var(--text-muted)' }}>W
+        <input type="number" value={w} min={20} max={800}
+          onChange={e => handleW(e.target.value)}
+          className="ml-1 w-16 px-1.5 py-0.5 rounded border text-xs"
+          style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />px
+      </label>
+      <button onClick={() => setLock(v => !v)}
+        className={`px-2 py-0.5 rounded text-xs border transition-colors ${lock ? 'bg-violet-600 text-white border-violet-600' : ''}`}
+        style={lock ? {} : { borderColor: 'var(--border)', color: 'var(--text-muted)' }}
+        title="Lock aspect ratio">
+        {lock ? '🔒' : '🔓'}
+      </button>
+      <div className="w-px h-4 bg-gray-300 dark:bg-gray-600" />
+      {['left', 'center', 'right'].map(a => (
+        <button key={a} onClick={() => handleAlign(a)}
+          className="px-2 py-0.5 rounded text-xs border transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20"
+          style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+          {a[0].toUpperCase() + a.slice(1)}
+        </button>
+      ))}
+      <button onClick={onClose}
+        className="ml-auto px-2 py-0.5 rounded text-xs border transition-colors text-red-500 border-red-200 hover:bg-red-50">
+        ✕
+      </button>
+    </div>
+  )
+}
+
 // ─── Body Editor ──────────────────────────────────────────────────────────────
-function BodyEditor({ editorRef, onInput }) {
+function BodyEditor({ editorRef, onInput, initialHtml }) {
   const savedSel = useRef(null)
+  const [showTableDialog, setShowTableDialog] = useState(false)
+  const [selectedImg, setSelectedImg]         = useState(null)
+
+  // Restore content on mount — keeps editor populated when section re-opens (keepMounted)
+  useLayoutEffect(() => {
+    if (editorRef.current && initialHtml && !editorRef.current.innerHTML.trim()) {
+      editorRef.current.innerHTML = initialHtml
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Image click detection inside editor
+  useEffect(() => {
+    const el = editorRef.current
+    if (!el) return
+    const handler = (e) => {
+      if (e.target.tagName === 'IMG') setSelectedImg(e.target)
+      else setSelectedImg(null)
+    }
+    el.addEventListener('click', handler)
+    return () => el.removeEventListener('click', handler)
+  }, [editorRef])
 
   const saveSel = () => {
     const sel = window.getSelection()
@@ -169,18 +337,6 @@ function BodyEditor({ editorRef, onInput }) {
   }
   const insertField = (field) => insertHtml(
     `<span style="background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-family:monospace;font-size:0.85em;">${field}</span>`
-  )
-  const insertTable = () => insertHtml(
-    `<table border="1" style="border-collapse:collapse;width:100%;margin:8px 0;">` +
-    `<tr><th style="padding:8px;background:#7c3aed;color:white;border:1px solid #e5e7eb;">Header 1</th>` +
-    `<th style="padding:8px;background:#7c3aed;color:white;border:1px solid #e5e7eb;">Header 2</th>` +
-    `<th style="padding:8px;background:#7c3aed;color:white;border:1px solid #e5e7eb;">Header 3</th></tr>` +
-    `<tr><td style="padding:8px;border:1px solid #e5e7eb;">Cell 1</td>` +
-    `<td style="padding:8px;border:1px solid #e5e7eb;">Cell 2</td>` +
-    `<td style="padding:8px;border:1px solid #e5e7eb;">Cell 3</td></tr>` +
-    `<tr><td style="padding:8px;background:#f9fafb;border:1px solid #e5e7eb;">Cell 4</td>` +
-    `<td style="padding:8px;background:#f9fafb;border:1px solid #e5e7eb;">Cell 5</td>` +
-    `<td style="padding:8px;background:#f9fafb;border:1px solid #e5e7eb;">Cell 6</td></tr></table>`
   )
   const insertPageBreak = () => insertHtml(
     `<div style="page-break-after:always;border-top:2px dashed #d1d5db;margin:16px 0 0;padding-top:4px;text-align:center;">` +
@@ -239,7 +395,7 @@ function BodyEditor({ editorRef, onInput }) {
           const u = prompt('Enter URL:')
           if (u) exec('createLink', u)
         }} />
-        <TB icon={TableIcon}  label="Insert Table"      onClick={insertTable} />
+        <TB icon={TableIcon}  label="Insert Table"      onClick={() => { saveSel(); setShowTableDialog(true) }} />
         <TB icon={Scissors}   label="Insert Page Break" onClick={insertPageBreak} />
         <label title="Insert Image" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
           <ImageIcon className="w-3.5 h-3.5" style={{ color: 'var(--text-body)' }} />
@@ -262,6 +418,13 @@ function BodyEditor({ editorRef, onInput }) {
         style={{ minHeight: 220, maxHeight: 360, overflowY: 'auto', fontSize: '12pt', lineHeight: 1.7, color: '#1f2937', fontFamily: 'Arial, sans-serif' }}
         data-placeholder="Type your document body content here…" />
 
+      {/* Image resize toolbar (appears when an image is selected in editor) */}
+      {selectedImg && (
+        <div className="border-t px-3 py-2" style={{ borderColor: 'var(--border)' }}>
+          <ImageResizeToolbar img={selectedImg} onClose={() => setSelectedImg(null)} />
+        </div>
+      )}
+
       {/* HR Field strip */}
       <div className="border-t px-3 py-2.5" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
         <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Insert HR Field</p>
@@ -283,6 +446,14 @@ function BodyEditor({ editorRef, onInput }) {
           ))}
         </div>
       </div>
+
+      {/* Table dialog modal */}
+      {showTableDialog && (
+        <TableDialog
+          onInsert={html => insertHtml(html)}
+          onClose={() => setShowTableDialog(false)}
+        />
+      )}
     </div>
   )
 }
@@ -395,8 +566,6 @@ function buildSigHtml(sigCfg) {
 // MS Word-style: header area → [top margin] → text area → [bottom margin] → footer area
 // Each page is exactly ph px tall. Content is windowed per page via overflow:hidden + negative margin.
 function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyHtml, sigCfg }) {
-  const measureRef = useRef(null)
-  const [measuredH, setMeasuredH] = useState(0)
 
   // Paper pixel dimensions at 96 dpi
   const base = PAPER_PX[paper.size] || PAPER_PX.A4
@@ -428,23 +597,55 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   const sigHtml      = buildSigHtml(sigCfg)
   const fullBodyHtml = titleHtml + (bodyHtml || '') + sigHtml
 
-  // Measure actual rendered height using ResizeObserver for accuracy
-  useEffect(() => {
-    const el = measureRef.current
-    if (!el) return
-    const measure = () => {
-      const h = el.scrollHeight
-      if (h > 0) setMeasuredH(h)
-    }
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    // Initial measurement after paint
-    requestAnimationFrame(measure)
-    return () => ro.disconnect()
-  }, [fullBodyHtml, contentW])
+  // Block-aware page distribution: measure each top-level element, never split blocks
+  const [pageBlocks, setPageBlocks] = useState([[]]) // array of pages, each page is array of {html, height}
 
-  // Number of pages needed (at least 1)
-  const pageCount = Math.max(1, Math.ceil(measuredH / usableH))
+  useEffect(() => {
+    if (!fullBodyHtml.trim()) { setPageBlocks([[]]); return }
+
+    const container = document.createElement('div')
+    container.setAttribute('aria-hidden', 'true')
+    Object.assign(container.style, {
+      position: 'absolute', top: '-99999px', left: '-99999px',
+      width: `${contentW}px`,
+      fontSize: '12pt', lineHeight: '1.7',
+      fontFamily: 'Arial, sans-serif', color: '#1f2937',
+      visibility: 'hidden', pointerEvents: 'none',
+    })
+    container.innerHTML = fullBodyHtml
+    document.body.appendChild(container)
+
+    requestAnimationFrame(() => {
+      const children = Array.from(container.children)
+      let blocks
+      if (children.length === 0) {
+        blocks = [{ html: fullBodyHtml, height: container.scrollHeight || 40 }]
+      } else {
+        blocks = children.map(el => {
+          const cs = window.getComputedStyle(el)
+          const extra = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
+          return { html: el.outerHTML, height: (el.offsetHeight || 20) + extra }
+        })
+      }
+      document.body.removeChild(container)
+
+      // Distribute blocks across pages without splitting any block
+      const pages = [[]]
+      let usedH = 0, pi = 0
+      for (const block of blocks) {
+        const bh = Math.max(block.height, 4)
+        if (usedH + bh > usableH && usedH > 0) {
+          pages.push([]); pi++; usedH = 0
+        }
+        pages[pi].push(block)
+        usedH += bh
+      }
+      setPageBlocks(pages)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullBodyHtml, contentW, usableH])
+
+  const pageCount = Math.max(1, pageBlocks.length)
 
   // ── Reusable header renderer ──────────────────────────────────────────────
   const renderDocHeader = () => {
@@ -539,6 +740,30 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
         </div>
       )
     }
+    if (layout === 'center') {
+      return (
+        <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+          {logoEl}
+          {companyBlockEl}
+        </div>
+      )
+    }
+    if (layout === 'split_3') {
+      const contactEl = (header.company_email || header.company_phone || header.company_website) ? (
+        <div style={{ lineHeight: 1.4, textAlign: 'right', fontSize: fs - 1, color: textColor }}>
+          {header.company_email && <div>{header.company_email}</div>}
+          {header.company_phone && <div>{header.company_phone}</div>}
+          {header.company_website && <div style={{ color: '#6b7280' }}>{header.company_website}</div>}
+        </div>
+      ) : null
+      return (
+        <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          {logoEl}
+          <div style={{ flex: 1, textAlign: 'center' }}>{companyBlockEl}</div>
+          {contactEl}
+        </div>
+      )
+    }
     // default: company_left_logo_right
     return (
       <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
@@ -578,113 +803,69 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, paddingBottom: 32 }}>
 
-      {/*
-        Hidden measurement div — rendered off-screen at exact content width.
-        ResizeObserver fires setMeasuredH whenever content height changes
-        (e.g., after images load or HTML updates).
-      */}
-      <div
-        ref={measureRef}
-        aria-hidden="true"
-        style={{
-          position: 'absolute', top: -9999, left: -9999,
-          width: contentW,
-          fontSize: '12pt', lineHeight: 1.7,
-          fontFamily: 'Arial, sans-serif', color: '#1f2937',
-          pointerEvents: 'none',
-        }}
-        dangerouslySetInnerHTML={{ __html: fullBodyHtml }}
-      />
-
-      {/* ── One div per page ── */}
-      {Array.from({ length: pageCount }, (_, i) => {
-        // Content offset: page i shows HTML from pixel [i*usableH] to [(i+1)*usableH]
-        // marginTop shifts the full content div UP so the right window is visible.
-        const contentOffset = i * usableH
-
-        return (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            {/* Page number label above each page */}
-            <div style={{
-              fontSize: 10, fontWeight: 600, color: '#9ca3af',
-              marginBottom: 6, letterSpacing: '0.08em', textTransform: 'uppercase',
-            }}>
-              Page {i + 1}{pageCount > 1 ? ` / ${pageCount}` : ''}
-            </div>
-
-            {/* A4 page card */}
-            <div style={{
-              width: pw, height: ph,
-              background: 'white',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.10), 0 12px 40px rgba(0,0,0,0.08)',
-              borderRadius: 2,
-              overflow: 'hidden',
-              position: 'relative',
-              flexShrink: 0,
-            }}>
-              {/* Watermark — z-index 1, below content */}
-              {watermark.enabled && (
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transform: `rotate(${watermark.rotation ?? -45}deg)`,
-                  fontSize: watermark.size || 72,
-                  opacity: Math.min(watermark.opacity || 0.12, 1),
-                  color: watermark.color || '#9ca3af',
-                  fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
-                }}>
-                  {watermark.text || 'CONFIDENTIAL'}
-                </div>
-              )}
-
-              {/* Header — fixed at top of each page (also renders when header OFF but branding set) */}
-              {headerVisible && renderDocHeader()}
-
-              {/*
-                Text content area:
-                  top    = headerH + mt   (header height + top margin)
-                  height = usableH        (pure text area, no margins)
-                  overflow = hidden       (clips to this page's window)
-
-                Inside: full HTML shifted up by contentOffset so page i
-                shows the correct slice. No top margin added inside since
-                mt is already encoded in the container's top position.
-              */}
-              <div style={{
-                position: 'absolute',
-                top: headerH + headerSpacing,
-                left: ml, right: mr,
-                height: usableH,
-                overflow: 'hidden',
-                zIndex: 2,
-              }}>
-                {fullBodyHtml.trim() ? (
-                  <div
-                    style={{
-                      marginTop: -contentOffset,
-                      fontSize: '12pt', lineHeight: 1.7,
-                      color: '#1f2937', fontFamily: 'Arial, sans-serif',
-                    }}
-                    dangerouslySetInnerHTML={{ __html: fullBodyHtml }}
-                  />
-                ) : (
-                  i === 0 && (
-                    <div style={{
-                      color: '#9ca3af', fontStyle: 'italic', fontSize: '11pt',
-                      textAlign: 'center', paddingTop: 40,
-                    }}>
-                      Fill in the form on the left — your document preview will appear here.
-                    </div>
-                  )
-                )}
-              </div>
-
-              {/* Footer — fixed at bottom of each page */}
-              {footer.show && renderDocFooter(i + 1)}
-            </div>
+      {/* ── One div per page (block-aware: no block ever splits across pages) ── */}
+      {pageBlocks.map((blocks, i) => (
+        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{
+            fontSize: 10, fontWeight: 600, color: '#9ca3af',
+            marginBottom: 6, letterSpacing: '0.08em', textTransform: 'uppercase',
+          }}>
+            Page {i + 1}{pageCount > 1 ? ` / ${pageCount}` : ''}
           </div>
-        )
-      })}
+
+          <div style={{
+            width: pw, height: ph,
+            background: 'white',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.10), 0 12px 40px rgba(0,0,0,0.08)',
+            borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0,
+          }}>
+            {/* Watermark */}
+            {watermark.enabled && (
+              <div style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transform: `rotate(${watermark.rotation ?? -45}deg)`,
+                fontSize: watermark.size || 72,
+                opacity: Math.min(watermark.opacity || 0.12, 1),
+                color: watermark.color || '#9ca3af',
+                fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
+              }}>
+                {watermark.text || 'CONFIDENTIAL'}
+              </div>
+            )}
+
+            {/* Header */}
+            {headerVisible && renderDocHeader()}
+
+            {/* Content area — renders only this page's blocks */}
+            <div style={{
+              position: 'absolute',
+              top: headerH + headerSpacing,
+              left: ml, right: mr,
+              height: usableH,
+              overflow: 'hidden',
+              zIndex: 2,
+              fontSize: '12pt', lineHeight: 1.7,
+              color: '#1f2937', fontFamily: 'Arial, sans-serif',
+            }}>
+              {blocks.length > 0 ? (
+                blocks.map((block, bi) => (
+                  <div key={bi} dangerouslySetInnerHTML={{ __html: block.html }} />
+                ))
+              ) : (
+                i === 0 && !fullBodyHtml.trim() && (
+                  <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '11pt', textAlign: 'center', paddingTop: 40 }}>
+                    Fill in the form on the left — your document preview will appear here.
+                  </div>
+                )
+              )}
+            </div>
+
+            {/* Footer */}
+            {footer.show && renderDocFooter(i + 1)}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -749,6 +930,8 @@ export default function QuickBuilder() {
   const [autoSaveStatus,   setAutoSaveStatus]   = useState('saved')
   const [categories,       setCategories]       = useState([])
   const [bodyHtml,         setBodyHtml]         = useState('')
+  const [inlineEditMode,   setInlineEditMode]   = useState(false)
+  const previewEditRef     = useRef(null)
 
   // Template metadata
   const [name,         setName]         = useState('Untitled Template')
@@ -811,6 +994,80 @@ export default function QuickBuilder() {
   })
 
   const toggleSection = (key) => setOpenSection(k => k === key ? null : key)
+
+  // ── Draft system ──────────────────────────────────────────────────────────
+  const draftKey = DRAFT_LS_PREFIX + (id || '__new__')
+
+  const saveDraft = useCallback(() => {
+    try {
+      const html = editorRef.current?.innerHTML || bodyHtml || ''
+      const draft = {
+        name, description, categoryId, tags, templateType,
+        header, footer, paper, watermark, docTitle, sigCfg,
+        bodyHtml: html, savedAt: new Date().toISOString(),
+      }
+      localStorage.setItem(draftKey, JSON.stringify(draft))
+    } catch (_) { /* localStorage quota */ }
+  }, [name, description, categoryId, tags, templateType, header, footer, paper, watermark, docTitle, sigCfg, bodyHtml, draftKey])
+
+  const restoreFromDraft = useCallback((draft) => {
+    if (!draft) return
+    try {
+      if (draft.name)         setName(draft.name)
+      if (draft.description)  setDescription(draft.description)
+      if (draft.categoryId)   setCategoryId(draft.categoryId)
+      if (draft.tags)         setTags(draft.tags)
+      if (draft.templateType) setTemplateType(draft.templateType)
+      if (draft.header)       setHeader(h => ({ ...h, ...draft.header }))
+      if (draft.footer)       setFooter(f => ({ ...f, ...draft.footer }))
+      if (draft.paper)        setPaper(p => ({ ...p, ...draft.paper }))
+      if (draft.watermark)    setWatermark(w => ({ ...w, ...draft.watermark }))
+      if (draft.docTitle)     setDocTitle(d => ({ ...d, ...draft.docTitle }))
+      if (draft.sigCfg)       setSigCfg(s => ({ ...s, ...draft.sigCfg }))
+      const html = draft.bodyHtml || ''
+      setBodyHtml(html)
+      if (editorRef.current) editorRef.current.innerHTML = html
+    } catch (_) {}
+  }, [])
+
+  // 30-second interval draft save
+  useEffect(() => {
+    const interval = setInterval(saveDraft, 30000)
+    return () => clearInterval(interval)
+  }, [saveDraft])
+
+  // Save draft on page unload
+  useEffect(() => {
+    const fn = () => saveDraft()
+    window.addEventListener('beforeunload', fn)
+    return () => window.removeEventListener('beforeunload', fn)
+  }, [saveDraft])
+
+  // On mount: offer to restore draft for new templates
+  useEffect(() => {
+    if (id) return // existing template — don't auto-restore
+    const raw = localStorage.getItem(draftKey)
+    if (!raw) return
+    try {
+      const draft = JSON.parse(raw)
+      if (!draft.savedAt) return
+      const age = Date.now() - new Date(draft.savedAt).getTime()
+      if (age > 7 * 24 * 60 * 60 * 1000) { localStorage.removeItem(draftKey); return } // older than 7 days
+      toast((t) => (
+        <div className="flex flex-col gap-2">
+          <span className="font-semibold text-sm">Draft restored</span>
+          <span className="text-xs text-gray-500">Saved {new Date(draft.savedAt).toLocaleString()}</span>
+          <div className="flex gap-2">
+            <button onClick={() => { restoreFromDraft(draft); toast.dismiss(t.id); toast.success('Draft restored successfully') }}
+              className="px-3 py-1 rounded bg-violet-600 text-white text-xs font-semibold">Restore</button>
+            <button onClick={() => { localStorage.removeItem(draftKey); toast.dismiss(t.id) }}
+              className="px-3 py-1 rounded border text-xs">Discard</button>
+          </div>
+        </div>
+      ), { duration: 10000 })
+    } catch (_) {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Sync to ref for auto-save
   useEffect(() => {
@@ -913,18 +1170,30 @@ export default function QuickBuilder() {
     setSaving(true)
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     try {
+      const payload = buildPayload()
+      // Guard against excessively large payloads (MongoDB 16 MB limit)
+      const payloadBytes = new Blob([JSON.stringify(payload)]).size
+      if (payloadBytes > 12 * 1024 * 1024) {
+        toast.error('Document too large (>12 MB). Remove large images or reduce content.')
+        setSaving(false)
+        return
+      }
       if (id) {
-        await documentCenterService.updateTemplate(id, buildPayload())
+        await documentCenterService.updateTemplate(id, payload)
         toast.success('Template saved')
         setAutoSaveStatus('saved')
+        localStorage.removeItem(draftKey)
       } else {
-        const r = await documentCenterService.createTemplate(buildPayload())
+        const r = await documentCenterService.createTemplate(payload)
         const newId = r.data?.data?._id
         toast.success('Template created')
+        localStorage.removeItem(draftKey)
         if (newId) navigate(`/hrm/doc-center/quick/${newId}`, { replace: true })
       }
     } catch (err) {
-      toast.error(err?.response?.data?.detail || 'Save failed')
+      const detail = err?.response?.data?.detail || err?.message || 'Unknown error'
+      toast.error(`Save failed: ${detail}`)
+      console.error('[QuickBuilder] save error', err?.response?.data || err)
     } finally {
       setSaving(false)
     }
@@ -1009,6 +1278,14 @@ export default function QuickBuilder() {
         return `<div style="${base}display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;">${compHtml}${logoHtml}</div>`
       if (layout === 'logo_left_company_right')
         return `<div style="${base}display:flex;align-items:center;justify-content:space-between;gap:16px;">${logoHtml}${compHtml}</div>`
+      if (layout === 'center')
+        return `<div style="${base}display:flex;align-items:center;justify-content:center;gap:16px;">${logoHtml}${compHtml}</div>`
+      if (layout === 'split_3') {
+        const contactHtml = (h.company_email || h.company_phone || h.company_website)
+          ? `<div style="line-height:1.4;text-align:right;font-size:${fs-1}px;color:${tc};">${[h.company_email,h.company_phone,h.company_website].filter(Boolean).map(v=>`<div>${v}</div>`).join('')}</div>`
+          : ''
+        return `<div style="${base}display:flex;align-items:center;justify-content:space-between;gap:12px;">${logoHtml}<div style="flex:1;text-align:center;">${compHtml}</div>${contactHtml}</div>`
+      }
       // default: company_left_logo_right
       return `<div style="${base}display:flex;align-items:center;justify-content:space-between;gap:16px;">${compHtml}${logoHtml}</div>`
     }
@@ -1153,8 +1430,8 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
         </button>
       </div>
 
-      {/* ── Main Layout ── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* ── Main Layout ── independently scrolling panels */}
+      <div className="flex flex-1 min-h-0" style={{ overflow: 'hidden' }}>
 
         {/* ── Left Panel ── */}
         <div className="flex-shrink-0 overflow-hidden transition-all duration-200"
@@ -1443,13 +1720,13 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
               </div>
             </Section>
 
-            {/* ── Section 4: Body Content ── */}
+            {/* ── Section 4: Body Content ── keepMounted so editor never unmounts */}
             <Section id="body" title="Body Content" icon={AlignLeft}
-              open={openSection === 'body'} onToggle={toggleSection}>
+              open={openSection === 'body'} onToggle={toggleSection} keepMounted>
               <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>
                 Use the toolbar for formatting. Insert HR fields below for dynamic content.
               </p>
-              <BodyEditor editorRef={editorRef} onInput={handleEditorInput} />
+              <BodyEditor editorRef={editorRef} onInput={handleEditorInput} initialHtml={bodyHtml} />
             </Section>
 
             {/* ── Section 5: Signature ── */}
@@ -1659,7 +1936,53 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
               </div>
             </Section>
 
-            {/* ── Section 9: Document Presets ── */}
+            {/* ── Section 9: Draft Management ── */}
+            <Section id="drafts" title="Drafts" icon={Clock}
+              open={openSection === 'drafts'} onToggle={toggleSection}>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                Drafts auto-save every 30 seconds and on browser close.
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={saveDraft}
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+                  Save Draft Now
+                </button>
+                <button onClick={() => {
+                  const raw = localStorage.getItem(draftKey)
+                  if (!raw) { toast.error('No draft found'); return }
+                  try {
+                    const draft = JSON.parse(raw)
+                    restoreFromDraft(draft)
+                    toast.success(`Draft restored from ${new Date(draft.savedAt).toLocaleString()}`)
+                  } catch { toast.error('Failed to restore draft') }
+                }}
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors hover:bg-green-50 dark:hover:bg-green-900/20"
+                  style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+                  Restore Draft
+                </button>
+                <button onClick={() => {
+                  localStorage.removeItem(draftKey)
+                  toast.success('Draft deleted')
+                }}
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors hover:bg-red-50"
+                  style={{ borderColor: '#fca5a5', color: '#ef4444' }}>
+                  Delete Draft
+                </button>
+              </div>
+              {(() => {
+                try {
+                  const raw = localStorage.getItem(draftKey)
+                  if (!raw) return null
+                  const d = JSON.parse(raw)
+                  return <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                    Last saved: {new Date(d.savedAt).toLocaleString()}
+                  </p>
+                } catch { return null }
+              })()}
+            </Section>
+
+            {/* ── Section 10: Document Presets ── */}
             <Section id="presets" title="Document Presets" icon={Wand2}
               open={openSection === 'presets'} onToggle={toggleSection}>
               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
@@ -1703,15 +2026,79 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
         {/* ── Right: Live Preview ── */}
         <div className="flex-1 min-h-0 overflow-auto py-8 px-6 flex flex-col items-center"
           style={{ background: '#e8e8ed' }}>
-          <div className="flex items-center gap-2 mb-5 self-start flex-shrink-0">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Live Preview</span>
+          <div className="flex items-center gap-3 mb-5 self-start flex-shrink-0 flex-wrap">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                {inlineEditMode ? 'Inline Edit' : 'Live Preview'}
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                if (!inlineEditMode) {
+                  // entering inline edit: sync current bodyHtml to preview editor
+                  setInlineEditMode(true)
+                  setTimeout(() => {
+                    if (previewEditRef.current) previewEditRef.current.innerHTML = editorRef.current?.innerHTML || bodyHtml || ''
+                  }, 0)
+                } else {
+                  // leaving inline edit: sync back to body editor
+                  const html = previewEditRef.current?.innerHTML || ''
+                  setBodyHtml(html)
+                  if (editorRef.current) editorRef.current.innerHTML = html
+                  setInlineEditMode(false)
+                  scheduleAutoSave()
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors"
+              style={inlineEditMode
+                ? { background: '#7c3aed', color: 'white', borderColor: '#7c3aed' }
+                : { borderColor: '#d1d5db', color: '#374151', background: 'white' }}>
+              {inlineEditMode ? '✓ Done Editing' : '✎ Edit in Preview'}
+            </button>
           </div>
 
-          <PaginatedDocPreview
-            header={header} footer={footer} paper={paper} watermark={watermark}
-            docTitle={docTitle} bodyHtml={bodyHtml} sigCfg={sigCfg}
-          />
+          {inlineEditMode ? (
+            /* ── Inline edit view: single page, full content editable ── */
+            (() => {
+              const base = PAPER_PX[paper.size] || PAPER_PX.A4
+              const [pw2] = paper.orientation === 'landscape' ? [base[1], base[0]] : base
+              const ml2 = Math.round((paper.margin_left  || 72) / 72 * 96)
+              const mr2 = Math.round((paper.margin_right || 72) / 72 * 96)
+              const mt2 = Math.round((paper.margin_top   || 72) / 72 * 96)
+              const mb2 = Math.round((paper.margin_bottom|| 72) / 72 * 96)
+              return (
+                <div style={{ width: pw2, background: 'white', borderRadius: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.15)', minHeight: 400, position: 'relative' }}>
+                  <div
+                    ref={previewEditRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    onInput={() => {
+                      const html = previewEditRef.current?.innerHTML || ''
+                      setBodyHtml(html)
+                      if (editorRef.current) editorRef.current.innerHTML = html
+                      scheduleAutoSave()
+                    }}
+                    style={{
+                      padding: `${mt2}px ${mr2}px ${mb2}px ${ml2}px`,
+                      fontSize: '12pt', lineHeight: 1.7,
+                      fontFamily: 'Arial, sans-serif', color: '#1f2937',
+                      outline: 'none', minHeight: 300,
+                      cursor: 'text',
+                    }}
+                  />
+                  <p style={{ position: 'absolute', bottom: 8, right: 12, fontSize: 10, color: '#9ca3af', pointerEvents: 'none' }}>
+                    Click anywhere to edit — click "Done Editing" to return to preview
+                  </p>
+                </div>
+              )
+            })()
+          ) : (
+            <PaginatedDocPreview
+              header={header} footer={footer} paper={paper} watermark={watermark}
+              docTitle={docTitle} bodyHtml={bodyHtml} sigCfg={sigCfg}
+            />
+          )}
         </div>
 
       </div>

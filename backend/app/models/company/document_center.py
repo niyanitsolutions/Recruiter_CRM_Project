@@ -57,6 +57,7 @@ class HeaderContent(BaseModel):
     show:              bool  = True
     logo_url:          Optional[str] = None
     logo_height:       int   = 40
+    logo_width:        int   = 0
     logo_alignment:    str   = "left"      # left | center | right (independent)
     company_name:      str   = ""
     company_address:   str   = ""
@@ -115,6 +116,7 @@ class FooterContent(BaseModel):
 
 
 class WatermarkContent(BaseModel):
+    model_config = ConfigDict(extra="allow")
     enabled:   bool          = False
     type:      WatermarkType = WatermarkType.TEXT
     text:      str           = "CONFIDENTIAL"
@@ -123,6 +125,7 @@ class WatermarkContent(BaseModel):
     opacity:   float         = 0.15
     rotation:  float         = -45.0
     size:      int           = 72
+    color:     str           = "#9ca3af"
 
 
 class PaperSettings(BaseModel):
