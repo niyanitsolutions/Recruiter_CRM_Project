@@ -1283,7 +1283,7 @@ export default function QuickBuilder() {
   const [saving,           setSaving]           = useState(false)
   const [showFullPreview,  setShowFullPreview]  = useState(false)
   const [showExport,       setShowExport]       = useState(false)
-  const [openSection,      setOpenSection]      = useState('template-info')
+  const [openSection,      setOpenSection]      = useState(() => localStorage.getItem('qb_open_section') ?? 'template-info')
   const [autoSaveStatus,   setAutoSaveStatus]   = useState('saved')
   const [categories,       setCategories]       = useState([])
   const [bodyHtml,         setBodyHtml]         = useState('')
@@ -1348,7 +1348,12 @@ export default function QuickBuilder() {
     opacity: 0.12, rotation: -45, size: 72, color: '#9ca3af',
   })
 
-  const toggleSection = (key) => setOpenSection(k => k === key ? null : key)
+  const toggleSection = (key) => setOpenSection(k => {
+    const next = k === key ? null : key
+    if (next) localStorage.setItem('qb_open_section', next)
+    else localStorage.removeItem('qb_open_section')
+    return next
+  })
 
   // ── Draft system ──────────────────────────────────────────────────────────
   const draftKey = DRAFT_LS_PREFIX + (id || '__new__')
@@ -2078,8 +2083,8 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
               </div>
             </Section>
 
-            {/* ── Section 4: Formatting Toolbar — keepMounted preserves savedSel ref ── */}
-            <Section id="body" title="Formatting Toolbar" icon={AlignLeft}
+            {/* ── Section 4: Body Content — keepMounted preserves savedSel ref ── */}
+            <Section id="body" title="Body Content" icon={AlignLeft}
               open={openSection === 'body'} onToggle={toggleSection}
               keepMounted>
               <p className="text-xs mb-2 px-0.5" style={{ color: 'var(--text-muted)' }}>
