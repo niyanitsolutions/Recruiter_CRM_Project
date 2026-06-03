@@ -494,9 +494,12 @@ function BodyEditor({ editorRef, onInput, bodyHtml, sidebarWriteRef }) {
     const el = sideEditorRef.current
     if (!el) return
     if (el === document.activeElement || el.contains(document.activeElement)) return
-    if ((bodyHtml || '') === lastSideHtml.current) return
-    lastSideHtml.current = bodyHtml || ''
-    el.innerHTML = bodyHtml || ''
+    const next = bodyHtml || ''
+    if (next === lastSideHtml.current) return
+    lastSideHtml.current = next
+    // Use a <p> placeholder when empty so the cursor always lands in a block element
+    // (prevents first keystroke from creating a bare text node that getMerged() misses)
+    el.innerHTML = next || '<p><br></p>'
   }, [bodyHtml])
 
   const fieldGroups = HR_FIELDS.reduce((acc, f) => {
@@ -897,29 +900,53 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
 }
 
 // ─── Cursor-trap fixes: ensure typing space before AND after tables/lists ────
-// IMPORTANT: skip data-noedit blocks (title/sig injected by pagination).
-// Without this guard every keystroke inserts a new <p> before the title or after
-// the signature, causing the cursor to jump and content to disappear.
+// Rules:
+//  - Always skip data-noedit blocks (title/sig injected by pagination).
+//  - Without this guard, every keystroke inserts an extra <p> causing cursor jump.
+//  - ensureTrailingP places the <p> in the correct body slot (after title, before sig).
 function ensureTrailingP(el) {
   if (!el) return
-  // Walk back past any trailing data-noedit blocks (signature, etc.)
+  // Walk back past trailing data-noedit blocks (signature)
   let last = el.lastElementChild
   while (last && last.hasAttribute?.('data-noedit')) last = last.previousElementSibling
-  if (!last || ['TABLE', 'UL', 'OL'].includes(last.tagName) ||
-      last.getAttribute?.('contenteditable') === 'false') {
-    const p = document.createElement('p')
-    p.innerHTML = '<br>'
-    // Insert before the first trailing noedit block, or append if none
-    const trailNoedit = el.lastElementChild?.hasAttribute?.('data-noedit') ? el.lastElementChild : null
-    if (trailNoedit) el.insertBefore(p, trailNoedit)
+
+  // If the last editable element is a plain block, no action needed
+  if (last && !['TABLE', 'UL', 'OL'].includes(last.tagName) &&
+      last.getAttribute?.('contenteditable') !== 'false') return
+
+  const p = document.createElement('p')
+  p.innerHTML = '<br>'
+
+  if (last) {
+    // Last editable is TABLE/UL/OL — insert <p> immediately after it
+    const nextSib = last.nextElementSibling
+    if (nextSib) el.insertBefore(p, nextSib)
     else el.appendChild(p)
+  } else {
+    // No editable content at all.
+    // Find the first slot after all leading noedit blocks (title).
+    let insertPos = el.firstElementChild
+    while (insertPos && insertPos.hasAttribute?.('data-noedit')) insertPos = insertPos.nextElementSibling
+    if (insertPos) {
+      el.insertBefore(p, insertPos)
+    } else {
+      // All children are noedit (e.g., title + sig with empty body).
+      // Insert before the last noedit child (sig) if multiple noedit exist; otherwise append.
+      const lastChild = el.lastElementChild
+      if (lastChild && lastChild.hasAttribute?.('data-noedit') && el.children.length > 1) {
+        el.insertBefore(p, lastChild)
+      } else {
+        el.appendChild(p)
+      }
+    }
   }
 }
 function ensureLeadingP(el) {
   if (!el) return
-  // Walk forward past any leading data-noedit blocks (title, etc.)
+  // Walk forward past leading data-noedit blocks (title)
   let first = el.firstElementChild
   while (first && first.hasAttribute?.('data-noedit')) first = first.nextElementSibling
+  // Only add <p> if first editable child is a cursor-trap element (table, list)
   if (first && (['TABLE', 'UL', 'OL'].includes(first.tagName) ||
       first.getAttribute?.('contenteditable') === 'false')) {
     const p = document.createElement('p')
@@ -1015,12 +1042,21 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
   }, [docTitle, sigCfg])
 
   // ── Collect body HTML from all page divs (exclude title/sig islands) ──────
+  // MUST use clone.innerHTML, NOT .children — .children misses bare text nodes
+  // typed before the first block element (i.e., before the user presses Enter).
+  // Using .children caused content to silently vanish on every 150ms debounce.
   const getMerged = useCallback(() =>
     Object.keys(pageRefs.current)
       .sort((a, b) => +a - +b)
-      .flatMap(k => Array.from(pageRefs.current[+k]?.children || [])
-        .filter(ch => !ch.hasAttribute('data-noedit')))
-      .map(ch => ch.outerHTML)
+      .map(k => {
+        const el = pageRefs.current[+k]
+        if (!el) return ''
+        const clone = el.cloneNode(true)
+        Array.from(clone.children).forEach(ch => {
+          if (ch.hasAttribute('data-noedit')) ch.remove()
+        })
+        return clone.innerHTML
+      })
       .join('')
   , [])
 
@@ -1092,19 +1128,21 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
 
   // ── Direct-write path for sidebar editor (avoids bodyHtml state race) ─────
   // Sidebar calls this instead of setBodyHtml so there is no competing update cycle.
+  // We write buildFull(html) so title/sig blocks remain in page0 while typing —
+  // otherwise the title would flash off for 1500ms until pagination re-adds it.
   useEffect(() => {
     if (!sidebarWriteRef) return
     sidebarWriteRef.current = (html) => {
-      // Write to page 0; clear pages 1+ to prevent getMerged duplication
+      const full = buildFull(html || '')
       Object.keys(pageRefs.current).forEach(k => {
         const el = pageRefs.current[+k]
         if (!el) return
         const focused = el === document.activeElement || el.contains(document.activeElement)
         if (+k === 0) {
-          if (!focused && el.innerHTML !== (html || '')) {
-            el.innerHTML = html || ''
-            ensureTrailingP(el)
+          if (!focused && el.innerHTML !== full) {
+            el.innerHTML = full
             ensureLeadingP(el)
+            ensureTrailingP(el)
           }
         } else {
           if (el.innerHTML !== '') el.innerHTML = ''
@@ -1121,7 +1159,7 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
       if (repagTimer.current) clearTimeout(repagTimer.current)
       repagTimer.current = setTimeout(() => runPag(html || ''), 1500)
     }
-  }, [getMerged, onBodyChange, runPag]) // eslint-disable-line
+  }, [getMerged, onBodyChange, runPag, buildFull]) // eslint-disable-line
 
   // ── Input handler — minimal work per keystroke for < 16ms latency ─────────
   const handleInput = useCallback((i) => {
