@@ -530,7 +530,7 @@ function buildTitleHtml(docTitle) {
   if (!docTitle?.text) return ''
   const mt = docTitle.margin_top ?? 12
   const mb = docTitle.margin_bottom ?? 14
-  return `<div style="text-align:${docTitle.alignment || 'center'};font-family:${docTitle.font_family || 'Arial'},sans-serif;font-size:${docTitle.font_size || 16}pt;color:${docTitle.color || '#111827'};font-weight:${docTitle.bold ? 'bold' : 'normal'};font-style:${docTitle.italic ? 'italic' : 'normal'};text-decoration:${docTitle.underline ? 'underline' : 'none'};margin:${mt}px 0 ${mb}px;">${docTitle.text}</div>`
+  return `<div data-qb-type="title" style="text-align:${docTitle.alignment || 'center'};font-family:${docTitle.font_family || 'Arial'},sans-serif;font-size:${docTitle.font_size || 16}pt;color:${docTitle.color || '#111827'};font-weight:${docTitle.bold ? 'bold' : 'normal'};font-style:${docTitle.italic ? 'italic' : 'normal'};text-decoration:${docTitle.underline ? 'underline' : 'none'};margin:${mt}px 0 ${mb}px;">${docTitle.text}</div>`
 }
 
 function buildSigHtml(sigCfg) {
@@ -548,7 +548,7 @@ function buildSigHtml(sigCfg) {
     : 'padding-top:5px;'
   const textAlign = pos === 'right' ? 'right' : pos === 'center' ? 'center' : 'left'
 
-  return `<table style="width:100%;margin:24px 0 0;border-collapse:collapse;"><tr>
+  return `<table data-qb-type="sig" style="width:100%;margin:24px 0 0;border-collapse:collapse;"><tr>
     ${pos === 'right' ? '<td style="width:60%;"></td>' : ''}
     <td style="width:${pos === 'center' ? '100%' : '40%'};padding:0 8px;vertical-align:bottom;text-align:${textAlign};">
       ${imgPart}
@@ -597,76 +597,134 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   const sigHtml      = buildSigHtml(sigCfg)
   const fullBodyHtml = titleHtml + (bodyHtml || '') + sigHtml
 
-  // Block-aware page distribution: measure each top-level element, never split blocks
-  const [pageBlocks, setPageBlocks] = useState([[]]) // array of pages, each page is array of {html, height}
+  // pageBlocks: array-of-pages, each page = array of {html, height, qbType}
+  // qbType values: 'title' | 'body' | 'sig' — derived from data-qb-type attribute in HTML
+  const [pageBlocks, setPageBlocks] = useState([[]])
 
-  // Editable preview support
+  // Refs — editable body divs, focus state, latest-value mirrors for stale-closure safety
   const editableRefs    = useRef([])
   const anyFocused      = useRef(false)
-  const pageBlocksRef   = useRef(pageBlocks)
   const onBodyChangeRef = useRef(onBodyChange)
+  const paginationTimer = useRef(null)
+  const rAFHandle       = useRef(null)
 
+  useEffect(() => { onBodyChangeRef.current = onBodyChange })
+
+  // ── Pagination: measures fullBodyHtml in a hidden div, tags each block with qbType ──
+  // Debounced 350 ms during active editing to prevent constant reflow while typing.
   useEffect(() => {
+    clearTimeout(paginationTimer.current)
+    cancelAnimationFrame(rAFHandle.current)
+
     if (!fullBodyHtml.trim()) { setPageBlocks([[]]); return }
 
-    const container = document.createElement('div')
-    container.setAttribute('aria-hidden', 'true')
-    Object.assign(container.style, {
-      position: 'absolute', top: '-99999px', left: '-99999px',
-      width: `${contentW}px`,
-      fontSize: '12pt', lineHeight: '1.7',
-      fontFamily: 'Arial, sans-serif', color: '#1f2937',
-      visibility: 'hidden', pointerEvents: 'none',
-    })
-    container.innerHTML = fullBodyHtml
-    document.body.appendChild(container)
+    const run = () => {
+      const container = document.createElement('div')
+      container.setAttribute('aria-hidden', 'true')
+      Object.assign(container.style, {
+        position: 'absolute', top: '-99999px', left: '-99999px',
+        width: `${contentW}px`,
+        fontSize: '12pt', lineHeight: '1.7',
+        fontFamily: 'Arial, sans-serif', color: '#1f2937',
+        visibility: 'hidden', pointerEvents: 'none',
+      })
+      container.innerHTML = fullBodyHtml
+      document.body.appendChild(container)
 
-    requestAnimationFrame(() => {
-      const children = Array.from(container.children)
-      let blocks
-      if (children.length === 0) {
-        blocks = [{ html: fullBodyHtml, height: container.scrollHeight || 40 }]
-      } else {
-        blocks = children.map(el => {
-          const cs = window.getComputedStyle(el)
-          const extra = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
-          return { html: el.outerHTML, height: (el.offsetHeight || 20) + extra }
-        })
-      }
-      document.body.removeChild(container)
-
-      // Distribute blocks across pages without splitting any block
-      const pages = [[]]
-      let usedH = 0, pi = 0
-      for (const block of blocks) {
-        const bh = Math.max(block.height, 4)
-        if (usedH + bh > usableH && usedH > 0) {
-          pages.push([]); pi++; usedH = 0
+      rAFHandle.current = requestAnimationFrame(() => {
+        const children = Array.from(container.children)
+        let blocks
+        if (children.length === 0) {
+          blocks = [{ html: fullBodyHtml, height: container.scrollHeight || 40, qbType: 'body' }]
+        } else {
+          blocks = children.map(el => {
+            const qbType = el.getAttribute('data-qb-type') || 'body'
+            const cs     = window.getComputedStyle(el)
+            const extra  = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
+            return { html: el.outerHTML, height: (el.offsetHeight || 20) + extra, qbType }
+          })
         }
-        pages[pi].push(block)
-        usedH += bh
-      }
-      setPageBlocks(pages)
-    })
+        if (document.body.contains(container)) document.body.removeChild(container)
+
+        // Distribute blocks across pages; never split a single block
+        const pages = [[]]
+        let usedH = 0, pi = 0
+        for (const block of blocks) {
+          const bh = Math.max(block.height, 4)
+          if (usedH + bh > usableH && usedH > 0) {
+            pages.push([]); pi++; usedH = 0
+          }
+          pages[pi].push(block)
+          usedH += bh
+        }
+        setPageBlocks(pages)
+      })
+    }
+
+    // Debounce while user is actively editing; run immediately otherwise
+    paginationTimer.current = setTimeout(run, anyFocused.current ? 350 : 0)
+
+    return () => {
+      clearTimeout(paginationTimer.current)
+      cancelAnimationFrame(rAFHandle.current)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullBodyHtml, contentW, usableH])
 
-  // Keep latest refs in sync (avoids stale closures in effects/handlers)
-  useEffect(() => { pageBlocksRef.current = pageBlocks })
-  useEffect(() => { onBodyChangeRef.current = onBodyChange })
-
-  // Sync pageBlocks → editable divs (only when user is not actively editing)
+  // ── Sync: write ONLY body blocks into editable divs ──
+  // Title and sig blocks are rendered as non-editable static nodes alongside the editable div.
+  // This prevents the duplication cycle: sync → onInput reads back title/sig → bodyHtml grows.
   useEffect(() => {
     if (!onBodyChangeRef.current) return
     if (anyFocused.current) return
     pageBlocks.forEach((blocks, i) => {
       const el = editableRefs.current[i]
-      if (el) el.innerHTML = blocks.map(b => b.html).join('')
+      if (el) el.innerHTML = blocks.filter(b => b.qbType === 'body').map(b => b.html).join('')
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageBlocks])
 
   const pageCount = Math.max(1, pageBlocks.length)
+
+  // ── Container-level focus/blur (avoids per-page race conditions) ──
+  const handleContainerFocus = () => { anyFocused.current = true }
+  const handleContainerBlur  = (e) => {
+    if (e.currentTarget.contains(e.relatedTarget)) return // focus moved between pages, not outside
+    anyFocused.current = false
+    // Run pagination immediately after the user stops editing (skip remaining debounce)
+    clearTimeout(paginationTimer.current)
+    cancelAnimationFrame(rAFHandle.current)
+    if (!fullBodyHtml.trim()) { setPageBlocks([[]]); return }
+    const container = document.createElement('div')
+    Object.assign(container.style, {
+      position: 'absolute', top: '-99999px', left: '-99999px',
+      width: `${contentW}px`, fontSize: '12pt', lineHeight: '1.7',
+      fontFamily: 'Arial, sans-serif', color: '#1f2937',
+      visibility: 'hidden', pointerEvents: 'none',
+    })
+    container.innerHTML = fullBodyHtml
+    document.body.appendChild(container)
+    rAFHandle.current = requestAnimationFrame(() => {
+      const children = Array.from(container.children)
+      const blocks = children.length === 0
+        ? [{ html: fullBodyHtml, height: container.scrollHeight || 40, qbType: 'body' }]
+        : children.map(el => {
+            const qbType = el.getAttribute('data-qb-type') || 'body'
+            const cs = window.getComputedStyle(el)
+            const extra = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
+            return { html: el.outerHTML, height: (el.offsetHeight || 20) + extra, qbType }
+          })
+      if (document.body.contains(container)) document.body.removeChild(container)
+      const pages = [[]]
+      let usedH = 0, pi = 0
+      for (const block of blocks) {
+        const bh = Math.max(block.height, 4)
+        if (usedH + bh > usableH && usedH > 0) { pages.push([]); pi++; usedH = 0 }
+        pages[pi].push(block); usedH += bh
+      }
+      setPageBlocks(pages)
+    })
+  }
 
   // ── Reusable header renderer ──────────────────────────────────────────────
   const renderDocHeader = () => {
@@ -821,107 +879,109 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
     </div>
   )
 
+  // Shared style for the content zone (flex column: title → body → sig)
+  const contentZoneStyle = {
+    position: 'absolute',
+    top: headerH + headerSpacing,
+    left: ml, right: mr,
+    height: usableH,
+    display: 'flex', flexDirection: 'column',
+    overflow: 'hidden',
+    zIndex: 2,
+    fontSize: '12pt', lineHeight: 1.7,
+    color: '#1f2937', fontFamily: 'Arial, sans-serif',
+    boxSizing: 'border-box',
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, paddingBottom: 32 }}>
+    <div
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, paddingBottom: 32 }}
+      onFocus={onBodyChange ? handleContainerFocus : undefined}
+      onBlur={onBodyChange  ? handleContainerBlur  : undefined}
+    >
+      {pageBlocks.map((blocks, i) => {
+        const titleBlocks = blocks.filter(b => b.qbType === 'title')
+        const sigBlocks   = blocks.filter(b => b.qbType === 'sig')
 
-      {/* ── One div per page (block-aware: no block ever splits across pages) ── */}
-      {pageBlocks.map((blocks, i) => (
-        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{
-            fontSize: 10, fontWeight: 600, color: '#9ca3af',
-            marginBottom: 6, letterSpacing: '0.08em', textTransform: 'uppercase',
-          }}>
-            Page {i + 1}{pageCount > 1 ? ` / ${pageCount}` : ''}
+        return (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {/* Page label */}
+            <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 6, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Page {i + 1}{pageCount > 1 ? ` / ${pageCount}` : ''}
+            </div>
+
+            {/* Page box */}
+            <div style={{ width: pw, height: ph, background: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.10), 0 12px 40px rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0 }}>
+
+              {/* Watermark */}
+              {watermark.enabled && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72, opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af', fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1 }}>
+                  {watermark.text || 'CONFIDENTIAL'}
+                </div>
+              )}
+
+              {/* Header — non-editable, position:absolute overlay */}
+              {headerVisible && renderDocHeader()}
+
+              {/* ── Content Zone ── */}
+              {onBodyChange ? (
+                /* EDITABLE MODE: flex column — title (static) → body (editable) → sig (static)
+                   Body div ONLY ever holds qbType==='body' blocks, so onInput reads back
+                   pure bodyHtml with no title/sig duplication. */
+                <div style={contentZoneStyle}>
+                  {titleBlocks.length > 0 && (
+                    <div
+                      style={{ flexShrink: 0, pointerEvents: 'none', userSelect: 'none' }}
+                      dangerouslySetInnerHTML={{ __html: titleBlocks.map(b => b.html).join('') }}
+                    />
+                  )}
+                  <div
+                    ref={el => { editableRefs.current[i] = el }}
+                    contentEditable
+                    suppressContentEditableWarning
+                    data-qb-editable
+                    onInput={() => {
+                      // Read body-only content from all page editable divs; strip any stray qb-type nodes
+                      const html = editableRefs.current.filter(Boolean).map(el => {
+                        const clone = el.cloneNode(true)
+                        clone.querySelectorAll('[data-qb-type]').forEach(n => n.remove())
+                        return clone.innerHTML
+                      }).join('')
+                      onBodyChangeRef.current?.(html)
+                    }}
+                    style={{ flex: 1, minHeight: 0, overflow: 'auto', outline: 'none', cursor: 'text' }}
+                    data-placeholder={i === 0 && !bodyHtml?.trim() ? 'Click to start typing…' : undefined}
+                  />
+                  {sigBlocks.length > 0 && (
+                    <div
+                      style={{ flexShrink: 0, pointerEvents: 'none', userSelect: 'none' }}
+                      dangerouslySetInnerHTML={{ __html: sigBlocks.map(b => b.html).join('') }}
+                    />
+                  )}
+                </div>
+              ) : (
+                /* READ-ONLY MODE: static blocks, existing behavior unchanged */
+                <div style={{ position: 'absolute', top: headerH + headerSpacing, left: ml, right: mr, height: usableH, overflow: 'hidden', zIndex: 2, fontSize: '12pt', lineHeight: 1.7, color: '#1f2937', fontFamily: 'Arial, sans-serif' }}>
+                  {blocks.length > 0 ? (
+                    blocks.map((block, bi) => (
+                      <div key={bi} dangerouslySetInnerHTML={{ __html: block.html }} />
+                    ))
+                  ) : (
+                    i === 0 && !fullBodyHtml.trim() && (
+                      <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '11pt', textAlign: 'center', paddingTop: 40 }}>
+                        Fill in the form on the left — your document preview will appear here.
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+
+              {/* Footer — non-editable, position:absolute overlay */}
+              {footer.show && renderDocFooter(i + 1)}
+            </div>
           </div>
-
-          <div style={{
-            width: pw, height: ph,
-            background: 'white',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.10), 0 12px 40px rgba(0,0,0,0.08)',
-            borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0,
-          }}>
-            {/* Watermark */}
-            {watermark.enabled && (
-              <div style={{
-                position: 'absolute', inset: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transform: `rotate(${watermark.rotation ?? -45}deg)`,
-                fontSize: watermark.size || 72,
-                opacity: Math.min(watermark.opacity || 0.12, 1),
-                color: watermark.color || '#9ca3af',
-                fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
-              }}>
-                {watermark.text || 'CONFIDENTIAL'}
-              </div>
-            )}
-
-            {/* Header */}
-            {headerVisible && renderDocHeader()}
-
-            {/* Content area */}
-            {onBodyChange ? (
-              /* Editable mode: single contentEditable div per page, managed via ref */
-              <div
-                ref={el => { editableRefs.current[i] = el }}
-                contentEditable
-                suppressContentEditableWarning
-                onFocus={() => { anyFocused.current = true }}
-                onBlur={() => {
-                  anyFocused.current = false
-                  // Re-sync from latest pageBlocks after editing so pagination is reflected
-                  pageBlocksRef.current.forEach((blks, j) => {
-                    const el = editableRefs.current[j]
-                    if (el) el.innerHTML = blks.map(b => b.html).join('')
-                  })
-                }}
-                onInput={() => {
-                  const html = editableRefs.current.filter(Boolean).map(el => el.innerHTML).join('')
-                  onBodyChangeRef.current?.(html)
-                }}
-                style={{
-                  position: 'absolute',
-                  top: headerH + headerSpacing,
-                  left: ml, right: mr,
-                  height: usableH,
-                  overflow: 'hidden',
-                  zIndex: 2,
-                  fontSize: '12pt', lineHeight: 1.7,
-                  color: '#1f2937', fontFamily: 'Arial, sans-serif',
-                  outline: 'none', cursor: 'text', boxSizing: 'border-box',
-                }}
-                data-placeholder={i === 0 && !fullBodyHtml.trim() ? 'Click to start typing…' : undefined}
-              />
-            ) : (
-              /* Read-only mode: static blocks via dangerouslySetInnerHTML */
-              <div style={{
-                position: 'absolute',
-                top: headerH + headerSpacing,
-                left: ml, right: mr,
-                height: usableH,
-                overflow: 'hidden',
-                zIndex: 2,
-                fontSize: '12pt', lineHeight: 1.7,
-                color: '#1f2937', fontFamily: 'Arial, sans-serif',
-              }}>
-                {blocks.length > 0 ? (
-                  blocks.map((block, bi) => (
-                    <div key={bi} dangerouslySetInnerHTML={{ __html: block.html }} />
-                  ))
-                ) : (
-                  i === 0 && !fullBodyHtml.trim() && (
-                    <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '11pt', textAlign: 'center', paddingTop: 40 }}>
-                      Fill in the form on the left — your document preview will appear here.
-                    </div>
-                  )
-                )}
-              </div>
-            )}
-
-            {/* Footer */}
-            {footer.show && renderDocFooter(i + 1)}
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -2116,6 +2176,8 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
           content: attr(data-placeholder);
           color: #9ca3af; pointer-events: none; font-style: italic;
         }
+        [data-qb-editable]::-webkit-scrollbar { display: none; }
+        [data-qb-editable] { scrollbar-width: none; -ms-overflow-style: none; }
       `}</style>
     </div>
   )
