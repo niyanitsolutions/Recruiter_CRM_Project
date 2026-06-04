@@ -1080,8 +1080,20 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
         </div>
       )}
 
+      {/* ── Dark pages wrapper — preview-style background with page cards ── */}
+      <div style={{
+        alignSelf: 'stretch',
+        background: '#2d2d3d',
+        borderRadius: 8,
+        padding: '24px 48px 32px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        overflowX: 'hidden',
+      }}>
+
       {/* Page counter */}
-      <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 8, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+      <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 12, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
         {pageCount > 1 ? `${pageCount} pages` : 'Page 1'}
       </div>
 
@@ -1133,33 +1145,6 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
             <div dangerouslySetInnerHTML={{ __html: sigHtml }} style={{ pointerEvents: 'none' }} />
           )}
 
-          {/* ── Page-break indicators at EXACT same positions as PaginatedDocPreview ── */}
-          {breakYs.map((y, i) => (
-            <div key={i} style={{
-              position: 'absolute',
-              top: y,
-              left: -ml, right: -mr,
-              pointerEvents: 'none', zIndex: 10,
-            }}>
-              {/* Dashed page-break line */}
-              <div style={{
-                borderTop: '2px dashed #c7d2fe',
-                marginBottom: 0,
-              }} />
-              {/* Page N label */}
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                gap: 12, padding: '2px 0',
-                background: 'rgba(238,242,255,0.9)',
-                fontSize: 9, fontWeight: 700, color: '#818cf8',
-                letterSpacing: '0.1em', textTransform: 'uppercase',
-              }}>
-                <div style={{ flex: 1, height: 1, background: '#e0e7ff' }} />
-                Page {i + 2} of {pageCount}
-                <div style={{ flex: 1, height: 1, background: '#e0e7ff' }} />
-              </div>
-            </div>
-          ))}
         </div>
 
         {/* Footer (always at the very bottom of the doc box) */}
@@ -1176,7 +1161,33 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
             <span>{footer.show_page_numbers ? `Page 1${pageCount > 1 ? ` of ${pageCount}` : ''}` : ''}</span>
           </div>
         )}
+
+        {/* ── Page gap overlays — one per break, positioned at the correct page boundary ── */}
+        {breakYs.map((y, i) => (
+          <div key={i} style={{
+            position: 'absolute',
+            top: headerH + headerSpacing + y,
+            left: 0, right: 0,
+            height: 40,
+            background: '#2d2d3d',
+            zIndex: 15,
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            boxShadow: '0 -4px 10px rgba(0,0,0,0.18), 0 4px 10px rgba(0,0,0,0.18)',
+          }}>
+            <div style={{ flex: 1, height: 1, background: '#4b5563' }} />
+            <span style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.12em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+              Page {i + 2} of {pageCount}
+            </span>
+            <div style={{ flex: 1, height: 1, background: '#4b5563' }} />
+          </div>
+        ))}
       </div>
+
+      </div>{/* end dark pages wrapper */}
     </div>
   )
 }
