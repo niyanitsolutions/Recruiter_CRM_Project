@@ -870,6 +870,9 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
   const headerSpacing = headerVisible ? (header.header_spacing ?? 20) : mt
   const usableH  = Math.max(ph - headerH - footerH - headerSpacing - mb, 100)
   const contentW = Math.max(pw - ml - mr, 200)
+  const titleH   = docTitle?.text
+    ? (docTitle.font_size || 16) * 1.5 + (docTitle.margin_top ?? 12) + (docTitle.margin_bottom ?? 14)
+    : 0
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [pageCount,    setPageCount]    = useState(1)
@@ -881,9 +884,8 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
 
   // ── Block-aware pagination — produces pageBlocks identical to PaginatedDocPreview ──
   const repaginate = useCallback((rawHtml) => {
-    const titleHtml = buildTitleHtml(docTitle)
     const sigHtml   = buildSigHtml(sigCfg)
-    const fullHtml  = titleHtml + (rawHtml || '') + sigHtml
+    const fullHtml  = (rawHtml || '') + sigHtml
     if (!fullHtml.trim()) { setPageCount(1); setPageBlocks([[]]); return }
 
     const container = document.createElement('div')
@@ -913,11 +915,13 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
       document.body.removeChild(container)
 
       const measureUsableH = usableH - 16
+      const page1UsableH = measureUsableH - titleH
       const pages = [[]]
       let usedH = 0, pi = 0
       for (const block of blocks) {
         const bh = Math.max(block.height, 4)
-        if (usedH + bh > measureUsableH && usedH > 0) {
+        const currentUsableH = pi === 0 ? page1UsableH : measureUsableH
+        if (usedH + bh > currentUsableH && usedH > 0) {
           pages.push([]); pi++; usedH = 0
         }
         pages[pi].push(block)
@@ -926,7 +930,7 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
       setPageBlocks(pages)
       setPageCount(pages.length)
     })
-  }, [contentW, usableH, docTitle, sigCfg])
+  }, [contentW, usableH, titleH, docTitle, sigCfg])
 
   // ── Initialise ────────────────────────────────────────────────────────────
   useLayoutEffect(() => {
@@ -1152,24 +1156,31 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
               {/* Header */}
               {headerVisible && renderDocHeader()}
 
-              {/* Content area */}
-              <div style={{
-                position: 'absolute',
-                top: headerH + headerSpacing,
-                left: ml, right: mr,
-                height: usableH,
-                overflow: 'hidden',
-                zIndex: 2,
-              }}>
-                {i === 0 ? (
-                  /* Page 1 — non-editable title above the single editorRef */
-                  <>
-                    {docTitle?.text && (
-                      <div
-                        dangerouslySetInnerHTML={{ __html: buildTitleHtml(docTitle) }}
-                        style={{ pointerEvents: 'none' }}
-                      />
-                    )}
+              {/* Page 1: title + editor; Pages 2+: read-only mirror */}
+              {i === 0 ? (
+                <>
+                  {/* Non-editable title — absolutely positioned above editor body */}
+                  {docTitle?.text && (
+                    <div
+                      dangerouslySetInnerHTML={{ __html: buildTitleHtml(docTitle) }}
+                      style={{
+                        position: 'absolute',
+                        top: headerH + headerSpacing,
+                        left: ml, right: mr,
+                        pointerEvents: 'none',
+                        zIndex: 3,
+                      }}
+                    />
+                  )}
+                  {/* Editor body — starts below title */}
+                  <div style={{
+                    position: 'absolute',
+                    top: headerH + headerSpacing + titleH,
+                    left: ml, right: mr,
+                    height: usableH - titleH,
+                    overflow: 'hidden',
+                    zIndex: 2,
+                  }}>
                     <div
                       ref={editorRef}
                       contentEditable
@@ -1184,27 +1195,51 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
                       }}
                       data-placeholder="Click here and start typing…"
                     />
-                  </>
-                ) : (
-                  /* Pages 2+ — read-only block mirror, clicking focuses editorRef */
+                  </div>
+                </>
+              ) : (
+                /* Pages 2+ — read-only block mirror */
+                <div style={{
+                  position: 'absolute',
+                  top: headerH + headerSpacing,
+                  left: ml, right: mr,
+                  height: usableH,
+                  overflow: 'hidden',
+                  zIndex: 2,
+                }}>
                   <div
                     style={{
                       fontSize: '12pt', lineHeight: 1.7,
                       fontFamily: 'Arial, sans-serif', color: '#1f2937',
                       cursor: 'text',
                     }}
-                    onClick={() => editorRef.current?.focus()}
+                    onClick={() => {
+                      const el = editorRef.current
+                      if (!el) return
+                      el.focus()
+                      const range = document.createRange()
+                      const sel = window.getSelection()
+                      range.selectNodeContents(el)
+                      range.collapse(false)
+                      sel?.removeAllRanges()
+                      sel?.addRange(range)
+                    }}
                   >
                     {(pageBlocks[i] || []).map((block, bi) => (
                       <div key={bi} dangerouslySetInnerHTML={{ __html: block.html }} />
                     ))}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Footer */}
               {footer.show && renderDocFooter(i + 1)}
             </div>
+            {i > 0 && (
+              <div style={{ fontSize: 9, color: '#9ca3af', marginTop: 4, textAlign: 'center' }}>
+                Click to continue editing ↑
+              </div>
+            )}
           </div>
         ))}
       </div>
