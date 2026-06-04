@@ -376,14 +376,19 @@ function BodyEditor({ editorRef, onInput }) {
         }} />
         <TB icon={TableIcon}  label="Insert Table"      onClick={() => { saveSel(); setShowTableDialog(true) }} />
         <TB icon={Scissors}   label="Insert Page Break" onClick={insertPageBreak} />
-        <label title="Insert Image" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
+        <label title="Insert Image" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600" onMouseDown={saveSel}>
           <ImageIcon className="w-3.5 h-3.5" style={{ color: 'var(--text-body)' }} />
           <input type="file" accept="image/*" className="sr-only"
             onChange={e => {
               const file = e.target.files[0]
               if (!file) return
               const reader = new FileReader()
-              reader.onload = ev => insertHtml(`<img src="${ev.target.result}" style="max-width:100%;height:auto;" />`)
+              reader.onload = ev => {
+                editorRef.current?.focus()
+                restoreSel()
+                document.execCommand('insertHTML', false, `<img src="${ev.target.result}" style="max-width:100%;height:auto;" />`)
+                onInput?.()
+              }
               reader.readAsDataURL(file)
               e.target.value = ''
             }} />
@@ -1012,7 +1017,7 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
   }, [tableCtx, handleInput])
 
   // ── Header renderer (identical to PaginatedDocPreview) ───────────────────
-  const renderDocHeader = () => {
+  const renderDocHeader = (topOffset = 0) => {
     const layout = header.header_layout || 'company_left_logo_right'
     const padL   = Math.max(32, header.padding_left  ?? 32)
     const padR   = Math.max(32, header.padding_right ?? 32)
@@ -1021,7 +1026,7 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     const isCen  = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
     const ca     = isCen ? 'center' : (header.company_alignment || 'left')
     const st = {
-      position: 'absolute', top: 0, left: 0, right: 0, height: headerH, zIndex: 2, overflow: 'hidden',
+      position: 'absolute', top: topOffset, left: 0, right: 0, height: headerH, zIndex: 2, overflow: 'hidden',
       paddingTop: header.padding_top ?? 20, paddingRight: padR, paddingBottom: header.padding_bottom ?? 8, paddingLeft: padL,
       borderBottom: header.show && header.border_bottom ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}` : 'none',
       backgroundColor: header.show ? (header.background_color || '#fff') : 'transparent',
@@ -1162,29 +1167,48 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
           </div>
         )}
 
-        {/* ── Page gap overlays — one per break, positioned at the correct page boundary ── */}
-        {breakYs.map((y, i) => (
-          <div key={i} style={{
-            position: 'absolute',
-            top: headerH + headerSpacing + y,
-            left: 0, right: 0,
-            height: 40,
-            background: '#2d2d3d',
-            zIndex: 15,
-            pointerEvents: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 12,
-            boxShadow: '0 -4px 10px rgba(0,0,0,0.18), 0 4px 10px rgba(0,0,0,0.18)',
-          }}>
-            <div style={{ flex: 1, height: 1, background: '#4b5563' }} />
-            <span style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.12em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-              Page {i + 2} of {pageCount}
-            </span>
-            <div style={{ flex: 1, height: 1, background: '#4b5563' }} />
-          </div>
-        ))}
+        {/* ── Per-page break zones: footer → separator bar → header ── */}
+        {breakYs.map((y, i) => {
+          const breakTop = headerH + headerSpacing + y
+          const ftrH = footer.show ? Math.max(footer.footer_height || 40, 20) : 0
+          const sepH = 24
+          return (
+            <div key={i} style={{ position: 'absolute', top: breakTop, left: 0, right: 0, zIndex: 8, pointerEvents: 'none' }}>
+              {/* Footer of page i+1 */}
+              {footer.show && (
+                <div style={{
+                  height: ftrH, background: 'white',
+                  padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 20}px ${footer.padding_bottom ?? 8}px ${footer.padding_left ?? 20}px`,
+                  borderTop: footer.border_top ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}` : 'none',
+                  fontSize: footer.font_size || 10, color: footer.font_color || '#666',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box',
+                }}>
+                  <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
+                  <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
+                  <span>{footer.show_page_numbers ? `Page ${i + 1} of ${pageCount}` : ''}</span>
+                </div>
+              )}
+              {/* Page separator bar */}
+              <div style={{
+                height: sepH, background: '#2d2d3d',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+                boxShadow: '0 -2px 6px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.18)',
+              }}>
+                <div style={{ flex: 1, height: 1, background: '#4b5563' }} />
+                <span style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.12em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                  Page {i + 2} of {pageCount}
+                </span>
+                <div style={{ flex: 1, height: 1, background: '#4b5563' }} />
+              </div>
+              {/* Header for page i+2 */}
+              {headerVisible && (
+                <div style={{ position: 'relative', height: headerH, overflow: 'hidden', background: 'white' }}>
+                  {renderDocHeader(0)}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       </div>{/* end dark pages wrapper */}
