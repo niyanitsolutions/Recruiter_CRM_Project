@@ -1055,11 +1055,44 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
 
   const titleHtml = buildTitleHtml(docTitle)
   const sigHtml   = buildSigHtml(sigCfg)
-  // Minimum document height = 1 full page
-  const docMinH   = headerH + headerSpacing + usableH + footerH
+  const fullDisplayHtml = titleHtml + (bodyHtml || '') + sigHtml
+
+  // ── Footer renderer (mirrors PaginatedDocPreview) ─────────────────────────
+  const renderDocFooter = (pageNum) => (
+    <div style={{
+      position: 'absolute', bottom: 0, left: 0, right: 0,
+      height: footerH, zIndex: 2,
+      padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 20}px ${footer.padding_bottom ?? 8}px ${footer.padding_left ?? 20}px`,
+      borderTop: footer.border_top ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}` : 'none',
+      fontSize: footer.font_size || 10, color: footer.font_color || '#666',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      boxSizing: 'border-box',
+    }}>
+      <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
+      <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
+      <span>{footer.show_page_numbers ? `Page ${pageNum}${pageCount > 1 ? ` of ${pageCount}` : ''}` : ''}</span>
+    </div>
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingBottom: 32 }}>
+
+      {/* ── Off-screen contentEditable — stays in DOM, receives keyboard input ── */}
+      <div style={{
+        position: 'fixed', top: '-99999px', left: '-99999px',
+        width: contentW, fontSize: '12pt', lineHeight: 1.7,
+        fontFamily: 'Arial, sans-serif', color: '#1f2937',
+        pointerEvents: 'none', zIndex: -1,
+      }}>
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={handleInput}
+          style={{ minHeight: 200, outline: 'none', fontSize: '12pt', lineHeight: 1.7, fontFamily: 'Arial, sans-serif', color: '#1f2937' }}
+          data-placeholder="Click here and start typing…"
+        />
+      </div>
 
       {/* Table toolbar — sticky at top */}
       {tableCtx && (
@@ -1085,7 +1118,7 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
         </div>
       )}
 
-      {/* ── Dark pages wrapper — preview-style background with page cards ── */}
+      {/* ── Dark pages wrapper ── */}
       <div style={{
         alignSelf: 'stretch',
         background: '#2d2d3d',
@@ -1094,124 +1127,85 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
+        gap: 32,
         overflowX: 'hidden',
       }}>
 
-      {/* Page counter */}
-      <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 12, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-        {pageCount > 1 ? `${pageCount} pages` : 'Page 1'}
-      </div>
-
-      {/* ── Document box — same width as PaginatedDocPreview, grows with content ── */}
-      <div style={{
-        width: pw, minHeight: docMinH,
-        background: 'white',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.10),0 12px 40px rgba(0,0,0,0.08)',
-        borderRadius: 2, position: 'relative', flexShrink: 0,
-      }}>
-        {/* Watermark */}
-        {watermark.enabled && (
-          <div style={{
-            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72,
-            opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af',
-            fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
-          }}>{watermark.text || 'CONFIDENTIAL'}</div>
-        )}
-
-        {/* Header (absolute, sits in the header zone) */}
-        {headerVisible && renderDocHeader()}
-
-        {/* Content area — starts EXACTLY at headerH+headerSpacing, same as PaginatedDocPreview */}
-        <div style={{ paddingTop: headerH + headerSpacing, paddingLeft: ml, paddingRight: mr, paddingBottom: footerH + mb, position: 'relative', zIndex: 2 }}>
-
-          {/* Document title (non-editable, from left panel settings) */}
-          {docTitle?.text && (
-            <div dangerouslySetInnerHTML={{ __html: titleHtml }} style={{ pointerEvents: 'none' }} />
-          )}
-
-          {/* ── Single editable body ── */}
-          <div
-            ref={editorRef}
-            contentEditable
-            suppressContentEditableWarning
-            onInput={handleInput}
-            className="focus:outline-none"
-            style={{
-              fontSize: '12pt', lineHeight: 1.7,
-              fontFamily: 'Arial, sans-serif', color: '#1f2937',
-              minHeight: 200, outline: 'none',
-            }}
-            data-placeholder="Click here and start typing…"
-          />
-
-          {/* Signature (non-editable, from left panel settings) */}
-          {sigCfg?.enabled && (
-            <div dangerouslySetInnerHTML={{ __html: sigHtml }} style={{ pointerEvents: 'none' }} />
-          )}
-
-        </div>
-
-        {/* Footer (always at the very bottom of the doc box) */}
-        {footer.show && (
-          <div style={{
-            paddingLeft: ml, paddingRight: mr,
-            padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 20}px ${footer.padding_bottom ?? 8}px ${footer.padding_left ?? 20}px`,
-            borderTop: footer.border_top ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}` : 'none',
-            fontSize: footer.font_size || 10, color: footer.font_color || '#666',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box',
-          }}>
-            <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
-            <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
-            <span>{footer.show_page_numbers ? `Page 1${pageCount > 1 ? ` of ${pageCount}` : ''}` : ''}</span>
-          </div>
-        )}
-
-        {/* ── Per-page break zones: footer → separator bar → header ── */}
-        {breakYs.map((y, i) => {
-          const breakTop = headerH + headerSpacing + y
-          const ftrH = footer.show ? Math.max(footer.footer_height || 40, 20) : 0
-          const sepH = 24
-          return (
-            <div key={i} style={{ position: 'absolute', top: breakTop, left: 0, right: 0, zIndex: 8, pointerEvents: 'none' }}>
-              {/* Footer of page i+1 */}
-              {footer.show && (
-                <div style={{
-                  height: ftrH, background: 'white',
-                  padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 20}px ${footer.padding_bottom ?? 8}px ${footer.padding_left ?? 20}px`,
-                  borderTop: footer.border_top ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}` : 'none',
-                  fontSize: footer.font_size || 10, color: footer.font_color || '#666',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box',
-                }}>
-                  <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
-                  <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
-                  <span>{footer.show_page_numbers ? `Page ${i + 1} of ${pageCount}` : ''}</span>
-                </div>
-              )}
-              {/* Page separator bar */}
-              <div style={{
-                height: sepH, background: '#2d2d3d',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-                boxShadow: '0 -2px 6px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.18)',
-              }}>
-                <div style={{ flex: 1, height: 1, background: '#4b5563' }} />
-                <span style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.12em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-                  Page {i + 2} of {pageCount}
-                </span>
-                <div style={{ flex: 1, height: 1, background: '#4b5563' }} />
-              </div>
-              {/* Header for page i+2 */}
-              {headerVisible && (
-                <div style={{ position: 'relative', height: headerH, overflow: 'hidden', background: 'white' }}>
-                  {renderDocHeader(0)}
-                </div>
-              )}
+        {/* ── One fixed-height page box per page; each clips its content slice ── */}
+        {Array.from({ length: pageCount }, (_, i) => (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {/* Page label */}
+            <div style={{
+              fontSize: 10, fontWeight: 600, color: '#9ca3af',
+              marginBottom: 6, letterSpacing: '0.08em', textTransform: 'uppercase',
+            }}>
+              Page {i + 1}{pageCount > 1 ? ` / ${pageCount}` : ''}
             </div>
-          )
-        })}
-      </div>
 
-      </div>{/* end dark pages wrapper */}
+            <div style={{
+              width: pw, height: ph,
+              background: 'white',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.10),0 12px 40px rgba(0,0,0,0.08)',
+              borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0,
+            }}>
+              {/* Watermark */}
+              {watermark.enabled && (
+                <div style={{
+                  position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72,
+                  opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af',
+                  fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
+                }}>{watermark.text || 'CONFIDENTIAL'}</div>
+              )}
+
+              {/* Header — position:absolute top:0 anchors to this page box */}
+              {headerVisible && renderDocHeader()}
+
+              {/* Content viewport — translateY shifts content to show this page's slice */}
+              <div style={{
+                position: 'absolute',
+                top: headerH + headerSpacing,
+                left: ml, right: mr,
+                height: usableH,
+                overflow: 'hidden',
+                zIndex: 2,
+              }}>
+                {fullDisplayHtml.trim() ? (
+                  <div
+                    style={{
+                      transform: `translateY(-${i * usableH}px)`,
+                      fontSize: '12pt', lineHeight: 1.7,
+                      fontFamily: 'Arial, sans-serif', color: '#1f2937',
+                      width: '100%',
+                    }}
+                    dangerouslySetInnerHTML={{ __html: fullDisplayHtml }}
+                  />
+                ) : i === 0 && (
+                  <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '11pt', textAlign: 'center', paddingTop: 40 }}>
+                    Click anywhere in the document to start typing…
+                  </div>
+                )}
+              </div>
+
+              {/* Transparent click overlay — focuses off-screen editorRef for typing */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: headerH + headerSpacing,
+                  left: ml, right: mr,
+                  height: usableH,
+                  zIndex: 10,
+                  cursor: 'text',
+                }}
+                onClick={() => editorRef.current?.focus()}
+              />
+
+              {/* Footer with correct page number */}
+              {footer.show && renderDocFooter(i + 1)}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
