@@ -852,9 +852,9 @@ function ensureTrailingP(el) {
 }
 
 // ─── WYSIWYG Document Editor ─────────────────────────────────────────────────
-// Single contentEditable body with page-break indicators at the EXACT same
-// positions PaginatedDocPreview uses — same page count, same break algorithm.
-// No cursor-position issues. Correct header/footer spacing.
+// Block-per-page architecture matching PaginatedDocPreview exactly.
+// Page 1: non-editable title + contentEditable body (editorRef).
+// Pages 2+: read-only block mirrors. All editing in editorRef on page 1.
 function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle, sigCfg, bodyHtml, onBodyChange }) {
   // ── Dimensions — identical to PaginatedDocPreview ─────────────────────────
   const base = PAPER_PX[paper.size] || PAPER_PX.A4
@@ -867,30 +867,31 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
   const mr = Math.round((paper.margin_right  || 72) / 72 * 96)
   const mt = Math.round((paper.margin_top    || 72) / 72 * 96)
   const mb = Math.round((paper.margin_bottom || 72) / 72 * 96)
-  // headerSpacing: gap between header bottom and text — same calc as PaginatedDocPreview
   const headerSpacing = headerVisible ? (header.header_spacing ?? 20) : mt
-  // usableH: lines of text per page — exactly as PaginatedDocPreview
   const usableH  = Math.max(ph - headerH - footerH - headerSpacing - mb, 100)
   const contentW = Math.max(pw - ml - mr, 200)
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [pageCount,    setPageCount]    = useState(1)
-  const [breakYs,      setBreakYs]      = useState([])   // px offsets of page breaks within content area
+  const [pageBlocks,   setPageBlocks]   = useState([[]])
   const [tableCtx,     setTableCtx]     = useState(null)
   const [selectedImg,  setSelectedImg]  = useState(null)
   const [imgToolbarVis,setImgToolbarVis]= useState(false)
   const repagTimer = useRef(null)
 
-  // ── Same block-aware pagination algorithm as PaginatedDocPreview ──────────
+  // ── Block-aware pagination — produces pageBlocks identical to PaginatedDocPreview ──
   const repaginate = useCallback((rawHtml) => {
-    const fullHtml = buildTitleHtml(docTitle) + (rawHtml || '') + buildSigHtml(sigCfg)
-    if (!fullHtml.trim()) { setPageCount(1); setBreakYs([]); return }
+    const titleHtml = buildTitleHtml(docTitle)
+    const sigHtml   = buildSigHtml(sigCfg)
+    const fullHtml  = titleHtml + (rawHtml || '') + sigHtml
+    if (!fullHtml.trim()) { setPageCount(1); setPageBlocks([[]]); return }
 
     const container = document.createElement('div')
     container.setAttribute('aria-hidden', 'true')
     Object.assign(container.style, {
       position: 'absolute', top: '-99999px', left: '-99999px',
-      width: `${contentW}px`, fontSize: '12pt', lineHeight: '1.7',
+      width: `${contentW}px`,
+      fontSize: '12pt', lineHeight: '1.7',
       fontFamily: 'Arial, sans-serif', color: '#1f2937',
       visibility: 'hidden', pointerEvents: 'none',
     })
@@ -899,36 +900,40 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
 
     requestAnimationFrame(() => {
       const children = Array.from(container.children)
-      const blocks = children.length === 0
-        ? [{ height: container.scrollHeight || 40 }]
-        : children.map(el => {
-            const cs = window.getComputedStyle(el)
-            const extra = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
-            return { height: (el.offsetHeight || 20) + extra }
-          })
+      let blocks
+      if (children.length === 0) {
+        blocks = [{ html: fullHtml, height: container.scrollHeight || 40 }]
+      } else {
+        blocks = children.map(el => {
+          const cs = window.getComputedStyle(el)
+          const extra = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
+          return { html: el.outerHTML, height: (el.offsetHeight || 20) + extra }
+        })
+      }
       document.body.removeChild(container)
 
-      // Same distribution loop as PaginatedDocPreview
-      // 16px buffer prevents premature breaks from off-screen measurement rounding
       const measureUsableH = usableH - 16
-      const breaks = []  // y-offsets within the content area where page breaks occur
-      let usedH = 0
+      const pages = [[]]
+      let usedH = 0, pi = 0
       for (const block of blocks) {
         const bh = Math.max(block.height, 4)
         if (usedH + bh > measureUsableH && usedH > 0) {
-          breaks.push(usedH)  // break at current accumulated height
-          usedH = 0
+          pages.push([]); pi++; usedH = 0
         }
+        pages[pi].push(block)
         usedH += bh
       }
-      setPageCount(breaks.length + 1)
-      setBreakYs(breaks)
+      setPageBlocks(pages)
+      setPageCount(pages.length)
     })
   }, [contentW, usableH, docTitle, sigCfg])
 
   // ── Initialise ────────────────────────────────────────────────────────────
   useLayoutEffect(() => {
-    if (editorRef.current) { editorRef.current.innerHTML = bodyHtml || ''; ensureTrailingP(editorRef.current) }
+    if (editorRef.current) {
+      editorRef.current.innerHTML = bodyHtml || ''
+      ensureTrailingP(editorRef.current)
+    }
   }, []) // eslint-disable-line
 
   useEffect(() => {
@@ -936,7 +941,7 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     repaginate(html)
   }, []) // eslint-disable-line
 
-  // Re-paginate when layout changes (header, footer, paper etc.)
+  // Re-paginate when layout changes (header, footer, paper, title etc.)
   useEffect(() => { repaginate(editorRef.current?.innerHTML || bodyHtml || '') }, // eslint-disable-line
     [header.header_height, header.header_spacing, header.show, footer.show, footer.footer_height,
      paper.size, paper.orientation, paper.margin_top, paper.margin_bottom, paper.margin_left, paper.margin_right,
@@ -1058,10 +1063,6 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{compEl}{logoEl}</div>
   }
 
-  const titleHtml = buildTitleHtml(docTitle)
-  const sigHtml   = buildSigHtml(sigCfg)
-  const fullDisplayHtml = titleHtml + (bodyHtml || '') + sigHtml
-
   // ── Footer renderer (mirrors PaginatedDocPreview) ─────────────────────────
   const renderDocFooter = (pageNum) => (
     <div style={{
@@ -1115,26 +1116,28 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 32,
         overflowX: 'hidden',
       }}>
 
-        {/* ── One fixed-height page box per page; each clips its content slice ── */}
+        {/* Page counter */}
+        <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 12, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          {pageCount > 1 ? `${pageCount} pages` : 'Page 1'}
+        </div>
+
+        {/* ── One page box per page ── */}
         {Array.from({ length: pageCount }, (_, i) => (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: i < pageCount - 1 ? 32 : 0 }}>
             {/* Page label */}
-            <div style={{
-              fontSize: 10, fontWeight: 600, color: '#9ca3af',
-              marginBottom: 6, letterSpacing: '0.08em', textTransform: 'uppercase',
-            }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 6, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Page {i + 1}{pageCount > 1 ? ` / ${pageCount}` : ''}
             </div>
 
+            {/* Page box — fixed size, clips content */}
             <div style={{
               width: pw, height: ph,
               background: 'white',
               boxShadow: '0 1px 4px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.10),0 12px 40px rgba(0,0,0,0.08)',
-              borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0,
+              borderRadius: 2, position: 'relative', flexShrink: 0, overflow: 'hidden',
             }}>
               {/* Watermark */}
               {watermark.enabled && (
@@ -1146,75 +1149,60 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
                 }}>{watermark.text || 'CONFIDENTIAL'}</div>
               )}
 
-              {/* Header — position:absolute top:0 anchors to this page box */}
+              {/* Header */}
               {headerVisible && renderDocHeader()}
 
-              {/* Page 1: editorRef directly (cursor visible); pages 2+: translateY window */}
-              {i === 0 ? (
-                <div style={{
-                  position: 'absolute',
-                  top: headerH + headerSpacing,
-                  left: ml, right: mr,
-                  height: usableH,
-                  zIndex: 2,
-                }}>
-                  <div
-                    ref={editorRef}
-                    contentEditable
-                    suppressContentEditableWarning
-                    onInput={handleInput}
-                    style={{
-                      position: 'absolute',
-                      top: 0, left: 0,
-                      width: '100%',
-                      minHeight: '100%',
-                      fontSize: '12pt', lineHeight: 1.7,
-                      fontFamily: 'Arial, sans-serif', color: '#1f2937',
-                      outline: 'none',
-                      caretColor: '#1f2937',
-                      background: 'transparent',
-                    }}
-                    data-placeholder="Click here and start typing…"
-                  />
-                </div>
-              ) : (
-                <>
-                  <div style={{
-                    position: 'absolute',
-                    top: headerH + headerSpacing,
-                    left: ml, right: mr,
-                    height: usableH,
-                    overflow: 'hidden',
-                    zIndex: 2,
-                  }}>
-                    {fullDisplayHtml.trim() && (
+              {/* Content area */}
+              <div style={{
+                position: 'absolute',
+                top: headerH + headerSpacing,
+                left: ml, right: mr,
+                height: usableH,
+                overflow: 'hidden',
+                zIndex: 2,
+              }}>
+                {i === 0 ? (
+                  /* Page 1 — non-editable title above the single editorRef */
+                  <>
+                    {docTitle?.text && (
                       <div
-                        style={{
-                          transform: `translateY(-${i * usableH}px)`,
-                          fontSize: '12pt', lineHeight: 1.7,
-                          fontFamily: 'Arial, sans-serif', color: '#1f2937',
-                          width: '100%',
-                        }}
-                        dangerouslySetInnerHTML={{ __html: fullDisplayHtml }}
+                        dangerouslySetInnerHTML={{ __html: buildTitleHtml(docTitle) }}
+                        style={{ pointerEvents: 'none' }}
                       />
                     )}
-                  </div>
-                  {/* Click overlay for pages 2+ — focuses editorRef */}
+                    <div
+                      ref={editorRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      onInput={handleInput}
+                      className="focus:outline-none"
+                      style={{
+                        fontSize: '12pt', lineHeight: 1.7,
+                        fontFamily: 'Arial, sans-serif', color: '#1f2937',
+                        minHeight: 200, outline: 'none', caretColor: '#1f2937',
+                        wordBreak: 'break-word',
+                      }}
+                      data-placeholder="Click here and start typing…"
+                    />
+                  </>
+                ) : (
+                  /* Pages 2+ — read-only block mirror, clicking focuses editorRef */
                   <div
                     style={{
-                      position: 'absolute',
-                      top: headerH + headerSpacing,
-                      left: ml, right: mr,
-                      height: usableH,
-                      zIndex: 10,
+                      fontSize: '12pt', lineHeight: 1.7,
+                      fontFamily: 'Arial, sans-serif', color: '#1f2937',
                       cursor: 'text',
                     }}
                     onClick={() => editorRef.current?.focus()}
-                  />
-                </>
-              )}
+                  >
+                    {(pageBlocks[i] || []).map((block, bi) => (
+                      <div key={bi} dangerouslySetInnerHTML={{ __html: block.html }} />
+                    ))}
+                  </div>
+                )}
+              </div>
 
-              {/* Footer with correct page number */}
+              {/* Footer */}
               {footer.show && renderDocFooter(i + 1)}
             </div>
           </div>
