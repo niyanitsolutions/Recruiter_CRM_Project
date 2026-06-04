@@ -1,8 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { paginate as paginateEngine } from './paginationEngine'
 import {
   Save, Eye, Bold, Italic, Underline, Strikethrough,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
@@ -12,7 +10,7 @@ import {
   ZoomIn, ZoomOut, X, Download, Printer, Clock, CheckCircle,
   AlertCircle, Upload, Maximize2, Wand2, Type, Settings,
   PenLine, Building2, LayoutTemplate, PanelLeftClose, PanelLeftOpen,
-  Scissors, Indent, Outdent, Subscript, Superscript, RemoveFormatting,
+  Scissors,
 } from 'lucide-react'
 import documentCenterService from '../../../services/documentCenterService'
 
@@ -143,10 +141,10 @@ function Section({ id, title, icon: Icon, open, onToggle, children, badge, keepM
 }
 
 // ─── Toolbar button ───────────────────────────────────────────────────────────
-const TB = ({ icon: Icon, label, onClick, active }) => (
+const TB = ({ icon: Icon, label, onClick }) => (
   <button type="button" title={label} onMouseDown={e => { e.preventDefault(); onClick() }}
-    className={`p-1.5 rounded transition-colors ${active ? 'bg-violet-600' : 'hover:bg-gray-200 dark:hover:bg-gray-600'}`}
-    style={{ color: active ? 'white' : 'var(--text-body)' }}>
+    className="p-1.5 rounded transition-colors hover:bg-gray-200 dark:hover:bg-gray-600"
+    style={{ color: 'var(--text-body)' }}>
     <Icon className="w-3.5 h-3.5" />
   </button>
 )
@@ -289,115 +287,10 @@ function ImageResizeToolbar({ img, onClose }) {
   )
 }
 
-// ─── Image Drag-Resize Overlay ────────────────────────────────────────────────
-// Renders via React portal (position:fixed) so it works inside any overflow container.
-function ImageDragResize({ img, onUpdate, onClose }) {
-  const getRectState = () => {
-    const r = img.getBoundingClientRect()
-    return { left: r.left, top: r.top, width: r.width, height: r.height }
-  }
-  const [rect, setRect] = useState(getRectState)
-  const dragRef         = useRef(null)
-
-  // Sync overlay position whenever the image or viewport moves
-  const syncRect = useCallback(() => setRect(getRectState()), [img]) // eslint-disable-line
-
-  useEffect(() => {
-    syncRect()
-    window.addEventListener('scroll', syncRect, true)
-    window.addEventListener('resize', syncRect)
-    return () => {
-      window.removeEventListener('scroll', syncRect, true)
-      window.removeEventListener('resize', syncRect)
-    }
-  }, [syncRect])
-
-  const startDrag = useCallback((e, corner) => {
-    e.preventDefault(); e.stopPropagation()
-    const r     = img.getBoundingClientRect()
-    const ratio = (img.naturalWidth || r.width) / Math.max(img.naturalHeight || r.height, 1)
-    dragRef.current = { corner, startX: e.clientX, startW: r.width, ratio }
-
-    const onMove = (mv) => {
-      const { corner, startX, startW, ratio } = dragRef.current
-      const dx = mv.clientX - startX
-      const nw = Math.max(40, corner === 'nw' || corner === 'sw' ? startW - dx : startW + dx)
-      const nh = Math.round(nw / ratio)
-      img.style.width    = nw + 'px'
-      img.style.height   = nh + 'px'
-      img.style.maxWidth = '100%'
-      syncRect()
-      onUpdate?.()
-    }
-    const onUp = () => {
-      dragRef.current = null
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-      onUpdate?.()
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-  }, [img, syncRect, onUpdate])
-
-  const corners = [
-    { id: 'nw', cursor: 'nw-resize', style: { top: -6, left: -6 } },
-    { id: 'ne', cursor: 'ne-resize', style: { top: -6, right: -6 } },
-    { id: 'sw', cursor: 'sw-resize', style: { bottom: -6, left: -6 } },
-    { id: 'se', cursor: 'se-resize', style: { bottom: -6, right: -6 } },
-  ]
-  const edges = [
-    { id: 'ne', cursor: 'e-resize', style: { top: '50%', right: -5, transform: 'translateY(-50%)', width: 8, height: 20, borderRadius: 4 } },
-    { id: 'nw', cursor: 'w-resize', style: { top: '50%', left: -5,  transform: 'translateY(-50%)', width: 8, height: 20, borderRadius: 4 } },
-  ]
-
-  return createPortal(
-    <div style={{ position: 'fixed', left: rect.left, top: rect.top, width: rect.width, height: rect.height, zIndex: 99999, pointerEvents: 'none' }}>
-      {/* Selection border */}
-      <div style={{ position: 'absolute', inset: -2, border: '2px solid #7c3aed', borderRadius: 2, pointerEvents: 'none' }} />
-      {/* Corner handles */}
-      {corners.map(h => (
-        <div key={h.id} onMouseDown={e => startDrag(e, h.id)} style={{
-          position: 'absolute', width: 12, height: 12,
-          background: 'white', border: '2px solid #7c3aed', borderRadius: 2,
-          cursor: h.cursor, pointerEvents: 'all', ...h.style,
-        }} />
-      ))}
-      {/* Side handles */}
-      {edges.map(h => (
-        <div key={h.id + '_edge'} onMouseDown={e => startDrag(e, h.id)} style={{
-          position: 'absolute', width: 10, height: 24,
-          background: 'white', border: '2px solid #7c3aed',
-          cursor: h.cursor, pointerEvents: 'all', ...h.style,
-        }} />
-      ))}
-      {/* Dismiss */}
-      <button onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onClose?.() }}
-        style={{
-          position: 'absolute', top: -22, right: 0,
-          background: '#7c3aed', color: 'white', border: 'none',
-          borderRadius: 4, padding: '1px 7px', fontSize: 10,
-          cursor: 'pointer', pointerEvents: 'all',
-        }}>Done</button>
-    </div>,
-    document.body
-  )
-}
-
 // ─── Body Editor (Formatting Toolbar only — editable div is in WysiwygDocument) ──
-// Exact font size list mapped to CSS pt values via the font-size-7 marker technique
-const FONT_SIZES_PT = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32, 36, 48, 72]
-
-function BodyEditor({ editorRef, onInput, bodyHtml, sidebarWriteRef }) {
-  const savedSel      = useRef(null)
-  const sideEditorRef = useRef(null)
-  const lastSideHtml  = useRef('')
+function BodyEditor({ editorRef, onInput }) {
+  const savedSel = useRef(null)
   const [showTableDialog, setShowTableDialog] = useState(false)
-  // Active formatting state — updated on every selection change
-  const [fmt, setFmt] = useState({
-    bold: false, italic: false, underline: false, strike: false,
-    alignLeft: true, alignCenter: false, alignRight: false, alignJustify: false,
-  })
-  const [currentFontSize, setCurrentFontSize] = useState('12')
 
   const saveSel = () => {
     const sel = window.getSelection()
@@ -409,45 +302,17 @@ function BodyEditor({ editorRef, onInput, bodyHtml, sidebarWriteRef }) {
     sel?.removeAllRanges()
     sel?.addRange(savedSel.current)
   }
-  // Routes toolbar/insert actions to the right editor path
-  const notifyChange = () => {
-    if (sideEditorRef.current && editorRef.current === sideEditorRef.current) {
-      const html = sideEditorRef.current.innerHTML
-      lastSideHtml.current = html
-      sidebarWriteRef?.current?.(html)
-    } else {
-      onInput?.()
-    }
-  }
-
   const exec = (cmd, val = null) => {
     editorRef.current?.focus()
     restoreSel()
     document.execCommand(cmd, false, val)
-    notifyChange()
+    onInput?.()
   }
-
-  // Apply exact pt font size using the size-7 marker trick
-  const applyFontSizePt = (pts) => {
-    editorRef.current?.focus()
-    restoreSel()
-    document.execCommand('fontSize', false, '7')
-    if (editorRef.current) {
-      editorRef.current.querySelectorAll('font[size="7"]').forEach(m => {
-        const span = document.createElement('span')
-        span.style.fontSize = `${pts}pt`
-        while (m.firstChild) span.appendChild(m.firstChild)
-        m.replaceWith(span)
-      })
-    }
-    notifyChange()
-  }
-
   const insertHtml = (html) => {
     editorRef.current?.focus()
     restoreSel()
     document.execCommand('insertHTML', false, html)
-    notifyChange()
+    onInput?.()
   }
   const insertField = (field) => insertHtml(
     `<span style="background:#ede9fe;color:#7c3aed;padding:1px 5px;border-radius:3px;font-family:monospace;font-size:0.85em;">${field}</span>`
@@ -457,111 +322,53 @@ function BodyEditor({ editorRef, onInput, bodyHtml, sidebarWriteRef }) {
     `<span style="font-size:10px;color:#9ca3af;background:white;padding:0 8px;">— Page Break —</span></div>`
   )
 
-  // Track active formatting state on every selection change
-  useEffect(() => {
-    const updateFmt = () => {
-      try {
-        setFmt({
-          bold:         document.queryCommandState('bold'),
-          italic:       document.queryCommandState('italic'),
-          underline:    document.queryCommandState('underline'),
-          strike:       document.queryCommandState('strikeThrough'),
-          alignLeft:    document.queryCommandState('justifyLeft'),
-          alignCenter:  document.queryCommandState('justifyCenter'),
-          alignRight:   document.queryCommandState('justifyRight'),
-          alignJustify: document.queryCommandState('justifyFull'),
-        })
-        // Detect current font size from the selection's computed style
-        const sel = window.getSelection()
-        if (sel?.anchorNode) {
-          const el = sel.anchorNode.nodeType === 3
-            ? sel.anchorNode.parentElement
-            : sel.anchorNode
-          if (el) {
-            const pxSize = parseFloat(window.getComputedStyle(el).fontSize) || 16
-            const ptSize = Math.round(pxSize * 0.75)
-            setCurrentFontSize(String(ptSize))
-          }
-        }
-      } catch { /* ignore */ }
-    }
-    document.addEventListener('selectionchange', updateFmt)
-    return () => document.removeEventListener('selectionchange', updateFmt)
-  }, [])
-
-  // Sync WysiwygDocument → sidebar editor (skip when sidebar is focused to avoid caret disruption)
-  useEffect(() => {
-    const el = sideEditorRef.current
-    if (!el) return
-    if (el === document.activeElement || el.contains(document.activeElement)) return
-    const next = bodyHtml || ''
-    if (next === lastSideHtml.current) return
-    lastSideHtml.current = next
-    // Use a <p> placeholder when empty so the cursor always lands in a block element
-    // (prevents first keystroke from creating a bare text node that getMerged() misses)
-    el.innerHTML = next || '<p><br></p>'
-  }, [bodyHtml])
-
   const fieldGroups = HR_FIELDS.reduce((acc, f) => {
     if (!acc[f.group]) acc[f.group] = []
     acc[f.group].push(f)
     return acc
   }, {})
 
-  const sep = <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
-
   return (
     <div className="border rounded-xl overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-      {/* Toolbar row 1: font controls + basic formatting */}
+      {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b"
         style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-        {/* Font family */}
         <select className="text-xs px-1.5 py-1 rounded border mr-1"
-          style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)', maxWidth: 110 }}
+          style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
           onMouseDown={saveSel} onChange={e => exec('fontName', e.target.value)}>
           {FONT_FAMILIES.map(f => <option key={f} value={f}>{f}</option>)}
         </select>
-        {/* Font size — exact pt values */}
-        <select className="text-xs px-1 py-1 rounded border w-14 mr-1"
+        <select className="text-xs px-1.5 py-1 rounded border w-14 mr-1"
           style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
-          value={FONT_SIZES_PT.includes(+currentFontSize) ? currentFontSize : '12'}
-          onMouseDown={saveSel}
-          onChange={e => applyFontSizePt(+e.target.value)}>
-          {FONT_SIZES_PT.map(s => <option key={s} value={s}>{s}</option>)}
+          defaultValue="3" onMouseDown={saveSel} onChange={e => exec('fontSize', e.target.value)}>
+          {[1,2,3,4,5,6,7].map(s => <option key={s} value={s}>{[8,10,12,14,18,24,36][s-1]}</option>)}
         </select>
-        {sep}
-        <TB icon={Bold}          label="Bold (Ctrl+B)"          onClick={() => exec('bold')}          active={fmt.bold} />
-        <TB icon={Italic}        label="Italic (Ctrl+I)"        onClick={() => exec('italic')}        active={fmt.italic} />
-        <TB icon={Underline}     label="Underline (Ctrl+U)"     onClick={() => exec('underline')}     active={fmt.underline} />
-        <TB icon={Strikethrough} label="Strikethrough"          onClick={() => exec('strikeThrough')} active={fmt.strike} />
-        <TB icon={Superscript}   label="Superscript"            onClick={() => exec('superscript')} />
-        <TB icon={Subscript}     label="Subscript"              onClick={() => exec('subscript')} />
-        {sep}
-        <label title="Text Color" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
-          onMouseDown={saveSel}>
+        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
+        <TB icon={Bold}          label="Bold"          onClick={() => exec('bold')} />
+        <TB icon={Italic}        label="Italic"        onClick={() => exec('italic')} />
+        <TB icon={Underline}     label="Underline"     onClick={() => exec('underline')} />
+        <TB icon={Strikethrough} label="Strikethrough" onClick={() => exec('strikeThrough')} />
+        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
+        <label title="Text Color" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
           <Palette className="w-3.5 h-3.5" style={{ color: 'var(--text-body)' }} />
-          <input type="color" className="sr-only" onChange={e => exec('foreColor', e.target.value)} />
+          <input type="color" className="sr-only" onMouseDown={saveSel} onChange={e => exec('foreColor', e.target.value)} />
         </label>
-        <label title="Highlight Color" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
-          onMouseDown={saveSel}>
+        <label title="Highlight" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
           <span className="w-3.5 h-3.5 inline-flex items-center justify-center text-[10px] font-bold" style={{ color: 'var(--text-body)' }}>H</span>
-          <input type="color" className="sr-only" onChange={e => exec('hiliteColor', e.target.value)} />
+          <input type="color" className="sr-only" onMouseDown={saveSel} onChange={e => exec('hiliteColor', e.target.value)} />
         </label>
-        <TB icon={RemoveFormatting} label="Clear Formatting" onClick={() => exec('removeFormat')} />
-        {sep}
-        <TB icon={AlignLeft}    label="Align Left"    onClick={() => exec('justifyLeft')}   active={fmt.alignLeft} />
-        <TB icon={AlignCenter}  label="Align Center"  onClick={() => exec('justifyCenter')} active={fmt.alignCenter} />
-        <TB icon={AlignRight}   label="Align Right"   onClick={() => exec('justifyRight')}  active={fmt.alignRight} />
-        <TB icon={AlignJustify} label="Justify"       onClick={() => exec('justifyFull')}   active={fmt.alignJustify} />
-        {sep}
-        <TB icon={List}        label="Bullet List"      onClick={() => exec('insertUnorderedList')} />
-        <TB icon={ListOrdered} label="Numbered List"    onClick={() => exec('insertOrderedList')} />
-        <TB icon={Indent}      label="Indent (Tab)"     onClick={() => exec('indent')} />
-        <TB icon={Outdent}     label="Outdent (Shift+Tab)" onClick={() => exec('outdent')} />
-        {sep}
-        <TB icon={RotateCcw} label="Undo (Ctrl+Z)" onClick={() => exec('undo')} />
-        <TB icon={RotateCw}  label="Redo (Ctrl+Y)" onClick={() => exec('redo')} />
-        {sep}
+        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
+        <TB icon={AlignLeft}    label="Left"    onClick={() => exec('justifyLeft')} />
+        <TB icon={AlignCenter}  label="Center"  onClick={() => exec('justifyCenter')} />
+        <TB icon={AlignRight}   label="Right"   onClick={() => exec('justifyRight')} />
+        <TB icon={AlignJustify} label="Justify" onClick={() => exec('justifyFull')} />
+        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
+        <TB icon={List}        label="Bullet List"   onClick={() => exec('insertUnorderedList')} />
+        <TB icon={ListOrdered} label="Numbered List" onClick={() => exec('insertOrderedList')} />
+        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
+        <TB icon={RotateCcw} label="Undo" onClick={() => exec('undo')} />
+        <TB icon={RotateCw}  label="Redo" onClick={() => exec('redo')} />
+        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-0.5" />
         <TB icon={Link2} label="Insert Link" onClick={() => {
           saveSel()
           const u = prompt('Enter URL:')
@@ -569,19 +376,12 @@ function BodyEditor({ editorRef, onInput, bodyHtml, sidebarWriteRef }) {
         }} />
         <TB icon={TableIcon}  label="Insert Table"      onClick={() => { saveSel(); setShowTableDialog(true) }} />
         <TB icon={Scissors}   label="Insert Page Break" onClick={insertPageBreak} />
-        {/* Image insert — saveSel on mousedown so async file read can restore selection */}
-        <label title="Insert Image" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
-          onMouseDown={saveSel}>
+        <label title="Insert Image" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
           <ImageIcon className="w-3.5 h-3.5" style={{ color: 'var(--text-body)' }} />
           <input type="file" accept="image/*" className="sr-only"
             onChange={e => {
               const file = e.target.files[0]
               if (!file) return
-              if (file.size > 4 * 1024 * 1024) {
-                toast.error('Image must be under 4 MB')
-                e.target.value = ''
-                return
-              }
               const reader = new FileReader()
               reader.onload = ev => insertHtml(`<img src="${ev.target.result}" style="max-width:100%;height:auto;" />`)
               reader.readAsDataURL(file)
@@ -589,33 +389,6 @@ function BodyEditor({ editorRef, onInput, bodyHtml, sidebarWriteRef }) {
             }} />
         </label>
       </div>
-
-      {/* Body Editor — syncs bidirectionally with the right-panel WysiwygDocument */}
-      <div
-        ref={sideEditorRef}
-        contentEditable
-        suppressContentEditableWarning
-        onFocus={() => { if (editorRef) editorRef.current = sideEditorRef.current }}
-        onInput={() => {
-          const el = sideEditorRef.current
-          if (!el) return
-          const html = el.innerHTML
-          lastSideHtml.current = html
-          sidebarWriteRef?.current?.(html)
-        }}
-        data-placeholder="Type your document body content here…"
-        style={{
-          minHeight: 120,
-          padding: '10px 12px',
-          fontSize: '11pt',
-          lineHeight: 1.7,
-          color: 'var(--text-body)',
-          outline: 'none',
-          borderTop: '1px solid var(--border)',
-          borderBottom: '1px solid var(--border)',
-          background: 'var(--bg-primary)',
-        }}
-      />
 
       {/* HR Field strip */}
       <div className="border-t px-3 py-2.5" style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
@@ -789,18 +562,181 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   const sigHtml      = buildSigHtml(sigCfg)
   const fullBodyHtml = titleHtml + (bodyHtml || '') + sigHtml
 
-  // ── Use the SAME pagination engine as the editor ─────────────────────────
-  const [pageBlocks, setPageBlocks] = useState([[]])
+  // Block-aware page distribution: measure each top-level element, never split blocks
+  const [pageBlocks, setPageBlocks] = useState([[]]) // array of pages, each page is array of {html, height}
 
   useEffect(() => {
     if (!fullBodyHtml.trim()) { setPageBlocks([[]]); return }
-    paginateEngine(fullBodyHtml, { contentW, usableH }).then(pages => setPageBlocks(pages))
+
+    const container = document.createElement('div')
+    container.setAttribute('aria-hidden', 'true')
+    Object.assign(container.style, {
+      position: 'absolute', top: '-99999px', left: '-99999px',
+      width: `${contentW}px`,
+      fontSize: '12pt', lineHeight: '1.7',
+      fontFamily: 'Arial, sans-serif', color: '#1f2937',
+      visibility: 'hidden', pointerEvents: 'none',
+    })
+    container.innerHTML = fullBodyHtml
+    document.body.appendChild(container)
+
+    requestAnimationFrame(() => {
+      const children = Array.from(container.children)
+      let blocks
+      if (children.length === 0) {
+        blocks = [{ html: fullBodyHtml, height: container.scrollHeight || 40 }]
+      } else {
+        blocks = children.map(el => {
+          const cs = window.getComputedStyle(el)
+          const extra = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
+          return { html: el.outerHTML, height: (el.offsetHeight || 20) + extra }
+        })
+      }
+      document.body.removeChild(container)
+
+      // Distribute blocks across pages without splitting any block
+      const pages = [[]]
+      let usedH = 0, pi = 0
+      for (const block of blocks) {
+        const bh = Math.max(block.height, 4)
+        if (usedH + bh > usableH && usedH > 0) {
+          pages.push([]); pi++; usedH = 0
+        }
+        pages[pi].push(block)
+        usedH += bh
+      }
+      setPageBlocks(pages)
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullBodyHtml, contentW, usableH])
 
   const pageCount = Math.max(1, pageBlocks.length)
 
-  // Uses shared DocHeaderEl component (same as editor)
+  // ── Reusable header renderer ──────────────────────────────────────────────
+  const renderDocHeader = () => {
+    const layout    = header.header_layout || 'company_left_logo_right'
+    const padL      = Math.max(32, header.padding_left  ?? 32)
+    const padR      = Math.max(32, header.padding_right ?? 32)
+    const padT      = header.padding_top    ?? 20
+    const padB      = header.padding_bottom ?? 8
+    const fs        = header.font_size || 11
+    const textColor = header.font_color || '#000'
+    const showBand  = header.show
+    const isCentered = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
+    const companyAlign = isCentered ? 'center' : (header.company_alignment || 'left')
+
+    const containerStyle = {
+      position: 'absolute', top: 0, left: 0, right: 0,
+      height: headerH, zIndex: 2, overflow: 'hidden',
+      paddingTop: padT, paddingRight: padR, paddingBottom: padB, paddingLeft: padL,
+      borderBottom: showBand && header.border_bottom
+        ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}`
+        : 'none',
+      backgroundColor: showBand ? (header.background_color || '#fff') : 'transparent',
+      fontFamily: header.font_family || 'Arial',
+      fontSize: fs,
+      color: textColor,
+      boxSizing: 'border-box',
+    }
+
+    const logoEl = header.logo_url ? (
+      <img src={header.logo_url} alt="Logo" style={{
+        height: header.logo_height || 40,
+        width: header.logo_width ? header.logo_width : 'auto',
+        objectFit: 'contain',
+        display: 'block',
+        flexShrink: 0,
+      }} />
+    ) : null
+
+    const hasCompany = !!(header.company_name || header.company_address || header.company_email || header.company_phone || header.company_website)
+    const companyBlockEl = hasCompany ? (
+      <div style={{ lineHeight: 1.4 }}>
+        {header.company_name && (
+          <div style={{
+            fontWeight: 'bold',
+            fontFamily: header.company_name_font || header.font_family || 'Arial',
+            fontSize: header.company_name_size || (fs + 2),
+            color: header.company_name_color || textColor,
+            textAlign: companyAlign,
+          }}>{header.company_name}</div>
+        )}
+        {header.company_address && (
+          <div style={{ fontSize: fs - 1, textAlign: companyAlign, color: textColor }}>{header.company_address}</div>
+        )}
+        {(header.company_email || header.company_phone) && (
+          <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: companyAlign }}>
+            {[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}
+          </div>
+        )}
+        {header.company_website && (
+          <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: companyAlign }}>{header.company_website}</div>
+        )}
+      </div>
+    ) : null
+
+    if (layout === 'logo_only') {
+      return <div style={{ ...containerStyle, display: 'flex', alignItems: 'center' }}>{logoEl}</div>
+    }
+    if (layout === 'company_only') {
+      return <div style={{ ...containerStyle, display: 'flex', alignItems: 'center' }}>{companyBlockEl}</div>
+    }
+    if (layout === 'logo_top_company_bottom') {
+      return (
+        <div style={{ ...containerStyle, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {logoEl}
+          {companyBlockEl}
+        </div>
+      )
+    }
+    if (layout === 'company_top_logo_bottom') {
+      return (
+        <div style={{ ...containerStyle, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {companyBlockEl}
+          {logoEl}
+        </div>
+      )
+    }
+    if (layout === 'logo_left_company_right') {
+      return (
+        <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          {logoEl}
+          {companyBlockEl}
+        </div>
+      )
+    }
+    if (layout === 'center') {
+      return (
+        <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+          {logoEl}
+          {companyBlockEl}
+        </div>
+      )
+    }
+    if (layout === 'split_3') {
+      const contactEl = (header.company_email || header.company_phone || header.company_website) ? (
+        <div style={{ lineHeight: 1.4, textAlign: 'right', fontSize: fs - 1, color: textColor }}>
+          {header.company_email && <div>{header.company_email}</div>}
+          {header.company_phone && <div>{header.company_phone}</div>}
+          {header.company_website && <div style={{ color: '#6b7280' }}>{header.company_website}</div>}
+        </div>
+      ) : null
+      return (
+        <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          {logoEl}
+          <div style={{ flex: 1, textAlign: 'center' }}>{companyBlockEl}</div>
+          {contactEl}
+        </div>
+      )
+    }
+    // default: company_left_logo_right
+    return (
+      <div style={{ ...containerStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+        {companyBlockEl}
+        {logoEl}
+      </div>
+    )
+  }
 
   // ── Reusable footer renderer ──────────────────────────────────────────────
   const renderDocFooter = (pageNum) => (
@@ -864,7 +800,7 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
             )}
 
             {/* Header */}
-            {headerVisible && <DocHeaderEl header={header} headerH={headerH} />}
+            {headerVisible && renderDocHeader()}
 
             {/* Content area — renders only this page's blocks */}
             <div style={{
@@ -899,329 +835,141 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   )
 }
 
-// ─── Cursor-trap fixes: ensure typing space before AND after tables/lists ────
-// Rules:
-//  - Always skip data-noedit blocks (title/sig injected by pagination).
-//  - Without this guard, every keystroke inserts an extra <p> causing cursor jump.
-//  - ensureTrailingP places the <p> in the correct body slot (after title, before sig).
+// ─── Helper: ensure editable div never ends with a table/list (cursor-trap fix) ──
 function ensureTrailingP(el) {
   if (!el) return
-  // Walk back past trailing data-noedit blocks (signature)
-  let last = el.lastElementChild
-  while (last && last.hasAttribute?.('data-noedit')) last = last.previousElementSibling
-
-  // If the last editable element is a plain block, no action needed
-  if (last && !['TABLE', 'UL', 'OL'].includes(last.tagName) &&
-      last.getAttribute?.('contenteditable') !== 'false') return
-
-  const p = document.createElement('p')
-  p.innerHTML = '<br>'
-
-  if (last) {
-    // Last editable is TABLE/UL/OL — insert <p> immediately after it
-    const nextSib = last.nextElementSibling
-    if (nextSib) el.insertBefore(p, nextSib)
-    else el.appendChild(p)
-  } else {
-    // No editable content at all.
-    // Find the first slot after all leading noedit blocks (title).
-    let insertPos = el.firstElementChild
-    while (insertPos && insertPos.hasAttribute?.('data-noedit')) insertPos = insertPos.nextElementSibling
-    if (insertPos) {
-      el.insertBefore(p, insertPos)
-    } else {
-      // All children are noedit (e.g., title + sig with empty body).
-      // Insert before the last noedit child (sig) if multiple noedit exist; otherwise append.
-      const lastChild = el.lastElementChild
-      if (lastChild && lastChild.hasAttribute?.('data-noedit') && el.children.length > 1) {
-        el.insertBefore(p, lastChild)
-      } else {
-        el.appendChild(p)
-      }
-    }
-  }
-}
-function ensureLeadingP(el) {
-  if (!el) return
-  // Walk forward past leading data-noedit blocks (title)
-  let first = el.firstElementChild
-  while (first && first.hasAttribute?.('data-noedit')) first = first.nextElementSibling
-  // Only add <p> if first editable child is a cursor-trap element (table, list)
-  if (first && (['TABLE', 'UL', 'OL'].includes(first.tagName) ||
-      first.getAttribute?.('contenteditable') === 'false')) {
+  const last = el.lastElementChild
+  if (!last || ['TABLE', 'UL', 'OL'].includes(last.tagName)) {
     const p = document.createElement('p')
     p.innerHTML = '<br>'
-    el.insertBefore(p, first)
+    el.appendChild(p)
   }
 }
 
-// ─── Shared header renderer (used by editor + preview) ────────────────────────
-function DocHeaderEl({ header, headerH }) {
-  const layout = header.header_layout || 'company_left_logo_right'
-  const padL   = Math.max(32, header.padding_left  ?? 32)
-  const padR   = Math.max(32, header.padding_right ?? 32)
-  const fs     = header.font_size || 11
-  const tc     = header.font_color || '#000'
-  const isCen  = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
-  const ca     = isCen ? 'center' : (header.company_alignment || 'left')
-  const st = {
-    position: 'absolute', top: 0, left: 0, right: 0, height: headerH, zIndex: 2, overflow: 'hidden',
-    paddingTop: header.padding_top ?? 20, paddingRight: padR, paddingBottom: header.padding_bottom ?? 8, paddingLeft: padL,
-    borderBottom: header.show && header.border_bottom ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}` : 'none',
-    backgroundColor: header.show ? (header.background_color || '#fff') : 'transparent',
-    fontFamily: header.font_family || 'Arial', fontSize: fs, color: tc, boxSizing: 'border-box',
-  }
-  const logoEl = header.logo_url
-    ? <img src={header.logo_url} alt="Logo" style={{ height: header.logo_height || 40, width: header.logo_width || 'auto', objectFit: 'contain', display: 'block', flexShrink: 0 }} />
-    : null
-  const hasComp = !!(header.company_name || header.company_address || header.company_email || header.company_phone)
-  const compEl = hasComp ? (
-    <div style={{ lineHeight: 1.4 }}>
-      {header.company_name && <div style={{ fontWeight: 'bold', fontSize: header.company_name_size || fs + 2, color: header.company_name_color || tc, textAlign: ca }}>{header.company_name}</div>}
-      {header.company_address && <div style={{ fontSize: fs - 1, textAlign: ca, color: tc }}>{header.company_address}</div>}
-      {(header.company_email || header.company_phone) && <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: ca }}>{[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}</div>}
-      {header.company_website && <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: ca }}>{header.company_website}</div>}
-    </div>
-  ) : null
-  if (layout === 'logo_only')        return <div style={{ ...st, display: 'flex', alignItems: 'center' }}>{logoEl}</div>
-  if (layout === 'company_only')     return <div style={{ ...st, display: 'flex', alignItems: 'center' }}>{compEl}</div>
-  if (layout === 'logo_top_company_bottom') return <div style={{ ...st, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{logoEl}{compEl}</div>
-  if (layout === 'company_top_logo_bottom') return <div style={{ ...st, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{compEl}{logoEl}</div>
-  if (layout === 'logo_left_company_right') return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{logoEl}{compEl}</div>
-  if (layout === 'center')           return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>{logoEl}{compEl}</div>
-  return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{compEl}{logoEl}</div>
-}
-
-// ─── TRUE PAGE LAYOUT EDITOR ──────────────────────────────────────────────────
-// KEY INVARIANT: We NEVER call el.innerHTML on a div that has DOM focus.
-// That single rule eliminates all cursor corruption and reversed-typing bugs.
-function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle, sigCfg, bodyHtml, onBodyChange, getMergedHtmlRef, sidebarWriteRef }) {
-  // ── Page dimensions ───────────────────────────────────────────────────────
+// ─── WYSIWYG Document Editor ─────────────────────────────────────────────────
+// Single contentEditable body with page-break indicators at the EXACT same
+// positions PaginatedDocPreview uses — same page count, same break algorithm.
+// No cursor-position issues. Correct header/footer spacing.
+function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle, sigCfg, bodyHtml, onBodyChange }) {
+  // ── Dimensions — identical to PaginatedDocPreview ─────────────────────────
   const base = PAPER_PX[paper.size] || PAPER_PX.A4
   const [pw, ph] = paper.orientation === 'landscape' ? [base[1], base[0]] : base
 
   const headerVisible = header.show || !!(header.logo_url || header.company_name)
-  const headerH    = headerVisible ? Math.max(header.header_height || 100, 40) : 0
-  const footerH    = footer.show   ? Math.max(footer.footer_height || 40,  20) : 0
+  const headerH       = headerVisible ? Math.max(header.header_height || 100, 40) : 0
+  const footerH       = footer.show   ? Math.max(footer.footer_height || 40,  20) : 0
   const ml = Math.round((paper.margin_left   || 72) / 72 * 96)
   const mr = Math.round((paper.margin_right  || 72) / 72 * 96)
   const mt = Math.round((paper.margin_top    || 72) / 72 * 96)
   const mb = Math.round((paper.margin_bottom || 72) / 72 * 96)
+  // headerSpacing: gap between header bottom and text — same calc as PaginatedDocPreview
   const headerSpacing = headerVisible ? (header.header_spacing ?? 20) : mt
+  // usableH: lines of text per page — exactly as PaginatedDocPreview
   const usableH  = Math.max(ph - headerH - footerH - headerSpacing - mb, 100)
   const contentW = Math.max(pw - ml - mr, 200)
 
-  // ── State (only what drives React rendering) ──────────────────────────────
-  const [pageCount,  setPageCount]  = useState(1)
-  const [resizeImg,  setResizeImg]  = useState(null)
-  const [tableCtx,   setTableCtx]   = useState(null)
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [pageCount,    setPageCount]    = useState(1)
+  const [breakYs,      setBreakYs]      = useState([])   // px offsets of page breaks within content area
+  const [tableCtx,     setTableCtx]     = useState(null)
+  const [selectedImg,  setSelectedImg]  = useState(null)
+  const [imgToolbarVis,setImgToolbarVis]= useState(false)
+  const repagTimer = useRef(null)
 
-  // ── Refs (no re-render, fast) ─────────────────────────────────────────────
-  const pageRefs   = useRef({})      // {pageIdx: contentEditableDiv}
-  const pagesData  = useRef([[]])    // latest pagination result (not React state)
-  const pcRef      = useRef(1)       // mirror of pageCount (avoids closure staleness)
-  const repagTimer = useRef(null)    // 1.5s debounce for pagination
-  const mergeTimer = useRef(null)    // 150ms debounce for parent bodyHtml update
-  const lastBody   = useRef(bodyHtml)// prevent reacting to own changes
+  // ── Same block-aware pagination algorithm as PaginatedDocPreview ──────────
+  const repaginate = useCallback((rawHtml) => {
+    const fullHtml = buildTitleHtml(docTitle) + (rawHtml || '') + buildSigHtml(sigCfg)
+    if (!fullHtml.trim()) { setPageCount(1); setBreakYs([]); return }
 
-  // ── THE CRITICAL RULE: never write innerHTML to a focused element ─────────
-  const safeSetHTML = (el, html) => {
-    if (!el) return
-    // If this element is focused (user is typing in it), NEVER touch its DOM.
-    if (el === document.activeElement || el.contains(document.activeElement)) return
-    if (el.innerHTML !== html) { el.innerHTML = html; ensureLeadingP(el); ensureTrailingP(el) }
-  }
-
-  // ── Build full HTML (title + body + sig) for measurement ─────────────────
-  const buildFull = useCallback((raw) => {
-    const t = buildTitleHtml(docTitle)
-    const s = buildSigHtml(sigCfg)
-    const tB = t ? `<div contenteditable="false" data-noedit="1">${t}</div>` : ''
-    const sB = s ? `<div contenteditable="false" data-noedit="1">${s}</div>` : ''
-    return tB + (raw || '') + sB
-  }, [docTitle, sigCfg])
-
-  // ── Collect body HTML from all page divs (exclude title/sig islands) ──────
-  // MUST use clone.innerHTML, NOT .children — .children misses bare text nodes
-  // typed before the first block element (i.e., before the user presses Enter).
-  // Using .children caused content to silently vanish on every 150ms debounce.
-  const getMerged = useCallback(() =>
-    Object.keys(pageRefs.current)
-      .sort((a, b) => +a - +b)
-      .map(k => {
-        const el = pageRefs.current[+k]
-        if (!el) return ''
-        const clone = el.cloneNode(true)
-        Array.from(clone.children).forEach(ch => {
-          if (ch.hasAttribute('data-noedit')) ch.remove()
-        })
-        return clone.innerHTML
-      })
-      .join('')
-  , [])
-
-  // Expose getMerged to parent (for payload building)
-  useEffect(() => {
-    if (getMergedHtmlRef) getMergedHtmlRef.current = getMerged
-  }, [getMerged, getMergedHtmlRef])
-
-  // ── Apply pagination result to page divs (respects safeSetHTML) ──────────
-  const applyPages = useCallback((pages) => {
-    pages.forEach((blocks, i) => {
-      safeSetHTML(pageRefs.current[i], blocks.map(b => b.html).join(''))
+    const container = document.createElement('div')
+    container.setAttribute('aria-hidden', 'true')
+    Object.assign(container.style, {
+      position: 'absolute', top: '-99999px', left: '-99999px',
+      width: `${contentW}px`, fontSize: '12pt', lineHeight: '1.7',
+      fontFamily: 'Arial, sans-serif', color: '#1f2937',
+      visibility: 'hidden', pointerEvents: 'none',
     })
-  }, []) // eslint-disable-line
+    container.innerHTML = fullHtml
+    document.body.appendChild(container)
 
-  // ── Run shared pagination engine ──────────────────────────────────────────
-  const runPag = useCallback((raw) => {
-    paginateEngine(buildFull(raw), { contentW, usableH }).then(pages => {
-      pagesData.current = pages
-      const nc = Math.max(1, pages.length)
-      pcRef.current = nc
-      if (nc !== pageCount) setPageCount(nc)  // triggers re-render (new page divs)
-      else applyPages(pages)                   // same count: just update content
-    })
-  }, [buildFull, contentW, usableH, pageCount, applyPages])
+    requestAnimationFrame(() => {
+      const children = Array.from(container.children)
+      const blocks = children.length === 0
+        ? [{ height: container.scrollHeight || 40 }]
+        : children.map(el => {
+            const cs = window.getComputedStyle(el)
+            const extra = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
+            return { height: (el.offsetHeight || 20) + extra }
+          })
+      document.body.removeChild(container)
 
-  // ── After page count changes, apply pagesData to newly-created divs ───────
-  useLayoutEffect(() => { applyPages(pagesData.current) }, [pageCount, applyPages])
-
-  // ── Init: load template content, then paginate ────────────────────────────
-  useLayoutEffect(() => {
-    const el = pageRefs.current[0]
-    if (el) { el.innerHTML = bodyHtml || ''; ensureTrailingP(el); ensureLeadingP(el) }
-    if (editorRef) editorRef.current = el || null
-    lastBody.current = bodyHtml
-    runPag(bodyHtml || '')
-  }, []) // eslint-disable-line
-
-  // ── External bodyHtml change (template load / draft restore) ─────────────
-  useEffect(() => {
-    if (bodyHtml === lastBody.current) return  // our own change — skip
-    lastBody.current = bodyHtml
-    // Full reset: put content on page 0, clear the rest
-    Object.keys(pageRefs.current).forEach(k => {
-      const el = pageRefs.current[+k]
-      if (!el) return
-      el.innerHTML = (+k === 0) ? (bodyHtml || '') : ''
-      if (+k === 0) { ensureTrailingP(el); ensureLeadingP(el) }
-    })
-    pcRef.current = 1; setPageCount(1)
-    runPag(bodyHtml || '')
-  }, [bodyHtml]) // eslint-disable-line
-
-  // ── Re-paginate on layout config changes ─────────────────────────────────
-  useEffect(() => {
-    runPag(getMerged() || bodyHtml || '')
-  }, [ // eslint-disable-line
-    header.header_height, header.header_spacing, header.show,
-    footer.show, footer.footer_height,
-    paper.size, paper.orientation,
-    paper.margin_top, paper.margin_bottom, paper.margin_left, paper.margin_right,
-    // Full docTitle coverage so every visual change (bold/italic/color/align/font/margins) updates editor
-    docTitle?.text, docTitle?.font_size, docTitle?.font_family,
-    docTitle?.color, docTitle?.alignment, docTitle?.bold,
-    docTitle?.italic, docTitle?.underline, docTitle?.margin_top, docTitle?.margin_bottom,
-    // Full sigCfg coverage so position/height changes repaginate
-    sigCfg?.enabled, sigCfg?.position, sigCfg?.height, sigCfg?.authorized_person,
-  ])
-
-  // ── Direct-write path for sidebar editor (avoids bodyHtml state race) ─────
-  // Sidebar calls this instead of setBodyHtml so there is no competing update cycle.
-  // We write buildFull(html) so title/sig blocks remain in page0 while typing —
-  // otherwise the title would flash off for 1500ms until pagination re-adds it.
-  useEffect(() => {
-    if (!sidebarWriteRef) return
-    sidebarWriteRef.current = (html) => {
-      const full = buildFull(html || '')
-      Object.keys(pageRefs.current).forEach(k => {
-        const el = pageRefs.current[+k]
-        if (!el) return
-        const focused = el === document.activeElement || el.contains(document.activeElement)
-        if (+k === 0) {
-          if (!focused && el.innerHTML !== full) {
-            el.innerHTML = full
-            ensureLeadingP(el)
-            ensureTrailingP(el)
-          }
-        } else {
-          if (el.innerHTML !== '') el.innerHTML = ''
+      // Same distribution loop as PaginatedDocPreview
+      const breaks = []  // y-offsets within the content area where page breaks occur
+      let usedH = 0
+      for (const block of blocks) {
+        const bh = Math.max(block.height, 4)
+        if (usedH + bh > usableH && usedH > 0) {
+          breaks.push(usedH)  // break at current accumulated height
+          usedH = 0
         }
-      })
-      // Debounce state sync (same cadence as handleInput)
-      if (mergeTimer.current) clearTimeout(mergeTimer.current)
-      mergeTimer.current = setTimeout(() => {
-        const m = getMerged()
-        lastBody.current = m
-        onBodyChange(m)
-      }, 150)
-      // Debounce pagination
-      if (repagTimer.current) clearTimeout(repagTimer.current)
-      repagTimer.current = setTimeout(() => runPag(html || ''), 1500)
-    }
-  }, [getMerged, onBodyChange, runPag, buildFull]) // eslint-disable-line
+        usedH += bh
+      }
+      setPageCount(breaks.length + 1)
+      setBreakYs(breaks)
+    })
+  }, [contentW, usableH, docTitle, sigCfg])
 
-  // ── Input handler — minimal work per keystroke for < 16ms latency ─────────
-  const handleInput = useCallback((i) => {
-    const el = pageRefs.current[i]
-    if (el) { ensureTrailingP(el); ensureLeadingP(el) }
-    if (editorRef) editorRef.current = el
+  // ── Initialise ────────────────────────────────────────────────────────────
+  useLayoutEffect(() => {
+    if (editorRef.current) { editorRef.current.innerHTML = bodyHtml || ''; ensureTrailingP(editorRef.current) }
+  }, []) // eslint-disable-line
 
-    // Debounce parent state update (prevents re-render on every keypress)
-    if (mergeTimer.current) clearTimeout(mergeTimer.current)
-    mergeTimer.current = setTimeout(() => {
-      const m = getMerged()
-      lastBody.current = m     // mark as our own change
-      onBodyChange(m)
-    }, 150)
+  useEffect(() => { repaginate(bodyHtml || '') }, []) // eslint-disable-line
 
-    // Debounce pagination recalculation
+  // Re-paginate when layout changes (header, footer, paper etc.)
+  useEffect(() => { repaginate(editorRef.current?.innerHTML || bodyHtml || '') }, // eslint-disable-line
+    [header.header_height, header.header_spacing, header.show, footer.show, footer.footer_height,
+     paper.size, paper.orientation, paper.margin_top, paper.margin_bottom, paper.margin_left, paper.margin_right,
+     docTitle?.text, docTitle?.font_size, sigCfg?.enabled]) // eslint-disable-line
+
+  // ── Input handler ─────────────────────────────────────────────────────────
+  const handleInput = useCallback(() => {
+    const el = editorRef.current
+    if (!el) return
+    ensureTrailingP(el)
+    const html = el.innerHTML || ''
+    onBodyChange(html)
     if (repagTimer.current) clearTimeout(repagTimer.current)
-    repagTimer.current = setTimeout(() => runPag(getMerged()), 1500)
-  }, [getMerged, onBodyChange, runPag, editorRef]) // eslint-disable-line
+    repagTimer.current = setTimeout(() => repaginate(html), 1200)
+  }, [onBodyChange, repaginate, editorRef])
 
-  // ── Page div ref callback ─────────────────────────────────────────────────
-  const setPageRef = useCallback((i, el) => {
-    const prev = pageRefs.current[i]
-    pageRefs.current[i] = el
-    if (el && el !== prev) {
-      // New div just mounted — initialize with latest pagesData
-      const html = pagesData.current[i]?.map(b => b.html).join('') || ''
-      el.innerHTML = html; ensureTrailingP(el); ensureLeadingP(el)
-      if (i === 0 && editorRef && !editorRef.current) editorRef.current = el
-    }
-    if (!el) delete pageRefs.current[i]
-  }, [editorRef])
-
-  // ── Image drag-resize ─────────────────────────────────────────────────────
+  // ── Image click ───────────────────────────────────────────────────────────
   useEffect(() => {
-    const onDown = (e) => {
-      const isInPage = Object.values(pageRefs.current).some(el => el?.contains(e.target))
-      if (e.target.tagName === 'IMG' && isInPage) setResizeImg(e.target)
-      else if (!e.target.closest?.('.img-resize-handle')) setResizeImg(null)
+    const el = editorRef.current
+    if (!el) return
+    const h = (e) => {
+      if (e.target.tagName === 'IMG') { setSelectedImg(e.target); setImgToolbarVis(true) }
+      else if (!e.target.closest?.('[data-img-toolbar]')) { setSelectedImg(null); setImgToolbarVis(false) }
     }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [])
+    el.addEventListener('click', h)
+    return () => el.removeEventListener('click', h)
+  }, [editorRef])
 
   // ── Table cursor detection ────────────────────────────────────────────────
   useEffect(() => {
     const onSel = () => {
       const sel = window.getSelection()
-      if (!sel?.anchorNode) { setTableCtx(null); return }
-      const inPage = Object.values(pageRefs.current).some(el => el?.contains(sel.anchorNode))
-      if (!inPage) { setTableCtx(null); return }
+      if (!sel?.anchorNode || !editorRef.current?.contains(sel.anchorNode)) { setTableCtx(null); return }
       let n = sel.anchorNode
-      while (n) {
+      while (n && n !== editorRef.current) {
         if (n.nodeName === 'TABLE') { setTableCtx({ table: n }); return }
-        if (n.dataset?.noedit) break
         n = n.parentNode
       }
       setTableCtx(null)
     }
     document.addEventListener('selectionchange', onSel)
     return () => document.removeEventListener('selectionchange', onSel)
-  }, [])
+  }, [editorRef])
 
   // ── Table operations ──────────────────────────────────────────────────────
   const tableOp = useCallback((op) => {
@@ -1236,121 +984,210 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     const cols = table.rows[0]?.cells?.length || 1
     if (op === 'addRow') {
       const refRow = cell?.closest?.('tr') || table.rows[table.rows.length - 1]
-      const row = document.createElement('tr')
+      const newRow = document.createElement('tr')
       for (let i = 0; i < cols; i++) {
-        const td = document.createElement('td'); td.style.cssText = 'padding:8px 10px;border:1px solid #e5e7eb;background:white;'; row.appendChild(td)
+        const td = document.createElement('td')
+        td.style.cssText = 'padding:8px 10px;border:1px solid #e5e7eb;background:white;'
+        newRow.appendChild(td)
       }
-      refRow.insertAdjacentElement('afterend', row)
+      refRow.insertAdjacentElement('afterend', newRow)
     } else if (op === 'deleteRow') {
-      const row = cell?.closest?.('tr'); if (row && table.rows.length > 1) row.remove()
+      const row = cell?.closest?.('tr')
+      if (row && table.rows.length > 1) row.remove()
     } else if (op === 'addCol') {
       const ci = cell ? Array.from(cell.closest?.('tr')?.cells || []).indexOf(cell) : cols - 1
       Array.from(table.rows).forEach((row, ri) => {
         const nc = document.createElement(ri === 0 ? 'th' : 'td')
-        nc.style.cssText = ri === 0 ? 'padding:8px 10px;background:#7c3aed;color:white;border:1px solid #e5e7eb;text-align:left;' : 'padding:8px 10px;border:1px solid #e5e7eb;background:white;'
-        if (ci >= 0 && row.cells[ci]) row.cells[ci].insertAdjacentElement('afterend', nc); else row.appendChild(nc)
+        nc.style.cssText = ri === 0
+          ? 'padding:8px 10px;background:#7c3aed;color:white;border:1px solid #e5e7eb;text-align:left;'
+          : 'padding:8px 10px;border:1px solid #e5e7eb;background:white;'
+        if (ci >= 0 && row.cells[ci]) row.cells[ci].insertAdjacentElement('afterend', nc)
+        else row.appendChild(nc)
       })
     } else if (op === 'deleteCol') {
       const ci = cell ? Array.from(cell.closest?.('tr')?.cells || []).indexOf(cell) : -1
       if (ci >= 0 && cols > 1) Array.from(table.rows).forEach(row => { if (row.cells[ci]) row.cells[ci].remove() })
     }
-    const owner = Object.entries(pageRefs.current).find(([, el]) => el?.contains(table))
-    if (owner) handleInput(+owner[0])
+    handleInput()
   }, [tableCtx, handleInput])
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, paddingBottom: 40 }}>
+  // ── Header renderer (identical to PaginatedDocPreview) ───────────────────
+  const renderDocHeader = () => {
+    const layout = header.header_layout || 'company_left_logo_right'
+    const padL   = Math.max(32, header.padding_left  ?? 32)
+    const padR   = Math.max(32, header.padding_right ?? 32)
+    const fs     = header.font_size || 11
+    const tc     = header.font_color || '#000'
+    const isCen  = layout === 'logo_top_company_bottom' || layout === 'company_top_logo_bottom'
+    const ca     = isCen ? 'center' : (header.company_alignment || 'left')
+    const st = {
+      position: 'absolute', top: 0, left: 0, right: 0, height: headerH, zIndex: 2, overflow: 'hidden',
+      paddingTop: header.padding_top ?? 20, paddingRight: padR, paddingBottom: header.padding_bottom ?? 8, paddingLeft: padL,
+      borderBottom: header.show && header.border_bottom ? `${header.border_width ?? 1}px solid ${header.border_color || '#d1d5db'}` : 'none',
+      backgroundColor: header.show ? (header.background_color || '#fff') : 'transparent',
+      fontFamily: header.font_family || 'Arial', fontSize: fs, color: tc, boxSizing: 'border-box',
+    }
+    const logoEl = header.logo_url
+      ? <img src={header.logo_url} alt="Logo" style={{ height: header.logo_height || 40, width: header.logo_width || 'auto', objectFit: 'contain', display: 'block', flexShrink: 0 }} />
+      : null
+    const hasComp = !!(header.company_name || header.company_address || header.company_email || header.company_phone)
+    const compEl = hasComp ? (
+      <div style={{ lineHeight: 1.4 }}>
+        {header.company_name && <div style={{ fontWeight: 'bold', fontSize: header.company_name_size || fs + 2, color: header.company_name_color || tc, textAlign: ca }}>{header.company_name}</div>}
+        {header.company_address && <div style={{ fontSize: fs - 1, textAlign: ca, color: tc }}>{header.company_address}</div>}
+        {(header.company_email || header.company_phone) && <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: ca }}>{[header.company_email, header.company_phone].filter(Boolean).join('  |  ')}</div>}
+        {header.company_website && <div style={{ fontSize: fs - 1, color: '#6b7280', textAlign: ca }}>{header.company_website}</div>}
+      </div>
+    ) : null
+    if (layout === 'logo_only')        return <div style={{ ...st, display: 'flex', alignItems: 'center' }}>{logoEl}</div>
+    if (layout === 'company_only')     return <div style={{ ...st, display: 'flex', alignItems: 'center' }}>{compEl}</div>
+    if (layout === 'logo_top_company_bottom') return <div style={{ ...st, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{logoEl}{compEl}</div>
+    if (layout === 'company_top_logo_bottom') return <div style={{ ...st, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{compEl}{logoEl}</div>
+    if (layout === 'logo_left_company_right') return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{logoEl}{compEl}</div>
+    if (layout === 'center')           return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16 }}>{logoEl}{compEl}</div>
+    return <div style={{ ...st, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>{compEl}{logoEl}</div>
+  }
 
-      {/* Table toolbar — sticky */}
+  const titleHtml = buildTitleHtml(docTitle)
+  const sigHtml   = buildSigHtml(sigCfg)
+  // Minimum document height = 1 full page
+  const docMinH   = headerH + headerSpacing + usableH + footerH
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingBottom: 32 }}>
+
+      {/* Table toolbar — sticky at top */}
       {tableCtx && (
-        <div className="sticky top-0 z-50 self-stretch flex items-center gap-2 px-4 py-2 border-b shadow"
+        <div className="sticky top-0 z-50 self-stretch flex items-center gap-1.5 px-4 py-2 border-b shadow-sm mb-4"
           style={{ background: '#f5f3ff', borderColor: '#ddd6fe' }}>
-          <span className="text-xs font-bold text-violet-700 mr-1">Table:</span>
+          <span className="text-xs font-bold text-violet-700 mr-2">Table:</span>
           {[{ label: '+ Row', op: 'addRow' }, { label: '- Row', op: 'deleteRow' },
             { label: '+ Column', op: 'addCol' }, { label: '- Column', op: 'deleteCol' }]
             .map(({ label, op }) => (
               <button key={op} onMouseDown={e => { e.preventDefault(); tableOp(op) }}
-                className="px-3 py-1 text-xs rounded border border-violet-300 text-violet-700 hover:bg-violet-100 transition-colors font-semibold">
+                className="px-2.5 py-1 text-xs rounded border border-violet-300 text-violet-700 hover:bg-violet-100 transition-colors">
                 {label}
               </button>
             ))}
         </div>
       )}
 
-      {/* Image drag-resize overlay */}
-      {resizeImg && (
-        <ImageDragResize
-          img={resizeImg}
-          onUpdate={() => {
-            const owner = Object.entries(pageRefs.current).find(([, el]) => el?.contains(resizeImg))
-            if (owner) handleInput(+owner[0])
-          }}
-          onClose={() => setResizeImg(null)}
-        />
+      {/* Image toolbar */}
+      {imgToolbarVis && selectedImg && (
+        <div data-img-toolbar="1" className="self-stretch border rounded-lg px-3 py-2 shadow-sm mb-4"
+          style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+          <ImageResizeToolbar img={selectedImg} onClose={() => { setImgToolbarVis(false); setSelectedImg(null) }} />
+        </div>
       )}
 
-      {/* ── Page boxes ──────────────────────────────────────────────────────── */}
-      {Array.from({ length: pageCount }, (_, pageIdx) => (
-        <div key={pageIdx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 6, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            Page {pageIdx + 1}{pageCount > 1 ? ` / ${pageCount}` : ''}
-          </div>
+      {/* ── Dark pages wrapper — preview-style background with page cards ── */}
+      <div style={{
+        alignSelf: 'stretch',
+        background: '#2d2d3d',
+        borderRadius: 8,
+        padding: '24px 48px 32px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        overflowX: 'hidden',
+      }}>
 
+      {/* Page counter */}
+      <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 12, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        {pageCount > 1 ? `${pageCount} pages` : 'Page 1'}
+      </div>
+
+      {/* ── Document box — same width as PaginatedDocPreview, grows with content ── */}
+      <div style={{
+        width: pw, minHeight: docMinH,
+        background: 'white',
+        boxShadow: '0 1px 4px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.10),0 12px 40px rgba(0,0,0,0.08)',
+        borderRadius: 2, position: 'relative', flexShrink: 0,
+      }}>
+        {/* Watermark */}
+        {watermark.enabled && (
           <div style={{
-            width: pw, height: ph, background: 'white',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.06),0 4px 20px rgba(0,0,0,0.12),0 8px 40px rgba(0,0,0,0.08)',
-            borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0,
-          }}>
-            {/* Watermark */}
-            {watermark.enabled && (
-              <div style={{
-                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72,
-                opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af',
-                fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
-              }}>{watermark.text || 'CONFIDENTIAL'}</div>
-            )}
+            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72,
+            opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af',
+            fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1,
+          }}>{watermark.text || 'CONFIDENTIAL'}</div>
+        )}
 
-            {/* Header on every page */}
-            {headerVisible && <DocHeaderEl header={header} headerH={headerH} />}
+        {/* Header (absolute, sits in the header zone) */}
+        {headerVisible && renderDocHeader()}
 
-            {/* Editable content area */}
-            <div
-              ref={el => setPageRef(pageIdx, el)}
-              contentEditable
-              suppressContentEditableWarning
-              onInput={() => handleInput(pageIdx)}
-              onFocus={() => { if (editorRef) editorRef.current = pageRefs.current[pageIdx] }}
-              style={{
-                position: 'absolute',
-                top: headerH + headerSpacing,
-                left: ml, right: mr,
-                height: usableH,
-                overflow: 'hidden',
-                zIndex: 2,
-                fontSize: '12pt', lineHeight: 1.7,
-                fontFamily: 'Arial, sans-serif', color: '#1f2937',
-                outline: 'none',
-              }}
-            />
+        {/* Content area — starts EXACTLY at headerH+headerSpacing, same as PaginatedDocPreview */}
+        <div style={{ paddingTop: headerH + headerSpacing, paddingLeft: ml, paddingRight: mr, paddingBottom: footerH + mb, position: 'relative', zIndex: 2 }}>
 
-            {/* Footer on every page */}
-            {footer.show && (
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0, height: footerH, zIndex: 2,
-                padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 20}px ${footer.padding_bottom ?? 8}px ${footer.padding_left ?? 20}px`,
-                borderTop: footer.border_top ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}` : 'none',
-                fontSize: footer.font_size || 10, color: footer.font_color || '#666',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box',
-              }}>
-                <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
-                <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
-                <span>{footer.show_page_numbers ? `Page ${pageIdx + 1}${pageCount > 1 ? ` of ${pageCount}` : ''}` : ''}</span>
-              </div>
-            )}
-          </div>
+          {/* Document title (non-editable, from left panel settings) */}
+          {docTitle?.text && (
+            <div dangerouslySetInnerHTML={{ __html: titleHtml }} style={{ pointerEvents: 'none' }} />
+          )}
+
+          {/* ── Single editable body ── */}
+          <div
+            ref={editorRef}
+            contentEditable
+            suppressContentEditableWarning
+            onInput={handleInput}
+            className="focus:outline-none"
+            style={{
+              fontSize: '12pt', lineHeight: 1.7,
+              fontFamily: 'Arial, sans-serif', color: '#1f2937',
+              minHeight: 200, outline: 'none',
+            }}
+            data-placeholder="Click here and start typing…"
+          />
+
+          {/* Signature (non-editable, from left panel settings) */}
+          {sigCfg?.enabled && (
+            <div dangerouslySetInnerHTML={{ __html: sigHtml }} style={{ pointerEvents: 'none' }} />
+          )}
+
         </div>
-      ))}
+
+        {/* Footer (always at the very bottom of the doc box) */}
+        {footer.show && (
+          <div style={{
+            paddingLeft: ml, paddingRight: mr,
+            padding: `${footer.padding_top ?? 8}px ${footer.padding_right ?? 20}px ${footer.padding_bottom ?? 8}px ${footer.padding_left ?? 20}px`,
+            borderTop: footer.border_top ? `${footer.border_width ?? 1}px solid ${footer.border_color || '#d1d5db'}` : 'none',
+            fontSize: footer.font_size || 10, color: footer.font_color || '#666',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box',
+          }}>
+            <span>{footer.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
+            <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
+            <span>{footer.show_page_numbers ? `Page 1${pageCount > 1 ? ` of ${pageCount}` : ''}` : ''}</span>
+          </div>
+        )}
+
+        {/* ── Page gap overlays — one per break, positioned at the correct page boundary ── */}
+        {breakYs.map((y, i) => (
+          <div key={i} style={{
+            position: 'absolute',
+            top: headerH + headerSpacing + y,
+            left: 0, right: 0,
+            height: 40,
+            background: '#2d2d3d',
+            zIndex: 15,
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            boxShadow: '0 -4px 10px rgba(0,0,0,0.18), 0 4px 10px rgba(0,0,0,0.18)',
+          }}>
+            <div style={{ flex: 1, height: 1, background: '#4b5563' }} />
+            <span style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.12em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+              Page {i + 2} of {pageCount}
+            </span>
+            <div style={{ flex: 1, height: 1, background: '#4b5563' }} />
+          </div>
+        ))}
+      </div>
+
+      </div>{/* end dark pages wrapper */}
     </div>
   )
 }
@@ -1384,14 +1221,10 @@ function PreviewModal({ onClose, header, footer, paper, watermark, docTitle, bod
 export default function QuickBuilder() {
   const { id }   = useParams()
   const navigate = useNavigate()
-  const editorRef       = useRef(null)
-  const autoSaveTimer   = useRef(null)
-  const exportRef       = useRef(null)
-  const latestRef       = useRef({})
-  // Ref to WysiwygDocument's getMerged function — returns body HTML from ALL pages.
-  // Used by save, autosave, draft, export so we always get the full document.
-  const getMergedBodyRef = useRef(null)
-  const sidebarWriteRef  = useRef(null)
+  const editorRef      = useRef(null)
+  const autoSaveTimer  = useRef(null)
+  const exportRef      = useRef(null)
+  const latestRef      = useRef({})
 
   // Panel state
   const [leftWidth,     setLeftWidth]     = useState(() => parseInt(localStorage.getItem('qb_left_w')   || '400'))
@@ -1415,7 +1248,7 @@ export default function QuickBuilder() {
   const [saving,           setSaving]           = useState(false)
   const [showFullPreview,  setShowFullPreview]  = useState(false)
   const [showExport,       setShowExport]       = useState(false)
-  const [openSection,      setOpenSection]      = useState(() => localStorage.getItem('qb_open_section') ?? 'template-info')
+  const [openSection,      setOpenSection]      = useState('template-info')
   const [autoSaveStatus,   setAutoSaveStatus]   = useState('saved')
   const [categories,       setCategories]       = useState([])
   const [bodyHtml,         setBodyHtml]         = useState('')
@@ -1480,19 +1313,14 @@ export default function QuickBuilder() {
     opacity: 0.12, rotation: -45, size: 72, color: '#9ca3af',
   })
 
-  const toggleSection = (key) => setOpenSection(k => {
-    const next = k === key ? null : key
-    if (next) localStorage.setItem('qb_open_section', next)
-    else localStorage.removeItem('qb_open_section')
-    return next
-  })
+  const toggleSection = (key) => setOpenSection(k => k === key ? null : key)
 
   // ── Draft system ──────────────────────────────────────────────────────────
   const draftKey = DRAFT_LS_PREFIX + (id || '__new__')
 
   const saveDraft = useCallback(() => {
     try {
-      const html = getMergedBodyRef.current?.() ?? editorRef.current?.innerHTML ?? bodyHtml ?? ''
+      const html = editorRef.current?.innerHTML || bodyHtml || ''
       const draft = {
         name, description, categoryId, tags, templateType,
         header, footer, paper, watermark, docTitle, sigCfg,
@@ -1518,8 +1346,7 @@ export default function QuickBuilder() {
       if (draft.sigCfg)       setSigCfg(s => ({ ...s, ...draft.sigCfg }))
       const html = draft.bodyHtml || ''
       setBodyHtml(html)
-      // Do NOT write directly to editorRef — setBodyHtml already triggers
-      // WysiwygDocument's bodyHtml effect which does a proper paginated reset.
+      if (editorRef.current) { editorRef.current.innerHTML = html }
     } catch (_) {}
   }, [])
 
@@ -1603,7 +1430,7 @@ export default function QuickBuilder() {
   // Build payload
   const buildPayload = useCallback((summary) => {
     const s = latestRef.current
-    const html = getMergedBodyRef.current?.() ?? editorRef.current?.innerHTML ?? bodyHtml ?? ''
+    const html = editorRef.current?.innerHTML ?? bodyHtml ?? ''
     return {
       name:           s.name,
       description:    s.description,
@@ -1645,14 +1472,7 @@ export default function QuickBuilder() {
   useEffect(() => { scheduleAutoSave() }, [header, footer, paper, watermark, name, description, categoryId, tags, docTitle, sigCfg])
 
   const handleEditorInput = useCallback(() => {
-    const html = getMergedBodyRef.current?.() ?? editorRef.current?.innerHTML ?? ''
-    setBodyHtml(html)
-    scheduleAutoSave()
-  }, [scheduleAutoSave])
-
-  // Stable callback so WysiwygDocument's handleInput/sidebarWriteRef don't
-  // get recreated on every QuickBuilder render (which was causing mid-type disruption).
-  const handleBodyChange = useCallback((html) => {
+    const html = editorRef.current?.innerHTML || ''
     setBodyHtml(html)
     scheduleAutoSave()
   }, [scheduleAutoSave])
@@ -1731,7 +1551,7 @@ export default function QuickBuilder() {
   // Build full HTML for export/print
   const buildFullHtml = useCallback(() => {
     const s   = latestRef.current
-    const html = getMergedBodyRef.current?.() ?? editorRef.current?.innerHTML ?? bodyHtml ?? ''
+    const html = editorRef.current?.innerHTML || bodyHtml || ''
     const ml  = `${(s.paper.margin_left  || 72) / 72 * 25.4}mm`
     const mr  = `${(s.paper.margin_right || 72) / 72 * 25.4}mm`
     const mt  = `${(s.paper.margin_top   || 72) / 72 * 25.4}mm`
@@ -1821,7 +1641,6 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
   const handleExportPDF = () => {
     setShowExport(false)
     const w = window.open('', '_blank')
-    if (!w) { toast.error('Popup blocked — allow popups for this site to export PDF'); return }
     w.document.write(buildFullHtml()); w.document.close(); w.focus()
     toast.success('Print dialog opening — select "Save as PDF"')
     setTimeout(() => { w.print(); w.close() }, 500)
@@ -1829,7 +1648,6 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
   const handlePrint = () => {
     setShowExport(false)
     const w = window.open('', '_blank')
-    if (!w) { toast.error('Popup blocked — allow popups for this site to print'); return }
     w.document.write(buildFullHtml()); w.document.close(); w.focus()
     setTimeout(() => { w.print(); w.close() }, 400)
   }
@@ -2222,19 +2040,13 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
               </div>
             </Section>
 
-            {/* ── Section 4: Body Content — keepMounted preserves savedSel ref ── */}
-            <Section id="body" title="Body Content" icon={AlignLeft}
-              open={openSection === 'body'} onToggle={toggleSection}
-              keepMounted>
+            {/* ── Section 4: Formatting Toolbar ── */}
+            <Section id="body" title="Formatting Toolbar" icon={AlignLeft}
+              open={openSection === 'body'} onToggle={toggleSection}>
               <p className="text-xs mb-2 px-0.5" style={{ color: 'var(--text-muted)' }}>
                 Click inside the document on the right to position your cursor, then use these tools.
               </p>
-              <BodyEditor
-                editorRef={editorRef}
-                onInput={handleEditorInput}
-                bodyHtml={bodyHtml}
-                sidebarWriteRef={sidebarWriteRef}
-              />
+              <BodyEditor editorRef={editorRef} onInput={handleEditorInput} />
             </Section>
 
             {/* ── Section 5: Signature ── */}
@@ -2547,9 +2359,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
             header={header} footer={footer} paper={paper}
             watermark={watermark} docTitle={docTitle} sigCfg={sigCfg}
             bodyHtml={bodyHtml}
-            onBodyChange={handleBodyChange}
-            getMergedHtmlRef={getMergedBodyRef}
-            sidebarWriteRef={sidebarWriteRef}
+            onBodyChange={(html) => { setBodyHtml(html); scheduleAutoSave() }}
           />
         </div>
 
