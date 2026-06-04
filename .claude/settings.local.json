@@ -123,7 +123,10 @@
       "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\\\\hrm\\\\document-center\" -File -Recurse)",
       "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\\\\hrm\\\\document-center\" -Recurse | Where-Object {$_.PSIsContainer} | Select-Object FullName)",
       "Bash(npx --no-install react-scripts --version)",
-      "Bash(awk '{print $NF}')"
+      "Bash(awk '{print $NF}')",
+      "Bash(curl -s http://localhost:5174/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5174/)",
+      "Bash(npx playwright *)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

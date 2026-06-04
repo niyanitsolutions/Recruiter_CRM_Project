@@ -877,6 +877,7 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
   // ── State ─────────────────────────────────────────────────────────────────
   const [pageCount,    setPageCount]    = useState(1)
   const [pageBlocks,   setPageBlocks]   = useState([[]])
+  const [page1BlocksH, setPage1BlocksH] = useState(null)  // actual px height of page 1 blocks
   const [tableCtx,     setTableCtx]     = useState(null)
   const [selectedImg,  setSelectedImg]  = useState(null)
   const [imgToolbarVis,setImgToolbarVis]= useState(false)
@@ -886,7 +887,7 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
   const repaginate = useCallback((rawHtml) => {
     const sigHtml   = buildSigHtml(sigCfg)
     const fullHtml  = (rawHtml || '') + sigHtml
-    if (!fullHtml.trim()) { setPageCount(1); setPageBlocks([[]]); return }
+    if (!fullHtml.trim()) { setPageCount(1); setPageBlocks([[]]); setPage1BlocksH(0); return }
 
     const container = document.createElement('div')
     container.setAttribute('aria-hidden', 'true')
@@ -927,8 +928,31 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
         pages[pi].push(block)
         usedH += bh
       }
+      // Measure ACTUAL page-1 content height via a second pass.
+      // Rendering page-1 blocks directly (no per-block div wrappers) lets the
+      // browser apply CSS margin-collapse exactly as editorRef does, so
+      // scrollHeight gives the correct clip boundary. The simple per-block sum
+      // above overcounts by ~marginTop+marginBottom per paragraph pair.
+      let p1h = 0
+      if (pages[0].length > 0) {
+        const p1Meas = document.createElement('div')
+        Object.assign(p1Meas.style, {
+          position: 'absolute', top: '-99999px', left: '-99999px',
+          width: `${contentW}px`,
+          fontSize: '12pt', lineHeight: '1.7',
+          fontFamily: 'Arial, sans-serif', color: '#1f2937',
+          wordBreak: 'break-word',
+          visibility: 'hidden',
+        })
+        p1Meas.innerHTML = pages[0].map(b => b.html).join('')
+        document.body.appendChild(p1Meas)
+        p1h = p1Meas.scrollHeight || 0
+        document.body.removeChild(p1Meas)
+      }
+
       setPageBlocks(pages)
       setPageCount(pages.length)
+      setPage1BlocksH(p1h)
     })
   }, [contentW, usableH, titleH, docTitle, sigCfg])
 
@@ -1172,12 +1196,16 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
                       }}
                     />
                   )}
-                  {/* Editor body — starts below title */}
+                  {/* Editor body — starts below title.
+                      When multi-page: clip at exact page-1 block boundary so page 2
+                      content does not bleed through the overflow area here. */}
                   <div style={{
                     position: 'absolute',
                     top: headerH + headerSpacing + titleH,
                     left: ml, right: mr,
-                    height: usableH - titleH,
+                    height: (page1BlocksH !== null && pageCount > 1)
+                      ? page1BlocksH
+                      : (usableH - titleH),
                     overflow: 'hidden',
                     zIndex: 2,
                   }}>
@@ -1213,16 +1241,27 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
                       fontFamily: 'Arial, sans-serif', color: '#1f2937',
                       cursor: 'text',
                     }}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault()
                       const el = editorRef.current
                       if (!el) return
                       el.focus()
-                      const range = document.createRange()
-                      const sel = window.getSelection()
-                      range.selectNodeContents(el)
-                      range.collapse(false)
-                      sel?.removeAllRanges()
-                      sel?.addRange(range)
+                      // Double-rAF: first rAF fires during the same paint cycle as
+                      // focus (browser may reset cursor to start inside it).
+                      // Second rAF fires after browser has fully settled focus events,
+                      // so our range placement reliably wins.
+                      requestAnimationFrame(() => requestAnimationFrame(() => {
+                        if (!el.isConnected) return
+                        const sel = window.getSelection()
+                        if (!sel) return
+                        const range = document.createRange()
+                        range.selectNodeContents(el)
+                        range.collapse(false) // cursor to END of all body content
+                        sel.removeAllRanges()
+                        sel.addRange(range)
+                        // Scroll page-1 box into view so the user can see cursor context
+                        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                      }))
                     }}
                   >
                     {(pageBlocks[i] || []).map((block, bi) => (
