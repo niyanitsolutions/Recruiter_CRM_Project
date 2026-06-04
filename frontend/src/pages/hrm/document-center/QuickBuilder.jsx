@@ -565,7 +565,7 @@ function buildSigHtml(sigCfg) {
 // ─── Paginated Doc Preview ────────────────────────────────────────────────────
 // MS Word-style: header area → [top margin] → text area → [bottom margin] → footer area
 // Each page is exactly ph px tall. Content is windowed per page via overflow:hidden + negative margin.
-function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyHtml, sigCfg }) {
+function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyHtml, sigCfg, onBodyChange }) {
 
   // Paper pixel dimensions at 96 dpi
   const base = PAPER_PX[paper.size] || PAPER_PX.A4
@@ -599,6 +599,12 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
 
   // Block-aware page distribution: measure each top-level element, never split blocks
   const [pageBlocks, setPageBlocks] = useState([[]]) // array of pages, each page is array of {html, height}
+
+  // Editable preview support
+  const editableRefs    = useRef([])
+  const anyFocused      = useRef(false)
+  const pageBlocksRef   = useRef(pageBlocks)
+  const onBodyChangeRef = useRef(onBodyChange)
 
   useEffect(() => {
     if (!fullBodyHtml.trim()) { setPageBlocks([[]]); return }
@@ -644,6 +650,21 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullBodyHtml, contentW, usableH])
+
+  // Keep latest refs in sync (avoids stale closures in effects/handlers)
+  useEffect(() => { pageBlocksRef.current = pageBlocks })
+  useEffect(() => { onBodyChangeRef.current = onBodyChange })
+
+  // Sync pageBlocks → editable divs (only when user is not actively editing)
+  useEffect(() => {
+    if (!onBodyChangeRef.current) return
+    if (anyFocused.current) return
+    pageBlocks.forEach((blocks, i) => {
+      const el = editableRefs.current[i]
+      if (el) el.innerHTML = blocks.map(b => b.html).join('')
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageBlocks])
 
   const pageCount = Math.max(1, pageBlocks.length)
 
@@ -837,29 +858,64 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
             {/* Header */}
             {headerVisible && renderDocHeader()}
 
-            {/* Content area — renders only this page's blocks */}
-            <div style={{
-              position: 'absolute',
-              top: headerH + headerSpacing,
-              left: ml, right: mr,
-              height: usableH,
-              overflow: 'hidden',
-              zIndex: 2,
-              fontSize: '12pt', lineHeight: 1.7,
-              color: '#1f2937', fontFamily: 'Arial, sans-serif',
-            }}>
-              {blocks.length > 0 ? (
-                blocks.map((block, bi) => (
-                  <div key={bi} dangerouslySetInnerHTML={{ __html: block.html }} />
-                ))
-              ) : (
-                i === 0 && !fullBodyHtml.trim() && (
-                  <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '11pt', textAlign: 'center', paddingTop: 40 }}>
-                    Fill in the form on the left — your document preview will appear here.
-                  </div>
-                )
-              )}
-            </div>
+            {/* Content area */}
+            {onBodyChange ? (
+              /* Editable mode: single contentEditable div per page, managed via ref */
+              <div
+                ref={el => { editableRefs.current[i] = el }}
+                contentEditable
+                suppressContentEditableWarning
+                onFocus={() => { anyFocused.current = true }}
+                onBlur={() => {
+                  anyFocused.current = false
+                  // Re-sync from latest pageBlocks after editing so pagination is reflected
+                  pageBlocksRef.current.forEach((blks, j) => {
+                    const el = editableRefs.current[j]
+                    if (el) el.innerHTML = blks.map(b => b.html).join('')
+                  })
+                }}
+                onInput={() => {
+                  const html = editableRefs.current.filter(Boolean).map(el => el.innerHTML).join('')
+                  onBodyChangeRef.current?.(html)
+                }}
+                style={{
+                  position: 'absolute',
+                  top: headerH + headerSpacing,
+                  left: ml, right: mr,
+                  height: usableH,
+                  overflow: 'hidden',
+                  zIndex: 2,
+                  fontSize: '12pt', lineHeight: 1.7,
+                  color: '#1f2937', fontFamily: 'Arial, sans-serif',
+                  outline: 'none', cursor: 'text', boxSizing: 'border-box',
+                }}
+                data-placeholder={i === 0 && !fullBodyHtml.trim() ? 'Click to start typing…' : undefined}
+              />
+            ) : (
+              /* Read-only mode: static blocks via dangerouslySetInnerHTML */
+              <div style={{
+                position: 'absolute',
+                top: headerH + headerSpacing,
+                left: ml, right: mr,
+                height: usableH,
+                overflow: 'hidden',
+                zIndex: 2,
+                fontSize: '12pt', lineHeight: 1.7,
+                color: '#1f2937', fontFamily: 'Arial, sans-serif',
+              }}>
+                {blocks.length > 0 ? (
+                  blocks.map((block, bi) => (
+                    <div key={bi} dangerouslySetInnerHTML={{ __html: block.html }} />
+                  ))
+                ) : (
+                  i === 0 && !fullBodyHtml.trim() && (
+                    <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '11pt', textAlign: 'center', paddingTop: 40 }}>
+                      Fill in the form on the left — your document preview will appear here.
+                    </div>
+                  )
+                )}
+              </div>
+            )}
 
             {/* Footer */}
             {footer.show && renderDocFooter(i + 1)}
@@ -930,8 +986,6 @@ export default function QuickBuilder() {
   const [autoSaveStatus,   setAutoSaveStatus]   = useState('saved')
   const [categories,       setCategories]       = useState([])
   const [bodyHtml,         setBodyHtml]         = useState('')
-  const [inlineEditMode,   setInlineEditMode]   = useState(false)
-  const previewEditRef     = useRef(null)
 
   // Template metadata
   const [name,         setName]         = useState('Untitled Template')
@@ -2030,75 +2084,20 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                {inlineEditMode ? 'Inline Edit' : 'Live Preview'}
+                Live Preview
               </span>
             </div>
-            <button
-              onClick={() => {
-                if (!inlineEditMode) {
-                  // entering inline edit: sync current bodyHtml to preview editor
-                  setInlineEditMode(true)
-                  setTimeout(() => {
-                    if (previewEditRef.current) previewEditRef.current.innerHTML = editorRef.current?.innerHTML || bodyHtml || ''
-                  }, 0)
-                } else {
-                  // leaving inline edit: sync back to body editor
-                  const html = previewEditRef.current?.innerHTML || ''
-                  setBodyHtml(html)
-                  if (editorRef.current) editorRef.current.innerHTML = html
-                  setInlineEditMode(false)
-                  scheduleAutoSave()
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-colors"
-              style={inlineEditMode
-                ? { background: '#7c3aed', color: 'white', borderColor: '#7c3aed' }
-                : { borderColor: '#d1d5db', color: '#374151', background: 'white' }}>
-              {inlineEditMode ? '✓ Done Editing' : '✎ Edit in Preview'}
-            </button>
           </div>
 
-          {inlineEditMode ? (
-            /* ── Inline edit view: single page, full content editable ── */
-            (() => {
-              const base = PAPER_PX[paper.size] || PAPER_PX.A4
-              const [pw2] = paper.orientation === 'landscape' ? [base[1], base[0]] : base
-              const ml2 = Math.round((paper.margin_left  || 72) / 72 * 96)
-              const mr2 = Math.round((paper.margin_right || 72) / 72 * 96)
-              const mt2 = Math.round((paper.margin_top   || 72) / 72 * 96)
-              const mb2 = Math.round((paper.margin_bottom|| 72) / 72 * 96)
-              return (
-                <div style={{ width: pw2, background: 'white', borderRadius: 2, boxShadow: '0 4px 16px rgba(0,0,0,0.15)', minHeight: 400, position: 'relative' }}>
-                  <div
-                    ref={previewEditRef}
-                    contentEditable
-                    suppressContentEditableWarning
-                    onInput={() => {
-                      const html = previewEditRef.current?.innerHTML || ''
-                      setBodyHtml(html)
-                      if (editorRef.current) editorRef.current.innerHTML = html
-                      scheduleAutoSave()
-                    }}
-                    style={{
-                      padding: `${mt2}px ${mr2}px ${mb2}px ${ml2}px`,
-                      fontSize: '12pt', lineHeight: 1.7,
-                      fontFamily: 'Arial, sans-serif', color: '#1f2937',
-                      outline: 'none', minHeight: 300,
-                      cursor: 'text',
-                    }}
-                  />
-                  <p style={{ position: 'absolute', bottom: 8, right: 12, fontSize: 10, color: '#9ca3af', pointerEvents: 'none' }}>
-                    Click anywhere to edit — click "Done Editing" to return to preview
-                  </p>
-                </div>
-              )
-            })()
-          ) : (
-            <PaginatedDocPreview
-              header={header} footer={footer} paper={paper} watermark={watermark}
-              docTitle={docTitle} bodyHtml={bodyHtml} sigCfg={sigCfg}
-            />
-          )}
+          <PaginatedDocPreview
+            header={header} footer={footer} paper={paper} watermark={watermark}
+            docTitle={docTitle} bodyHtml={bodyHtml} sigCfg={sigCfg}
+            onBodyChange={(html) => {
+              setBodyHtml(html)
+              if (editorRef.current) editorRef.current.innerHTML = html
+              scheduleAutoSave()
+            }}
+          />
         </div>
 
       </div>
