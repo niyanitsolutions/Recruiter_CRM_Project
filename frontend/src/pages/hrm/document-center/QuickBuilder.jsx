@@ -909,11 +909,13 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
       document.body.removeChild(container)
 
       // Same distribution loop as PaginatedDocPreview
+      // 16px buffer prevents premature breaks from off-screen measurement rounding
+      const measureUsableH = usableH - 16
       const breaks = []  // y-offsets within the content area where page breaks occur
       let usedH = 0
       for (const block of blocks) {
         const bh = Math.max(block.height, 4)
-        if (usedH + bh > usableH && usedH > 0) {
+        if (usedH + bh > measureUsableH && usedH > 0) {
           breaks.push(usedH)  // break at current accumulated height
           usedH = 0
         }
@@ -929,7 +931,10 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
     if (editorRef.current) { editorRef.current.innerHTML = bodyHtml || ''; ensureTrailingP(editorRef.current) }
   }, []) // eslint-disable-line
 
-  useEffect(() => { repaginate(bodyHtml || '') }, []) // eslint-disable-line
+  useEffect(() => {
+    const html = editorRef.current?.innerHTML || bodyHtml || ''
+    repaginate(html)
+  }, []) // eslint-disable-line
 
   // Re-paginate when layout changes (header, footer, paper etc.)
   useEffect(() => { repaginate(editorRef.current?.innerHTML || bodyHtml || '') }, // eslint-disable-line
@@ -1077,23 +1082,6 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingBottom: 32 }}>
 
-      {/* ── Off-screen contentEditable — stays in DOM, receives keyboard input ── */}
-      <div style={{
-        position: 'fixed', top: '-99999px', left: '-99999px',
-        width: contentW, fontSize: '12pt', lineHeight: 1.7,
-        fontFamily: 'Arial, sans-serif', color: '#1f2937',
-        pointerEvents: 'none', zIndex: -1,
-      }}>
-        <div
-          ref={editorRef}
-          contentEditable
-          suppressContentEditableWarning
-          onInput={handleInput}
-          style={{ minHeight: 200, outline: 'none', fontSize: '12pt', lineHeight: 1.7, fontFamily: 'Arial, sans-serif', color: '#1f2937' }}
-          data-placeholder="Click here and start typing…"
-        />
-      </div>
-
       {/* Table toolbar — sticky at top */}
       {tableCtx && (
         <div className="sticky top-0 z-50 self-stretch flex items-center gap-1.5 px-4 py-2 border-b shadow-sm mb-4"
@@ -1161,44 +1149,70 @@ function WysiwygDocument({ editorRef, header, footer, paper, watermark, docTitle
               {/* Header — position:absolute top:0 anchors to this page box */}
               {headerVisible && renderDocHeader()}
 
-              {/* Content viewport — translateY shifts content to show this page's slice */}
-              <div style={{
-                position: 'absolute',
-                top: headerH + headerSpacing,
-                left: ml, right: mr,
-                height: usableH,
-                overflow: 'hidden',
-                zIndex: 2,
-              }}>
-                {fullDisplayHtml.trim() ? (
-                  <div
-                    style={{
-                      transform: `translateY(-${i * usableH}px)`,
-                      fontSize: '12pt', lineHeight: 1.7,
-                      fontFamily: 'Arial, sans-serif', color: '#1f2937',
-                      width: '100%',
-                    }}
-                    dangerouslySetInnerHTML={{ __html: fullDisplayHtml }}
-                  />
-                ) : i === 0 && (
-                  <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '11pt', textAlign: 'center', paddingTop: 40 }}>
-                    Click anywhere in the document to start typing…
-                  </div>
-                )}
-              </div>
-
-              {/* Transparent click overlay — focuses off-screen editorRef for typing */}
-              <div
-                style={{
+              {/* Page 1: editorRef directly (cursor visible); pages 2+: translateY window */}
+              {i === 0 ? (
+                <div style={{
                   position: 'absolute',
                   top: headerH + headerSpacing,
                   left: ml, right: mr,
                   height: usableH,
-                  zIndex: 10,
-                  cursor: 'text',
-                }}
-                onClick={() => editorRef.current?.focus()}
-              />
+                  zIndex: 2,
+                }}>
+                  <div
+                    ref={editorRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    onInput={handleInput}
+                    style={{
+                      position: 'absolute',
+                      top: 0, left: 0,
+                      width: '100%',
+                      minHeight: '100%',
+                      fontSize: '12pt', lineHeight: 1.7,
+                      fontFamily: 'Arial, sans-serif', color: '#1f2937',
+                      outline: 'none',
+                      caretColor: '#1f2937',
+                      background: 'transparent',
+                    }}
+                    data-placeholder="Click here and start typing…"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div style={{
+                    position: 'absolute',
+                    top: headerH + headerSpacing,
+                    left: ml, right: mr,
+                    height: usableH,
+                    overflow: 'hidden',
+                    zIndex: 2,
+                  }}>
+                    {fullDisplayHtml.trim() && (
+                      <div
+                        style={{
+                          transform: `translateY(-${i * usableH}px)`,
+                          fontSize: '12pt', lineHeight: 1.7,
+                          fontFamily: 'Arial, sans-serif', color: '#1f2937',
+                          width: '100%',
+                        }}
+                        dangerouslySetInnerHTML={{ __html: fullDisplayHtml }}
+                      />
+                    )}
+                  </div>
+                  {/* Click overlay for pages 2+ — focuses editorRef */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: headerH + headerSpacing,
+                      left: ml, right: mr,
+                      height: usableH,
+                      zIndex: 10,
+                      cursor: 'text',
+                    }}
+                    onClick={() => editorRef.current?.focus()}
+                  />
+                </>
+              )}
 
               {/* Footer with correct page number */}
               {footer.show && renderDocFooter(i + 1)}
@@ -2397,6 +2411,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
           content: attr(data-placeholder);
           color: #9ca3af; pointer-events: none; font-style: italic;
         }
+        [contenteditable]:focus { caret-color: #1f2937 !important; }
       `}</style>
     </div>
   )
