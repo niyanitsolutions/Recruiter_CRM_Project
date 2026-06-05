@@ -412,17 +412,12 @@ class UserService:
 
             users.append(user)
 
-        # Batch-resolve department and designation names for users that have
-        # IDs stored but are missing the corresponding name strings.
-        # This handles users created/edited before name-resolution was added.
-        dept_ids = list({
-            u["department_id"] for u in users
-            if u.get("department_id") and not u.get("department")
-        })
-        desig_ids = list({
-            u["designation_id"] for u in users
-            if u.get("designation_id") and not u.get("designation")
-        })
+        # Batch-resolve department and designation names from their master collections.
+        # Collect ALL IDs regardless of whether a cached text name already exists —
+        # this ensures stale cached text (e.g. from a previous edit that only updated
+        # the ID field) is overwritten with the current master-collection name.
+        dept_ids = list({u["department_id"] for u in users if u.get("department_id")})
+        desig_ids = list({u["designation_id"] for u in users if u.get("designation_id")})
 
         dept_map: Dict[str, str] = {}
         if dept_ids:
@@ -439,10 +434,12 @@ class UserService:
                 desig_map[desig["_id"]] = desig.get("name", "")
 
         for user in users:
-            if not user.get("department") and user.get("department_id"):
-                user["department"] = dept_map.get(user["department_id"], "")
-            if not user.get("designation") and user.get("designation_id"):
-                user["designation"] = desig_map.get(user["designation_id"], "")
+            if user.get("department_id"):
+                # Fresh name from master collection; fall back to cached text if the
+                # department record was deleted and is no longer in the collection.
+                user["department"] = dept_map.get(user["department_id"]) or user.get("department") or ""
+            if user.get("designation_id"):
+                user["designation"] = desig_map.get(user["designation_id"]) or user.get("designation") or ""
 
         return users, total
     
