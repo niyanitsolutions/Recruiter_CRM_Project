@@ -554,8 +554,13 @@ const ProfileCompleteModal = () => {
   const [designations, setDesignations] = useState([])
   const [coworkers,    setCoworkers]    = useState([])
 
-  // Show to ALL authenticated company users (not super-admin or seller)
-  const shouldCheck = !!user?.id && !user?.isSuperAdmin && !user?.isSeller && profileCompleted === false
+  // Show to ALL authenticated company users (not super-admin or seller).
+  // Must NOT run while ForcePasswordModal is active — that modal must be
+  // completed first so both modals don't overlap and trigger a render crash.
+  const forcePasswordChange = useSelector(selectForcePasswordChange)
+  const shouldCheck = !!user?.id && !user?.isSuperAdmin && !user?.isSeller
+    && profileCompleted === false
+    && !forcePasswordChange
 
   const { register, handleSubmit, formState: { errors } } = useForm({ mode: 'onBlur' })
 
@@ -575,10 +580,15 @@ const ProfileCompleteModal = () => {
 
         if (cancelled) return
 
-        const profile  = profileRes.data?.data  || profileRes.data  || {}
-        const deptList = deptsRes.data?.data     || deptsRes.data    || []
-        const desigList = desigsRes.data?.data   || desigsRes.data   || []
-        const userList  = usersRes.data?.data    || usersRes.data    || []
+        // Extract profile object safely
+        const profile = profileRes.data?.data || profileRes.data || {}
+
+        // Always produce a real array — guards against unexpected API response shapes
+        // that would make .map() / .filter() throw and crash the whole app.
+        const safeArr = (v) => (Array.isArray(v) ? v : [])
+        const deptList  = safeArr(deptsRes.data?.data  ?? deptsRes.data)
+        const desigList = safeArr(desigsRes.data?.data ?? desigsRes.data)
+        const userList  = safeArr(usersRes.data?.data  ?? usersRes.data)
 
         setDepartments(deptList)
         setDesignations(desigList)
