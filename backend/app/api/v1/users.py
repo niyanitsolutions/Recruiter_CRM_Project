@@ -58,9 +58,10 @@ async def list_users(
     sort_order: int = -1,
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
-    _: bool = Depends(require_permissions(["users:view"]))
 ):
-    """List internal users only (user_type=internal). Partners are managed via /partners."""
+    """List internal users only (user_type=internal). Partners are managed via /partners.
+    Any authenticated company user may read this list (needed for Reports To dropdowns).
+    Creating / editing / deleting users still requires users:create / edit / delete."""
     user_service = UserService(db)
 
     users, total = await user_service.list_users(

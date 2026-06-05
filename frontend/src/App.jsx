@@ -589,7 +589,7 @@ const ProfileCompleteModal = () => {
           api.get('/users/me'),
           departmentService.getDepartments(),
           designationService.getDesignations(),
-          userService.getUsers({ page_size: 200 }),
+          userService.getUsers({ page_size: 100 }),
         ])
 
         if (cancelled) return
