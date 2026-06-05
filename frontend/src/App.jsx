@@ -645,11 +645,18 @@ const ProfileCompleteModal = () => {
     try {
       const payload = { profile_completed: true }
 
-      // ── Department (identical logic to UserForm's on-the-fly creation) ─────
+      // ── Department ────────────────────────────────────────────────────────────
+      // Strategy:
+      //  a) Existing selection (not 'custom')      → use stored ID + name directly
+      //  b) Custom + has departments:create perm   → create master entry, use new ID
+      //  c) Custom + 403 (no create permission)    → save text name to user record only
+      //     (text is stored in user.department; no master entry is created)
       let deptId   = data.department_id
       let deptName = departments.find(d => d.id === deptId)?.name || ''
       if (deptId === 'custom' && deptCustom.trim()) {
         const norm = _normName(deptCustom)
+        deptName = norm           // default: text-only (no master entry)
+        deptId   = null
         try {
           const res     = await departmentService.createDepartment({ name: norm })
           const created = res?.data
@@ -659,31 +666,42 @@ const ProfileCompleteModal = () => {
             setDepartments(prev => [...prev, created])
           }
         } catch (err) {
-          const msg = err?.response?.data?.detail || err?.response?.data?.message || ''
+          const msg    = err?.response?.data?.detail || err?.response?.data?.message || ''
+          const status = err?.response?.status
           if (typeof msg === 'string' && msg.toLowerCase().includes('already exists')) {
-            const listRes = await departmentService.getDepartments()
-            const existing = (listRes?.data || []).find(
-              d => d.name?.toLowerCase().trim() === norm.toLowerCase().trim()
-            )
-            if (existing) { deptId = existing.id; deptName = existing.name || norm }
-            else throw err
-          } else throw err
+            // Department already exists → find and reuse
+            try {
+              const listRes = await departmentService.getDepartments()
+              const existing = (listRes?.data || []).find(
+                d => d.name?.toLowerCase().trim() === norm.toLowerCase().trim()
+              )
+              if (existing) { deptId = existing.id; deptName = existing.name || norm }
+            } catch { /* stay with text-only */ }
+          } else if (status !== 403) {
+            throw err   // unexpected error → surface to user
+          }
+          // 403: no create permission — deptId stays null, deptName = norm (text-only save)
         }
       }
-      if (deptId && deptId !== 'custom') {
+      if (deptId) {
         payload.department_id = deptId
         payload.department    = deptName
+      } else if (deptName && deptName !== 'custom') {
+        payload.department    = deptName   // text-only: visible in user record/list
       }
 
-      // ── Designation (identical logic to UserForm's on-the-fly creation) ────
+      // ── Designation ───────────────────────────────────────────────────────────
+      // Same strategy as department above
       let desigId   = data.designation_id
       let desigName = designations.find(d => d.id === desigId)?.name || ''
       if (desigId === 'custom' && desigCustom.trim()) {
         const norm = _normName(desigCustom)
+        desigName = norm          // default: text-only
+        desigId   = null
         try {
           const res     = await designationService.createDesignation({
             name: norm, code: null,
-            department_id: deptId && deptId !== 'custom' ? deptId : undefined,
+            department_id: deptId || undefined,
           })
           const created = res?.data
           if (created?.id) {
@@ -692,19 +710,26 @@ const ProfileCompleteModal = () => {
             setDesignations(prev => [...prev, created])
           }
         } catch (err) {
-          const msg = err?.response?.data?.detail || ''
+          const msg    = err?.response?.data?.detail || ''
+          const status = err?.response?.status
           if (typeof msg === 'string' && msg.toLowerCase().includes('already exists')) {
-            const listRes = await designationService.getDesignations()
-            const existing = (listRes?.data || []).find(
-              d => d.name?.toLowerCase().trim() === norm.toLowerCase().trim()
-            )
-            if (existing) { desigId = existing.id; desigName = existing.name || norm }
-            else throw err
-          } else throw err
+            try {
+              const listRes = await designationService.getDesignations()
+              const existing = (listRes?.data || []).find(
+                d => d.name?.toLowerCase().trim() === norm.toLowerCase().trim()
+              )
+              if (existing) { desigId = existing.id; desigName = existing.name || norm }
+            } catch { /* stay with text-only */ }
+          } else if (status !== 403) {
+            throw err
+          }
+          // 403: text-only save
         }
       }
-      if (desigId && desigId !== 'custom') {
+      if (desigId) {
         payload.designation_id = desigId
+        payload.designation    = desigName
+      } else if (desigName && desigName !== 'custom') {
         payload.designation    = desigName
       }
 

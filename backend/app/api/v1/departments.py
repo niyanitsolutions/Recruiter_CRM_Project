@@ -28,9 +28,9 @@ async def list_departments(
     parent_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
-    _: bool = Depends(require_permissions(["departments:view"]))
 ):
-    """List all departments"""
+    """List all departments — any authenticated company user may read the list.
+    Creation / editing / deletion still require departments:create / edit / delete."""
     dept_service = DepartmentService(db)
     departments = await dept_service.list_departments(
         include_inactive=include_inactive,

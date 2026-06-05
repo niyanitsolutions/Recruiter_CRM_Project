@@ -29,9 +29,9 @@ async def list_designations(
     level: Optional[int] = None,
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
-    _: bool = Depends(require_permissions(["designations:view"]))
 ):
-    """List all designations"""
+    """List all designations — any authenticated company user may read the list.
+    Creation / editing / deletion still require designations:create / edit / delete."""
     desig_service = DesignationService(db)
     designations = await desig_service.list_designations(
         include_inactive=include_inactive,
