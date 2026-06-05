@@ -238,6 +238,13 @@ class UserProfileUpdate(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
     zip_code: Optional[str] = None
+    # Fields settable via the one-time profile completion popup
+    department_id: Optional[str] = None
+    department: Optional[str] = None
+    designation_id: Optional[str] = None
+    designation: Optional[str] = None
+    reporting_to: Optional[str] = None
+    joining_date: Optional[datetime] = None
     # Allow user to mark their own profile as complete (used by the one-time popup)
     profile_completed: Optional[bool] = None
 

@@ -505,59 +505,79 @@ const ForcePasswordModal = () => {
  * One-time popup shown to users whose profile_completed flag is false.
  *
  * Flow:
- * 1. On mount, fetch GET /users/me to get the current DB values.
- * 2. Check which required fields are actually empty (mobile, designation).
+ * 1. On mount, fetch GET /users/me plus reference lists (departments, designations, users).
+ * 2. Check which of the four required fields are actually empty in the DB.
  * 3. If NONE are missing → silently mark profile complete via PUT /users/me, no popup.
- * 4. If SOME are missing → show the popup with ONLY those fields.
+ * 4. If SOME are missing → show the popup with ONLY those missing fields.
  * 5. On save → PUT /users/me with the filled values + profile_completed: true.
  */
 
-// Fields that constitute a "complete" profile for the popup check.
+// checkKeys: ALL must be falsy/empty in the DB record for the field to be considered missing.
 const REQUIRED_PROFILE_FIELDS = [
-  { key: 'mobile',      label: 'Mobile Number',  placeholder: '10-digit mobile number' },
-  { key: 'designation', label: 'Designation',     placeholder: 'e.g. Software Engineer'  },
+  { key: 'department_id',  checkKeys: ['department_id', 'department'],   label: 'Department',   type: 'select' },
+  { key: 'designation_id', checkKeys: ['designation_id', 'designation'], label: 'Designation',  type: 'select' },
+  { key: 'reporting_to',   checkKeys: ['reporting_to'],                  label: 'Reports To',   type: 'select' },
+  { key: 'joining_date',   checkKeys: ['joining_date'],                  label: 'Joining Date', type: 'date'   },
 ]
 
 const ProfileCompleteModal = () => {
-  const dispatch        = useDispatch()
-  const user            = useSelector(selectUser)
+  const dispatch         = useDispatch()
+  const user             = useSelector(selectUser)
   const profileCompleted = useSelector(selectProfileCompleted)
 
   // null = still checking, [] = nothing missing (no popup), [...] = fields to fill
   const [missingFields, setMissingFields] = useState(null)
   const [saving, setSaving]               = useState(false)
 
-  // Show to ALL authenticated company users (not super-admin or seller — they have no profile_completed flag)
+  // Reference data for dropdown options
+  const [departments,  setDepartments]  = useState([])
+  const [designations, setDesignations] = useState([])
+  const [coworkers,    setCoworkers]    = useState([])
+
+  // Show to ALL authenticated company users (not super-admin or seller)
   const shouldCheck = !!user?.id && !user?.isSuperAdmin && !user?.isSeller && profileCompleted === false
 
   const { register, handleSubmit, formState: { errors } } = useForm({ mode: 'onBlur' })
 
-  // On mount: fetch fresh profile data and decide whether to show the popup
+  // On mount: fetch fresh profile + reference lists, determine which fields are missing
   useEffect(() => {
     if (!shouldCheck || !user?.id) return
 
     let cancelled = false
     ;(async () => {
       try {
-        const res     = await api.get('/users/me')
-        const profile = res.data?.data || res.data || {}
-
-        const missing = REQUIRED_PROFILE_FIELDS.filter(
-          f => !profile[f.key] || String(profile[f.key]).trim() === ''
-        )
+        const [profileRes, deptsRes, desigsRes, usersRes] = await Promise.all([
+          api.get('/users/me'),
+          api.get('/departments/'),
+          api.get('/designations/'),
+          api.get('/users/', { params: { page_size: 200 } }),
+        ])
 
         if (cancelled) return
 
+        const profile  = profileRes.data?.data  || profileRes.data  || {}
+        const deptList = deptsRes.data?.data     || deptsRes.data    || []
+        const desigList = desigsRes.data?.data   || desigsRes.data   || []
+        const userList  = usersRes.data?.data    || usersRes.data    || []
+
+        setDepartments(deptList)
+        setDesignations(desigList)
+        setCoworkers(userList.filter(u => u.id !== user.id))
+
+        // A field is missing when every one of its checkKeys is falsy/empty in the DB
+        const missing = REQUIRED_PROFILE_FIELDS.filter(f =>
+          f.checkKeys.every(k => !profile[k] || String(profile[k]).trim() === '')
+        )
+
         if (missing.length === 0) {
-          // Everything is already filled — silently mark complete, no popup
+          // Everything already filled — silently mark complete, no popup shown
           await api.put('/users/me', { profile_completed: true })
           dispatch(setProfileCompleted())
         } else {
           setMissingFields(missing)
         }
       } catch {
-        // If the fetch fails, fall back to showing the full popup so the user
-        // is not blocked. Mark as complete after they submit.
+        // Fetch failed — fall back to showing all fields so the user is not blocked
         if (!cancelled) setMissingFields(REQUIRED_PROFILE_FIELDS)
       }
     })()
@@ -565,16 +585,32 @@ const ProfileCompleteModal = () => {
     return () => { cancelled = true }
   }, [shouldCheck, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Don't render until we know what's missing (avoid flash)
+  // Don't render until we know what's missing (avoids flash)
   if (!shouldCheck || missingFields === null || missingFields.length === 0) return null
 
   const onSubmit = async (data) => {
     setSaving(true)
     try {
-      await api.put('/users/me', {
-        ...data,
-        profile_completed: true,
-      })
+      const payload = { profile_completed: true }
+
+      if (data.department_id) {
+        payload.department_id = data.department_id
+        payload.department    = departments.find(d => d.id === data.department_id)?.name || ''
+      }
+      if (data.designation_id) {
+        payload.designation_id = data.designation_id
+        payload.designation    = designations.find(d => d.id === data.designation_id)?.name || ''
+      }
+      if (data.reporting_to) {
+        payload.reporting_to = data.reporting_to
+      }
+      if (data.joining_date) {
+        payload.joining_date = data.joining_date.includes('T')
+          ? data.joining_date
+          : data.joining_date + 'T00:00:00'
+      }
+
+      await api.put('/users/me', payload)
       dispatch(setProfileCompleted())
       toast.success('Profile updated!')
     } catch (err) {
@@ -611,27 +647,72 @@ const ProfileCompleteModal = () => {
             <input className="input bg-surface-50 cursor-not-allowed" value={user?.email || ''} disabled />
           </div>
 
-          {/* Only render fields that are actually missing */}
+          {/* Only render fields that are actually missing from the DB */}
           {missingFields.map(field => (
             <div key={field.key}>
               <label className="input-label">
                 {field.label} <span className="text-danger-500">*</span>
               </label>
-              <input
-                className={`input ${errors[field.key] ? 'border-danger-500' : ''}`}
-                placeholder={field.placeholder}
-                {...register(field.key, {
-                  required: `${field.label} is required`,
-                  ...(field.key === 'mobile' && {
-                    pattern: {
-                      value: /^[6-9]\d{9}$/,
-                      message: 'Enter a valid 10-digit mobile number starting with 6–9',
-                    },
-                  }),
-                })}
-              />
-              {errors[field.key] && (
-                <p className="input-error-text mt-1">{errors[field.key].message}</p>
+
+              {field.key === 'department_id' && (
+                <>
+                  <select
+                    className={`input ${errors.department_id ? 'border-danger-500' : ''}`}
+                    defaultValue=""
+                    {...register('department_id', { required: 'Department is required' })}
+                  >
+                    <option value="">Select Department</option>
+                    {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                  {errors.department_id && (
+                    <p className="input-error-text mt-1">{errors.department_id.message}</p>
+                  )}
+                </>
+              )}
+
+              {field.key === 'designation_id' && (
+                <>
+                  <select
+                    className={`input ${errors.designation_id ? 'border-danger-500' : ''}`}
+                    defaultValue=""
+                    {...register('designation_id', { required: 'Designation is required' })}
+                  >
+                    <option value="">Select Designation</option>
+                    {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                  {errors.designation_id && (
+                    <p className="input-error-text mt-1">{errors.designation_id.message}</p>
+                  )}
+                </>
+              )}
+
+              {field.key === 'reporting_to' && (
+                <>
+                  <select
+                    className={`input ${errors.reporting_to ? 'border-danger-500' : ''}`}
+                    defaultValue=""
+                    {...register('reporting_to', { required: 'Reports To is required' })}
+                  >
+                    <option value="">Select Manager</option>
+                    {coworkers.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                  </select>
+                  {errors.reporting_to && (
+                    <p className="input-error-text mt-1">{errors.reporting_to.message}</p>
+                  )}
+                </>
+              )}
+
+              {field.key === 'joining_date' && (
+                <>
+                  <input
+                    type="date"
+                    className={`input ${errors.joining_date ? 'border-danger-500' : ''}`}
+                    {...register('joining_date', { required: 'Joining Date is required' })}
+                  />
+                  {errors.joining_date && (
+                    <p className="input-error-text mt-1">{errors.joining_date.message}</p>
+                  )}
+                </>
               )}
             </div>
           ))}
