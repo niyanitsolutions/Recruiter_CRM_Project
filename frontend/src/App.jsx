@@ -13,6 +13,9 @@ import { MY_PORTAL_ALLOWED_ROLES } from './config/portalConfig'
 import { useSessionWebSocket } from './hooks/useSessionWebSocket'
 import { useFavicon } from './hooks/useFavicon'
 import api from './services/api'
+import departmentService  from './services/departmentService'
+import designationService from './services/designationService'
+import userService        from './services/userService'
 import SessionExpiryModal    from './components/auth/SessionExpiryModal'
 import SessionWarningModal   from './components/auth/SessionWarningModal'
 import LoginRequestModal     from './components/auth/LoginRequestModal'
@@ -523,16 +526,22 @@ const ForcePasswordModal = () => {
 // ─── Profile Completion Modal ─────────────────────────────────────────────────
 /**
  * One-time popup shown to users whose profile_completed flag is false.
+ * Uses the SAME services, API calls, and Custom-option logic as Add User / Edit User —
+ * one source of truth for departments, designations, and users lists.
  *
  * Flow:
- * 1. On mount, fetch GET /users/me plus reference lists (departments, designations, users).
- * 2. Check which of the four required fields are actually empty in the DB.
- * 3. If NONE are missing → silently mark profile complete via PUT /users/me, no popup.
- * 4. If SOME are missing → show the popup with ONLY those missing fields.
- * 5. On save → PUT /users/me with the filled values + profile_completed: true.
+ * 1. Wait until ForcePasswordModal is dismissed (!forcePasswordChange guard).
+ * 2. Load reference data via departmentService / designationService / userService
+ *    with Promise.allSettled so a 403 on /users/ (non-admin) never blocks depts/desigs.
+ * 3. Compare profile fields → show ONLY the missing ones.
+ * 4. On save → create custom dept/desig via API when selected, then PUT /users/me.
  */
 
-// checkKeys: ALL must be falsy/empty in the DB record for the field to be considered missing.
+// Normalise a free-text name identically to UserForm (title-case, collapse spaces)
+const _normName = (v) =>
+  v.trim().replace(/\s+/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+
+// checkKeys: ALL must be falsy/empty in the DB record for the field to count as missing.
 const REQUIRED_PROFILE_FIELDS = [
   { key: 'department_id',  checkKeys: ['department_id', 'department'],   label: 'Department',   type: 'select' },
   { key: 'designation_id', checkKeys: ['designation_id', 'designation'], label: 'Designation',  type: 'select' },
@@ -545,69 +554,74 @@ const ProfileCompleteModal = () => {
   const user             = useSelector(selectUser)
   const profileCompleted = useSelector(selectProfileCompleted)
 
-  // null = still checking, [] = nothing missing (no popup), [...] = fields to fill
-  const [missingFields, setMissingFields] = useState(null)
+  const [missingFields, setMissingFields] = useState(null) // null=loading, [...]= fields
   const [saving, setSaving]               = useState(false)
 
-  // Reference data for dropdown options
+  // Reference data — loaded from the SAME services as Add User / Edit User
   const [departments,  setDepartments]  = useState([])
   const [designations, setDesignations] = useState([])
   const [coworkers,    setCoworkers]    = useState([])
 
-  // Show to ALL authenticated company users (not super-admin or seller).
-  // Must NOT run while ForcePasswordModal is active — that modal must be
-  // completed first so both modals don't overlap and trigger a render crash.
+  // Custom-option state — mirrors UserForm's deptCustom / desigCustom
+  const [deptCustom,   setDeptCustom]   = useState('')
+  const [desigCustom,  setDesigCustom]  = useState('')
+  const [customErrors, setCustomErrors] = useState({})
+
+  // Must NOT activate while ForcePasswordModal is open (sequential flow required)
   const forcePasswordChange = useSelector(selectForcePasswordChange)
   const shouldCheck = !!user?.id && !user?.isSuperAdmin && !user?.isSeller
     && profileCompleted === false
     && !forcePasswordChange
 
-  const { register, handleSubmit, formState: { errors } } = useForm({ mode: 'onBlur' })
+  const { register, handleSubmit, watch, formState: { errors } } = useForm({ mode: 'onBlur' })
+  const watchDeptId  = watch('department_id',  '')
+  const watchDesigId = watch('designation_id', '')
 
-  // On mount: fetch fresh profile + reference lists, determine which fields are missing
+  // Fetch data and determine missing fields once shouldCheck becomes true
   useEffect(() => {
     if (!shouldCheck || !user?.id) return
 
     let cancelled = false
     ;(async () => {
       try {
-        const [profileRes, deptsRes, desigsRes, usersRes] = await Promise.all([
+        // Promise.allSettled — a 403 on /users/ (non-admin roles) won't block depts/desigs
+        const [profileRes, deptsRes, desigsRes, usersRes] = await Promise.allSettled([
           api.get('/users/me'),
-          api.get('/departments/'),
-          api.get('/designations/'),
-          api.get('/users/', { params: { page_size: 200 } }),
+          departmentService.getDepartments(),
+          designationService.getDesignations(),
+          userService.getUsers({ page_size: 200 }),
         ])
 
         if (cancelled) return
 
-        // Extract profile object safely
-        const profile = profileRes.data?.data || profileRes.data || {}
+        // Services return response.data; the list is at .data (same as UserForm)
+        if (deptsRes.status === 'fulfilled') {
+          setDepartments(Array.isArray(deptsRes.value?.data) ? deptsRes.value.data : [])
+        }
+        if (desigsRes.status === 'fulfilled') {
+          setDesignations(Array.isArray(desigsRes.value?.data) ? desigsRes.value.data : [])
+        }
+        if (usersRes.status === 'fulfilled') {
+          const all = Array.isArray(usersRes.value?.data) ? usersRes.value.data : []
+          setCoworkers(all.filter(u => u.id !== user.id))
+        }
 
-        // Always produce a real array — guards against unexpected API response shapes
-        // that would make .map() / .filter() throw and crash the whole app.
-        const safeArr = (v) => (Array.isArray(v) ? v : [])
-        const deptList  = safeArr(deptsRes.data?.data  ?? deptsRes.data)
-        const desigList = safeArr(desigsRes.data?.data ?? desigsRes.data)
-        const userList  = safeArr(usersRes.data?.data  ?? usersRes.data)
+        // api.get('/users/me') returns an axios response; the user object is at .data.data
+        const profile = profileRes.status === 'fulfilled'
+          ? (profileRes.value?.data?.data || profileRes.value?.data || {})
+          : {}
 
-        setDepartments(deptList)
-        setDesignations(desigList)
-        setCoworkers(userList.filter(u => u.id !== user.id))
-
-        // A field is missing when every one of its checkKeys is falsy/empty in the DB
         const missing = REQUIRED_PROFILE_FIELDS.filter(f =>
           f.checkKeys.every(k => !profile[k] || String(profile[k]).trim() === '')
         )
 
         if (missing.length === 0) {
-          // Everything already filled — silently mark complete, no popup shown
           await api.put('/users/me', { profile_completed: true })
           dispatch(setProfileCompleted())
         } else {
           setMissingFields(missing)
         }
       } catch {
-        // Fetch failed — fall back to showing all fields so the user is not blocked
         if (!cancelled) setMissingFields(REQUIRED_PROFILE_FIELDS)
       }
     })()
@@ -615,25 +629,87 @@ const ProfileCompleteModal = () => {
     return () => { cancelled = true }
   }, [shouldCheck, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Don't render until we know what's missing (avoids flash)
   if (!shouldCheck || missingFields === null || missingFields.length === 0) return null
 
   const onSubmit = async (data) => {
+    // Validate custom text inputs before touching any API
+    const newCE = {}
+    if (data.department_id  === 'custom' && !deptCustom.trim())
+      newCE.deptCustom  = 'Please enter a department name'
+    if (data.designation_id === 'custom' && !desigCustom.trim())
+      newCE.desigCustom = 'Please enter a designation name'
+    if (Object.keys(newCE).length) { setCustomErrors(newCE); return }
+    setCustomErrors({})
     setSaving(true)
+
     try {
       const payload = { profile_completed: true }
 
-      if (data.department_id) {
-        payload.department_id = data.department_id
-        payload.department    = departments.find(d => d.id === data.department_id)?.name || ''
+      // ── Department (identical logic to UserForm's on-the-fly creation) ─────
+      let deptId   = data.department_id
+      let deptName = departments.find(d => d.id === deptId)?.name || ''
+      if (deptId === 'custom' && deptCustom.trim()) {
+        const norm = _normName(deptCustom)
+        try {
+          const res     = await departmentService.createDepartment({ name: norm })
+          const created = res?.data
+          if (created?.id) {
+            deptId   = created.id
+            deptName = created.name || norm
+            setDepartments(prev => [...prev, created])
+          }
+        } catch (err) {
+          const msg = err?.response?.data?.detail || err?.response?.data?.message || ''
+          if (typeof msg === 'string' && msg.toLowerCase().includes('already exists')) {
+            const listRes = await departmentService.getDepartments()
+            const existing = (listRes?.data || []).find(
+              d => d.name?.toLowerCase().trim() === norm.toLowerCase().trim()
+            )
+            if (existing) { deptId = existing.id; deptName = existing.name || norm }
+            else throw err
+          } else throw err
+        }
       }
-      if (data.designation_id) {
-        payload.designation_id = data.designation_id
-        payload.designation    = designations.find(d => d.id === data.designation_id)?.name || ''
+      if (deptId && deptId !== 'custom') {
+        payload.department_id = deptId
+        payload.department    = deptName
       }
-      if (data.reporting_to) {
-        payload.reporting_to = data.reporting_to
+
+      // ── Designation (identical logic to UserForm's on-the-fly creation) ────
+      let desigId   = data.designation_id
+      let desigName = designations.find(d => d.id === desigId)?.name || ''
+      if (desigId === 'custom' && desigCustom.trim()) {
+        const norm = _normName(desigCustom)
+        try {
+          const res     = await designationService.createDesignation({
+            name: norm, code: null,
+            department_id: deptId && deptId !== 'custom' ? deptId : undefined,
+          })
+          const created = res?.data
+          if (created?.id) {
+            desigId   = created.id
+            desigName = created.name || norm
+            setDesignations(prev => [...prev, created])
+          }
+        } catch (err) {
+          const msg = err?.response?.data?.detail || ''
+          if (typeof msg === 'string' && msg.toLowerCase().includes('already exists')) {
+            const listRes = await designationService.getDesignations()
+            const existing = (listRes?.data || []).find(
+              d => d.name?.toLowerCase().trim() === norm.toLowerCase().trim()
+            )
+            if (existing) { desigId = existing.id; desigName = existing.name || norm }
+            else throw err
+          } else throw err
+        }
       }
+      if (desigId && desigId !== 'custom') {
+        payload.designation_id = desigId
+        payload.designation    = desigName
+      }
+
+      // ── Reports To / Joining Date ────────────────────────────────────────────
+      if (data.reporting_to) payload.reporting_to = data.reporting_to
       if (data.joining_date) {
         payload.joining_date = data.joining_date.includes('T')
           ? data.joining_date
@@ -665,7 +741,6 @@ const ProfileCompleteModal = () => {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Read-only identity fields shown for context */}
           {user?.fullName && (
             <div>
               <label className="input-label">Full Name</label>
@@ -693,9 +768,25 @@ const ProfileCompleteModal = () => {
                   >
                     <option value="">Select Department</option>
                     {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    <option value="custom">Custom…</option>
                   </select>
                   {errors.department_id && (
                     <p className="input-error-text mt-1">{errors.department_id.message}</p>
+                  )}
+                  {watchDeptId === 'custom' && (
+                    <input
+                      type="text"
+                      className={`mt-2 input ${customErrors.deptCustom ? 'border-danger-500' : ''}`}
+                      placeholder="Enter new department name"
+                      value={deptCustom}
+                      onChange={e => {
+                        setDeptCustom(e.target.value)
+                        setCustomErrors(p => ({ ...p, deptCustom: '' }))
+                      }}
+                    />
+                  )}
+                  {customErrors.deptCustom && (
+                    <p className="input-error-text mt-1">{customErrors.deptCustom}</p>
                   )}
                 </>
               )}
@@ -709,9 +800,25 @@ const ProfileCompleteModal = () => {
                   >
                     <option value="">Select Designation</option>
                     {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    <option value="custom">Custom…</option>
                   </select>
                   {errors.designation_id && (
                     <p className="input-error-text mt-1">{errors.designation_id.message}</p>
+                  )}
+                  {watchDesigId === 'custom' && (
+                    <input
+                      type="text"
+                      className={`mt-2 input ${customErrors.desigCustom ? 'border-danger-500' : ''}`}
+                      placeholder="Enter new designation name"
+                      value={desigCustom}
+                      onChange={e => {
+                        setDesigCustom(e.target.value)
+                        setCustomErrors(p => ({ ...p, desigCustom: '' }))
+                      }}
+                    />
+                  )}
+                  {customErrors.desigCustom && (
+                    <p className="input-error-text mt-1">{customErrors.desigCustom}</p>
                   )}
                 </>
               )}
