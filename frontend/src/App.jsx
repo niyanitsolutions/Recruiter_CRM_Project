@@ -338,9 +338,18 @@ const Unauthorized = () => {
 /**
  * Catches any render-time JS error in the subtree and shows a recovery UI
  * instead of a white screen.
+ *
+ * Auto-reload behaviour: on the FIRST error in a session (tracked via
+ * sessionStorage) the boundary silently reloads the page, which resolves
+ * transient first-login crashes (race conditions, lazy-chunk loading failures).
+ * If the page crashes again after the reload the error UI is shown instead
+ * of reloading forever.  The flag is cleared whenever the app renders
+ * successfully so future sessions always get the one free auto-retry.
  */
+const _RELOAD_FLAG = '_errBoundaryReloaded'
+
 class ErrorBoundary extends React.Component {
-  state = { hasError: false, errorPath: null }
+  state = { hasError: false }
 
   static getDerivedStateFromError() {
     return { hasError: true }
@@ -348,11 +357,22 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('App render error:', error, info)
+    // Auto-reload once to recover from transient first-load errors
+    // (first-time login race conditions, lazy chunk failures, etc.)
+    if (!sessionStorage.getItem(_RELOAD_FLAG)) {
+      sessionStorage.setItem(_RELOAD_FLAG, '1')
+      window.location.reload()
+    }
   }
 
   componentDidUpdate(prevProps) {
     if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
       this.setState({ hasError: false })
+    }
+    // Clear the reload flag whenever the app is rendering without errors
+    // so the next session always gets its one free auto-retry.
+    if (!this.state.hasError) {
+      sessionStorage.removeItem(_RELOAD_FLAG)
     }
   }
 
@@ -365,7 +385,7 @@ class ErrorBoundary extends React.Component {
             <p className="text-surface-500 mb-6">An unexpected error occurred. Please try navigating to another page.</p>
             <div className="flex items-center justify-center gap-3">
               <button
-                onClick={() => this.setState({ hasError: false })}
+                onClick={() => window.location.reload()}
                 className="inline-block px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
               >
                 Try Again
