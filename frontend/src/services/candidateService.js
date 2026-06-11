@@ -106,9 +106,8 @@ const candidateService = {
   parseResumeFile: async (file) => {
     const fd = new FormData()
     fd.append('file', file)
-    const response = await api.post('/candidates/extract-resume', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    // Do NOT set Content-Type manually — let browser set multipart/form-data with boundary
+    const response = await api.post('/candidates/extract-resume', fd)
     return response.data
   },
 
@@ -116,9 +115,7 @@ const candidateService = {
   parseResumeFilePublic: async (file) => {
     const fd = new FormData()
     fd.append('file', file)
-    const response = await api.post('/public/extract-resume', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    const response = await api.post('/public/extract-resume', fd)
     return response.data
   },
 
@@ -129,7 +126,6 @@ const candidateService = {
     const response = await api.post(
       `/public/candidate-form/${token}/resume?candidate_id=${candidateId}`,
       fd,
-      { headers: { 'Content-Type': 'multipart/form-data' } },
     )
     return response.data
   },
@@ -138,9 +134,8 @@ const candidateService = {
   uploadResume: async (candidateId, file) => {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await api.post(`/candidates/${candidateId}/resume`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
+    // Do NOT set Content-Type manually — let browser set multipart/form-data with boundary
+    const response = await api.post(`/candidates/${candidateId}/resume`, formData)
     return response.data
   },
 

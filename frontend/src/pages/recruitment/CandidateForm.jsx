@@ -351,28 +351,43 @@ const CandidateForm = () => {
 
   const MOBILE_RE = /^[6-9]\d{9}$/
 
+  const EDU_MIN_YEARS = {
+    'High School': 2,
+    'Diploma': 2,
+    "Bachelor's": 3,
+    "Master's": 2,
+    'PhD': 3,
+  }
+
   const validate = () => {
     const errs = {}
     if (!formData.gender) errs.gender = 'Gender is required'
+
+    // DOB validation — also compute dobDate for use in work experience check below
+    let dobDate = null
     if (!formData.date_of_birth) {
       errs.date_of_birth = 'Date of birth is required'
     } else {
-      const dob = new Date(formData.date_of_birth)
+      dobDate = new Date(formData.date_of_birth)
       const today = new Date()
-      if (dob >= today) {
+      if (dobDate >= today) {
         errs.date_of_birth = 'Date of birth must be in the past'
       } else {
-        const age = today.getFullYear() - dob.getFullYear() - (
-          today < new Date(today.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0
+        const age = today.getFullYear() - dobDate.getFullYear() - (
+          today < new Date(today.getFullYear(), dobDate.getMonth(), dobDate.getDate()) ? 1 : 0
         )
-        if (age < 16) errs.date_of_birth = 'Candidate must be at least 16 years old'
+        if (age < 16) {
+          errs.date_of_birth = 'Candidate must be at least 16 years old'
+          dobDate = null  // invalidate so age check below doesn't run on a bad DOB
+        }
       }
     }
+
     if (formData.skills.length === 0) errs.skills = 'At least one skill is required'
     if (formData.preferred_locations.length === 0) errs.preferred_locations = 'At least one preferred location is required'
     if (!isEdit && !pendingResumeFile) errs.resume = 'Resume is required'
 
-    // Education: all fields required for every entry
+    // Education: all fields required + minimum duration per degree type
     education.forEach((edu, i) => {
       if (!edu.degree) errs[`edu_${i}_degree`] = 'Degree is required'
       if (!edu.field_of_study?.trim()) errs[`edu_${i}_field_of_study`] = 'Specialization is required'
@@ -389,10 +404,18 @@ const CandidateForm = () => {
         errs[`edu_${i}_to_year`] = 'To year is required'
       } else if (edu.from_year && Number(edu.to_year) < Number(edu.from_year)) {
         errs[`edu_${i}_to_year`] = 'To year must be after From year'
+      } else if (edu.from_year && edu.degree) {
+        const minYears = EDU_MIN_YEARS[edu.degree]
+        if (minYears !== undefined) {
+          const duration = Number(edu.to_year) - Number(edu.from_year)
+          if (duration < minYears) {
+            errs[`edu_${i}_to_year`] = `${edu.degree} requires a minimum of ${minYears} year${minYears > 1 ? 's' : ''} of study.`
+          }
+        }
       }
     })
 
-    // Work experience: all fields required for every entry
+    // Work experience: all fields required + start date must be after candidate turns 18
     if (!isFresher) {
       workExperience.forEach((exp, i) => {
         if (!exp.company_name?.trim()) errs[`exp_${i}_company_name`] = 'Company name is required'
@@ -401,6 +424,13 @@ const CandidateForm = () => {
           errs[`exp_${i}_start_date`] = 'Start date is required'
         } else if (new Date(exp.start_date) > new Date()) {
           errs[`exp_${i}_start_date`] = 'Start date cannot be in the future'
+        } else if (dobDate) {
+          // Enforce: work start date >= DOB + 18 years
+          const minWorkDate = new Date(dobDate)
+          minWorkDate.setFullYear(minWorkDate.getFullYear() + 18)
+          if (new Date(exp.start_date) < minWorkDate) {
+            errs[`exp_${i}_start_date`] = 'Work experience cannot start before the candidate reaches 18 years of age.'
+          }
         }
         if (!exp.is_current && !exp.end_date) {
           errs[`exp_${i}_end_date`] = 'End date is required'
@@ -510,25 +540,47 @@ const CandidateForm = () => {
         tags: []
       }
 
-      if (isEdit) {
-        await candidateService.updateCandidate(id, payload)
-        toast.success('Candidate updated successfully')
-      } else {
-        const res = await candidateService.createCandidate(payload)
-        const newId = res.data?.id || res.data?._id
-        if (pendingResumeFile && newId) {
-          try {
-            await candidateService.uploadResume(newId, pendingResumeFile)
-          } catch {
-            toast.success('Candidate created successfully')
-            toast.error('Resume upload failed — you can upload it from the edit form')
-            navigate('/candidates')
-            return
-          }
-        }
-        toast.success('Candidate created successfully')
+      const parseError = (error) => {
+        const detail = error?.response?.data?.detail
+        if (Array.isArray(detail)) return detail.map(d => d.msg?.replace('Value error, ', '') || JSON.stringify(d)).join('; ')
+        if (typeof detail === 'string') return detail
+        return error?.response?.data?.message || error?.message || 'Failed to save candidate'
       }
 
+      if (isEdit) {
+        try {
+          await candidateService.updateCandidate(id, payload)
+          toast.success('Candidate updated successfully')
+          navigate('/candidates')
+        } catch (error) {
+          console.error('Candidate update error:', error?.response?.data ?? error)
+          toast.error(parseError(error))
+        }
+        return
+      }
+
+      // Create flow: first save the candidate, then upload resume separately
+      let createRes
+      try {
+        createRes = await candidateService.createCandidate(payload)
+      } catch (error) {
+        console.error('Candidate creation error:', error?.response?.data ?? error)
+        toast.error(parseError(error))
+        return
+      }
+
+      const newId = createRes?.data?.id || createRes?.data?._id
+
+      // Upload resume in a separate try-catch so a failed upload never hides a successful create
+      if (pendingResumeFile && newId) {
+        try {
+          await candidateService.uploadResume(newId, pendingResumeFile)
+        } catch {
+          toast.error('Resume upload failed — you can upload it from the Edit Candidate page')
+        }
+      }
+
+      toast.success('Candidate created successfully')
       navigate('/candidates')
     } catch (error) {
       console.error('Candidate save error:', error?.response?.data ?? error)
