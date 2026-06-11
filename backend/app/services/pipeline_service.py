@@ -68,6 +68,8 @@ class PipelineService:
             "name": pipeline_data.name,
             "description": pipeline_data.description,
             "job_id": pipeline_data.job_id,
+            "client_id": pipeline_data.client_id,
+            "client_name": pipeline_data.client_name,
             "stages": stages,
             "is_default": pipeline_data.is_default,
             "created_by": created_by,
@@ -133,8 +135,10 @@ class PipelineService:
                 name=d["name"],
                 description=d.get("description"),
                 job_id=d.get("job_id"),
+                client_id=d.get("client_id"),
                 job_title=job_map.get(d.get("job_id") or "", {}).get("title"),
-                client_name=job_map.get(d.get("job_id") or "", {}).get("client_name"),
+                # Pipeline's own client_name takes priority; fall back to job denormalization
+                client_name=d.get("client_name") or job_map.get(d.get("job_id") or "", {}).get("client_name"),
                 stage_count=len(d.get("stages", [])),
                 is_default=d.get("is_default", False),
                 created_at=d["created_at"],
@@ -174,6 +178,10 @@ class PipelineService:
             update_dict["description"] = update_data.description
         if update_data.job_id is not None:
             update_dict["job_id"] = update_data.job_id
+        if update_data.client_id is not None:
+            update_dict["client_id"] = update_data.client_id
+        if update_data.client_name is not None:
+            update_dict["client_name"] = update_data.client_name
         if update_data.is_default is not None:
             if update_data.is_default:
                 await collection.update_many(
@@ -251,6 +259,8 @@ class PipelineService:
             name=doc["name"],
             description=doc.get("description"),
             job_id=doc.get("job_id"),
+            client_id=doc.get("client_id"),
+            client_name=doc.get("client_name"),
             stages=stages,
             is_default=doc.get("is_default", False),
             created_at=doc["created_at"],

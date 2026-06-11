@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import pipelineService from '../../services/pipelineService'
+import clientService from '../../services/clientService'
 import ModalPortal from '../common/ModalPortal'
 
 const STAGE_MODES = [
@@ -203,19 +204,30 @@ export default function EditPipelineModal({ pipelineId, onClose, onUpdated }) {
   const [description, setDesc]    = useState('')
   const [isDefault, setIsDefault] = useState(false)
   const [stages, setStages]       = useState([])
-  const [nameError, setNameError]   = useState('')
+  const [nameError, setNameError]     = useState('')
+  const [clientError, setClientError] = useState('')
   const [stagesError, setStagesError] = useState('')
 
-  // Fetch full pipeline details on mount
+  const [clients, setClients]       = useState([])
+  const [clientId, setClientId]     = useState('')
+  const [clientName, setClientName] = useState('')
+
+  // Fetch pipeline details and clients list in parallel
   useEffect(() => {
     let cancelled = false
     const load = async () => {
       try {
-        const pipeline = await pipelineService.getPipeline(pipelineId)
+        const [pipeline, clientsRes] = await Promise.all([
+          pipelineService.getPipeline(pipelineId),
+          clientService.getClientsDropdown(),
+        ])
         if (cancelled) return
+        setClients(clientsRes.data || [])
         setName(pipeline.name || '')
         setDesc(pipeline.description || '')
         setIsDefault(pipeline.is_default || false)
+        setClientId(pipeline.client_id || '')
+        setClientName(pipeline.client_name || '')
         const sorted = [...(pipeline.stages || [])].sort((a, b) => a.order - b.order)
         setStages(sorted.map(s => ({
           _key:              Math.random().toString(36).slice(2),
@@ -271,6 +283,9 @@ export default function EditPipelineModal({ pipelineId, onClose, onUpdated }) {
     if (!name.trim()) { setNameError('Pipeline name is required'); valid = false }
     else setNameError('')
 
+    if (!clientId) { setClientError('Client is required'); valid = false }
+    else setClientError('')
+
     if (stages.length === 0) {
       setStagesError('Add at least one stage'); valid = false
     } else if (stages.some(s => !s.stage_name.trim())) {
@@ -287,6 +302,8 @@ export default function EditPipelineModal({ pipelineId, onClose, onUpdated }) {
         name:        name.trim(),
         description: description.trim() || null,
         is_default:  isDefault,
+        client_id:   clientId,
+        client_name: clientName,
         stages:      stages.map((s, i) => ({
           stage_name:        s.stage_name.trim(),
           order:             i + 1,
@@ -401,6 +418,32 @@ export default function EditPipelineModal({ pipelineId, onClose, onUpdated }) {
                   {nameError && (
                     <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
                       <AlertCircle className="w-3 h-3" /> {nameError}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
+                    Client <span className="text-red-400">*</span>
+                  </label>
+                  <select
+                    value={clientId}
+                    onChange={e => {
+                      const opt = clients.find(c => c.value === e.target.value)
+                      setClientId(e.target.value)
+                      setClientName(opt?.label || '')
+                      if (e.target.value) setClientError('')
+                    }}
+                    className={`input w-full text-sm ${clientError ? 'border-red-400' : ''}`}
+                  >
+                    <option value="">Select a client…</option>
+                    {clients.map(c => (
+                      <option key={c.value} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                  {clientError && (
+                    <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" /> {clientError}
                     </p>
                   )}
                 </div>

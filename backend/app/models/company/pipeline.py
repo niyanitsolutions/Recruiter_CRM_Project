@@ -53,6 +53,8 @@ class PipelineModel(BaseModel):
     description: Optional[str] = None
     job_id: Optional[str] = None      # If attached to a specific job
     tenant_id: Optional[str] = None   # For multi-tenant isolation
+    client_id: Optional[str] = None   # Direct client association
+    client_name: Optional[str] = None # Denormalized for fast reads
 
     stages: List[PipelineStage] = Field(default_factory=list)
 
@@ -75,6 +77,8 @@ class PipelineCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=200)
     description: Optional[str] = None
     job_id: Optional[str] = None
+    client_id: Optional[str] = None
+    client_name: Optional[str] = None
     stages: List[PipelineStageCreate] = Field(default_factory=list)
     is_default: bool = Field(default=False)
 
@@ -84,6 +88,8 @@ class PipelineUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=200)
     description: Optional[str] = None
     job_id: Optional[str] = None
+    client_id: Optional[str] = None
+    client_name: Optional[str] = None
     stages: Optional[List[PipelineStageCreate]] = None
     is_default: Optional[bool] = None
 
@@ -94,6 +100,8 @@ class PipelineResponse(BaseModel):
     name: str
     description: Optional[str]
     job_id: Optional[str]
+    client_id: Optional[str] = None
+    client_name: Optional[str] = None
     stages: List[PipelineStage]
     is_default: bool
     created_at: datetime
@@ -106,8 +114,9 @@ class PipelineListResponse(BaseModel):
     name: str
     description: Optional[str]
     job_id: Optional[str]
+    client_id: Optional[str] = None
     job_title: Optional[str] = None     # denormalized from jobs collection
-    client_name: Optional[str] = None   # denormalized from jobs collection
+    client_name: Optional[str] = None   # direct field, falls back to job denormalization
     stage_count: int = 0
     is_default: bool
     created_at: datetime

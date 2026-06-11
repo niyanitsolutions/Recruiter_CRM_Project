@@ -9,7 +9,7 @@
  *                             the parent can append it to its list and
  *                             auto-select it.
  */
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import {
   X, Plus, Trash2, ChevronUp, ChevronDown,
   GitBranch, Clock, Video, Phone, Users,
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import pipelineService from '../../services/pipelineService'
+import clientService from '../../services/clientService'
 import ModalPortal from '../common/ModalPortal'
 
 // ── Stage defaults ────────────────────────────────────────────────────────────
@@ -235,13 +236,26 @@ function StageCard({ stage, index, total, onChange, onMove, onRemove }) {
 // ── Main Modal ────────────────────────────────────────────────────────────────
 
 export default function CreatePipelineModal({ onClose, onCreated }) {
-  const [saving, setSaving]   = useState(false)
-  const [name, setName]       = useState('')
-  const [description, setDesc] = useState('')
+  const [saving, setSaving]       = useState(false)
+  const [name, setName]           = useState('')
+  const [description, setDesc]    = useState('')
   const [isDefault, setIsDefault] = useState(false)
-  const [stages, setStages]   = useState([makeStage('Resume Screening', 1)])
-  const [nameError, setNameError] = useState('')
+  const [stages, setStages]       = useState([makeStage('Resume Screening', 1)])
+  const [nameError, setNameError]     = useState('')
+  const [clientError, setClientError] = useState('')
   const [stagesError, setStagesError] = useState('')
+
+  const [clients, setClients]       = useState([])
+  const [clientsLoading, setClientsLoading] = useState(true)
+  const [clientId, setClientId]     = useState('')
+  const [clientName, setClientName] = useState('')
+
+  useEffect(() => {
+    clientService.getClientsDropdown()
+      .then(res => setClients(res.data || []))
+      .catch(() => {})
+      .finally(() => setClientsLoading(false))
+  }, [])
 
   // ── Stage CRUD helpers ──────────────────────────────────────────────────
 
@@ -289,6 +303,9 @@ export default function CreatePipelineModal({ onClose, onCreated }) {
     if (!name.trim()) { setNameError('Pipeline name is required'); valid = false }
     else setNameError('')
 
+    if (!clientId) { setClientError('Client is required'); valid = false }
+    else setClientError('')
+
     const emptyStage = stages.find(s => !s.stage_name.trim())
     if (stages.length === 0) {
       setStagesError('Add at least one stage')
@@ -308,6 +325,8 @@ export default function CreatePipelineModal({ onClose, onCreated }) {
         name:        name.trim(),
         description: description.trim() || null,
         is_default:  isDefault,
+        client_id:   clientId,
+        client_name: clientName,
         stages:      stages.map((s, i) => ({
           stage_name:        s.stage_name.trim(),
           order:             i + 1,
@@ -419,6 +438,33 @@ export default function CreatePipelineModal({ onClose, onCreated }) {
                 {nameError && (
                   <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" /> {nameError}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
+                  Client <span className="text-red-400">*</span>
+                </label>
+                <select
+                  value={clientId}
+                  onChange={e => {
+                    const opt = clients.find(c => c.value === e.target.value)
+                    setClientId(e.target.value)
+                    setClientName(opt?.label || '')
+                    if (e.target.value) setClientError('')
+                  }}
+                  disabled={clientsLoading}
+                  className={`input w-full text-sm ${clientError ? 'border-red-400' : ''}`}
+                >
+                  <option value="">{clientsLoading ? 'Loading clients…' : 'Select a client…'}</option>
+                  {clients.map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+                {clientError && (
+                  <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" /> {clientError}
                   </p>
                 )}
               </div>
