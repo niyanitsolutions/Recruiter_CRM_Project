@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Briefcase, ArrowLeft, Save, Plus, Trash2, ChevronDown, GitBranch, CheckCircle2, X } from 'lucide-react'
+import { Briefcase, ArrowLeft, Save, Plus, Trash2, ChevronDown, GitBranch, CheckCircle2, X, Pencil } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import jobService from '../../services/jobService'
 import clientService from '../../services/clientService'
 import pipelineService from '../../services/pipelineService'
 import CreatePipelineModal from '../../components/pipeline/CreatePipelineModal'
+import EditPipelineModal from '../../components/pipeline/EditPipelineModal'
 
 const JobForm = () => {
   const navigate = useNavigate()
@@ -58,6 +59,7 @@ const JobForm = () => {
   const [newMandatorySkill, setNewMandatorySkill] = useState('')
   const [newOptionalSkill, setNewOptionalSkill] = useState('')
   const [showPipelineModal, setShowPipelineModal] = useState(false)
+  const [showEditPipelineModal, setShowEditPipelineModal] = useState(false)
 
   useEffect(() => {
     loadDropdowns()
@@ -140,6 +142,18 @@ const JobForm = () => {
       [name]: type === 'checkbox' ? checked : value
     }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: undefined }))
+  }
+
+  const handleDeletePipeline = async (pipeline) => {
+    if (!window.confirm(`Delete pipeline "${pipeline.job_title || pipeline.name}"?\n\nThis cannot be undone.`)) return
+    try {
+      await pipelineService.deletePipeline(pipeline.id)
+      setPipelines(prev => prev.filter(p => p.id !== pipeline.id))
+      setFormData(f => ({ ...f, pipeline_id: '' }))
+      toast.success('Pipeline deleted')
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to delete pipeline')
+    }
   }
 
   const validate = () => {
@@ -684,19 +698,52 @@ const JobForm = () => {
                   {formData.pipeline_id && (() => {
                     const sel = pipelines.find(p => p.id === formData.pipeline_id)
                     return sel ? (
-                      <div className="flex items-center justify-between px-3 py-1.5 bg-accent/5">
-                        <div className="flex items-center gap-2 text-xs text-surface-500">
-                          <GitBranch className="w-3.5 h-3.5 text-accent" />
-                          <span>{sel.stage_count ?? 0} stages</span>
-                          {sel.is_default && <span className="px-1.5 py-0.5 rounded-full bg-accent/10 text-accent font-medium">Default</span>}
+                      <div className="px-3 py-2.5 bg-accent/5 space-y-1.5">
+                        {/* Name + clear */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <GitBranch className="w-3.5 h-3.5 text-accent flex-shrink-0" />
+                            <span className="text-sm font-medium text-surface-800 truncate">
+                              {sel.job_title || sel.name}{sel.client_name ? ` — ${sel.client_name}` : ''}
+                            </span>
+                            {sel.is_default && (
+                              <span className="px-1.5 py-0.5 rounded-full bg-accent/10 text-accent text-xs font-medium flex-shrink-0">Default</span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setFormData(f => ({ ...f, pipeline_id: '' }))}
+                            className="text-surface-400 hover:text-red-500 transition-colors flex-shrink-0"
+                            title="Clear selection"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setFormData(f => ({ ...f, pipeline_id: '' }))}
-                          className="text-surface-400 hover:text-red-500 transition-colors"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Client + stages meta */}
+                        <div className="flex items-center gap-3 pl-5 text-xs text-surface-500">
+                          {sel.client_name && <span>Client: <span className="font-medium text-surface-700">{sel.client_name}</span></span>}
+                          <span>Stages: <span className="font-medium text-surface-700">{sel.stage_count ?? 0}</span></span>
+                        </div>
+                        {/* Edit / Delete */}
+                        <div className="flex items-center gap-2 pl-5">
+                          <button
+                            type="button"
+                            onClick={() => setShowEditPipelineModal(true)}
+                            className="flex items-center gap-1 text-xs font-medium text-accent hover:text-accent/80 transition-colors"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            Edit Pipeline
+                          </button>
+                          <span className="text-surface-300">|</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePipeline(sel)}
+                            className="flex items-center gap-1 text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Delete Pipeline
+                          </button>
+                        </div>
                       </div>
                     ) : null
                   })()}
@@ -940,6 +987,21 @@ const JobForm = () => {
             setPipelines(prev => [...prev, newPipeline])
             setFormData(f => ({ ...f, pipeline_id: newPipeline.id || newPipeline._id || '' }))
             setShowPipelineModal(false)
+          }}
+        />
+      )}
+
+      {showEditPipelineModal && formData.pipeline_id && (
+        <EditPipelineModal
+          pipelineId={formData.pipeline_id}
+          onClose={() => setShowEditPipelineModal(false)}
+          onUpdated={async () => {
+            // Refresh pipelines list so dropdown + info row show updated data
+            try {
+              const res = await pipelineService.getPipelines({ page_size: 100 })
+              setPipelines(res.data || [])
+            } catch { /* ignore */ }
+            setShowEditPipelineModal(false)
           }}
         />
       )}
