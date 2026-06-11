@@ -491,12 +491,18 @@ async def upload_candidate_resume(
     _: bool = Depends(require_permissions(["candidates:edit"]))
 ):
     """Upload or replace a candidate's resume (PDF, DOC, DOCX — max 5 MB)"""
-    candidate = await CandidateService.upload_resume(
-        db=db,
-        candidate_id=candidate_id,
-        file=file,
-        updated_by=current_user["id"]
-    )
+    try:
+        candidate = await CandidateService.upload_resume(
+            db=db,
+            candidate_id=candidate_id,
+            file=file,
+            updated_by=current_user["id"]
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Resume upload failed for candidate %s: %s", candidate_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to upload resume. Please try again.")
     return {"success": True, "message": "Resume uploaded successfully", "data": candidate}
 
 

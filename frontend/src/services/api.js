@@ -12,6 +12,11 @@ api.interceptors.request.use(
   (config) => {
     const token = getToken()
     if (token) config.headers.Authorization = `Bearer ${token}`
+    // For multipart uploads: remove the instance-level Content-Type default so
+    // the browser XHR can set multipart/form-data with the correct boundary.
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type']
+    }
     return config
   },
   (error) => Promise.reject(error)
