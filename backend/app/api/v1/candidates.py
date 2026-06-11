@@ -194,7 +194,7 @@ async def create_candidate(
             detail=f"Failed to create candidate: {exc}"
         )
 
-    logger.info("Notification triggered: candidate_created id=%s by user=%s", candidate.get("id"), current_user["id"])
+    logger.info("Notification triggered: candidate_created id=%s by user=%s", candidate.id, current_user["id"])
     try:
         await NotificationService(db).create_notification(
             data=NotificationCreate(
