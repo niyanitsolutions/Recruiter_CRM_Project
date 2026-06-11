@@ -47,6 +47,7 @@ const InterviewSettings = () => {
   const [selectedJobId, setSelectedJobId] = useState('')
   const [numRounds, setNumRounds] = useState(3)
   const [rounds, setRounds] = useState([blankRound(1), blankRound(2), blankRound(3)])
+  const [pipelineName, setPipelineName] = useState('')
   const [loadingJobs, setLoadingJobs] = useState(false)
   const [loadingPipeline, setLoadingPipeline] = useState(false)
   const [existingPipelineId, setExistingPipelineId] = useState(null)
@@ -71,6 +72,7 @@ const InterviewSettings = () => {
     // Reset form state
     setFormError('')
     setExistingPipelineId(null)
+    setPipelineName('')
     setSelectedClientId('')
     setSelectedJobId('')
     setFilteredJobs([])
@@ -92,6 +94,7 @@ const InterviewSettings = () => {
       // Editing existing: load full pipeline details
       const p = await pipelineService.getPipeline(pipeline.id)
       setExistingPipelineId(p.id || pipeline.id)
+      setPipelineName(p.name || pipeline.name || '')
 
       // Load stages as rounds
       const stages = [...(p.stages || [])].sort((a, b) => a.order - b.order)
@@ -206,6 +209,7 @@ const InterviewSettings = () => {
 
   // ─── Save ─────────────────────────────────────────────────────────────────────
   const handleSave = async () => {
+    if (!pipelineName.trim()) { setFormError('Pipeline name is required'); return }
     if (!selectedJobId) { setFormError('Please select a job'); return }
     if (rounds.some(r => !r.stage_name.trim())) { setFormError('All rounds must have a name'); return }
 
@@ -224,19 +228,16 @@ const InterviewSettings = () => {
         auto_reject: r.auto_reject,
       }))
 
-      const job = filteredJobs.find(j => j.id === selectedJobId)
-      const pipelineName = job ? `${job.title} Pipeline` : 'Interview Pipeline'
-
       if (existingPipelineId) {
         await pipelineService.updatePipeline(existingPipelineId, {
-          name: pipelineName,
+          name: pipelineName.trim(),
           stages,
           job_id: selectedJobId,
         })
         toast.success('Pipeline updated successfully')
       } else {
         await pipelineService.createPipeline({
-          name: pipelineName,
+          name: pipelineName.trim(),
           job_id: selectedJobId,
           stages,
           is_default: false,
@@ -303,8 +304,7 @@ const InterviewSettings = () => {
         <table className="w-full">
           <thead className="bg-surface-50 border-b border-surface-100">
             <tr>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Company</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Job</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Pipeline</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Total Rounds</th>
               <th className="text-right px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Actions</th>
             </tr>
@@ -312,14 +312,14 @@ const InterviewSettings = () => {
           <tbody className="divide-y divide-surface-100">
             {loading ? (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-surface-500">
+                <td colSpan={3} className="px-6 py-8 text-center text-surface-500">
                   <div className="animate-spin w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full mx-auto mb-2" />
                   Loading pipelines...
                 </td>
               </tr>
             ) : pipelines.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-6 py-12 text-center">
+                <td colSpan={3} className="px-6 py-12 text-center">
                   <SlidersHorizontal className="w-10 h-10 text-surface-300 mx-auto mb-3" />
                   <p className="text-surface-500 font-medium">No pipelines configured</p>
                   <p className="text-surface-400 text-sm mt-1">
@@ -330,11 +330,10 @@ const InterviewSettings = () => {
             ) : (
               pipelines.map(p => (
                 <tr key={p.id} className="hover:bg-surface-50 transition-colors">
-                  <td className="px-6 py-4 text-sm text-surface-700">
-                    {p.client_name || <span className="text-surface-400 italic">—</span>}
-                  </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm font-medium text-surface-900">{p.job_title || p.name}</p>
+                    <p className="text-sm font-medium text-surface-900">
+                      {p.job_title || p.name}{p.client_name ? ` — ${p.client_name}` : ''}
+                    </p>
                     {p.is_default && (
                       <span className="text-xs text-primary-600 font-medium">Default pipeline</span>
                     )}
@@ -413,6 +412,20 @@ const InterviewSettings = () => {
                     {formError}
                   </div>
                 )}
+
+                {/* Pipeline Name */}
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 mb-1">
+                    Pipeline Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={pipelineName}
+                    onChange={e => setPipelineName(e.target.value)}
+                    placeholder="e.g. Software Engineer Pipeline"
+                    className="w-full border border-surface-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
 
                 {/* Company */}
                 <div>

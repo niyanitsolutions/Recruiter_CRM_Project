@@ -147,7 +147,7 @@ async def create_job(
             created_by_name=current_user.get("full_name", ""),
             user_name=current_user.get("full_name", ""),
         )
-        logger.info("Notification triggered: job_created id=%s by user=%s", job.get("id"), current_user["id"])
+        logger.info("Notification triggered: job_created id=%s by user=%s", job.id, current_user["id"])
         try:
             await NotificationService(db).create_notification(
                 data=NotificationCreate(

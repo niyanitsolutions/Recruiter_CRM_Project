@@ -674,7 +674,7 @@ const JobForm = () => {
                       <option value="">Select a pipeline…</option>
                       {pipelines.map(p => (
                         <option key={p.id} value={p.id}>
-                          {p.name}{p.is_default ? ' (Default)' : ''}
+                          {p.job_title || p.name}{p.client_name ? ` - ${p.client_name}` : ''}{p.is_default ? ' (Default)' : ''}
                         </option>
                       ))}
                     </select>
