@@ -436,42 +436,24 @@ class JobService:
     
     @staticmethod
     async def check_candidate_eligibility(db: AsyncIOMotorDatabase, job_id: str, candidate_id: str) -> Dict[str, Any]:
-        """Check if candidate meets job eligibility criteria"""
-        jobs_collection = db[JobService.COLLECTION]
-        candidates_collection = db["candidates"]
-        
-        job = await jobs_collection.find_one({"_id": job_id, "is_deleted": False})
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        
-        candidate = await candidates_collection.find_one({"_id": candidate_id, "is_deleted": False})
-        if not candidate:
-            raise HTTPException(status_code=404, detail="Candidate not found")
-        
-        eligibility = job.get("eligibility")
-        if not eligibility:
-            return {"eligible": True, "score": 100, "details": "No eligibility criteria defined"}
-        
-        score = 100
-        issues = []
-        
-        if eligibility.get("min_experience_years"):
-            cand_exp = candidate.get("total_experience_years", 0)
-            if cand_exp < eligibility["min_experience_years"]:
-                score -= 30
-                issues.append(f"Experience {cand_exp} years, required {eligibility['min_experience_years']}+ years")
-        
-        if eligibility.get("mandatory_skills"):
-            cand_skills = set([s.lower() for s in candidate.get("skill_tags", [])])
-            required_skills = set([s.lower() for s in eligibility["mandatory_skills"]])
-            missing = required_skills - cand_skills
-            if missing:
-                score -= 10 * len(missing)
-                issues.append(f"Missing mandatory skills: {', '.join(missing)}")
-        
-        score = max(0, score)
-        
-        return {"eligible": score >= 50, "score": score, "issues": issues, "details": "Eligible" if score >= 50 else f"Not eligible: {'; '.join(issues)}"}
+        """Check if candidate meets job eligibility criteria using the central matching engine."""
+        from app.services.matching_service import MatchingService
+        ev = await MatchingService.evaluate(db, job_id, candidate_id)
+        return {
+            "eligible": ev["eligible"],
+            "score": ev["final_score"],
+            "issues": ev["rejection_reasons"],
+            "details": "Eligible" if ev["eligible"] else "; ".join(ev["rejection_reasons"]),
+            # Extended fields for callers that need the full breakdown
+            "final_score": ev["final_score"],
+            "matched_skills": ev["matched_skills"],
+            "missing_skills": ev["missing_skills"],
+            "skill_status": ev["skill_status"],
+            "experience_status": ev["experience_status"],
+            "percentage_status": ev["percentage_status"],
+            "location_status": ev["location_status"],
+            "rejection_reasons": ev["rejection_reasons"],
+        }
     
     @staticmethod
     async def find_matching_candidates(db: AsyncIOMotorDatabase, job_id: str, limit: int = 20) -> List[Dict[str, Any]]:
@@ -498,14 +480,14 @@ class JobService:
         results = []
         for cand in candidates:
             eligibility_result = await JobService.check_candidate_eligibility(db, job_id, cand["_id"])
-            if eligibility_result["score"] >= 50:
+            if eligibility_result.get("eligible", False):
                 results.append({
                     "candidate_id": cand["_id"], "name": cand.get("full_name"), "email": cand["email"],
                     "experience": cand.get("total_experience_years"), "current_ctc": cand.get("current_ctc"),
                     "expected_ctc": cand.get("expected_ctc"), "notice_period": cand.get("notice_period"),
                     "skills": cand.get("skill_tags", [])[:5], "score": eligibility_result["score"]
                 })
-        
+
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:limit]
     

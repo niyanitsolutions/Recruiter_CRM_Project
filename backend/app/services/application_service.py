@@ -83,42 +83,18 @@ class ApplicationService:
             partner = await users_collection.find_one({"_id": partner_id})
             partner_name = partner.get("full_name") if partner else None
         
-        # Calculate eligibility score
-        from app.services.job_service import JobService
-        eligibility_result = await JobService.check_candidate_eligibility(
-            db, application_data.job_id, application_data.candidate_id
-        )
+        # Run centralized evaluation — single source of truth for all modules
+        from app.services.matching_service import MatchingService
+        evaluation = MatchingService.evaluate_dicts(job, candidate)
 
-        # ---- ATS Eligibility Gate ----
+        # ---- ATS Eligibility Gate (uses centralized evaluation only) ----
         initial_status = ApplicationStatus.APPLIED.value
         rejection_reason = None
         rejected_at_val = None
         rejected_by_val = None
 
         if not getattr(application_data, "bypass_eligibility", False):
-            reasons = []
-            job_min_pct = job.get("min_percentage")
-            if job_min_pct is not None:
-                cand_pct = candidate.get("percentage") or candidate.get("cgpa")
-                if cand_pct is None or float(cand_pct) < float(job_min_pct):
-                    reasons.append(f"Percentage low (required {job_min_pct}%)")
-
-            elig = job.get("eligibility") or {}
-            job_skills = [s.lower() for s in elig.get("required_skills", [])]
-            if job_skills:
-                cand_skill_tags = [s.lower() for s in candidate.get("skill_tags", [])]
-                missing = [s for s in job_skills if s not in cand_skill_tags]
-                if missing:
-                    reasons.append(f"Skill mismatch: missing {', '.join(missing)}")
-
-            min_exp = elig.get("min_experience_years")
-            max_exp = elig.get("max_experience_years")
-            cand_exp = float(candidate.get("total_experience_years") or 0)
-            if min_exp is not None and cand_exp < float(min_exp):
-                reasons.append(f"Experience not matching (min {min_exp} yrs required)")
-            if max_exp is not None and cand_exp > float(max_exp):
-                reasons.append(f"Experience not matching (max {max_exp} yrs allowed)")
-
+            reasons = evaluation["rejection_reasons"]
             if reasons:
                 initial_status = ApplicationStatus.REJECTED.value
                 rejection_reason = "; ".join(reasons)
@@ -158,8 +134,8 @@ class ApplicationService:
                 "changed_at": datetime.now(timezone.utc),
                 "remarks": rejection_reason or "Application created"
             }],
-            "eligibility_score": eligibility_result.get("score"),
-            "eligibility_details": eligibility_result,
+            "eligibility_score": evaluation.get("final_score"),
+            "eligibility_details": evaluation,
             "notes": application_data.notes,
             "applied_at": datetime.now(timezone.utc),
             "created_by": created_by,
@@ -171,6 +147,7 @@ class ApplicationService:
 
         # Update job stats and candidate tracking (non-critical — don't fail the response)
         try:
+            from app.services.job_service import JobService
             await JobService.update_job_stats(db, application_data.job_id)
         except Exception:
             pass

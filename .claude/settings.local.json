@@ -124,11 +124,22 @@
       "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\\\\hrm\\\\document-center\" -Recurse | Where-Object {$_.PSIsContainer} | Select-Object FullName)",
       "Bash(npx --no-install react-scripts --version)",
       "Bash(awk '{print $NF}')",
-      "Bash(dir \"d:\\\\crm-project\\\\frontend\\\\src\\\\components\\\\layout\" /B)"
+      "Bash(dir \"d:\\\\crm-project\\\\frontend\\\\src\\\\components\\\\layout\" /B)",
+      "Bash(find \"d:\\\\crm-project\\\\frontend\\\\src\" -type d -name \"*recruitment*\" -o -type d -name \"*job*\" -o -type d -name \"*candidate*\" -o -type d -name \"*application*\" 2>nul)",
+      "Bash(find \"d:\\\\crm-project\\\\frontend\\\\src\\\\pages\\\\recruitment\" -type f 2>nul)",
+      "Bash(find \"d:\\\\crm-project\\\\frontend\\\\src\\\\utils\" -type f -name \"*.js\" 2>nul | head -20)",
+      "Bash(find \"d:\\\\crm-project\\\\frontend\\\\src\\\\constants\" -type f -name \"*.js\" 2>nul)",
+      "Bash(find \"d:\\\\crm-project\\\\frontend\\\\src\\\\hooks\" -type f -name \"*.js\" 2>nul | head -20)",
+      "Bash(find \"d:\\\\crm-project\\\\backend\\\\app\\\\utils\" -type f -name \"*.py\" 2>nul)",
+      "Bash(find \"d:\\\\crm-project\\\\backend\\\\app\\\\schemas\" -type f -name \"*.py\" 2>nul | head -20)",
+      "Bash(find \"d:\\\\crm-project\\\\backend\\\\app\\\\core\" -type f -name \"*.py\" 2>nul)",
+      "Bash(find \"d:\\\\crm-project\\\\backend\\\\app\\\\models\\\\company\" -name \"*.py\" -type f | xargs grep -l \"matching\\\\|score\\\\|eligib\" 2>nul)",
+      "Bash(find \"d:\\\\crm-project\\\\frontend\\\\src\" -name \"*.jsx\" -o -name \"*.js\" | xargs grep -l \"matching\\\\|MatchingService\" 2>nul | grep -v node_modules)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",
-      "d:\\crm-project\\backend\\migrations"
+      "d:\\crm-project\\backend\\migrations",
+      "d:\\crm-project"
     ]
   }
 }

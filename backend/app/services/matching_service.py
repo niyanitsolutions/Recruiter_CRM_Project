@@ -1,6 +1,11 @@
 """
 Matching Service — Naukri-style ATS scoring engine
 Computes candidate-job match scores and stores in matching_results collection.
+
+Single source of truth for ALL candidate-job evaluation:
+  evaluate_dicts(job, candidate) → centralized evaluation result
+  evaluate(db, job_id, candidate_id) → DB-fetching wrapper
+  run_matching(db, job_id) → batch evaluation + storage for all candidates
 """
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
@@ -16,10 +21,9 @@ class MatchingService:
 
     @staticmethod
     def _skill_score(job: dict, candidate: dict) -> dict:
-        """Skills matching: mandatory skills from eligibility criteria."""
+        """Skills matching: combines mandatory_skills + required_skills from eligibility."""
         eligibility = job.get("eligibility") or {}
         required = [s.lower().strip() for s in (eligibility.get("mandatory_skills") or [])]
-        # Also include top-level required_skills if present
         required += [s.lower().strip() for s in (eligibility.get("required_skills") or [])]
         required = list(dict.fromkeys(required))  # deduplicate, preserve order
 
@@ -35,11 +39,6 @@ class MatchingService:
         cand_skills = set(s.lower().strip() for s in (candidate.get("skill_tags") or []))
         matched = [s for s in required if s in cand_skills]
         missing = [s for s in required if s not in cand_skills]
-
-        # Debug logging
-        print(f"[Matching] Required: {required}")
-        print(f"[Matching] Candidate skills: {sorted(cand_skills)}")
-        print(f"[Matching] Matched: {matched}")
 
         pct = round(len(matched) / len(required) * 100, 1)
 
@@ -119,14 +118,27 @@ class MatchingService:
 
     @staticmethod
     def _percentage_score(job: dict, candidate: dict) -> dict:
-        """Academic percentage matching: candidate % vs job min_percentage."""
+        """Academic percentage matching: candidate % vs job min_percentage.
+
+        Reads candidate percentage from top-level field first, then falls back
+        to the first education entry with a percentage value.
+        """
         min_pct = job.get("min_percentage")
 
         if min_pct is None:
             return {"percentage_status": "No Criteria", "percentage_score": 100}
 
         cand_pct = candidate.get("percentage") or candidate.get("cgpa")
+
+        # Fall back to education array when top-level field is absent
         if cand_pct is None:
+            for edu in (candidate.get("education") or []):
+                if isinstance(edu, dict) and edu.get("percentage") is not None:
+                    cand_pct = edu["percentage"]
+                    break
+
+        if cand_pct is None:
+            # Percentage not on record — treat as neutral (not a disqualifier)
             return {"percentage_status": "Not Provided", "percentage_score": 50}
 
         if float(cand_pct) >= float(min_pct):
@@ -134,7 +146,94 @@ class MatchingService:
 
         return {"percentage_status": "Below Minimum", "percentage_score": 0}
 
-    # ── Public methods ──────────────────────────────────────────────────────
+    # ── Central evaluation ──────────────────────────────────────────────────
+
+    @staticmethod
+    def evaluate_dicts(job: dict, candidate: dict) -> Dict[str, Any]:
+        """
+        THE single evaluation function used by every module.
+
+        Weights: Skills 50%, Location 20%, Experience 20%, Percentage 10%.
+        Eligible = final_score >= 60 AND percentage not "Below Minimum".
+
+        Returns a dict that is stored on applications and reused everywhere.
+        """
+        s = MatchingService._skill_score(job, candidate)
+        l = MatchingService._location_score(job, candidate)
+        e = MatchingService._experience_score(job, candidate)
+        p = MatchingService._percentage_score(job, candidate)
+
+        final_score = round(
+            s["skill_score"] * 0.5
+            + l["location_score"] * 0.2
+            + e["experience_score"] * 0.2
+            + p["percentage_score"] * 0.1
+        )
+
+        # Build rejection reasons only from criteria that actually failed
+        rejection_reasons: List[str] = []
+        if s["missing_skills"]:
+            rejection_reasons.append(f"Missing skills: {', '.join(s['missing_skills'])}")
+        if e["experience_status"] == "Below Minimum":
+            min_exp = (job.get("eligibility") or {}).get("min_experience_years")
+            rejection_reasons.append(
+                f"Experience {e['candidate_exp']}y below minimum {min_exp}y"
+            )
+        if p["percentage_status"] == "Below Minimum":
+            rejection_reasons.append(
+                f"Percentage below required {job.get('min_percentage')}%"
+            )
+        if l["location_status"] == "Not Matched":
+            job_city = job.get("city", "")
+            cand_city = candidate.get("current_city") or candidate.get("city") or "Unknown"
+            rejection_reasons.append(f"Location mismatch: {cand_city} vs {job_city}")
+
+        is_eligible = final_score >= 60 and p["percentage_status"] != "Below Minimum"
+
+        return {
+            # Sub-scores
+            "skills_score": s["skill_score"],
+            "experience_score": e["experience_score"],
+            "education_score": p["percentage_score"],
+            "location_score": l["location_score"],
+            # Statuses
+            "skill_status": s["skill_status"],
+            "skill_match_percent": s["skill_match_percent"],
+            "experience_status": e["experience_status"],
+            "candidate_exp": e["candidate_exp"],
+            "percentage_status": p["percentage_status"],
+            "location_status": l["location_status"],
+            # Skills detail
+            "matched_skills": s["matched_skills"],
+            "missing_skills": s["missing_skills"],
+            # Final verdict
+            "final_score": final_score,
+            "eligible": is_eligible,
+            "rejection_reasons": rejection_reasons,
+            "evaluation_timestamp": datetime.now(timezone.utc).isoformat(),
+            # Backward-compat aliases used by existing callers
+            "score": final_score,
+            "issues": rejection_reasons,
+        }
+
+    @staticmethod
+    async def evaluate(
+        db: AsyncIOMotorDatabase,
+        job_id: str,
+        candidate_id: str,
+    ) -> Dict[str, Any]:
+        """DB-fetching wrapper around evaluate_dicts()."""
+        job = await db.jobs.find_one({"_id": job_id, "is_deleted": False})
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        candidate = await db.candidates.find_one({"_id": candidate_id, "is_deleted": False})
+        if not candidate:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+
+        return MatchingService.evaluate_dicts(job, candidate)
+
+    # ── Batch matching (stores results) ────────────────────────────────────
 
     @staticmethod
     async def run_matching(
@@ -146,6 +245,7 @@ class MatchingService:
         """
         Compute match scores for ALL active candidates against the job.
         Results are stored via delete-then-insert (full refresh per job_id).
+        Uses evaluate_dicts() — same formula as every other module.
         Returns sorted list (highest score first).
         """
         job = await db.jobs.find_one({"_id": job_id, "is_deleted": False})
@@ -160,36 +260,7 @@ class MatchingService:
         now = datetime.now(timezone.utc)
 
         for cand in candidates:
-            s = MatchingService._skill_score(job, cand)
-            l = MatchingService._location_score(job, cand)
-            e = MatchingService._experience_score(job, cand)
-            p = MatchingService._percentage_score(job, cand)
-
-            # Weighted scoring: Skills 50%, Location 20%, Experience 20%, Percentage 10%
-            final_score = round(
-                s["skill_score"] * 0.5 +
-                l["location_score"] * 0.2 +
-                e["experience_score"] * 0.2 +
-                p["percentage_score"] * 0.1
-            )
-
-            # Build human-readable issues list
-            issues = []
-            if s["missing_skills"]:
-                issues.append(f"Missing skills: {', '.join(s['missing_skills'])}")
-            if l["location_status"] == "Not Matched":
-                job_city = job.get("city", "")
-                cand_city = cand.get("current_city") or cand.get("city") or "Unknown"
-                issues.append(f"Location mismatch: {cand_city} vs {job_city}")
-            if e["experience_status"] == "Below Minimum":
-                issues.append(
-                    f"Experience {e['candidate_exp']}y below minimum {job.get('eligibility', {}).get('min_experience_years')}y"
-                )
-            if p["percentage_status"] == "Below Minimum":
-                issues.append(f"Percentage below required {job.get('min_percentage')}%")
-
-            # Eligibility: final_score >= 60 AND percentage not "Below Minimum"
-            is_eligible = final_score >= 60 and p["percentage_status"] != "Below Minimum"
+            ev = MatchingService.evaluate_dicts(job, cand)
 
             doc = {
                 "_id": str(ObjectId()),
@@ -198,21 +269,21 @@ class MatchingService:
                 "candidate_name": cand.get("full_name", ""),
                 "candidate_email": cand.get("email", ""),
                 # Skills
-                "skill_match_percent": s["skill_match_percent"],
-                "skill_status": s["skill_status"],
-                "matched_skills": s["matched_skills"],
-                "missing_skills": s["missing_skills"],
+                "skill_match_percent": ev["skill_match_percent"],
+                "skill_status": ev["skill_status"],
+                "matched_skills": ev["matched_skills"],
+                "missing_skills": ev["missing_skills"],
                 # Location
-                "location_status": l["location_status"],
+                "location_status": ev["location_status"],
                 # Experience
-                "experience_status": e["experience_status"],
-                "candidate_exp": e["candidate_exp"],
+                "experience_status": ev["experience_status"],
+                "candidate_exp": ev["candidate_exp"],
                 # Percentage
-                "percentage_status": p["percentage_status"],
+                "percentage_status": ev["percentage_status"],
                 # Final
-                "final_score": final_score,
-                "eligibility_status": "eligible" if is_eligible else "not_eligible",
-                "issues": issues,
+                "final_score": ev["final_score"],
+                "eligibility_status": "eligible" if ev["eligible"] else "not_eligible",
+                "issues": ev["rejection_reasons"],
                 "computed_at": now,
                 "is_deleted": False,
             }
