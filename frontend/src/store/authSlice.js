@@ -160,6 +160,7 @@ export const login = createAsyncThunk(
             type:         'ACTIVE_SESSION',
             message:      detail.message || 'This account is already active on another device.',
             session_info: detail.session_info || {},
+            company_id:   detail.company_id || detail.session_info?.company_id || null,
           })
         }
       }

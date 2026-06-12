@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, status, Query
 from pydantic import BaseModel
 
 from app.core.database import get_master_db, get_company_db
@@ -225,68 +225,46 @@ class AccessRequestBody(BaseModel):
 
 
 @router.post("/sessions/request-access")
-async def request_access(body: AccessRequestBody):
+async def request_access(body: AccessRequestBody, request: Request):
     """
     Device B received a 409 (active session). Instead of force-logging-in,
     it submits credentials here to create a pending login_request document
     and immediately pushes a real-time notification to Device A via WebSocket.
 
-    Credentials are validated directly against the DB — no fragile error-string
-    parsing of auth_service.login().
+    Uses the same user-lookup path as /auth/login (resolve_login_context) so
+    that target_user_id in login_requests always matches the JWT sub stored in
+    the sessions collection.  This fixes the heartbeat fallback: Device A's
+    heartbeat queries login_requests by auth.user_id (== JWT sub) and will now
+    find the pending request even when the WebSocket push was missed.
 
-    Returns a request_id so Device B can poll / listen for the result.
-    Raises 400 with detail "NO_ACTIVE_SESSION" if the session is already gone
-    (race condition: by the time Device B calls this, the session may have died),
-    allowing Device B to retry a direct login.
+    Returns a request_id so Device B can poll for the result.
+    Raises 400 "NO_ACTIVE_SESSION" if the session died between the 409 and now,
+    allowing Device B to retry a direct login immediately.
     """
-    from app.core.security import verify_password
-    from app.core.database import get_master_db as _master, get_company_db as _company_db
+    from app.core.tenant_resolver import tenant_resolver as _resolver
+    from app.core.security import verify_password as _verify_pw
 
-    master_db = _master()
+    master_db = get_master_db()
     now = datetime.now(timezone.utc)
-    identifier_lower = body.identifier.lower().strip()
 
-    # ── Step 1: Find the local user via global_users + user_company_map ─────
-    gu = await master_db.global_users.find_one({
-        "$or": [
-            {"email":    identifier_lower},
-            {"mobile":   body.identifier},
-            {"username": identifier_lower},
-        ]
-    })
+    # ── Step 1: Resolve user via the same path as /auth/login ───────────────
+    # company_code is the short tenant key (e.g. "abc") forwarded from the
+    # 409 ACTIVE_SESSION response.  When provided it scopes the lookup to a
+    # single tenant (no cross-tenant risk).  When absent the global search
+    # across all tenants is used as a fallback.
+    tenant, user, resolve_error = await _resolver.resolve_login_context(
+        identifier=body.identifier.strip(),
+        company_code=body.company_code,
+    )
 
-    user_id       = None
-    password_hash = None
-
-    if gu and body.company_code:
-        tenant = await master_db.tenants.find_one({"company_id": body.company_code})
-        if tenant:
-            cdb = _company_db(body.company_code)
-            local_user = await cdb.users.find_one({
-                "$or": [{"email": identifier_lower}, {"username": identifier_lower}],
-                "is_deleted": False,
-            })
-            if local_user:
-                user_id       = str(local_user["_id"])
-                password_hash = local_user.get("password_hash", "")
-            elif str(tenant.get("owner", {}).get("_id", "")) == str(gu.get("_id", "")):
-                user_id       = str(gu["_id"])
-                password_hash = tenant.get("owner", {}).get("password_hash", "")
-
-    if not user_id and gu:
-        mapping = await master_db.user_company_map.find_one(
-            {"global_user_id": gu["_id"], "status": "active"}
-        )
-        if mapping:
-            cid = str(mapping.get("company_id", ""))
-            cdb2 = _company_db(cid)
-            lu2  = await cdb2.users.find_one({"_id": str(mapping["local_user_id"])})
-            if lu2:
-                user_id       = str(lu2["_id"])
-                password_hash = lu2.get("password_hash", "")
-
-    if not password_hash or not verify_password(body.password, password_hash):
+    if resolve_error or not user or not tenant:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials.")
+
+    if not _verify_pw(body.password, user.get("password_hash", "")):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials.")
+
+    user_id    = str(user.get("_id") or user.get("id", ""))
+    company_id = tenant.get("company_id", "")
 
     if not user_id:
         raise HTTPException(status_code=400, detail="Could not identify account.")
@@ -298,7 +276,6 @@ async def request_access(body: AccessRequestBody):
         "expires_at": {"$gt": now},
     })
     if not active_session:
-        # Session died between the login attempt and now — let frontend retry login
         raise HTTPException(status_code=400, detail="NO_ACTIVE_SESSION")
 
     last_act = active_session.get("last_activity_at") or active_session.get("created_at")
@@ -310,17 +287,23 @@ async def request_access(body: AccessRequestBody):
     ws_alive = ws_manager.is_connected(user_id)
 
     if not heartbeat_alive and not ws_alive:
-        # Session is stale — backend will auto-clear it on next login attempt
         raise HTTPException(status_code=400, detail="NO_ACTIVE_SESSION")
 
-    # ── Step 3: Create login_request document ────────────────────────────────
-    request_id  = str(uuid.uuid4())
-    device_info = ""
-    ip_address  = ""
+    # ── Step 3: Capture Device B info from the HTTP request ─────────────────
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    device_info   = (request.headers.get("user-agent", "") or "")[:200]
+    ip_address    = (
+        forwarded_for.split(",")[0].strip()
+        if forwarded_for
+        else (request.client.host if request.client else "")
+    )
 
+    # ── Step 4: Create login_request document ───────────────────────────────
+    request_id = str(uuid.uuid4())
     await master_db.login_requests.insert_one({
         "_id":              request_id,
         "target_user_id":   user_id,
+        "company_id":       company_id,
         "requester_device": device_info,
         "requester_ip":     ip_address,
         "status":           "pending",
@@ -329,14 +312,20 @@ async def request_access(body: AccessRequestBody):
         "identifier":       body.identifier,
     })
 
+    # ── Step 5: Push real-time notification to Device A ──────────────────────
     notified = await ws_manager.send_to_user(user_id, {
-        "type":        "login_request",
-        "request_id":  request_id,
-        "device_info": device_info,
-        "ip_address":  ip_address,
+        "type":         "login_request",
+        "request_id":   request_id,
+        "device_info":  device_info,
+        "ip_address":   ip_address,
         "requested_at": now.isoformat(),
-        "message":     "Someone is requesting access to your account from another device.",
+        "message":      "Someone is requesting access to your account from another device.",
     })
+
+    logger.info(
+        "[request_access] request_id=%s user_id=%s company_id=%s notified_ws=%s",
+        request_id, user_id, company_id, notified,
+    )
 
     return {
         "request_id":  request_id,

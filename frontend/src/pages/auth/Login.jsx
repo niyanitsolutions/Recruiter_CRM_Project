@@ -121,7 +121,7 @@ function InfoRow({ icon, label, value }) {
 // ── Active Session Conflict Modal ─────────────────────────────────────────────
 function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
   const dispatch = useDispatch()
-  const { identifier, password, sessionInfo = {} } = data || {}
+  const { identifier, password, sessionInfo = {}, companyId = null } = data || {}
 
   const [phase,     setPhase]     = useState('confirm')
   const [requestId, setRequestId] = useState(null)
@@ -142,7 +142,7 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
   const handleRequestAccess = async () => {
     setPhase('requesting')
     try {
-      const res = await authService.requestAccess(identifier, password)
+      const res = await authService.requestAccess(identifier, password, companyId)
       const rid = res.data?.request_id
       if (!rid) throw new Error('No request_id returned')
       setRequestId(rid)
@@ -451,7 +451,7 @@ const Login = () => {
     } else if (login.rejected.match(result)) {
       const payload = result.payload
       if (payload?.type === 'ACTIVE_SESSION') {
-        setActiveSessionData({ identifier: data.identifier, password: data.password, sessionInfo: payload.session_info || {} })
+        setActiveSessionData({ identifier: data.identifier, password: data.password, sessionInfo: payload.session_info || {}, companyId: payload.company_id || null })
         dispatch(clearError())
       } else if (payload?.email_not_verified) {
         setEmailNotVerified({ email: payload.email, message: payload.message })

@@ -492,6 +492,7 @@ class AuthService:
                             "last_active":    _last_act.isoformat() if _last_act else None,
                             "session_status": _session_doc.get("session_status", "active"),
                             "ws_connected":   _ws_connected,
+                            "company_id":     tenant.get("company_id", ""),
                         }
                         return None, f"ACTIVE_SESSION|{_json.dumps(_session_info)}"
                     else:

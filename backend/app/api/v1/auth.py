@@ -85,6 +85,7 @@ async def login(data: LoginRequest, request: Request):
                     "active_session": True,
                     "message": "This account is currently active on another device.",
                     "session_info": _session_info,
+                    "company_id": _session_info.get("company_id") or data.company_code,
                 },
             )
         if "EMAIL_NOT_VERIFIED" in error:
@@ -186,6 +187,7 @@ async def login_with_tenant(data: TenantLoginRequest, request: Request):
                     "active_session": True,
                     "message": "This account is currently active on another device.",
                     "session_info": _session_info,
+                    "company_id": _session_info.get("company_id") or data.company_id,
                 },
             )
         if "SUBSCRIPTION_EXPIRED" in error:
