@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search, Edit2, Trash2, Eye, Users } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, Eye, Users, UserPlus, CheckCircle2, AlertCircle } from 'lucide-react'
 import hrmService from '../../services/hrmService'
 import TableScroll from '../../components/common/TableScroll'
 
@@ -9,6 +9,23 @@ const STATUS_STYLE = {
   inactive:   { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' },
   terminated: { background: 'var(--bg-danger)',  color: 'var(--text-danger)' },
   on_leave:   { background: 'var(--bg-warning)', color: 'var(--text-warning)' },
+}
+
+const AccountStatusBadge = ({ emp }) => {
+  if (emp.crm_user_id) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+            style={{ background: 'var(--bg-success)', color: 'var(--text-success)' }}>
+        <CheckCircle2 className="w-3 h-3" /> Active
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+          style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>
+      <AlertCircle className="w-3 h-3" /> Missing
+    </span>
+  )
 }
 
 export default function Employees() {
@@ -72,7 +89,7 @@ export default function Employees() {
         <table className="w-full text-sm">
           <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border-card)' }}>
             <tr>
-              {['Employee ID', 'Name', 'Designation', 'Department', 'Status', 'Actions'].map(h => (
+              {['Employee ID', 'Name', 'Designation', 'Department', 'Status', 'Account', 'Actions'].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>{h}</th>
               ))}
             </tr>
@@ -80,12 +97,12 @@ export default function Employees() {
           <tbody style={{ borderColor: 'var(--border-subtle)' }}>
             {loading ? (
               [...Array(5)].map((_, i) => (
-                <tr key={i}><td colSpan={6} className="px-4 py-3">
+                <tr key={i}><td colSpan={7} className="px-4 py-3">
                   <div className="h-4 rounded animate-pulse" style={{ background: 'var(--bg-card-alt)' }} />
                 </td></tr>
               ))
             ) : employees.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-10 text-center" style={{ color: 'var(--text-muted)' }}>
+              <tr><td colSpan={7} className="px-4 py-10 text-center" style={{ color: 'var(--text-muted)' }}>
                 <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
                 No employees found
               </td></tr>
@@ -105,6 +122,29 @@ export default function Employees() {
                         style={STATUS_STYLE[emp.employment_status] ?? { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' }}>
                     {emp.employment_status}
                   </span>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-col gap-1">
+                    <AccountStatusBadge emp={emp} />
+                    {!emp.crm_user_id && (
+                      <button
+                        onClick={() => navigate(`/users/new?employee_id=${emp.id}`)}
+                        className="inline-flex items-center gap-1 text-xs hover:underline"
+                        style={{ color: 'var(--text-info)' }}
+                      >
+                        <UserPlus className="w-3 h-3" /> Create Account
+                      </button>
+                    )}
+                    {emp.crm_user_id && (
+                      <button
+                        onClick={() => navigate(`/users/${emp.crm_user_id}`)}
+                        className="text-xs hover:underline"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        View User
+                      </button>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">

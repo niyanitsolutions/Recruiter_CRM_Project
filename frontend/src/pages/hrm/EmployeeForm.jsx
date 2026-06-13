@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Save, ChevronDown, ChevronUp,
   User, Briefcase, CreditCard, Phone, GraduationCap,
-  ShieldCheck, FileText, Plus, Trash2, Upload, X,
+  ShieldCheck, FileText, Plus, Trash2, Upload, X, Info, Link2,
 } from 'lucide-react'
 import hrmService from '../../services/hrmService'
+import userService from '../../services/userService'
 import toast from 'react-hot-toast'
 import { useFormValidation, validators } from '../../hooks/useFormValidation'
 
@@ -94,6 +95,7 @@ const EMPTY_FORM = {
 export default function EmployeeForm() {
   const navigate = useNavigate()
   const { id }   = useParams()
+  const [searchParams] = useSearchParams()
   const isEdit   = !!id
   const fileRef  = useRef(null)
 
@@ -102,6 +104,8 @@ export default function EmployeeForm() {
   const [form, setForm]                   = useState({ ...EMPTY_FORM })
   const [createLoginAccount, setCreateLoginAccount] = useState(false)
   const [loginRole, setLoginRole]         = useState('hr')
+  const [linkedUserName, setLinkedUserName] = useState('')   // prefill banner text
+  const [prefillBanner, setPrefillBanner]   = useState('')   // "Prefilled from User Account"
 
   const { errors: fErrors, touched: fTouched, touch, validate: fValidate } = useFormValidation({
     full_name: validators.required('Full name'),
@@ -165,8 +169,31 @@ export default function EmployeeForm() {
       if (e.qualifications?.length)       setQualifications(e.qualifications)
       if (e.disciplinary_records?.length) setDisciplinary(e.disciplinary_records)
       if (e.documents?.length)            setDocuments(e.documents)
+      // If this employee was auto-created from a User, show link info
+      if (e.crm_user_id) setLinkedUserName(e.full_name || '')
     }).catch(() => {})
   }, [id])
+
+  // ── Prefill from User when ?user_id query param is present ───────────────
+  useEffect(() => {
+    if (isEdit) return
+    const userId = searchParams.get('user_id')
+    if (!userId) return
+    userService.getUser(userId).then(u => {
+      setForm(f => ({
+        ...f,
+        full_name:       u.full_name   || f.full_name,
+        email:           u.email       || f.email,
+        phone:           u.mobile      || f.phone,
+        department_name: u.department  || f.department_name,
+        designation_name: u.designation || f.designation_name,
+        date_of_joining: u.joining_date
+          ? (typeof u.joining_date === 'string' ? u.joining_date.slice(0, 10) : '')
+          : f.date_of_joining,
+      }))
+      setPrefillBanner(`Prefilled from User Account: ${u.full_name}`)
+    }).catch(() => {})
+  }, [isEdit, searchParams])
 
   // ── Build payload ─────────────────────────────────────────────────────────
   const buildPayload = () => ({
@@ -296,6 +323,22 @@ export default function EmployeeForm() {
           <p className="text-sm text-gray-500 mt-0.5">Complete HR file</p>
         </div>
       </div>
+
+      {/* Prefill banner — shown when creating from a User record */}
+      {prefillBanner && (
+        <div className="flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg p-3 text-sm">
+          <Info className="w-4 h-4 flex-shrink-0" />
+          {prefillBanner} — review and complete the remaining fields.
+        </div>
+      )}
+
+      {/* Linked user info — shown when editing an auto-linked employee */}
+      {isEdit && linkedUserName && (
+        <div className="flex items-center gap-2 bg-green-50 text-green-700 border border-green-200 rounded-lg p-3 text-sm">
+          <Link2 className="w-4 h-4 flex-shrink-0" />
+          Linked to User Account: <span className="font-medium">{linkedUserName}</span>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 text-sm">{error}</div>

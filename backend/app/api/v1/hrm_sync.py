@@ -123,3 +123,51 @@ async def manual_unlink(
     """Remove link between a user and their employee record."""
     svc = HRMSyncService(db)
     return await svc.unlink(user_id, current_user["company_id"])
+
+
+@router.post("/migrate")
+async def run_migration(
+    current_user: dict = Depends(require_permissions(["hrm:employees:manage"])),
+    db=Depends(get_company_db),
+):
+    """
+    One-time migration: for every existing internal user without an employee
+    profile, auto-create a linked employee shell.  Idempotent — safe to run
+    multiple times (already-linked pairs are skipped).
+    """
+    svc = HRMSyncService(db)
+    company_id = current_user["company_id"]
+    created_by = current_user["id"]
+
+    # Find all internal users with no hrm_employee_id
+    unlinked = await svc.list_unlinked_users(company_id, page=1, page_size=1000)
+    results = {"created": 0, "already_linked": 0, "errors": 0, "details": []}
+
+    for user in unlinked.get("items", []):
+        uid = user.get("id") or user.get("_id")
+        if not uid:
+            continue
+        try:
+            result = await svc.sync_user_to_employee(
+                user_id=uid,
+                company_id=company_id,
+                created_by=created_by,
+            )
+            if result.get("success"):
+                if "created" in result.get("message", "").lower():
+                    results["created"] += 1
+                else:
+                    results["already_linked"] += 1
+            else:
+                results["errors"] += 1
+                results["details"].append({"user_id": uid, "error": result.get("message")})
+        except Exception as exc:
+            results["errors"] += 1
+            results["details"].append({"user_id": uid, "error": str(exc)})
+
+    return {
+        "success": True,
+        "message": f"Migration complete: {results['created']} employee profiles created, "
+                   f"{results['already_linked']} already linked, {results['errors']} errors.",
+        **results,
+    }

@@ -5,8 +5,8 @@
  *   Right: HRM employees without a CRM user       → "Add User" (role selection)
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Users, UserPlus, RefreshCw, CheckCircle, AlertCircle, Loader2, UserX, X } from 'lucide-react'
-import toast from 'react-hot-toast'
+import { Users, UserPlus, RefreshCw, CheckCircle, AlertCircle, Loader2, UserX, X, Play } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
 
 const ROLES = [
@@ -431,9 +431,11 @@ function UnlinkedEmployeesPanel({ onSync }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function HRMSyncPanel() {
-  const [status, setStatus]   = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [rev, setRev]         = useState(0)
+  const [status, setStatus]     = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [rev, setRev]           = useState(0)
+  const [migrating, setMigrating] = useState(false)
+  const [migrateResult, setMigrateResult] = useState(null)
 
   const loadStatus = useCallback(async () => {
     setLoading(true)
@@ -447,6 +449,24 @@ export default function HRMSyncPanel() {
   useEffect(() => { loadStatus() }, [loadStatus, rev])
 
   const onSync = () => setRev(r => r + 1)
+
+  const handleMigrate = async () => {
+    if (!window.confirm(
+      'Run migration? This will auto-create Employee profiles for all Users that currently have none. ' +
+      'Already-linked pairs are skipped. This is safe to run multiple times.'
+    )) return
+    setMigrating(true)
+    setMigrateResult(null)
+    try {
+      const res = await hrmService.runMigration()
+      setMigrateResult(res.data)
+      toast.success(res.data?.message || 'Migration complete')
+      setRev(r => r + 1)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Migration failed')
+    }
+    setMigrating(false)
+  }
 
   const totalPending = (status?.unlinked_users || 0) + (status?.unlinked_employees || 0)
   const linkedCount  = (status?.total_users || 0) - (status?.unlinked_users || 0)
@@ -487,6 +507,31 @@ export default function HRMSyncPanel() {
           ))}
         </div>
       )}
+
+      {/* Migration section */}
+      <div className="rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center gap-4"
+           style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>Bulk Migration</h3>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            Auto-create Employee shell profiles for all existing Users that do not yet have one. Safe to run multiple times — already-linked pairs are skipped.
+          </p>
+          {migrateResult && (
+            <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-success)' }}>
+              {migrateResult.message}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={handleMigrate}
+          disabled={migrating}
+          className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-50"
+          style={{ background: 'rgba(79,172,254,0.12)', color: '#4FACFE', border: '1px solid rgba(79,172,254,0.3)' }}
+        >
+          {migrating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+          {migrating ? 'Running…' : 'Run Migration'}
+        </button>
+      </div>
 
       {/* Panels */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">

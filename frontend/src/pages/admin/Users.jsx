@@ -4,7 +4,7 @@ import usePermissions from '../../hooks/usePermissions'
 import {
   Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, EyeOff,
   UserCheck, UserX, Key, ChevronLeft, ChevronRight, X, Download,
-  Building, Award, Save, Loader2, Users as UsersIcon,
+  Building, Award, Save, Loader2, Users as UsersIcon, UserCog, CheckCircle2, AlertCircle,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import userService from '../../services/userService'
@@ -21,6 +21,21 @@ import { formatDateTime } from '../../utils/format'
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
 
+const EmployeeProfileBadge = ({ user }) => {
+  if (user.hrm_employee_id) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+        <CheckCircle2 className="w-3 h-3" /> Complete
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+      <AlertCircle className="w-3 h-3" /> Incomplete
+    </span>
+  )
+}
+
 const StatusBadge = ({ status }) => {
   const cls = {
     active: 'bg-green-100 text-green-700',
@@ -35,7 +50,7 @@ const StatusBadge = ({ status }) => {
   )
 }
 
-const UserActions = ({ user, onEdit, onDelete, onStatusChange, onResetPassword }) => {
+const UserActions = ({ user, onEdit, onDelete, onStatusChange, onResetPassword, onCompleteProfile }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
   const buttonRef = useRef(null)
@@ -83,6 +98,14 @@ const UserActions = ({ user, onEdit, onDelete, onStatusChange, onResetPassword }
             >
               <Eye className="w-4 h-4" /> View Details
             </Link>
+            {!user.hrm_employee_id && user.user_type !== 'partner' && (
+              <button
+                onClick={() => { onCompleteProfile(user); setIsOpen(false) }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-yellow-700 hover:bg-yellow-50"
+              >
+                <UserCog className="w-4 h-4" /> Complete Employee Profile
+              </button>
+            )}
             {canEdit && (
               <button
                 onClick={() => { onEdit(user); setIsOpen(false) }}
@@ -1044,15 +1067,16 @@ const Users = () => {
                     <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Designation</th>
                     <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Department</th>
                     <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Status</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Employee Profile</th>
                     <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Last Login</th>
                     <th className="text-right px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100">
                   {loading ? (
-                    <tr><td colSpan={6} className="px-6 py-8 text-center text-surface-500">Loading...</td></tr>
+                    <tr><td colSpan={7} className="px-6 py-8 text-center text-surface-500">Loading...</td></tr>
                   ) : users.length === 0 ? (
-                    <tr><td colSpan={6} className="px-6 py-8 text-center text-surface-500">No users found</td></tr>
+                    <tr><td colSpan={7} className="px-6 py-8 text-center text-surface-500">No users found</td></tr>
                   ) : (
                     users.map(user => (
                       <tr key={user.id} className="hover:bg-surface-50">
@@ -1083,6 +1107,27 @@ const Users = () => {
                         </td>
                         <td className="px-6 py-4 text-surface-600 text-sm">{user.department || '-'}</td>
                         <td className="px-6 py-4"><StatusBadge status={user.status} /></td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1">
+                            <EmployeeProfileBadge user={user} />
+                            {!user.hrm_employee_id && user.user_type !== 'partner' && (
+                              <button
+                                onClick={() => navigate(`/hrm/employees/new?user_id=${user.id}`)}
+                                className="text-xs text-accent-600 hover:underline text-left"
+                              >
+                                Complete Employee Profile
+                              </button>
+                            )}
+                            {user.hrm_employee_id && (
+                              <button
+                                onClick={() => navigate(`/hrm/employees/${user.hrm_employee_id}/edit`)}
+                                className="text-xs text-surface-500 hover:text-accent-600 text-left"
+                              >
+                                View Profile
+                              </button>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-6 py-4 text-sm text-surface-500">
                           {user.last_login ? formatDateTime(user.last_login) : 'Never'}
                         </td>
@@ -1093,6 +1138,7 @@ const Users = () => {
                             onDelete={(u) => setDeleteDialog({ open: true, user: u })}
                             onStatusChange={(u, status) => setStatusDialog({ open: true, user: u, status })}
                             onResetPassword={(u) => setResetPasswordDialog({ open: true, user: u })}
+                            onCompleteProfile={(u) => navigate(`/hrm/employees/new?user_id=${u.id}`)}
                           />
                         </td>
                       </tr>

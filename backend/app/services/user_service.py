@@ -267,21 +267,38 @@ class UserService:
                             {"$set": {"hrm_employee_id": emp_id, "updated_at": now_link}},
                         )
                     else:
-                        # No employee exists — notify HR team to create one.
-                        # Users in the company-specific DB have no company_id field; omit it.
-                        hr_ids = [
-                            d["_id"] async for d in self.db.users.find(
-                                {"role": "hr", "is_deleted": {"$ne": True}, "status": "active"},
-                                {"_id": 1},
-                            )
-                        ]
-                        if hr_ids:
-                            await notif_svc.notify_hrm_user_created(
+                        # No employee exists — auto-create an Employee shell linked to this user.
+                        # Partners never get employee profiles.
+                        if user_data.user_type != "partner" and user_data.role != "partner":
+                            from app.services.hrm_sync_service import HRMSyncService
+                            sync_svc = HRMSyncService(self.db)
+                            await sync_svc.sync_user_to_employee(
+                                user_id=user_id,
                                 company_id=company_id,
-                                hr_user_ids=hr_ids,
-                                new_user_name=user_data.full_name,
-                                new_user_email=user_data.email,
+                                created_by=created_by_id,
+                                extra_fields={
+                                    "department_id":   user_data.department_id,
+                                    "department_name": user_data.department,
+                                    "designation_id":  user_data.designation_id,
+                                    "designation_name": user_data.designation,
+                                    "date_of_joining": user_data.joining_date,
+                                },
                             )
+                        else:
+                            # Partner user — just notify HR team
+                            hr_ids = [
+                                d["_id"] async for d in self.db.users.find(
+                                    {"role": "hr", "is_deleted": {"$ne": True}, "status": "active"},
+                                    {"_id": 1},
+                                )
+                            ]
+                            if hr_ids:
+                                await notif_svc.notify_hrm_user_created(
+                                    company_id=company_id,
+                                    hr_user_ids=hr_ids,
+                                    new_user_name=user_data.full_name,
+                                    new_user_email=user_data.email,
+                                )
                 except Exception:
                     pass  # linking must never block user creation
 

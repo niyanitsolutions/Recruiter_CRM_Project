@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { refreshToken } from '../../store/authSlice'
-import { ArrowLeft, Save, Loader2, Shield, GitBranch, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Shield, GitBranch, ChevronDown, Info, Link2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import userService from '../../services/userService'
 import hrmService from '../../services/hrmService'
@@ -184,12 +184,15 @@ const UserForm = () => {
   const currentUser = useSelector(state => state.auth.user)
   const auth = useSelector(state => state.auth)
   const { id } = useParams()
+  const [searchParams] = useSearchParams()
   const isEdit = Boolean(id)
 
   const [loading, setLoading]   = useState(false)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState(null)
   const [createEmployeeProfile, setCreateEmployeeProfile] = useState(false)
+  const [prefillBanner, setPrefillBanner] = useState('')      // "Prefilled from Employee: John Doe"
+  const [linkedEmployeeId, setLinkedEmployeeId] = useState('')  // existing hrm_employee_id (edit mode)
 
   // Duplicate user modal state
   const [duplicateModal, setDuplicateModal] = useState({
@@ -353,6 +356,51 @@ const [errors,       setErrors]       = useState({})
     }
     fetchUser()
   }, [id, isEdit])
+
+  // ── Prefill from Employee when ?employee_id query param is present ───────
+  useEffect(() => {
+    if (isEdit) return
+    const empId = searchParams.get('employee_id')
+    if (!empId) return
+    hrmService.getEmployee(empId).then(res => {
+      const e = res.data
+      setFormData(prev => ({
+        ...prev,
+        full_name:  e.full_name  || prev.full_name,
+        email:      e.email      || prev.email,
+        mobile:     e.phone      || prev.mobile,
+      }))
+      // Resolve department_id and designation_id from name
+      if (e.department_name) {
+        setDepartments(prev => {
+          const match = prev.find(d => d.name?.toLowerCase() === e.department_name?.toLowerCase())
+          if (match) setFormData(fd => ({ ...fd, department_id: match.id }))
+          return prev
+        })
+      }
+      if (e.designation_name) {
+        setDesignations(prev => {
+          const match = prev.find(d => d.name?.toLowerCase() === e.designation_name?.toLowerCase())
+          if (match) setFormData(fd => ({ ...fd, designation_id: match.id }))
+          return prev
+        })
+      }
+      // Auto-suggest username from email
+      if (e.email && !formData.username) {
+        const suggestedUsername = e.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_')
+        setFormData(fd => ({ ...fd, username: fd.username || suggestedUsername }))
+      }
+      setPrefillBanner(`Prefilled from Employee Profile: ${e.full_name}`)
+    }).catch(() => {})
+  }, [isEdit, searchParams])
+
+  // ── Detect linked employee on edit (show badge) ──────────────────────────
+  useEffect(() => {
+    if (!isEdit) return
+    userService.getUser(id).then(res => {
+      if (res.data?.hrm_employee_id) setLinkedEmployeeId(res.data.hrm_employee_id)
+    }).catch(() => {})
+  }, [isEdit, id])
 
   // ── Form change ──────────────────────────────────────────────────────────
   const handleChange = (e) => {
@@ -660,6 +708,29 @@ const [errors,       setErrors]       = useState({})
         <ArrowLeft className="w-4 h-4" /> Back to Users
       </button>
       <h1 className="text-2xl font-bold text-surface-900 mb-6">{isEdit ? 'Edit User' : 'Add New User'}</h1>
+
+      {/* Prefill banner — shown when creating from an Employee record */}
+      {prefillBanner && (
+        <div className="mb-4 flex items-center gap-2 p-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm">
+          <Info className="w-4 h-4 flex-shrink-0" />
+          {prefillBanner} — review and complete remaining fields.
+        </div>
+      )}
+
+      {/* Linked employee badge — shown on edit when user has an employee profile */}
+      {isEdit && linkedEmployeeId && (
+        <div className="mb-4 flex items-center gap-2 p-3 bg-green-50 text-green-700 border border-green-200 rounded-lg text-sm">
+          <Link2 className="w-4 h-4 flex-shrink-0" />
+          Linked to Employee Profile.{' '}
+          <button
+            type="button"
+            onClick={() => navigate(`/hrm/employees/${linkedEmployeeId}/edit`)}
+            className="underline font-medium hover:text-green-900"
+          >
+            View Employee Profile
+          </button>
+        </div>
+      )}
 
       {error && <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg">{error}</div>}
 

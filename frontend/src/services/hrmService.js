@@ -171,6 +171,7 @@ const syncEmployeeToUser = (employeeId, params) => api.post(`${BASE}/sync/employ
 const syncUserToEmployee = (userId, data = null) => api.post(`${BASE}/sync/user-to-employee/${userId}`, data)
 const linkUserEmployee = (userId, employeeId) => api.post(`${BASE}/sync/link`, null, { params: { user_id: userId, employee_id: employeeId } })
 const unlinkUserEmployee = (userId) => api.delete(`${BASE}/sync/unlink/${userId}`)
+const runMigration = () => api.post(`${BASE}/sync/migrate`)
 
 // ── Holidays ───────────────────────────────────────────────────────────────
 const listHolidays = (params) => api.get(`${BASE}/holidays`, { params })
@@ -219,7 +220,7 @@ const hrmService = {
   getEmployeeDocumentCounts, deleteDocument, updateDocumentMeta, updateDocumentStatus, getDocumentServeUrl,
   getAnnouncements,
   getSyncStatus, getSyncUnlinkedPreview, getUnlinkedUsers, getUnlinkedEmployees,
-  syncEmployeeToUser, syncUserToEmployee, linkUserEmployee, unlinkUserEmployee,
+  syncEmployeeToUser, syncUserToEmployee, linkUserEmployee, unlinkUserEmployee, runMigration,
   getOrgChart,
   generateDocUploadToken, listDocUploadTokens, reactivateDocUploadToken, revokeDocUploadToken,
   validateDocUploadToken, uploadViaToken,

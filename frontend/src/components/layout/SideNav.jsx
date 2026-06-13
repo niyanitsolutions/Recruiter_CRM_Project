@@ -67,11 +67,8 @@ const PERMISSION_NAV_MAP = [
     path: '/clients',      icon: Building2,       label: 'Clients',           section: 'Recruitment' },
   { permissions: ['onboards:view'],
     path: '/onboards',     icon: UserCheck,       label: 'Onboarding',        section: 'Recruitment' },
-  // Admin Management
-  { permissions: ['users:view'],
-    path: '/users',        icon: Users,           label: 'Users',             section: 'Admin Management' },
-  { permissions: ['partners:view', 'accounts:payouts', 'accounts:invoices'],
-    path: '/partners',     icon: Link2,           label: 'Sourcing Partners', section: 'Admin Management' },
+  // Admin Management (section kept for other items that may exist)
+  // Users and Sourcing Partners are now part of the HRM section for unified people management
   // Operations
   { permissions: ['tasks:view'],
     path: '/tasks',        icon: FileCheck,       label: 'Tasks',             section: 'Operations' },
@@ -95,6 +92,11 @@ const PERMISSION_NAV_MAP = [
     path: '/hrm',                   icon: LayoutDashboard, label: 'HRM Dashboard',    section: 'HRM', hrmOnly: true },
   { permissions: ['hrm:employees:view', 'hrm:employees:manage'],
     path: '/hrm/employees',         icon: UserCog,         label: 'Employees',        section: 'HRM', hrmOnly: true },
+  // Users and Sourcing Partners live under HRM for unified people management
+  { permissions: ['users:view'],
+    path: '/users',                  icon: Users,           label: 'Users',            section: 'HRM', hrmOnly: true },
+  { permissions: ['partners:view', 'accounts:payouts', 'accounts:invoices'],
+    path: '/partners',               icon: Link2,           label: 'Sourcing Partners', section: 'HRM', hrmOnly: true },
   { permissions: ['hrm:attendance:self', 'hrm:attendance:team', 'hrm:attendance:manage'],
     path: '/hrm/attendance',        icon: Clock,           label: 'Attendance',       section: 'HRM', hrmOnly: true },
   { permissions: ['hrm:leave:apply', 'hrm:leave:team_approve', 'hrm:leave:manage'],
