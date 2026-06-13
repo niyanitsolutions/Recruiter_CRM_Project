@@ -138,6 +138,7 @@ class JobModel(BaseModel):
     eligibility: Optional[EligibilityCriteria] = None
     auto_match_enabled: bool = Field(default=False)
     min_percentage: Optional[float] = Field(None, ge=0, le=100)  # Minimum academic %
+    minimum_match_score: int = Field(default=70, ge=0, le=100)  # Min match % for eligibility
 
     # ===== Pipeline =====
     pipeline_id: Optional[str] = None  # Attached interview pipeline
@@ -225,11 +226,12 @@ class JobCreate(BaseModel):
     eligibility: Optional[EligibilityCriteria] = None
     auto_match_enabled: bool = Field(default=False)
     min_percentage: Optional[float] = Field(None, ge=0, le=100)
+    minimum_match_score: int = Field(default=70, ge=0, le=100)
     pipeline_id: Optional[str] = None
 
     priority: Optional[str] = Field(default=Priority.MEDIUM.value)
     target_date: Optional[date] = None
-    
+
     assigned_coordinators: List[str] = Field(default_factory=list)
     primary_coordinator: Optional[str] = None
     
@@ -274,6 +276,7 @@ class JobUpdate(BaseModel):
     eligibility: Optional[EligibilityCriteria] = None
     auto_match_enabled: Optional[bool] = None
     min_percentage: Optional[float] = Field(None, ge=0, le=100)
+    minimum_match_score: Optional[int] = Field(None, ge=0, le=100)
     pipeline_id: Optional[str] = None
 
     priority: Optional[str] = None
@@ -330,6 +333,7 @@ class JobResponse(BaseModel):
     eligibility: Optional[EligibilityCriteria] = None
     auto_match_enabled: bool = False
     min_percentage: Optional[float] = None
+    minimum_match_score: int = 70
     pipeline_id: Optional[str] = None
 
     priority: str

@@ -1000,7 +1000,8 @@ const Candidates = () => {
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
                       <th className="text-left py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Job</th>
                       <th className="text-left py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Client</th>
-                      <th className="text-left py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Match</th>
+                      <th className="text-left py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Score</th>
+                      <th className="text-left py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Eligibility</th>
                       <th className="text-right py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Action</th>
                     </tr>
                   </thead>
@@ -1032,6 +1033,24 @@ const Candidates = () => {
                           >
                             {job.score}%
                           </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          {job.eligible ? (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: 'rgba(67,233,123,0.12)', color: '#43E97B' }}>
+                              Eligible
+                            </span>
+                          ) : (
+                            <div>
+                              <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: 'rgba(255,71,87,0.12)', color: '#FF4757' }}>
+                                Not Eligible
+                              </span>
+                              {job.issues?.length > 0 && (
+                                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)', maxWidth: '160px' }}>
+                                  {job.issues[0]}
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3 px-3 text-right">
                           {job.already_applied ? (

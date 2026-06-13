@@ -136,6 +136,12 @@ class ApplicationService:
             }],
             "eligibility_score": evaluation.get("final_score"),
             "eligibility_details": evaluation,
+            "eligibility_reason": (
+                "; ".join(evaluation.get("rejection_reasons", []))
+                if evaluation.get("rejection_reasons")
+                else "Eligible"
+            ),
+            "matching_breakdown": evaluation,
             "notes": application_data.notes,
             "applied_at": datetime.now(timezone.utc),
             "created_by": created_by,
@@ -218,6 +224,8 @@ class ApplicationService:
             assigned_to=app.get("assigned_to"),
             assigned_to_name=app.get("assigned_to_name"),
             eligibility_score=app.get("eligibility_score"),
+            eligibility_reason=app.get("eligibility_reason"),
+            matching_breakdown=app.get("matching_breakdown") or app.get("eligibility_details"),
             applied_at=app["applied_at"],
             status_changed_at=app.get("status_changed_at")
         )

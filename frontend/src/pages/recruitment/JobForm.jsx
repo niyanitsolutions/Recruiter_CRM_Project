@@ -52,9 +52,13 @@ const JobForm = () => {
     notes: '',
     status: 'draft',
     min_percentage: '',
+    minimum_match_score: 70,
     pipeline_id: '',
     gender_eligibility: 'all'
   })
+
+  // Maps select value → integer days for max_notice_period_days
+  const NOTICE_DAYS_MAP = { immediate: 0, '15_days': 15, '30_days': 30, '60_days': 60, '90_days': 90 }
 
   const [newMandatorySkill, setNewMandatorySkill] = useState('')
   const [newOptionalSkill, setNewOptionalSkill] = useState('')
@@ -120,9 +124,15 @@ const JobForm = () => {
           experience_max: job.experience?.max_years || '',
           mandatory_skills: job.eligibility?.mandatory_skills || [],
           optional_skills: job.eligibility?.required_skills || [],
-          notice_period_max: '',
+          notice_period_max: (() => {
+            const days = job.eligibility?.max_notice_period_days
+            if (days == null) return ''
+            const entry = Object.entries({ immediate: 0, '15_days': 15, '30_days': 30, '60_days': 60, '90_days': 90 }).find(([, v]) => v === days)
+            return entry ? entry[0] : ''
+          })(),
           ctc_max: job.eligibility?.max_ctc || '',
           min_percentage: job.min_percentage ?? '',
+          minimum_match_score: job.minimum_match_score ?? 70,
           pipeline_id: job.pipeline_id || '',
           gender_eligibility: job.gender_eligibility || 'all'
         }))
@@ -173,6 +183,9 @@ const JobForm = () => {
     if (!formData.notice_period_max) e.notice_period_max = 'Notice period is required'
     if (formData.ctc_max === '' || formData.ctc_max === null) e.ctc_max = 'Max CTC is required'
     if (formData.min_percentage === '' || formData.min_percentage === null) e.min_percentage = 'Min percentage is required'
+    const mms = Number(formData.minimum_match_score)
+    if (formData.minimum_match_score === '' || formData.minimum_match_score == null) e.minimum_match_score = 'Minimum match score is required'
+    else if (isNaN(mms) || mms < 0 || mms > 100) e.minimum_match_score = 'Must be 0–100'
     if (!formData.pipeline_id) e.pipeline_id = 'Interview pipeline is required'
     if (formData.mandatory_skills.length === 0) e.mandatory_skills = 'At least one mandatory skill is required'
     // Job Description
@@ -259,9 +272,11 @@ const JobForm = () => {
           max_experience_years: formData.experience_max ? Number(formData.experience_max) : null,
           mandatory_skills: formData.mandatory_skills.map(s => s.trim().toLowerCase()).filter(Boolean),
           required_skills: formData.optional_skills.map(s => s.trim().toLowerCase()).filter(Boolean),
-          max_ctc: formData.ctc_max ? Number(formData.ctc_max) : null
+          max_ctc: formData.ctc_max ? Number(formData.ctc_max) : null,
+          max_notice_period_days: formData.notice_period_max ? (NOTICE_DAYS_MAP[formData.notice_period_max] ?? null) : null
         },
         min_percentage: formData.min_percentage !== '' ? Number(formData.min_percentage) : null,
+        minimum_match_score: Number(formData.minimum_match_score) || 70,
         pipeline_id: formData.pipeline_id || null,
         gender_eligibility: formData.gender_eligibility || 'all',
         education_required: [],
@@ -656,6 +671,28 @@ const JobForm = () => {
               {errors.min_percentage
                 ? <p className="text-red-500 text-xs mt-1">{errors.min_percentage}</p>
                 : <p className="text-xs text-surface-400 mt-1">Candidates below this % will be auto-rejected</p>
+              }
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">
+                Minimum Match Score (%) <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="field-minimum_match_score"
+                type="number"
+                name="minimum_match_score"
+                value={formData.minimum_match_score}
+                onChange={handleChange}
+                className={`input w-full ${errors.minimum_match_score ? 'border-red-400' : ''}`}
+                min="0"
+                max="100"
+                step="1"
+                placeholder="e.g. 70"
+              />
+              {errors.minimum_match_score
+                ? <p className="text-red-500 text-xs mt-1">{errors.minimum_match_score}</p>
+                : <p className="text-xs text-surface-400 mt-1">Candidates with ATS score below this % will be auto-rejected</p>
               }
             </div>
 

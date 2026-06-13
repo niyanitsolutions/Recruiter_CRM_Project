@@ -119,8 +119,10 @@ class ApplicationModel(BaseModel):
     
     # ===== Match Score =====
     eligibility_score: Optional[float] = None  # 0-100 match %
-    eligibility_details: Optional[dict] = None
-    
+    eligibility_details: Optional[dict] = None  # Full evaluation breakdown
+    eligibility_reason: Optional[str] = None    # Human-readable verdict
+    matching_breakdown: Optional[dict] = None   # Permanent stored breakdown
+
     # ===== Notes =====
     notes: Optional[str] = None
     internal_remarks: Optional[str] = None  # Not visible to partners
@@ -239,9 +241,11 @@ class ApplicationResponse(BaseModel):
     
     assigned_to: Optional[str]
     assigned_to_name: Optional[str]
-    
+
     eligibility_score: Optional[float]
-    
+    eligibility_reason: Optional[str] = None
+    matching_breakdown: Optional[dict] = None
+
     applied_at: datetime
     status_changed_at: Optional[datetime] = None
 

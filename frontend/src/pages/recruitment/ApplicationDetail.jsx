@@ -245,6 +245,112 @@ const ApplicationDetail = () => {
         {/* Left column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
+          {/* Match Analysis (stored at application time — single source of truth) */}
+          {app.eligibility_score != null && (
+            <Card title="Match Analysis">
+              {/* Score bar + threshold */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '13px', color: '#94a3b8' }}>Overall Match Score</span>
+                  <span style={{
+                    fontSize: '18px', fontWeight: 700,
+                    color: app.eligibility_score >= (app.matching_breakdown?.minimum_match_score ?? 70) ? '#10b981' : '#ef4444'
+                  }}>
+                    {Math.round(app.eligibility_score)}%
+                  </span>
+                </div>
+                <div style={{ height: '8px', borderRadius: '4px', background: 'rgba(30,41,59,0.8)', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: '4px',
+                    width: `${app.eligibility_score}%`,
+                    background: app.eligibility_score >= (app.matching_breakdown?.minimum_match_score ?? 70)
+                      ? 'linear-gradient(90deg,#10b981,#34d399)'
+                      : 'linear-gradient(90deg,#ef4444,#f87171)',
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', fontSize: '11px', color: '#64748b' }}>
+                  <span>Min threshold: <strong style={{ color: '#cbd5e1' }}>{app.matching_breakdown?.minimum_match_score ?? 70}%</strong></span>
+                  <span style={{
+                    fontWeight: 600,
+                    color: app.eligibility_score >= (app.matching_breakdown?.minimum_match_score ?? 70) ? '#34d399' : '#f87171'
+                  }}>
+                    {app.eligibility_score >= (app.matching_breakdown?.minimum_match_score ?? 70) ? 'Eligible' : 'Not Eligible'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Reason */}
+              {app.eligibility_reason && app.eligibility_reason !== 'Eligible' && (
+                <div style={{
+                  padding: '8px 12px', borderRadius: '8px', marginBottom: '14px',
+                  background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+                  fontSize: '12px', color: '#fca5a5',
+                }}>
+                  {app.eligibility_reason}
+                </div>
+              )}
+
+              {/* Sub-score breakdown */}
+              {app.matching_breakdown && (() => {
+                const bd = app.matching_breakdown
+                const rows = [
+                  { label: 'Skills',      score: bd.skills_score,     status: bd.skill_status,      weight: '60%' },
+                  { label: 'Experience',  score: bd.experience_score,  status: bd.experience_status, weight: '15%' },
+                  { label: 'Location',    score: bd.location_score,    status: bd.location_status,   weight: '10%' },
+                  { label: 'Academic %',  score: bd.education_score,   status: bd.percentage_status, weight: '10%' },
+                  { label: 'Notice',      score: bd.notice_score,      status: bd.notice_status,     weight: '5%'  },
+                ]
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {rows.map(r => (
+                      <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '11px', color: '#64748b', width: '68px', flexShrink: 0 }}>{r.label}</span>
+                        <div style={{ flex: 1, height: '4px', borderRadius: '2px', background: 'rgba(30,41,59,0.8)', overflow: 'hidden' }}>
+                          <div style={{
+                            height: '100%', borderRadius: '2px',
+                            width: `${r.score ?? 50}%`,
+                            background: (r.score ?? 50) >= 70 ? '#10b981' : (r.score ?? 50) >= 40 ? '#f59e0b' : '#ef4444',
+                          }} />
+                        </div>
+                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#e2e8f0', width: '32px', textAlign: 'right' }}>
+                          {r.score != null ? `${Math.round(r.score)}%` : '—'}
+                        </span>
+                        <span style={{ fontSize: '10px', color: '#475569', width: '24px', textAlign: 'right' }}>{r.weight}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+
+              {/* Matched / Missing skills */}
+              {app.matching_breakdown && (
+                <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid rgba(51,65,85,0.5)' }}>
+                  {app.matching_breakdown.matched_skills?.length > 0 && (
+                    <div style={{ marginBottom: '8px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Matched Skills</span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {app.matching_breakdown.matched_skills.map(s => (
+                          <span key={s} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', background: 'rgba(16,185,129,0.12)', color: '#34d399' }}>{s}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {app.matching_breakdown.missing_skills?.length > 0 && (
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Missing Skills</span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {app.matching_breakdown.missing_skills.map(s => (
+                          <span key={s} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '999px', background: 'rgba(239,68,68,0.12)', color: '#fca5a5' }}>{s}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
+
           {/* Stage History Timeline */}
           <Card title="Application Journey">
             <StageTimeline history={stageHistory} />
@@ -319,20 +425,10 @@ const ApplicationDetail = () => {
             <InfoRow icon={Mail} label="Email" value={app.candidate_email} />
             <InfoRow icon={Phone} label="Mobile" value={app.candidate_mobile} />
             {app.eligibility_score != null && (
-              <div style={{ marginTop: '12px' }}>
-                <div style={{ fontSize: '11px', color: '#64748b', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: '6px' }}>Match Score</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: 'rgba(30,41,59,0.8)', overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%', borderRadius: '3px',
-                      width: `${app.eligibility_score}%`,
-                      background: app.eligibility_score >= 70 ? '#10b981' : app.eligibility_score >= 50 ? '#f59e0b' : '#ef4444',
-                    }} />
-                  </div>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#e2e8f0', minWidth: '36px' }}>
-                    {Math.round(app.eligibility_score)}%
-                  </span>
-                </div>
+              <div style={{ marginTop: '8px', fontSize: '12px', color: '#64748b' }}>
+                ATS Score: <strong style={{
+                  color: app.eligibility_score >= (app.matching_breakdown?.minimum_match_score ?? 70) ? '#34d399' : '#f87171'
+                }}>{Math.round(app.eligibility_score)}%</strong>
               </div>
             )}
             <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(51,65,85,0.5)' }}>

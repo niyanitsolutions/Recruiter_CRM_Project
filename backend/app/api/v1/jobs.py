@@ -616,6 +616,26 @@ async def get_matching_results(
     return {"success": True, "data": results, "count": len(results)}
 
 
+@router.post("/admin/migrate-minimum-match-score")
+async def migrate_minimum_match_score(
+    db = Depends(get_company_db),
+    _: bool = Depends(require_permissions(["jobs:edit"]))
+):
+    """
+    One-time migration: set minimum_match_score = 70 on all jobs that don't have it yet.
+    Safe to run multiple times (only updates documents where the field is absent).
+    """
+    result = await db.jobs.update_many(
+        {"minimum_match_score": {"$exists": False}, "is_deleted": False},
+        {"$set": {"minimum_match_score": 70}}
+    )
+    return {
+        "success": True,
+        "updated": result.modified_count,
+        "message": f"Set minimum_match_score=70 on {result.modified_count} jobs"
+    }
+
+
 @router.get("/{job_id}/eligible-for-interview")
 async def get_eligible_for_interview(
     job_id: str,

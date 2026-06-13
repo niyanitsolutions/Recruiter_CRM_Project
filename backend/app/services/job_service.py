@@ -205,6 +205,7 @@ class JobService:
             eligibility=job.get("eligibility"),
             auto_match_enabled=job.get("auto_match_enabled", False),
             min_percentage=job.get("min_percentage"),
+            minimum_match_score=int(job.get("minimum_match_score") or 70),
             pipeline_id=job.get("pipeline_id"),
             priority=job.get("priority", "medium"),
             priority_display=get_priority_display(job.get("priority", "medium")),

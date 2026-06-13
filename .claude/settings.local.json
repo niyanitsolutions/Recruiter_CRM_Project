@@ -134,7 +134,8 @@
       "Bash(find \"d:\\\\crm-project\\\\backend\\\\app\\\\schemas\" -type f -name \"*.py\" 2>nul | head -20)",
       "Bash(find \"d:\\\\crm-project\\\\backend\\\\app\\\\core\" -type f -name \"*.py\" 2>nul)",
       "Bash(find \"d:\\\\crm-project\\\\backend\\\\app\\\\models\\\\company\" -name \"*.py\" -type f | xargs grep -l \"matching\\\\|score\\\\|eligib\" 2>nul)",
-      "Bash(find \"d:\\\\crm-project\\\\frontend\\\\src\" -name \"*.jsx\" -o -name \"*.js\" | xargs grep -l \"matching\\\\|MatchingService\" 2>nul | grep -v node_modules)"
+      "Bash(find \"d:\\\\crm-project\\\\frontend\\\\src\" -name \"*.jsx\" -o -name \"*.js\" | xargs grep -l \"matching\\\\|MatchingService\" 2>nul | grep -v node_modules)",
+      "Bash(not exist *)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

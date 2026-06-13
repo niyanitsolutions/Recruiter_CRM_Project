@@ -6,6 +6,9 @@ Single source of truth for ALL candidate-job evaluation:
   evaluate_dicts(job, candidate) → centralized evaluation result
   evaluate(db, job_id, candidate_id) → DB-fetching wrapper
   run_matching(db, job_id) → batch evaluation + storage for all candidates
+
+Weights: Skills 60%, Experience 15%, Location 10%, Academic % 10%, Notice Period 5%
+Eligibility: match_score >= job.minimum_match_score (default 70)
 """
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
@@ -16,6 +19,17 @@ from fastapi import HTTPException
 
 class MatchingService:
     COLLECTION = "matching_results"
+
+    # Notice period string → days
+    NOTICE_PERIOD_DAYS: Dict[str, int] = {
+        "immediate": 0,
+        "15_days": 15,
+        "30_days": 30,
+        "60_days": 60,
+        "90_days": 90,
+        "3_months": 90,
+        "6_months": 180,
+    }
 
     # ── Private score helpers ───────────────────────────────────────────────
 
@@ -146,6 +160,26 @@ class MatchingService:
 
         return {"percentage_status": "Below Minimum", "percentage_score": 0}
 
+    @staticmethod
+    def _notice_period_score(job: dict, candidate: dict) -> dict:
+        """Notice period matching: candidate notice vs job max_notice_period_days."""
+        eligibility = job.get("eligibility") or {}
+        max_days = eligibility.get("max_notice_period_days")
+
+        if max_days is None:
+            return {"notice_status": "No Criteria", "notice_score": 100}
+
+        cand_notice = (candidate.get("notice_period") or "").lower().strip()
+        cand_days = MatchingService.NOTICE_PERIOD_DAYS.get(cand_notice)
+
+        if cand_days is None:
+            return {"notice_status": "Not Provided", "notice_score": 50}
+
+        if cand_days <= int(max_days):
+            return {"notice_status": "Within Limit", "notice_score": 100}
+
+        return {"notice_status": "Exceeds Limit", "notice_score": 0}
+
     # ── Central evaluation ──────────────────────────────────────────────────
 
     @staticmethod
@@ -153,8 +187,8 @@ class MatchingService:
         """
         THE single evaluation function used by every module.
 
-        Weights: Skills 50%, Location 20%, Experience 20%, Percentage 10%.
-        Eligible = final_score >= 60 AND percentage not "Below Minimum".
+        Weights: Skills 60%, Experience 15%, Location 10%, Academic % 10%, Notice Period 5%.
+        Eligible = final_score >= job.minimum_match_score (default 70).
 
         Returns a dict that is stored on applications and reused everywhere.
         """
@@ -162,16 +196,25 @@ class MatchingService:
         l = MatchingService._location_score(job, candidate)
         e = MatchingService._experience_score(job, candidate)
         p = MatchingService._percentage_score(job, candidate)
+        n = MatchingService._notice_period_score(job, candidate)
 
         final_score = round(
-            s["skill_score"] * 0.5
-            + l["location_score"] * 0.2
-            + e["experience_score"] * 0.2
-            + p["percentage_score"] * 0.1
+            s["skill_score"] * 0.60
+            + e["experience_score"] * 0.15
+            + l["location_score"] * 0.10
+            + p["percentage_score"] * 0.10
+            + n["notice_score"] * 0.05
         )
 
-        # Build rejection reasons only from criteria that actually failed
+        minimum_match_score = int(job.get("minimum_match_score") or 70)
+        is_eligible = final_score >= minimum_match_score
+
+        # Collect rejection reasons; threshold check is always first if score is low
         rejection_reasons: List[str] = []
+        if not is_eligible:
+            rejection_reasons.append(
+                f"Match score {final_score}% below minimum threshold {minimum_match_score}%"
+            )
         if s["missing_skills"]:
             rejection_reasons.append(f"Missing skills: {', '.join(s['missing_skills'])}")
         if e["experience_status"] == "Below Minimum":
@@ -183,12 +226,13 @@ class MatchingService:
             rejection_reasons.append(
                 f"Percentage below required {job.get('min_percentage')}%"
             )
+        if n["notice_status"] == "Exceeds Limit":
+            max_days = (job.get("eligibility") or {}).get("max_notice_period_days")
+            rejection_reasons.append(f"Notice period exceeds maximum {max_days} days")
         if l["location_status"] == "Not Matched":
             job_city = job.get("city", "")
             cand_city = candidate.get("current_city") or candidate.get("city") or "Unknown"
             rejection_reasons.append(f"Location mismatch: {cand_city} vs {job_city}")
-
-        is_eligible = final_score >= 60 and p["percentage_status"] != "Below Minimum"
 
         return {
             # Sub-scores
@@ -196,6 +240,7 @@ class MatchingService:
             "experience_score": e["experience_score"],
             "education_score": p["percentage_score"],
             "location_score": l["location_score"],
+            "notice_score": n["notice_score"],
             # Statuses
             "skill_status": s["skill_status"],
             "skill_match_percent": s["skill_match_percent"],
@@ -203,9 +248,12 @@ class MatchingService:
             "candidate_exp": e["candidate_exp"],
             "percentage_status": p["percentage_status"],
             "location_status": l["location_status"],
+            "notice_status": n["notice_status"],
             # Skills detail
             "matched_skills": s["matched_skills"],
             "missing_skills": s["missing_skills"],
+            # Threshold
+            "minimum_match_score": minimum_match_score,
             # Final verdict
             "final_score": final_score,
             "eligible": is_eligible,
@@ -280,8 +328,11 @@ class MatchingService:
                 "candidate_exp": ev["candidate_exp"],
                 # Percentage
                 "percentage_status": ev["percentage_status"],
+                # Notice
+                "notice_status": ev["notice_status"],
                 # Final
                 "final_score": ev["final_score"],
+                "minimum_match_score": ev["minimum_match_score"],
                 "eligibility_status": "eligible" if ev["eligible"] else "not_eligible",
                 "issues": ev["rejection_reasons"],
                 "computed_at": now,
