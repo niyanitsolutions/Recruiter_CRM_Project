@@ -177,8 +177,8 @@ const JobDetails = () => {
           <InfoRow label="Job Type"       value={job.job_type?.replace(/_/g, ' ')} />
           <InfoRow label="Location"       value={[job.city, job.state, job.country].filter(Boolean).join(', ')} />
           <InfoRow label="Work Mode"      value={job.work_mode} />
-          <InfoRow label="Experience"     value={`${job.experience?.min || 0}–${job.experience?.max || '?'} years`} />
-          <InfoRow label="Salary Range"   value={`₹${job.salary?.min || 0}–${job.salary?.max || '?'} LPA`} />
+          <InfoRow label="Experience"     value={`${job.experience?.min_years ?? 0}–${job.experience?.max_years ?? '?'} years`} />
+          <InfoRow label="Salary Range"   value={`₹${job.salary?.min_salary ?? 0}–${job.salary?.max_salary ?? '?'} LPA`} />
           <InfoRow label="Department"     value={job.department} />
           <InfoRow label="Posted On"      value={formatDate(job.created_at)} />
           {job.target_date && (
@@ -255,10 +255,10 @@ const JobDetails = () => {
       {/* Eligibility criteria */}
       <SectionCard title="Eligibility Criteria">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
-          <InfoRow label="Experience"        value={`${job.experience?.min || 0}–${job.experience?.max || '?'} years`} />
+          <InfoRow label="Experience"        value={`${job.experience?.min_years ?? 0}–${job.experience?.max_years ?? '?'} years`} />
           <InfoRow label="Max Notice Period" value={job.eligibility_criteria?.notice_period_max?.replace(/_/g, ' ') || 'Any'} />
           <InfoRow label="Max Current CTC"   value={job.eligibility_criteria?.ctc_max ? `₹${job.eligibility_criteria.ctc_max} LPA` : 'Any'} />
-          <InfoRow label="Salary Range"      value={`₹${job.salary?.min || 0}–${job.salary?.max || '?'} LPA`} />
+          <InfoRow label="Salary Range"      value={`₹${job.salary?.min_salary ?? 0}–${job.salary?.max_salary ?? '?'} LPA`} />
         </div>
       </SectionCard>
 
@@ -433,8 +433,8 @@ const JobDetails = () => {
       <div className="flex flex-wrap gap-4 mb-6 p-4 bg-white border border-surface-200 rounded-xl">
         <MetaBadge icon={Building2}    text={job.client_name} />
         <MetaBadge icon={MapPin}       text={[job.city, job.state].filter(Boolean).join(', ')} />
-        <MetaBadge icon={Clock}        text={`${job.experience?.min || 0}–${job.experience?.max || '?'} yrs`} />
-        <MetaBadge icon={IndianRupee}  text={`₹${job.salary?.min || 0}–${job.salary?.max || '?'} LPA`} />
+        <MetaBadge icon={Clock}        text={`${job.experience?.min_years ?? 0}–${job.experience?.max_years ?? '?'} yrs`} />
+        <MetaBadge icon={IndianRupee}  text={`₹${job.salary?.min_salary ?? 0}–${job.salary?.max_salary ?? '?'} LPA`} />
         <MetaBadge icon={Users}        text={`${total} positions`} />
         <MetaBadge icon={Briefcase}    text={job.work_mode} />
         <MetaBadge icon={Calendar}     text={`Posted ${formatDate(job.created_at)}`} />
