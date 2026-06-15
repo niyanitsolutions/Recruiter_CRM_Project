@@ -34,9 +34,60 @@ class EmployeeService:
         data: EmployeeCreate,
         company_id: str,
         created_by: str,
+        created_by_name: str = "",
+        created_by_role: str = "hr",
+        company_name: str = "",
         crm_enabled: bool = True,
         hrm_enabled: bool = True,
     ) -> dict:
+        # ── Pre-validate account_info before creating anything ────────────────
+        # This prevents orphan employees when account creation fails due to duplicates.
+        if data.account_info and data.account_info.username and data.account_info.password:
+            from fastapi import HTTPException
+            ai = data.account_info
+            employee_email = str(data.email).lower().strip()
+
+            # Duplicate username check
+            dup_user = await self.db.users.find_one(
+                {"username": ai.username.lower(), "is_deleted": {"$ne": True}},
+                {"_id": 1},
+            )
+            if dup_user:
+                raise HTTPException(status_code=409, detail={
+                    "duplicate": True,
+                    "fields": {"username": ai.username},
+                })
+
+            # Duplicate email check (will become the user's email too)
+            dup_email = await self.db.users.find_one(
+                {"email": {"$regex": f"^{re.escape(employee_email)}$", "$options": "i"},
+                 "is_deleted": {"$ne": True}},
+                {"_id": 1},
+            )
+            if dup_email:
+                raise HTTPException(status_code=409, detail={
+                    "duplicate": True,
+                    "fields": {"email": str(data.email)},
+                })
+
+            # Seat limit check (internal users only)
+            if (ai.user_type or "internal") != "partner":
+                from app.core.database import get_master_db
+                master_db = get_master_db()
+                tenant = await master_db.tenants.find_one({"company_id": company_id})
+                if tenant:
+                    total_seats = int(tenant.get("max_users", 0))
+                    if total_seats > 0:
+                        current_count = await self.db.users.count_documents({
+                            "is_deleted": False, "user_type": "internal",
+                        })
+                        if current_count >= total_seats:
+                            raise HTTPException(status_code=402, detail={
+                                "seat_limit_reached": True,
+                                "total_user_seats": total_seats,
+                                "current_active_users": current_count,
+                            })
+
         emp_id = await self._next_employee_id(company_id)
         now = datetime.now(timezone.utc)
         doc = {
@@ -83,27 +134,30 @@ class EmployeeService:
                     {"$set": {"crm_user_id": user_id, "updated_at": now}},
                 )
                 doc["crm_user_id"] = user_id
-                # Also stamp employee_id back on the user for reverse lookup
                 await self.db.users.update_one(
                     {"_id": user_id},
                     {"$set": {"hrm_employee_id": doc["_id"], "updated_at": now}},
                 )
+
             elif data.account_info and data.account_info.username and data.account_info.password:
-                # No CRM user exists BUT account_info was provided — create user account now
-                from app.services.hrm_sync_service import HRMSyncService
-                sync_svc = HRMSyncService(self.db)
-                await sync_svc.sync_employee_to_user(
+                # No CRM user exists — create one using the full UserService pipeline
+                # (handles permissions, welcome email, global user sync, audit log)
+                ai = data.account_info
+                await self._create_linked_user(
                     employee_id=doc["_id"],
+                    employee_doc=doc,
+                    account_info=ai,
                     company_id=company_id,
                     created_by=created_by,
-                    password=data.account_info.password,
-                    role=data.account_info.role or "hr",
-                    username=data.account_info.username,
+                    created_by_name=created_by_name,
+                    created_by_role=created_by_role,
+                    company_name=company_name,
                 )
-                # Refresh crm_user_id in memory after sync
+                # Refresh crm_user_id in memory
                 fresh = await self.col.find_one({"_id": doc["_id"]}, {"crm_user_id": 1})
                 if fresh and fresh.get("crm_user_id"):
                     doc["crm_user_id"] = fresh["crm_user_id"]
+
             else:
                 # No CRM user exists — notify admins to create one
                 admin_ids = await self._get_admin_ids(company_id)
@@ -118,6 +172,73 @@ class EmployeeService:
             pass  # linking must never block employee creation
 
         return self._serialize(doc)
+
+    async def _create_linked_user(
+        self,
+        employee_id: str,
+        employee_doc: dict,
+        account_info: AccountInfoCreate,
+        company_id: str,
+        created_by: str,
+        created_by_name: str,
+        created_by_role: str,
+        company_name: str,
+    ) -> None:
+        """Create a CRM user from account_info + employee identity, then link them."""
+        from app.services.user_service import UserService
+        from app.models.company.user import UserCreate
+
+        # joining_date: convert from ISO date string to datetime if present
+        joining_dt = None
+        if account_info.joining_date:
+            try:
+                from datetime import date as _date
+                parsed = _date.fromisoformat(account_info.joining_date[:10])
+                joining_dt = datetime(parsed.year, parsed.month, parsed.day, tzinfo=timezone.utc)
+            except Exception:
+                pass
+
+        # mobile: use employee's phone; fall back to placeholder if empty/invalid
+        mobile_raw = str(employee_doc.get("phone", "") or "").strip()
+        if not re.match(r"^[6-9]\d{9}$", re.sub(r"[^0-9]", "", mobile_raw)):
+            mobile_raw = "9999999999"  # placeholder — user must update after first login
+
+        user_data = UserCreate(
+            username=account_info.username.lower().strip(),
+            password=account_info.password,
+            email=str(employee_doc["email"]).lower().strip(),
+            full_name=str(employee_doc["full_name"]).strip(),
+            mobile=re.sub(r"[^0-9]", "", mobile_raw),
+            employee_id=account_info.employee_id,
+            role=account_info.role or "candidate_coordinator",
+            user_type=account_info.user_type or "internal",
+            department_id=account_info.department_id,
+            department=account_info.department,
+            designation_id=account_info.designation_id,
+            designation=account_info.designation,
+            reporting_to=account_info.reporting_to,
+            joining_date=joining_dt,
+            status=account_info.status or "active",
+            permissions=account_info.permissions,
+            primary_department=account_info.primary_department,
+            level=account_info.level,
+            assigned_departments=account_info.assigned_departments or [],
+            restricted_modules=account_info.restricted_modules or [],
+            override_duplicate=account_info.override_duplicate or False,
+        )
+
+        user_svc = UserService(self.db)
+        ok, msg, _ = await user_svc.create_user(
+            user_data=user_data,
+            created_by_id=created_by,
+            created_by_name=created_by_name or "System",
+            created_by_role=created_by_role or "hr",
+            company_id=company_id,
+            company_name=company_name or "",
+        )
+        if not ok:
+            raise RuntimeError(f"User creation failed: {msg}")
+        # auto-link is handled inside user_service.create_user via sync_user_to_employee
 
     async def _get_admin_ids(self, company_id: str) -> list:
         """Return user _ids for all active admin/owner users in this company.
@@ -174,9 +295,9 @@ class EmployeeService:
         # Phase 10: sync shared fields to linked CRM user
         try:
             shared = {}
-            if "full_name" in update_data:     shared["full_name"] = update_data["full_name"]
-            if "email" in update_data:         shared["email"] = str(update_data["email"]).lower()
-            if "phone" in update_data:         shared["mobile"] = update_data["phone"]
+            if "full_name" in update_data:       shared["full_name"] = update_data["full_name"]
+            if "email" in update_data:           shared["email"] = str(update_data["email"]).lower()
+            if "phone" in update_data:           shared["mobile"] = update_data["phone"]
             if "department_name" in update_data: shared["department"] = update_data["department_name"]
             if "department_id" in update_data:   shared["department_id"] = update_data["department_id"]
             if shared:

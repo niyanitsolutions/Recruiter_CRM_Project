@@ -17,7 +17,12 @@ async def create_employee(
     _perm=Depends(require_permissions(["hrm:employees:manage"])),
 ):
     return await EmployeeService(db).create(
-        data, cu["company_id"], cu["id"],
+        data,
+        company_id=cu["company_id"],
+        created_by=cu["id"],
+        created_by_name=cu.get("full_name") or cu.get("username") or "",
+        created_by_role=cu.get("role") or "hr",
+        company_name=cu.get("company_name") or "",
         crm_enabled=cu.get("crm_enabled", False),
         hrm_enabled=cu.get("hrm_enabled", True),
     )

@@ -177,10 +177,26 @@ class EmployeeModel(BaseModel):
 
 
 class AccountInfoCreate(BaseModel):
-    """Account credentials for creating a linked CRM user account alongside an employee."""
+    """Full user account fields for creating a CRM user alongside an employee.
+    Email, full_name, and phone are inherited from the employee record (not duplicated here)."""
     username: str
     password: str
-    role: str = "hr"
+    employee_id: Optional[str] = None
+    user_type: str = "internal"
+    role: str = "candidate_coordinator"
+    department_id: Optional[str] = None
+    department: Optional[str] = None
+    designation_id: Optional[str] = None
+    designation: Optional[str] = None
+    reporting_to: Optional[str] = None
+    joining_date: Optional[str] = None
+    status: str = "active"
+    permissions: Optional[List[str]] = None
+    primary_department: Optional[str] = None
+    level: Optional[str] = None
+    assigned_departments: Optional[List[str]] = None
+    restricted_modules: Optional[List[str]] = None
+    override_duplicate: bool = False
 
 
 class EmployeeCreate(BaseModel):
