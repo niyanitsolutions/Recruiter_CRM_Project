@@ -303,17 +303,21 @@ export default function EmployeeForm() {
   const [linkedUserInfo, setLinkedUserInfo] = useState(null)
   const [prefillBanner, setPrefillBanner]   = useState('')
 
-  // ── Reference data load ─────────────────────────────────────────
+  // ── Reference data load — identical calls to UserForm ───────────
   useEffect(() => {
-    Promise.all([
-      departmentService.getDepartments(),
-      designationService.getDesignations(),
-      userService.getUsers({ page_size: 200 }),
-    ]).then(([d, dsg, u]) => {
-      setDepartments(d.data || [])
-      setDesignations(dsg.data || [])
-      setUsers(u.data || [])
-    }).catch(() => {})
+    const fetchData = async () => {
+      try {
+        const [deptsRes, desigsRes, usersRes] = await Promise.all([
+          departmentService.getDepartments(),
+          designationService.getDesignations(),
+          userService.getUsers({ page_size: 100 }),
+        ])
+        setDepartments(deptsRes.data || [])
+        setDesignations(desigsRes.data || [])
+        setUsers(usersRes.data || [])
+      } catch (err) { console.error('EmployeeForm: reference data load failed', err) }
+    }
+    fetchData()
   }, [])
 
   // ── Load existing employee (edit mode) ──────────────────────────
