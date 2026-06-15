@@ -165,8 +165,17 @@ async def create_job(
         return {"success": True, "message": "Job created successfully", "data": job}
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception(
+            "Unexpected error during job creation | company_id=%s user_id=%s title=%r",
+            current_user.get("company_id", ""),
+            current_user.get("id", ""),
+            job_data.title,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while creating the job. Please try again or contact support."
+        )
 
 
 

@@ -1,8 +1,9 @@
-import re
 """
 Job Service - Phase 3
 Business logic for job management with eligibility matching
 """
+import re
+import logging
 from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
@@ -22,6 +23,8 @@ from app.models.company.job import (
     get_priority_display
 )
 from app.services.audit_service import AuditService
+
+logger = logging.getLogger(__name__)
 
 
 def _sanitize_for_mongo(d: dict) -> dict:
@@ -57,16 +60,24 @@ class JobService:
         user_name: str = "",
     ) -> JobResponse:
         """Create a new job"""
+        logger.info(
+            "Job creation started | company_id=%s user_id=%s title=%r",
+            company_id, created_by, job_data.title
+        )
         collection = db[JobService.COLLECTION]
-        
+
         # Verify client exists
         clients_collection = db["clients"]
         client = await clients_collection.find_one({
             "_id": job_data.client_id,
             "is_deleted": False
         })
-        
+
         if not client:
+            logger.warning(
+                "Job creation failed: client not found | company_id=%s user_id=%s client_id=%s",
+                company_id, created_by, job_data.client_id
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Client not found"
@@ -75,13 +86,20 @@ class JobService:
         # Generate job code if not provided
         job_code = job_data.job_code
         if not job_code:
-            client_code = client.get("code", "JOB")[:3].upper()
+            # Use `or` so that None, empty string, or any falsy code value
+            # all fall back to the "JOB" default — client.get("code", "JOB")
+            # only triggers the default when the key is absent, not when it is None.
+            raw_code = client.get("code") or "JOB"
+            client_code = raw_code[:3].upper()
             last_job = await collection.find_one(
                 {"job_code": {"$regex": f"^{re.escape(client_code)}-"}},
                 sort=[("job_code", -1)]
             )
             if last_job:
-                last_num = int(last_job["job_code"].split("-")[-1])
+                try:
+                    last_num = int((last_job.get("job_code") or "").split("-")[-1])
+                except (ValueError, IndexError):
+                    last_num = 0
                 job_code = f"{client_code}-{str(last_num + 1).zfill(3)}"
             else:
                 job_code = f"{client_code}-001"
@@ -90,7 +108,7 @@ class JobService:
         job_dict = job_data.model_dump(exclude_unset=True)
         job_dict["_id"] = str(ObjectId())
         job_dict["job_code"] = job_code
-        job_dict["client_name"] = client["name"]
+        job_dict["client_name"] = client.get("name", "")
         job_dict["created_by"] = created_by
         job_dict["created_at"] = datetime.now(timezone.utc)
         job_dict["is_deleted"] = False
@@ -111,6 +129,10 @@ class JobService:
         _sanitize_for_mongo(job_dict)
 
         await collection.insert_one(job_dict)
+        logger.info(
+            "Job created | company_id=%s job_id=%s job_code=%s user_id=%s",
+            company_id, job_dict["_id"], job_dict["job_code"], created_by
+        )
 
         # Update client stats — best-effort; never block the response
         try:
