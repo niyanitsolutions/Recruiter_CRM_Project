@@ -134,6 +134,7 @@ const ActiveSessionsPage      = lazy(() => import('./pages/settings').then(m => 
 const HRMDashboard       = lazy(() => import('./pages/hrm/HRMDashboard'))
 const Employees          = lazy(() => import('./pages/hrm/Employees'))
 const EmployeeForm       = lazy(() => import('./pages/hrm/EmployeeForm'))
+const EmployeeView       = lazy(() => import('./pages/hrm/EmployeeView'))
 const Attendance         = lazy(() => import('./pages/hrm/Attendance'))
 const LeaveManagement    = lazy(() => import('./pages/hrm/LeaveManagement'))
 const Payroll            = lazy(() => import('./pages/hrm/Payroll'))
@@ -1437,9 +1438,10 @@ function App() {
         {/* ── HRM Module ── */}
         <Route path="/hrm"                element={<PermissionRoute permission="hrm:dashboard:view"><HRMDashboard /></PermissionRoute>} />
         <Route path="/hrm/employees"      element={<PermissionRoute permission="hrm:employees:view"><Employees /></PermissionRoute>} />
-        <Route path="/hrm/employees/new"  element={<PermissionRoute permission="hrm:employees:manage"><EmployeeForm /></PermissionRoute>} />
-        <Route path="/hrm/employees/:id"  element={<PermissionRoute permission="hrm:employees:view"><EmployeeForm /></PermissionRoute>} />
-        <Route path="/hrm/employees/:id/edit" element={<PermissionRoute permission="hrm:employees:manage"><EmployeeForm /></PermissionRoute>} />
+        <Route path="/hrm/employees/new"        element={<PermissionRoute permission="hrm:employees:manage"><EmployeeForm /></PermissionRoute>} />
+        <Route path="/hrm/employees/:id"        element={<PermissionRoute permission="hrm:employees:view"><EmployeeView /></PermissionRoute>} />
+        <Route path="/hrm/employees/:id/view"   element={<PermissionRoute permission="hrm:employees:view"><EmployeeView /></PermissionRoute>} />
+        <Route path="/hrm/employees/:id/edit"   element={<PermissionRoute permission="hrm:employees:manage"><EmployeeForm /></PermissionRoute>} />
         <Route path="/hrm/attendance"     element={<PermissionRoute permission="hrm:attendance:self"><Attendance /></PermissionRoute>} />
         <Route path="/hrm/leaves"         element={<PermissionRoute permission="hrm:leave:apply"><LeaveManagement /></PermissionRoute>} />
         <Route path="/hrm/payroll"        element={<PermissionRoute permission="hrm:payroll:view_self"><Payroll /></PermissionRoute>} />

@@ -583,7 +583,7 @@ export default function EmployeeForm() {
       uan_number: form.uan_number || undefined,
       emergency_contacts: emergencyContacts.filter(c => c.name || c.phone),
       qualifications:     qualifications.filter(q => q.title),
-      disciplinary_records: isEdit ? disciplinary : undefined,
+      disciplinary_records: disciplinary.filter(d => d.date || d.incident),
       background_check: { status: form.bg_status, notes: form.bg_notes || undefined },
       account_info,
     }
@@ -1355,37 +1355,41 @@ export default function EmployeeForm() {
         </Section>
 
         {/* ═══════════════════════════════════════════════════════════
-            SECTION 8 — DISCIPLINARY RECORDS (edit only)
+            SECTION 8 — DISCIPLINARY RECORDS
             ═══════════════════════════════════════════════════════════ */}
-        {isEdit && (
-          <Section icon={FileText} title="Disciplinary Records" color="red" defaultOpen={false}>
-            <div className="space-y-3 mt-2">
-              {disciplinary.map((d, i) => (
-                <div key={i} className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-red-50 rounded-lg">
-                  <EmpInput type="date" value={d.date} onChange={e => setDisc(i,'date',e.target.value)} />
-                  <EmpInput placeholder="Incident" value={d.incident} onChange={e => setDisc(i,'incident',e.target.value)} />
-                  <div className="flex gap-2">
-                    <EmpInput placeholder="Action taken" value={d.action_taken} onChange={e => setDisc(i,'action_taken',e.target.value)} />
-                    <button type="button" onClick={() => removeDisc(i)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg flex-shrink-0">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+        <Section icon={FileText} title="Disciplinary Records" color="red" defaultOpen={false}>
+          <div className="space-y-3 mt-2">
+            {disciplinary.map((d, i) => (
+              <div key={i} className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-red-50 rounded-lg">
+                <EmpInput type="date" value={d.date} onChange={e => setDisc(i,'date',e.target.value)} />
+                <EmpInput placeholder="Incident" value={d.incident} onChange={e => setDisc(i,'incident',e.target.value)} />
+                <div className="flex gap-2">
+                  <EmpInput placeholder="Action taken" value={d.action_taken} onChange={e => setDisc(i,'action_taken',e.target.value)} />
+                  <button type="button" onClick={() => removeDisc(i)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg flex-shrink-0">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
-              ))}
-              <button type="button" onClick={addDisc}
-                className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 font-medium">
-                <Plus className="w-4 h-4" /> Add Record
-              </button>
-            </div>
-          </Section>
-        )}
+              </div>
+            ))}
+            <button type="button" onClick={addDisc}
+              className="flex items-center gap-2 text-sm text-red-600 hover:text-red-700 font-medium">
+              <Plus className="w-4 h-4" /> Add Record
+            </button>
+          </div>
+        </Section>
 
         {/* ═══════════════════════════════════════════════════════════
-            SECTION 9 — DOCUMENTS (edit only)
+            SECTION 9 — DOCUMENTS
             ═══════════════════════════════════════════════════════════ */}
-        {isEdit && (
-          <Section icon={FileText} title="Documents" color="blue" defaultOpen={false}>
-            <div className="mt-2 space-y-4">
+        <Section icon={FileText} title="Documents" color="blue" defaultOpen={false}>
+          <div className="mt-2 space-y-4">
+            {!isEdit && (
+              <div className="flex items-center gap-2 p-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm">
+                <Info className="w-4 h-4 flex-shrink-0" />
+                Documents can be uploaded after the employee profile is saved.
+              </div>
+            )}
+            {isEdit && (
               <div className="flex flex-wrap gap-3 items-end p-4 bg-gray-50 rounded-lg">
                 <Field label="Document Type" className="w-44">
                   <EmpSelect value={docType} onChange={e => setDocType(e.target.value)} options={[
@@ -1407,25 +1411,25 @@ export default function EmployeeForm() {
                   </button>
                 </div>
               </div>
-              {documents.length > 0 ? (
-                <div className="space-y-2">
-                  {documents.map((doc, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{doc.doc_name}</p>
-                        <p className="text-xs text-gray-500">{doc.doc_type}</p>
-                      </div>
-                      <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
-                        className="text-xs text-indigo-600 hover:underline">View</a>
+            )}
+            {documents.length > 0 ? (
+              <div className="space-y-2">
+                {documents.map((doc, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{doc.doc_name}</p>
+                      <p className="text-xs text-gray-500">{doc.doc_type}</p>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-400 text-center py-4">No documents uploaded yet</p>
-              )}
-            </div>
-          </Section>
-        )}
+                    <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-indigo-600 hover:underline">View</a>
+                  </div>
+                ))}
+              </div>
+            ) : isEdit ? (
+              <p className="text-sm text-gray-400 text-center py-4">No documents uploaded yet</p>
+            ) : null}
+          </div>
+        </Section>
 
         {/* ── Actions ──────────────────────────────────────────────────── */}
         <div className="flex justify-end gap-3 pt-2">
