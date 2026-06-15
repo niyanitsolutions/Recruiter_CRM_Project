@@ -571,6 +571,23 @@ class UserService:
             # Get updated user
             updated_user = await self.get_user(user_id)
 
+            # Phase 10: sync shared fields to linked HRM employee
+            try:
+                shared = {}
+                if "full_name" in update_dict:   shared["full_name"] = update_dict["full_name"]
+                if "email" in update_dict:        shared["email"] = str(update_dict["email"]).lower()
+                if "mobile" in update_dict:       shared["phone"] = update_dict["mobile"]
+                if "department" in update_dict:   shared["department_name"] = update_dict["department"]
+                if "department_id" in update_dict: shared["department_id"] = update_dict["department_id"]
+                if shared and existing.get("hrm_employee_id"):
+                    shared["updated_at"] = datetime.now(timezone.utc)
+                    await self.db.hrm_employees.update_one(
+                        {"_id": existing["hrm_employee_id"], "is_deleted": False},
+                        {"$set": shared},
+                    )
+            except Exception:
+                pass  # sync must never block user update
+
             # Audit log
             await self.audit_service.log(
                 action=AuditAction.UPDATE.value,

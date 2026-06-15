@@ -148,6 +148,7 @@ class HRMSyncService:
         created_by: str,
         password: Optional[str] = None,
         role: str = "hr",
+        username: Optional[str] = None,
     ) -> dict:
         """Create a CRM user account from an employee record and link them."""
         emp = await self.employees.find_one({"_id": employee_id, "company_id": company_id, "is_deleted": False})
@@ -181,10 +182,11 @@ class HRMSyncService:
         pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=rounds)
         plain_pwd = password or f"HireFlow@{datetime.now().year}"
         now = datetime.now(timezone.utc)
+        _username = (username or emp["email"].split("@")[0]).lower().replace(".", "_").replace("-", "_")
         user_doc = {
             "_id": str(ObjectId()),
             "company_id": company_id,
-            "username": emp["email"].split("@")[0].lower().replace(".", "_"),
+            "username": _username,
             "email": emp["email"],
             "full_name": emp["full_name"],
             "phone": emp.get("phone", ""),

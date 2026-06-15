@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional, List
 from bson import ObjectId
 
-from app.models.company.employee import EmployeeCreate, EmployeeUpdate, EmploymentStatus
+from app.models.company.employee import EmployeeCreate, EmployeeUpdate, EmploymentStatus, AccountInfoCreate
 
 
 class EmployeeService:
@@ -43,7 +43,7 @@ class EmployeeService:
             "_id": str(ObjectId()),
             "company_id": company_id,
             "employee_id": emp_id,
-            **data.model_dump(exclude_none=True),
+            **data.model_dump(exclude_none=True, exclude={"account_info"}),
             "employment_status": EmploymentStatus.ACTIVE,
             "created_by": created_by,
             "created_at": now,
@@ -88,6 +88,22 @@ class EmployeeService:
                     {"_id": user_id},
                     {"$set": {"hrm_employee_id": doc["_id"], "updated_at": now}},
                 )
+            elif data.account_info and data.account_info.username and data.account_info.password:
+                # No CRM user exists BUT account_info was provided — create user account now
+                from app.services.hrm_sync_service import HRMSyncService
+                sync_svc = HRMSyncService(self.db)
+                await sync_svc.sync_employee_to_user(
+                    employee_id=doc["_id"],
+                    company_id=company_id,
+                    created_by=created_by,
+                    password=data.account_info.password,
+                    role=data.account_info.role or "hr",
+                    username=data.account_info.username,
+                )
+                # Refresh crm_user_id in memory after sync
+                fresh = await self.col.find_one({"_id": doc["_id"]}, {"crm_user_id": 1})
+                if fresh and fresh.get("crm_user_id"):
+                    doc["crm_user_id"] = fresh["crm_user_id"]
             else:
                 # No CRM user exists — notify admins to create one
                 admin_ids = await self._get_admin_ids(company_id)
@@ -154,6 +170,27 @@ class EmployeeService:
                 update_data[field] = update_data[field].model_dump()
         update_data["updated_at"] = datetime.now(timezone.utc)
         await self.col.update_one({"_id": employee_id, "company_id": company_id}, {"$set": update_data})
+
+        # Phase 10: sync shared fields to linked CRM user
+        try:
+            shared = {}
+            if "full_name" in update_data:     shared["full_name"] = update_data["full_name"]
+            if "email" in update_data:         shared["email"] = str(update_data["email"]).lower()
+            if "phone" in update_data:         shared["mobile"] = update_data["phone"]
+            if "department_name" in update_data: shared["department"] = update_data["department_name"]
+            if "department_id" in update_data:   shared["department_id"] = update_data["department_id"]
+            if shared:
+                emp_doc = await self.col.find_one({"_id": employee_id}, {"crm_user_id": 1})
+                crm_user_id = emp_doc.get("crm_user_id") if emp_doc else None
+                if crm_user_id:
+                    shared["updated_at"] = datetime.now(timezone.utc)
+                    await self.db.users.update_one(
+                        {"_id": crm_user_id, "is_deleted": {"$ne": True}},
+                        {"$set": shared},
+                    )
+        except Exception:
+            pass  # sync must never block employee update
+
         return await self.get(employee_id, company_id)
 
     async def delete(self, employee_id: str, company_id: str) -> bool:

@@ -176,6 +176,13 @@ class EmployeeModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class AccountInfoCreate(BaseModel):
+    """Account credentials for creating a linked CRM user account alongside an employee."""
+    username: str
+    password: str
+    role: str = "hr"
+
+
 class EmployeeCreate(BaseModel):
     full_name: str
     email: EmailStr
@@ -206,10 +213,12 @@ class EmployeeCreate(BaseModel):
     work_description: Optional[str] = None
     qualifications: Optional[List[Qualification]] = None
     background_check: Optional[BackgroundCheck] = None
+    account_info: Optional[AccountInfoCreate] = None
 
 
 class EmployeeUpdate(BaseModel):
     full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
     phone: Optional[str] = None
     gender: Optional[Gender] = None
     date_of_birth: Optional[date] = None

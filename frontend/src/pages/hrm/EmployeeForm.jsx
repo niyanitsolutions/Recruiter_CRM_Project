@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom'
 import {
   ArrowLeft, Save, ChevronDown, ChevronUp,
   User, Briefcase, CreditCard, Phone, GraduationCap,
-  ShieldCheck, FileText, Plus, Trash2, Upload, X, Info, Link2,
+  ShieldCheck, FileText, Plus, Trash2, Upload, X, Info, Link2, KeyRound,
+  CheckCircle, AlertCircle,
 } from 'lucide-react'
 import hrmService from '../../services/hrmService'
 import userService from '../../services/userService'
@@ -21,6 +22,7 @@ const Section = ({ icon: Icon, title, color = 'indigo', children, defaultOpen = 
     orange: 'bg-orange-50 text-orange-600',
     red:    'bg-red-50 text-red-600',
     teal:   'bg-teal-50 text-teal-600',
+    violet: 'bg-violet-50 text-violet-600',
   }
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -67,17 +69,27 @@ const Textarea = ({ ...props }) => (
   <textarea rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-500 resize-none" {...props} />
 )
 
+const ROLE_OPTIONS = [
+  { value: 'hr',                   label: 'HR' },
+  { value: 'candidate_coordinator', label: 'Candidate Coordinator' },
+  { value: 'client_coordinator',    label: 'Client Coordinator' },
+  { value: 'accounts',              label: 'Accounts' },
+  { value: 'admin',                 label: 'Admin' },
+]
+
 // ── Main form ─────────────────────────────────────────────────────────────────
 const EMPTY_FORM = {
-  // Basic
-  full_name: '', email: '', phone: '',
+  // Account Information (section 1 — drives both employee + user creation)
+  full_name: '', email: '', phone: '', department_name: '',
+  username: '', password: '', role: 'hr',
+  // Personal
   gender: '', date_of_birth: '', blood_group: '',
   // Address
   street: '', city: '', state: '', zip_code: '', country: 'India',
   // IDs
   pan_number: '', aadhaar_number: '',
-  // Employment
-  designation_name: '', department_name: '',
+  // Employment (department moved to Account Info)
+  designation_name: '',
   reporting_manager_id: '', employment_type: 'full_time',
   date_of_joining: '', work_location: '',
   shift_start_time: '09:00', shift_end_time: '18:00',
@@ -99,13 +111,12 @@ export default function EmployeeForm() {
   const isEdit   = !!id
   const fileRef  = useRef(null)
 
-  const [saving, setSaving]               = useState(false)
-  const [error, setError]                 = useState('')
-  const [form, setForm]                   = useState({ ...EMPTY_FORM })
-  const [createLoginAccount, setCreateLoginAccount] = useState(false)
-  const [loginRole, setLoginRole]         = useState('hr')
-  const [linkedUserName, setLinkedUserName] = useState('')   // prefill banner text
-  const [prefillBanner, setPrefillBanner]   = useState('')   // "Prefilled from User Account"
+  const [saving, setSaving]             = useState(false)
+  const [error, setError]               = useState('')
+  const [form, setForm]                 = useState({ ...EMPTY_FORM })
+  const [linkedUserId, setLinkedUserId] = useState('')   // crm_user_id from employee doc
+  const [linkedUserInfo, setLinkedUserInfo] = useState(null) // { username, role, email, mobile }
+  const [prefillBanner, setPrefillBanner]   = useState('')
 
   const { errors: fErrors, touched: fTouched, touch, validate: fValidate } = useFormValidation({
     full_name: validators.required('Full name'),
@@ -133,6 +144,7 @@ export default function EmployeeForm() {
         full_name:        e.full_name          || '',
         email:            e.email              || '',
         phone:            e.phone              || '',
+        department_name:  e.department_name   || '',
         gender:           e.gender             || '',
         date_of_birth:    e.date_of_birth      || '',
         blood_group:      e.blood_group        || '',
@@ -144,7 +156,6 @@ export default function EmployeeForm() {
         pan_number:       e.pan_number         || '',
         aadhaar_number:   e.aadhaar_number     || '',
         designation_name: e.designation_name  || '',
-        department_name:  e.department_name   || '',
         reporting_manager_id: e.reporting_manager_id || '',
         employment_type:  e.employment_type   || 'full_time',
         date_of_joining:  e.date_of_joining   || '',
@@ -164,13 +175,26 @@ export default function EmployeeForm() {
         uan_number:       e.uan_number        || '',
         bg_status:        e.background_check?.status || 'pending',
         bg_notes:         e.background_check?.notes  || '',
+        // account fields unused in edit mode but keep defaults
+        username: '', password: '', role: 'hr',
       })
       if (e.emergency_contacts?.length)  setEmergencyContacts(e.emergency_contacts)
       if (e.qualifications?.length)       setQualifications(e.qualifications)
       if (e.disciplinary_records?.length) setDisciplinary(e.disciplinary_records)
       if (e.documents?.length)            setDocuments(e.documents)
-      // If this employee was auto-created from a User, show link info
-      if (e.crm_user_id) setLinkedUserName(e.full_name || '')
+
+      // Load linked user info for MODE B display
+      if (e.crm_user_id) {
+        setLinkedUserId(e.crm_user_id)
+        userService.getUser(e.crm_user_id).then(u => {
+          setLinkedUserInfo({
+            username: u.username || '',
+            role:     u.role     || '',
+            email:    u.email    || '',
+            mobile:   u.mobile   || '',
+          })
+        }).catch(() => {})
+      }
     }).catch(() => {})
   }, [id])
 
@@ -196,50 +220,63 @@ export default function EmployeeForm() {
   }, [isEdit, searchParams])
 
   // ── Build payload ─────────────────────────────────────────────────────────
-  const buildPayload = () => ({
-    full_name:       form.full_name,
-    email:           form.email,
-    phone:           form.phone,
-    gender:          form.gender || undefined,
-    date_of_birth:   form.date_of_birth || undefined,
-    blood_group:     form.blood_group || undefined,
-    pan_number:      form.pan_number || undefined,
-    aadhaar_number:  form.aadhaar_number || undefined,
-    address_info: {
-      street:  form.street,
-      city:    form.city,
-      state:   form.state,
-      zip_code: form.zip_code,
-      country: form.country,
-    },
-    designation_name:    form.designation_name || undefined,
-    department_name:     form.department_name  || undefined,
-    reporting_manager_id: form.reporting_manager_id || undefined,
-    employment_type:     form.employment_type,
-    date_of_joining:     form.date_of_joining  || undefined,
-    work_location:       form.work_location    || undefined,
-    shift_start_time:    form.shift_start_time,
-    shift_end_time:      form.shift_end_time,
-    work_description:    form.work_description || undefined,
-    salary: {
-      ctc:               Number(form.ctc)               || 0,
-      basic:             Number(form.basic)             || 0,
-      hra:               Number(form.hra)               || 0,
-      special_allowance: Number(form.special_allowance) || 0,
-    },
-    bank_details: {
-      bank_name:           form.bank_name           || undefined,
-      account_number:      form.account_number      || undefined,
-      ifsc_code:           form.ifsc_code           || undefined,
-      account_holder_name: form.account_holder_name || undefined,
-    },
-    pf_number:  form.pf_number  || undefined,
-    uan_number: form.uan_number || undefined,
-    emergency_contacts: emergencyContacts.filter(c => c.name || c.phone),
-    qualifications:     qualifications.filter(q => q.title),
-    disciplinary_records: isEdit ? disciplinary : undefined,
-    background_check: { status: form.bg_status, notes: form.bg_notes || undefined },
-  })
+  const buildPayload = () => {
+    const payload = {
+      full_name:       form.full_name,
+      email:           form.email,
+      phone:           form.phone,
+      gender:          form.gender || undefined,
+      date_of_birth:   form.date_of_birth || undefined,
+      blood_group:     form.blood_group || undefined,
+      pan_number:      form.pan_number || undefined,
+      aadhaar_number:  form.aadhaar_number || undefined,
+      address_info: {
+        street:   form.street,
+        city:     form.city,
+        state:    form.state,
+        zip_code: form.zip_code,
+        country:  form.country,
+      },
+      department_name:     form.department_name  || undefined,
+      designation_name:    form.designation_name || undefined,
+      reporting_manager_id: form.reporting_manager_id || undefined,
+      employment_type:     form.employment_type,
+      date_of_joining:     form.date_of_joining  || undefined,
+      work_location:       form.work_location    || undefined,
+      shift_start_time:    form.shift_start_time,
+      shift_end_time:      form.shift_end_time,
+      work_description:    form.work_description || undefined,
+      salary: {
+        ctc:               Number(form.ctc)               || 0,
+        basic:             Number(form.basic)             || 0,
+        hra:               Number(form.hra)               || 0,
+        special_allowance: Number(form.special_allowance) || 0,
+      },
+      bank_details: {
+        bank_name:           form.bank_name           || undefined,
+        account_number:      form.account_number      || undefined,
+        ifsc_code:           form.ifsc_code           || undefined,
+        account_holder_name: form.account_holder_name || undefined,
+      },
+      pf_number:  form.pf_number  || undefined,
+      uan_number: form.uan_number || undefined,
+      emergency_contacts: emergencyContacts.filter(c => c.name || c.phone),
+      qualifications:     qualifications.filter(q => q.title),
+      disciplinary_records: isEdit ? disciplinary : undefined,
+      background_check: { status: form.bg_status, notes: form.bg_notes || undefined },
+    }
+
+    // Phase 3: include account_info only in create mode when all three fields are filled
+    if (!isEdit && form.username.trim() && form.password.trim()) {
+      payload.account_info = {
+        username: form.username.trim().toLowerCase(),
+        password: form.password,
+        role:     form.role || 'hr',
+      }
+    }
+
+    return payload
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -253,19 +290,9 @@ export default function EmployeeForm() {
         await hrmService.updateEmployee(id, buildPayload())
         toast.success('Employee updated')
       } else {
-        const res = await hrmService.createEmployee(buildPayload())
-        toast.success('Employee created')
-        if (createLoginAccount) {
-          const empId = res.data?.id
-          if (empId) {
-            try {
-              await hrmService.syncEmployeeToUser(empId, { role: loginRole })
-              toast.success('Login account created')
-            } catch {
-              toast.error('Employee created — but login account setup failed. Use the Sync panel to retry.')
-            }
-          }
-        }
+        await hrmService.createEmployee(buildPayload())
+        const hasAccount = form.username.trim() && form.password.trim()
+        toast.success(hasAccount ? 'Employee and login account created' : 'Employee created')
       }
       navigate('/hrm/employees')
     } catch (err) {
@@ -311,6 +338,10 @@ export default function EmployeeForm() {
   const removeDisc = (i) => setDisciplinary(d => d.filter((_, idx) => idx !== i))
   const setDisc = (i, k, v) => setDisciplinary(d => d.map((item, idx) => idx === i ? { ...item, [k]: v } : item))
 
+  // MODE A = create mode OR editing an employee without a linked user
+  const modeB = isEdit && !!linkedUserId
+  const modeA = !modeB
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-4">
       {/* Header */}
@@ -324,19 +355,11 @@ export default function EmployeeForm() {
         </div>
       </div>
 
-      {/* Prefill banner — shown when creating from a User record */}
+      {/* Prefill banner */}
       {prefillBanner && (
         <div className="flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg p-3 text-sm">
           <Info className="w-4 h-4 flex-shrink-0" />
           {prefillBanner} — review and complete the remaining fields.
-        </div>
-      )}
-
-      {/* Linked user info — shown when editing an auto-linked employee */}
-      {isEdit && linkedUserName && (
-        <div className="flex items-center gap-2 bg-green-50 text-green-700 border border-green-200 rounded-lg p-3 text-sm">
-          <Link2 className="w-4 h-4 flex-shrink-0" />
-          Linked to User Account: <span className="font-medium">{linkedUserName}</span>
         </div>
       )}
 
@@ -346,8 +369,9 @@ export default function EmployeeForm() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
 
-        {/* ── PERSONAL INFORMATION ─────────────────────────────────────────── */}
-        <Section icon={User} title="Personal Information" color="indigo">
+        {/* ── SECTION 1: ACCOUNT INFORMATION ───────────────────────────────── */}
+        <Section icon={KeyRound} title="Account Information" color="violet">
+          {/* Shared identity fields — always editable */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
             <Field label="Full Name" required error={fTouched.full_name ? fErrors.full_name : ''}>
               <Input value={form.full_name} onChange={e => set('full_name', e.target.value)} onBlur={() => touch('full_name', form.full_name, form)} />
@@ -355,9 +379,125 @@ export default function EmployeeForm() {
             <Field label="Email" required error={fTouched.email ? fErrors.email : ''}>
               <Input type="email" value={form.email} onChange={e => set('email', e.target.value)} onBlur={() => touch('email', form.email, form)} />
             </Field>
-            <Field label="Phone" error={fTouched.phone ? fErrors.phone : ''}>
+            <Field label="Mobile" error={fTouched.phone ? fErrors.phone : ''}>
               <Input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} onBlur={() => touch('phone', form.phone, form)} />
             </Field>
+            <Field label="Department">
+              <Input value={form.department_name} onChange={e => set('department_name', e.target.value)} placeholder="e.g. Engineering" />
+            </Field>
+          </div>
+
+          {/* MODE A — create mode or no linked user: show account creation fields */}
+          {modeA && (
+            <div className="mt-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1 h-px bg-gray-200" />
+                <p className="text-xs font-semibold text-gray-500 uppercase whitespace-nowrap px-2">
+                  CRM Login Account <span className="text-gray-400 normal-case font-normal">(optional — leave blank to skip)</span>
+                </p>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Field label="Username">
+                  <Input
+                    value={form.username}
+                    onChange={e => set('username', e.target.value.toLowerCase().replace(/\s/g, '_'))}
+                    placeholder="e.g. john_doe"
+                    autoComplete="off"
+                  />
+                </Field>
+                <Field label="Password">
+                  <Input
+                    type="password"
+                    value={form.password}
+                    onChange={e => set('password', e.target.value)}
+                    placeholder="Min 6 characters"
+                    autoComplete="new-password"
+                  />
+                </Field>
+                <Field label="Role">
+                  <Select value={form.role} onChange={e => set('role', e.target.value)} options={ROLE_OPTIONS} />
+                </Field>
+              </div>
+              {form.username && form.password && (
+                <p className="text-xs text-violet-600 mt-2 flex items-center gap-1.5">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  A CRM account will be created with role <strong>{ROLE_OPTIONS.find(r => r.value === form.role)?.label}</strong> on save.
+                </p>
+              )}
+              {(form.username && !form.password) || (!form.username && form.password) ? (
+                <p className="text-xs text-amber-600 mt-2 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Fill both Username and Password to create a login account.
+                </p>
+              ) : null}
+            </div>
+          )}
+
+          {/* MODE B — editing with a linked user: show readonly account card */}
+          {modeB && (
+            <div className="mt-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1 h-px bg-gray-200" />
+                <p className="text-xs font-semibold text-gray-500 uppercase whitespace-nowrap px-2">Linked CRM Account</p>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
+              {linkedUserInfo ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+                  <div className="flex items-center gap-2 text-green-700">
+                    <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                    <span className="text-sm font-medium">Account linked</span>
+                  </div>
+                  <div className="flex flex-wrap gap-4 text-sm text-gray-700">
+                    <span><span className="text-gray-500">Username:</span> <strong>{linkedUserInfo.username}</strong></span>
+                    <span><span className="text-gray-500">Role:</span> <strong>{ROLE_OPTIONS.find(r => r.value === linkedUserInfo.role)?.label || linkedUserInfo.role}</strong></span>
+                    {linkedUserInfo.mobile && (
+                      <span><span className="text-gray-500">Mobile:</span> {linkedUserInfo.mobile}</span>
+                    )}
+                  </div>
+                  <Link
+                    to={`/users/${linkedUserId}`}
+                    className="text-xs text-indigo-600 hover:underline font-medium whitespace-nowrap"
+                  >
+                    View / Edit User →
+                  </Link>
+                </div>
+              ) : (
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-500 flex items-center gap-2">
+                  <Link2 className="w-4 h-4" />
+                  Loading linked account…
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Edit mode, no linked user — offer navigation to create account */}
+          {isEdit && !linkedUserId && (
+            <div className="mt-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1 h-px bg-gray-200" />
+                <p className="text-xs font-semibold text-gray-500 uppercase whitespace-nowrap px-2">CRM Account</p>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
+              <div className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                <div className="flex items-center gap-2 text-amber-700 text-sm">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  No CRM login account linked to this employee.
+                </div>
+                <Link
+                  to={`/users/new?employee_id=${id}`}
+                  className="text-xs text-indigo-600 hover:underline font-medium whitespace-nowrap"
+                >
+                  Create Account →
+                </Link>
+              </div>
+            </div>
+          )}
+        </Section>
+
+        {/* ── PERSONAL INFORMATION (trimmed — Full Name / Email / Phone moved above) ── */}
+        <Section icon={User} title="Personal Information" color="indigo">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
             <Field label="Date of Birth">
               <Input type="date" value={form.date_of_birth} onChange={e => set('date_of_birth', e.target.value)} />
             </Field>
@@ -379,7 +519,7 @@ export default function EmployeeForm() {
             <Field label="PAN Number">
               <Input value={form.pan_number} onChange={e => set('pan_number', e.target.value.toUpperCase())} placeholder="ABCDE1234F" maxLength={10} />
             </Field>
-            <Field label="Aadhaar Number">
+            <Field label="Aadhaar Number" className="md:col-span-2">
               <Input value={form.aadhaar_number} onChange={e => set('aadhaar_number', e.target.value)} placeholder="XXXX XXXX XXXX" maxLength={14} />
             </Field>
           </div>
@@ -396,11 +536,10 @@ export default function EmployeeForm() {
           </div>
         </Section>
 
-        {/* ── EMPLOYMENT ───────────────────────────────────────────────────── */}
+        {/* ── EMPLOYMENT (Department moved to Account Info) ─────────────────── */}
         <Section icon={Briefcase} title="Employment Details" color="blue">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
             <Field label="Designation"><Input value={form.designation_name} onChange={e => set('designation_name', e.target.value)} /></Field>
-            <Field label="Department"><Input value={form.department_name} onChange={e => set('department_name', e.target.value)} /></Field>
             <Field label="Employment Type">
               <Select value={form.employment_type} onChange={e => set('employment_type', e.target.value)} options={[
                 { value: 'full_time', label: 'Full Time' },
@@ -588,40 +727,6 @@ export default function EmployeeForm() {
               )}
             </div>
           </Section>
-        )}
-
-        {/* ── Create Login Account toggle (create mode only) ─────────────── */}
-        {!isEdit && (
-          <div
-            className="flex flex-wrap items-center gap-3 p-4 rounded-xl"
-            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
-          >
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={createLoginAccount}
-                onChange={e => setCreateLoginAccount(e.target.checked)}
-                className="w-4 h-4 accent-indigo-600"
-              />
-              <span className="text-sm font-medium" style={{ color: 'var(--text-body)' }}>
-                Also create a CRM login account for this employee
-              </span>
-            </label>
-            {createLoginAccount && (
-              <select
-                value={loginRole}
-                onChange={e => setLoginRole(e.target.value)}
-                className="ml-auto text-sm rounded-lg px-3 py-1.5"
-                style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)' }}
-              >
-                <option value="hr">HR</option>
-                <option value="candidate_coordinator">Candidate Coordinator</option>
-                <option value="client_coordinator">Client Coordinator</option>
-                <option value="accounts">Accounts</option>
-                <option value="admin">Admin</option>
-              </select>
-            )}
-          </div>
         )}
 
         {/* ── Actions ──────────────────────────────────────────────────────── */}
