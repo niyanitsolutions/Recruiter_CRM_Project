@@ -7,8 +7,11 @@ import { Download, FileSpreadsheet, Clock, CheckCircle, XCircle, RefreshCw, Plus
 import importExportService from '../../services/importExportService';
 import { formatDateTime } from '../../utils/format';
 import ExportModal from './components/ExportModal';
+import usePermissions from '../../hooks/usePermissions';
 
 const ExportsPage = () => {
+  const { has } = usePermissions();
+  const canCreate = has('exports:create');
   const [exports, setExports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -55,13 +58,15 @@ const ExportsPage = () => {
           <h1 className="text-2xl font-bold text-gray-900">Export Data</h1>
           <p className="text-gray-500 mt-1">Download your data in various formats</p>
         </div>
-        <button
-          onClick={() => setShowExportModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" />
-          New Export
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <Plus className="w-4 h-4" />
+            New Export
+          </button>
+        )}
       </div>
 
       {/* Export History */}

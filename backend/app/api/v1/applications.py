@@ -46,6 +46,7 @@ async def list_applications(
         partner_id=partner_id,
         assigned_to=assigned_to,
         keyword=keyword,
+        current_user=current_user,
     )
     
     return {"success": True, **result}
@@ -117,11 +118,17 @@ async def get_application(
 ):
     """Get application by ID"""
     application = await ApplicationService.get_application(db, application_id)
-    
+
     # Partners can only view their own applications
-    if current_user.get("role") == "partner" and application.partner_id != current_user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
+    if current_user.get("role") == "partner":
+        if application.partner_id != current_user["id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+    else:
+        from app.services.user_service import UserService
+        visible_ids = await UserService(db).get_visible_user_ids(current_user, module_name="applications")
+        if visible_ids is not None and application.created_by not in visible_ids:
+            raise HTTPException(status_code=403, detail="Access denied")
+
     return {"success": True, "data": application}
 
 

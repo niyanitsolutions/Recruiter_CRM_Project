@@ -267,7 +267,7 @@ const CompanyRoute = ({ children, allowedRoles = [] }) => {
  * showUnauthorized=true → render an inline "Access Denied" page instead of
  * silently redirecting (useful for routes the user can navigate TO manually).
  */
-const PermissionRoute = ({ children, permission, allowedRoles, showUnauthorized = false }) => {
+const PermissionRoute = ({ children, permission, anyPermission, allowedRoles, showUnauthorized = false }) => {
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const isSuperAdmin   = useSelector(selectIsSuperAdmin)
   const user           = useSelector(selectUser)
@@ -294,6 +294,13 @@ const PermissionRoute = ({ children, permission, allowedRoles, showUnauthorized 
   // Enforce permission
   const permissionSet = new Set(user?.permissions || [])
   if (permission && !permissionSet.has(permission)) {
+    if (showUnauthorized) return <Unauthorized />
+    return <Navigate to={getDefaultRoute(userRole, user?.permissions, userType)} replace />
+  }
+
+  // Enforce any-of permission list (OR check) — used where the sidebar shows
+  // a menu item for several permission variants (self/team/manage) of a module.
+  if (anyPermission && !anyPermission.some((p) => permissionSet.has(p))) {
     if (showUnauthorized) return <Unauthorized />
     return <Navigate to={getDefaultRoute(userRole, user?.permissions, userType)} replace />
   }
@@ -1442,32 +1449,33 @@ function App() {
         <Route path="/hrm/employees/:id"        element={<PermissionRoute permission="hrm:employees:view"><EmployeeView /></PermissionRoute>} />
         <Route path="/hrm/employees/:id/view"   element={<PermissionRoute permission="hrm:employees:view"><EmployeeView /></PermissionRoute>} />
         <Route path="/hrm/employees/:id/edit"   element={<PermissionRoute permission="hrm:employees:manage"><EmployeeForm /></PermissionRoute>} />
-        <Route path="/hrm/attendance"     element={<PermissionRoute permission="hrm:attendance:self"><Attendance /></PermissionRoute>} />
-        <Route path="/hrm/leaves"         element={<PermissionRoute permission="hrm:leave:apply"><LeaveManagement /></PermissionRoute>} />
+        <Route path="/hrm/attendance"     element={<PermissionRoute anyPermission={['hrm:attendance:self', 'hrm:attendance:team', 'hrm:attendance:manage']}><Attendance /></PermissionRoute>} />
+        <Route path="/hrm/leaves"         element={<PermissionRoute anyPermission={['hrm:leave:apply', 'hrm:leave:team_approve', 'hrm:leave:manage']}><LeaveManagement /></PermissionRoute>} />
         <Route path="/hrm/payroll"        element={<PermissionRoute permission="hrm:payroll:view_self"><Payroll /></PermissionRoute>} />
         <Route path="/hrm/performance"    element={<PermissionRoute permission="hrm:performance:self"><Performance /></PermissionRoute>} />
         <Route path="/hrm/announcements"  element={<PermissionRoute permission="hrm:announcements:view"><Announcements /></PermissionRoute>} />
-        <Route path="/hrm/hiring"         element={<PermissionRoute permission="hrm:hiring:view"><HiringDashboard /></PermissionRoute>} />
-        <Route path="/hrm/hiring/jobs"         element={<PermissionRoute permission="hrm:hiring:view"><HRJobs /></PermissionRoute>} />
-        <Route path="/hrm/hiring/candidates"   element={<PermissionRoute permission="hrm:hiring:view"><HRCandidates /></PermissionRoute>} />
-        <Route path="/hrm/hiring/interviews"   element={<PermissionRoute permission="hrm:hiring:view"><HRInterviews /></PermissionRoute>} />
-        <Route path="/hrm/hiring/onboarding"   element={<PermissionRoute permission="hrm:hiring:view"><HROnboarding /></PermissionRoute>} />
+        <Route path="/hrm/hiring"         element={<PermissionRoute anyPermission={['hrm:hiring:view', 'hrm:hiring:manage']}><HiringDashboard /></PermissionRoute>} />
+        <Route path="/hrm/hiring/jobs"         element={<PermissionRoute anyPermission={['hrm:hiring:view', 'hrm:hiring:manage']}><HRJobs /></PermissionRoute>} />
+        <Route path="/hrm/hiring/candidates"   element={<PermissionRoute anyPermission={['hrm:hiring:view', 'hrm:hiring:manage']}><HRCandidates /></PermissionRoute>} />
+        <Route path="/hrm/hiring/interviews"   element={<PermissionRoute anyPermission={['hrm:hiring:view', 'hrm:hiring:manage']}><HRInterviews /></PermissionRoute>} />
+        <Route path="/hrm/hiring/onboarding"   element={<PermissionRoute anyPermission={['hrm:hiring:view', 'hrm:hiring:manage']}><HROnboarding /></PermissionRoute>} />
         <Route path="/hrm/ess"                 element={<PermissionRoute allowedRoles={MY_PORTAL_ALLOWED_ROLES}><EmployeeSelfService /></PermissionRoute>} />
         {/* Emp Resources — tabbed page. Old URLs redirect to the right tab */}
         <Route path="/hrm/emp-resources"
-          element={<PermissionRoute permission="hrm:employees:view" showUnauthorized><EmpResources /></PermissionRoute>} />
+          element={<PermissionRoute anyPermission={['hrm:employees:view', 'hrm:employees:manage', 'hrm:documents:manage', 'hrm:assets:view', 'hrm:assets:manage', 'hrm:exit:view', 'hrm:exit:manage']} showUnauthorized><EmpResources /></PermissionRoute>} />
         <Route path="/hrm/documents"
           element={<Navigate to="/hrm/emp-resources?tab=documents" replace />} />
         <Route path="/hrm/assets"
           element={<Navigate to="/hrm/emp-resources?tab=assets" replace />} />
         <Route path="/hrm/exit"
           element={<Navigate to="/hrm/emp-resources?tab=exit" replace />} />
-        <Route path="/hrm/assets/scan/:assetId" element={<AssetScanPage />} />
+        <Route path="/hrm/assets/scan/:assetId"
+          element={<PermissionRoute anyPermission={['hrm:assets:view', 'hrm:assets:manage']} showUnauthorized><AssetScanPage /></PermissionRoute>} />
         <Route path="/hrm/sync"                element={<PermissionRoute permission="hrm:employees:manage"><HRMSyncPanel /></PermissionRoute>} />
 
         {/* ── Document Center ── */}
         <Route path="/hrm/doc-center/*"
-          element={<PermissionRoute permission="docs:view" showUnauthorized><DocumentCenter /></PermissionRoute>} />
+          element={<PermissionRoute anyPermission={['docs:view', 'docs:create', 'docs:manage']} showUnauthorized><DocumentCenter /></PermissionRoute>} />
       </Route>
 
       {/* DEFAULT */}

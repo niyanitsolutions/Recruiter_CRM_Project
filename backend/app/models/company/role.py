@@ -315,6 +315,37 @@ _CRM_ADMIN_BASE = [
 ]
 
 
+# Platform-administration permissions for ADMIN — deliberately excludes
+# Recruitment (candidates/jobs/interviews/onboarding), Clients, HR business
+# data, and Accounts/Payouts/Invoices. Admin manages the platform itself
+# (users, roles, partners, tasks, targets, audit, settings) — not recruitment
+# or finance business data — unless explicitly granted via per-user override.
+_ADMIN_BASE = [
+    Permission.DASHBOARD_VIEW,
+    Permission.USERS_VIEW, Permission.USERS_CREATE, Permission.USERS_EDIT,
+    Permission.USERS_DELETE, Permission.USERS_MANAGE_ROLES,
+    Permission.ROLES_VIEW, Permission.ROLES_CREATE, Permission.ROLES_EDIT, Permission.ROLES_DELETE,
+    Permission.DEPARTMENTS_VIEW, Permission.DEPARTMENTS_CREATE,
+    Permission.DEPARTMENTS_EDIT, Permission.DEPARTMENTS_DELETE,
+    Permission.DESIGNATIONS_VIEW, Permission.DESIGNATIONS_CREATE,
+    Permission.DESIGNATIONS_EDIT, Permission.DESIGNATIONS_DELETE,
+    Permission.PARTNERS_VIEW, Permission.PARTNERS_CREATE,
+    Permission.PARTNERS_EDIT, Permission.PARTNERS_DELETE,
+    Permission.TARGETS_VIEW, Permission.TARGETS_CREATE,
+    Permission.TARGETS_EDIT, Permission.TARGETS_DELETE, Permission.TARGETS_ADMIN,
+    Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
+    Permission.REPORTS_VIEW, Permission.REPORTS_EXPORT,
+    Permission.ANALYTICS_VIEW,
+    Permission.AUDIT_VIEW, Permission.AUDIT_SESSIONS, Permission.AUDIT_ALERTS, Permission.AUDIT_ADMIN,
+    Permission.CRM_SETTINGS_VIEW, Permission.CRM_SETTINGS_EDIT,
+    Permission.IMPORTS_VIEW, Permission.IMPORTS_CREATE,
+    Permission.EXPORTS_VIEW, Permission.EXPORTS_CREATE,
+    Permission.NOTIFICATIONS_CREATE,
+    Permission.NOTIFICATIONS_VIEW,
+    *_HRM_ESS_MINIMUM,
+]
+
+
 # Default permissions for each system role
 ROLE_DEFAULT_PERMISSIONS = {
 
@@ -323,15 +354,17 @@ ROLE_DEFAULT_PERMISSIONS = {
     # simply grants all permissions so nothing is blocked inside enabled modules.
     SystemRole.OWNER: _CRM_ADMIN_BASE + _HRM_FULL,
 
-    # ── ADMIN: Same as OWNER for day-to-day platform administration.
-    SystemRole.ADMIN: _CRM_ADMIN_BASE + _HRM_FULL,
+    # ── ADMIN: Platform administration only — no recruitment, client, HR
+    # business data, or accounts/finance access by default. Grant individual
+    # modules via per-user permission override when a specific admin needs them.
+    SystemRole.ADMIN: _ADMIN_BASE,
 
     # ── CRM specialist roles ──────────────────────────────────────────────────
 
     SystemRole.RECRUITER: [
         Permission.DASHBOARD_VIEW,
         Permission.CANDIDATES_VIEW, Permission.CANDIDATES_CREATE,
-        Permission.CANDIDATES_EDIT, Permission.CANDIDATES_DELETE, Permission.CANDIDATES_ASSIGN,
+        Permission.CANDIDATES_EDIT, Permission.CANDIDATES_ASSIGN,
         Permission.INTERVIEWS_VIEW, Permission.INTERVIEWS_SCHEDULE, Permission.INTERVIEWS_UPDATE_STATUS,
         Permission.INTERVIEW_SETTINGS_VIEW,
         Permission.JOBS_VIEW, Permission.JOBS_CREATE, Permission.JOBS_EDIT,
@@ -346,7 +379,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.DASHBOARD_VIEW,
         Permission.CLIENTS_VIEW,
         Permission.CANDIDATES_VIEW, Permission.CANDIDATES_CREATE,
-        Permission.CANDIDATES_EDIT, Permission.CANDIDATES_DELETE, Permission.CANDIDATES_ASSIGN,
+        Permission.CANDIDATES_EDIT, Permission.CANDIDATES_ASSIGN,
         Permission.INTERVIEWS_VIEW, Permission.INTERVIEWS_SCHEDULE, Permission.INTERVIEWS_UPDATE_STATUS,
         Permission.INTERVIEW_SETTINGS_VIEW, Permission.INTERVIEW_SETTINGS_CREATE,
         Permission.INTERVIEW_SETTINGS_EDIT, Permission.INTERVIEW_SETTINGS_DELETE,
@@ -360,8 +393,8 @@ ROLE_DEFAULT_PERMISSIONS = {
     SystemRole.CLIENT_COORDINATOR: [
         Permission.DASHBOARD_VIEW,
         Permission.CLIENTS_VIEW, Permission.CLIENTS_CREATE,
-        Permission.CLIENTS_EDIT, Permission.CLIENTS_DELETE,
-        Permission.JOBS_VIEW, Permission.JOBS_CREATE, Permission.JOBS_EDIT, Permission.JOBS_DELETE,
+        Permission.CLIENTS_EDIT,
+        Permission.JOBS_VIEW, Permission.JOBS_CREATE, Permission.JOBS_EDIT,
         Permission.INTERVIEWS_VIEW, Permission.INTERVIEWS_SCHEDULE, Permission.INTERVIEWS_UPDATE_STATUS,
         Permission.INTERVIEW_SETTINGS_VIEW,
         Permission.CANDIDATES_VIEW,

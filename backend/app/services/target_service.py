@@ -5,6 +5,7 @@ Handles goals, targets, and performance tracking
 from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
+from fastapi import HTTPException
 
 from app.models.company.target import (
     TargetType, TargetPeriod, TargetStatus, TargetScope,
@@ -198,7 +199,17 @@ class TargetService:
         company_id: str,
         user_id: str
     ) -> bool:
-        """Soft delete a target"""
+        """Soft delete a target. Access: creator (created_by) ONLY — mirrors task delete."""
+        doc = await self.targets.find_one({"id": target_id, "company_id": company_id})
+        if not doc:
+            return False
+
+        if doc.get("created_by") != user_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied: only the target creator can delete this target"
+            )
+
         result = await self.targets.update_one(
             {"id": target_id, "company_id": company_id},
             {

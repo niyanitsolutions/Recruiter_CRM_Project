@@ -135,7 +135,9 @@
       "Bash(find \"d:\\\\crm-project\\\\backend\\\\app\\\\core\" -type f -name \"*.py\" 2>nul)",
       "Bash(find \"d:\\\\crm-project\\\\backend\\\\app\\\\models\\\\company\" -name \"*.py\" -type f | xargs grep -l \"matching\\\\|score\\\\|eligib\" 2>nul)",
       "Bash(find \"d:\\\\crm-project\\\\frontend\\\\src\" -name \"*.jsx\" -o -name \"*.js\" | xargs grep -l \"matching\\\\|MatchingService\" 2>nul | grep -v node_modules)",
-      "Bash(not exist *)"
+      "Bash(not exist *)",
+      "Bash(cd /d/crm-project/backend/app/core && cat dependencies.py | head -150)",
+      "Read(//d/d/crm-project/backend/app/core/**)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

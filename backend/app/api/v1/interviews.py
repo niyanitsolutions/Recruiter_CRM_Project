@@ -57,7 +57,8 @@ async def list_interviews(
         status_filter=status_list,
         interviewer_id=interviewer_id,
         date_from=date_from,
-        date_to=date_to
+        date_to=date_to,
+        current_user=current_user,
     )
     
     return {"success": True, **result}
@@ -202,6 +203,13 @@ async def get_interview(
 ):
     """Get interview by ID"""
     interview = await InterviewService.get_interview(db, interview_id)
+
+    if current_user.get("role") != "partner":
+        from app.services.user_service import UserService
+        visible_ids = await UserService(db).get_visible_user_ids(current_user, module_name="interviews")
+        if visible_ids is not None and interview.created_by not in visible_ids:
+            raise HTTPException(status_code=403, detail="Access denied")
+
     return {"success": True, "data": interview}
 
 

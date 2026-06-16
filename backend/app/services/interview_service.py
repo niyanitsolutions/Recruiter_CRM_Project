@@ -100,7 +100,8 @@ class InterviewService:
             is_rescheduled=interview.get("is_rescheduled", False),
             reschedule_count=interview.get("reschedule_count", 0),
             instructions=interview.get("instructions"),
-            created_at=interview["created_at"]
+            created_at=interview["created_at"],
+            created_by=interview.get("created_by")
         )
 
     @staticmethod
@@ -736,12 +737,22 @@ class InterviewService:
         status_filter: Optional[List[str]] = None,
         interviewer_id: Optional[str] = None,
         date_from: Optional[date] = None,
-        date_to: Optional[date] = None
+        date_to: Optional[date] = None,
+        current_user: Optional[dict] = None,
     ) -> Dict[str, Any]:
         """List interviews with filters"""
         collection = db[InterviewService.COLLECTION]
 
         query: Dict[str, Any] = {"is_deleted": False}
+
+        # Access control: enforce hierarchy-based visibility (mirrors candidates/jobs/applications).
+        if current_user and current_user.get("role") != "partner":
+            from app.services.user_service import UserService
+            user_svc = UserService(db)
+            visible_ids = await user_svc.get_visible_user_ids(current_user, module_name="interviews")
+            if visible_ids is not None:
+                query["created_by"] = {"$in": visible_ids}
+
         if application_id:
             query["application_id"] = application_id
         if candidate_id:

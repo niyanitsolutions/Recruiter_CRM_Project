@@ -8,8 +8,11 @@ import {
   ArrowLeft, Users, Building, Briefcase, X, RefreshCw
 } from 'lucide-react';
 import importExportService from '../../services/importExportService';
+import usePermissions from '../../hooks/usePermissions';
 
 const ImportsPage = () => {
+  const { has } = usePermissions();
+  const canCreate = has('imports:create');
   const [step, setStep] = useState(1);
   const [entityType, setEntityType] = useState('');
   const [file, setFile] = useState(null);
@@ -126,6 +129,12 @@ const ImportsPage = () => {
         </div>
       )}
 
+      {!canCreate && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 text-sm">
+          You have view-only access to imports. Contact an administrator for permission to start a new import.
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         {step === 1 && (
           <div className="space-y-6">
@@ -136,8 +145,9 @@ const ImportsPage = () => {
                 return (
                   <button
                     key={et.value}
+                    disabled={!canCreate}
                     onClick={() => { setEntityType(et.value); setStep(2); }}
-                    className="p-6 border-2 rounded-xl text-left transition-all hover:shadow-lg border-gray-200 hover:border-blue-300"
+                    className="p-6 border-2 rounded-xl text-left transition-all hover:shadow-lg border-gray-200 hover:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
                   >
                     <div className="p-3 bg-blue-100 rounded-lg w-fit mb-4">
                       <Icon className="w-6 h-6 text-blue-600" />
@@ -213,7 +223,7 @@ const ImportsPage = () => {
               <button onClick={() => setStep(3)} className="px-4 py-2 text-gray-600 rounded-lg flex items-center gap-2">
                 <ArrowLeft className="w-4 h-4" />Back
               </button>
-              <button onClick={handleStartImport} disabled={loading} className="px-6 py-2 bg-green-600 text-white rounded-lg disabled:opacity-50">
+              <button onClick={handleStartImport} disabled={loading || !canCreate} className="px-6 py-2 bg-green-600 text-white rounded-lg disabled:opacity-50">
                 {loading ? 'Importing...' : 'Start Import'}
               </button>
             </div>

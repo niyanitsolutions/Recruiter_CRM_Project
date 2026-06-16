@@ -248,11 +248,21 @@ class ApplicationService:
         partner_id: Optional[str] = None,
         assigned_to: Optional[str] = None,
         keyword: Optional[str] = None,
+        current_user: Optional[dict] = None,
     ) -> Dict[str, Any]:
         """List applications with filters"""
         collection = db[ApplicationService.COLLECTION]
 
         query = {"is_deleted": False}
+
+        # Access control: enforce hierarchy-based visibility (mirrors candidates/jobs).
+        # Partners are scoped via the explicit partner_id filter passed in by the caller.
+        if current_user and current_user.get("role") != "partner":
+            from app.services.user_service import UserService
+            user_svc = UserService(db)
+            visible_ids = await user_svc.get_visible_user_ids(current_user, module_name="applications")
+            if visible_ids is not None:
+                query["created_by"] = {"$in": visible_ids}
 
         if job_id:
             query["job_id"] = job_id

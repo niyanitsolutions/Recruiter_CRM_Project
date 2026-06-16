@@ -540,10 +540,26 @@ async def serve_document(
     # Check employee access
     emp = await db.hrm_employees.find_one(
         {"_id": employee_id, "company_id": company_id, "is_deleted": False},
-        {"documents": 1},
+        {"documents": 1, "crm_user_id": 1},
     )
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
+
+    # Authorization: owner/super-admin, holders of hrm:employees:view/manage,
+    # or the employee viewing their own document.
+    is_self = (
+        employee_id == payload.get("hrm_employee_id")
+        or emp.get("crm_user_id") == payload.get("sub")
+    )
+    if not is_self:
+        token_permissions = set(payload.get("permissions") or [])
+        is_authorized = (
+            payload.get("is_owner")
+            or payload.get("is_super_admin")
+            or bool(token_permissions & {"hrm:employees:view", "hrm:employees:manage"})
+        )
+        if not is_authorized:
+            raise HTTPException(status_code=403, detail="Access denied")
 
     docs = emp.get("documents", [])
 

@@ -27,8 +27,24 @@ import io
 from app.core.dependencies import get_company_db, require_permissions
 from app.middleware.auth import require_super_admin, AuthContext
 from app.middleware.tenant import get_master_database
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/export", tags=["Export"])
+
+
+async def _apply_visibility(query: dict, current_user: dict, db, module_name: str) -> None:
+    """Mutate `query` in-place so an export can never return more rows than the
+    user's corresponding list view would. Mirrors the created_by scoping used by
+    list_candidates/list_jobs/list_clients/list_applications/list_interviews —
+    exports must never leak records hidden from the same user's list/detail view."""
+    role = current_user.get("role", "")
+    user_id = current_user.get("id") or current_user.get("sub", "")
+    if role == "partner":
+        query["partner_id"] = user_id
+        return
+    visible_ids = await UserService(db).get_visible_user_ids(current_user, module_name=module_name)
+    if visible_ids is not None:
+        query["created_by"] = {"$in": visible_ids}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -196,6 +212,7 @@ async def export_candidates(
 ):
     """Export candidates as CSV or PDF (tenant-isolated)."""
     query: dict = {"is_deleted": {"$ne": True}}
+    await _apply_visibility(query, current_user, db, "candidates")
     dq = _date_query(from_date, to_date)
     if dq:
         query["created_at"] = dq
@@ -243,6 +260,7 @@ async def export_jobs(
 ):
     """Export jobs as CSV or PDF (tenant-isolated)."""
     query: dict = {"is_deleted": {"$ne": True}}
+    await _apply_visibility(query, current_user, db, "jobs")
     dq = _date_query(from_date, to_date)
     if dq:
         query["created_at"] = dq
@@ -297,6 +315,7 @@ async def export_clients(
 ):
     """Export clients as CSV or PDF (tenant-isolated)."""
     query: dict = {"is_deleted": {"$ne": True}}
+    await _apply_visibility(query, current_user, db, "clients")
     dq = _date_query(from_date, to_date)
     if dq:
         query["created_at"] = dq
@@ -344,6 +363,7 @@ async def export_applications(
 ):
     """Export applications as CSV or PDF (tenant-isolated)."""
     query: dict = {"is_deleted": {"$ne": True}}
+    await _apply_visibility(query, current_user, db, "applications")
     dq = _date_query(from_date, to_date)
     if dq:
         query["applied_date"] = dq
@@ -385,6 +405,7 @@ async def export_interviews(
 ):
     """Export interviews as CSV or PDF (tenant-isolated)."""
     query: dict = {"is_deleted": {"$ne": True}}
+    await _apply_visibility(query, current_user, db, "interviews")
     dq = _date_query(from_date, to_date)
     if dq:
         query["scheduled_at"] = dq

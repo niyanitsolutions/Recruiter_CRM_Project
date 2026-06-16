@@ -240,6 +240,18 @@ async def get_leave(
     leave = await LeaveService(db).get(leave_id, cu["company_id"])
     if not leave:
         raise HTTPException(status_code=404, detail="Leave not found")
+
+    # Authorization: owner/admin, holders of team_approve/manage, or the
+    # leave's own applicant.
+    if not (cu.get("is_owner") or cu.get("role") == "admin"):
+        user_permissions = set(cu.get("permissions") or [])
+        is_authorized = bool(user_permissions & {"hrm:leave:team_approve", "hrm:leave:manage"})
+        if not is_authorized:
+            emp_id = await _resolve_hrm_employee_id(cu, db)
+            leave_employee_id = leave.get("employee_id") if isinstance(leave, dict) else getattr(leave, "employee_id", None)
+            if leave_employee_id != emp_id:
+                raise HTTPException(status_code=403, detail="Access denied")
+
     return leave
 
 
