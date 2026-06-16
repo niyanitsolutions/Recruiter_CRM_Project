@@ -22,16 +22,24 @@ import { formatDateTime } from '../../utils/format'
 // ─── Shared sub-components ───────────────────────────────────────────────────
 
 const EmployeeProfileBadge = ({ user }) => {
-  if (user.hrm_employee_id) {
+  const status = user.employee_profile_status || (user.hrm_employee_id ? 'incomplete' : 'missing')
+  if (status === 'complete') {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
         <CheckCircle2 className="w-3 h-3" /> Complete
       </span>
     )
   }
+  if (status === 'incomplete') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+        <AlertCircle className="w-3 h-3" /> Incomplete
+      </span>
+    )
+  }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
-      <AlertCircle className="w-3 h-3" /> Incomplete
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+      <AlertCircle className="w-3 h-3" /> Missing
     </span>
   )
 }
@@ -98,7 +106,7 @@ const UserActions = ({ user, onEdit, onDelete, onStatusChange, onResetPassword, 
             >
               <Eye className="w-4 h-4" /> View Details
             </Link>
-            {!user.hrm_employee_id && user.user_type !== 'partner' && (
+            {(user.employee_profile_status === 'missing' || user.employee_profile_status === 'incomplete') && user.user_type !== 'partner' && (
               <button
                 onClick={() => { onCompleteProfile(user); setIsOpen(false) }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-yellow-700 hover:bg-yellow-50"
@@ -1110,15 +1118,18 @@ const Users = () => {
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
                             <EmployeeProfileBadge user={user} />
-                            {!user.hrm_employee_id && user.user_type !== 'partner' && (
+                            {(user.employee_profile_status === 'missing' || user.employee_profile_status === 'incomplete') && user.user_type !== 'partner' && (
                               <button
-                                onClick={() => navigate(`/hrm/employees/new?user_id=${user.id}`)}
+                                onClick={() => user.hrm_employee_id
+                                  ? navigate(`/hrm/employees/${user.hrm_employee_id}/edit`)
+                                  : navigate(`/hrm/employees/new?user_id=${user.id}`)
+                                }
                                 className="text-xs text-accent-600 hover:underline text-left"
                               >
                                 Complete Employee Profile
                               </button>
                             )}
-                            {user.hrm_employee_id && (
+                            {user.employee_profile_status === 'complete' && (
                               <button
                                 onClick={() => navigate(`/hrm/employees/${user.hrm_employee_id}/edit`)}
                                 className="text-xs text-surface-500 hover:text-accent-600 text-left"
@@ -1138,7 +1149,10 @@ const Users = () => {
                             onDelete={(u) => setDeleteDialog({ open: true, user: u })}
                             onStatusChange={(u, status) => setStatusDialog({ open: true, user: u, status })}
                             onResetPassword={(u) => setResetPasswordDialog({ open: true, user: u })}
-                            onCompleteProfile={(u) => navigate(`/hrm/employees/new?user_id=${u.id}`)}
+                            onCompleteProfile={(u) => u.hrm_employee_id
+                              ? navigate(`/hrm/employees/${u.hrm_employee_id}/edit`)
+                              : navigate(`/hrm/employees/new?user_id=${u.id}`)
+                            }
                           />
                         </td>
                       </tr>

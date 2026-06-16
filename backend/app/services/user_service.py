@@ -458,6 +458,22 @@ class UserService:
             if user.get("designation_id"):
                 user["designation"] = desig_map.get(user["designation_id"]) or user.get("designation") or ""
 
+        # Batch-resolve employee profile completion status
+        from app.models.company.employee import calculate_profile_completion
+        emp_ids = [u["hrm_employee_id"] for u in users if u.get("hrm_employee_id")]
+        emp_completion_map: Dict[str, str] = {}
+        if emp_ids:
+            async for emp in self.db.hrm_employees.find(
+                {"_id": {"$in": emp_ids}, "is_deleted": False},
+            ):
+                emp_completion_map[emp["_id"]] = calculate_profile_completion(emp)
+        for user in users:
+            emp_id = user.get("hrm_employee_id")
+            if emp_id:
+                user["employee_profile_status"] = emp_completion_map.get(emp_id, "incomplete")
+            else:
+                user["employee_profile_status"] = "missing"
+
         return users, total
     
     async def update_user(

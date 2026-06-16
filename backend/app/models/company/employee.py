@@ -103,6 +103,69 @@ class EmployeeDocument(BaseModel):
     uploaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+def calculate_profile_completion(emp: dict) -> str:
+    """
+    Return 'complete' if all mandatory sections are filled, otherwise 'incomplete'.
+    Works on raw MongoDB dicts so it can be called at list-query time without
+    constructing a full EmployeeModel instance.
+    """
+    # 1. Personal Information
+    addr = emp.get("address_info") or {}
+    personal_ok = bool(
+        emp.get("phone") and
+        emp.get("date_of_birth") and
+        emp.get("gender") and
+        emp.get("blood_group") and
+        emp.get("pan_number") and
+        emp.get("aadhaar_number") and
+        addr.get("street") and
+        addr.get("city") and
+        addr.get("state") and
+        addr.get("zip_code")
+    )
+
+    # 2. Employment Details
+    employment_ok = bool(
+        (emp.get("department_id") or emp.get("department_name")) and
+        (emp.get("designation_id") or emp.get("designation_name")) and
+        emp.get("date_of_joining")
+    )
+
+    # 3. Bank Details
+    bank = emp.get("bank_details") or {}
+    bank_ok = bool(
+        bank.get("bank_name") and
+        bank.get("account_number") and
+        bank.get("ifsc_code") and
+        bank.get("account_holder_name")
+    )
+
+    # 4. Emergency Contacts — at least one with name + relationship + phone
+    contact_ok = False
+    for c in (emp.get("emergency_contacts") or []):
+        if isinstance(c, dict) and c.get("name") and c.get("relationship") and c.get("phone"):
+            contact_ok = True
+            break
+    if not contact_ok:
+        lc = emp.get("emergency_contact")
+        if isinstance(lc, dict) and lc.get("name") and lc.get("relationship") and lc.get("phone"):
+            contact_ok = True
+
+    # 5. Qualifications — at least one record
+    qual_ok = len(emp.get("qualifications") or []) >= 1
+
+    # 6. Background Verification — status field present
+    bg = emp.get("background_check")
+    bg_ok = bool(bg and (bg.get("status") if isinstance(bg, dict) else getattr(bg, "status", None)))
+
+    # 7. Documents — at least one uploaded
+    docs_ok = len(emp.get("documents") or []) >= 1
+
+    if personal_ok and employment_ok and bank_ok and contact_ok and qual_ok and bg_ok and docs_ok:
+        return "complete"
+    return "incomplete"
+
+
 class EmployeeModel(BaseModel):
     """Core HR employee record — stored in company_db.hrm_employees"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), alias="_id")
