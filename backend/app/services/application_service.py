@@ -94,10 +94,17 @@ class ApplicationService:
         rejected_by_val = None
 
         if not getattr(application_data, "bypass_eligibility", False):
-            reasons = evaluation["rejection_reasons"]
-            if reasons:
+            # Authoritative verdict is evaluation["eligible"] (final_score >= minimum_match_score).
+            # rejection_reasons may list informational sub-criteria (e.g. partially missing
+            # skills) even when the candidate clears the overall threshold — those alone
+            # must not flip a passing candidate to "rejected".
+            if not evaluation["eligible"]:
+                reasons = evaluation["rejection_reasons"]
                 initial_status = ApplicationStatus.REJECTED.value
-                rejection_reason = "; ".join(reasons)
+                rejection_reason = "; ".join(reasons) if reasons else (
+                    f"Match score {evaluation['final_score']}% below minimum "
+                    f"threshold {evaluation['minimum_match_score']}%"
+                )
                 rejected_at_val = datetime.now(timezone.utc)
                 rejected_by_val = "system"
             else:
