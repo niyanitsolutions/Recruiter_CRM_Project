@@ -11,6 +11,31 @@ const STATUS_STYLE = {
   on_leave:   { background: 'var(--bg-warning)', color: 'var(--text-warning)' },
 }
 
+const EmployeeProfileBadge = ({ status }) => {
+  if (status === 'complete') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+            style={{ background: 'var(--bg-success)', color: 'var(--text-success)' }}>
+        <CheckCircle2 className="w-3 h-3" /> Complete
+      </span>
+    )
+  }
+  if (status === 'incomplete') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+            style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>
+        <AlertCircle className="w-3 h-3" /> Incomplete
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+          style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
+      <AlertCircle className="w-3 h-3" /> Missing
+    </span>
+  )
+}
+
 const AccountStatusBadge = ({ emp }) => {
   if (emp.crm_user_id) {
     return (
@@ -89,7 +114,7 @@ export default function Employees() {
         <table className="w-full text-sm">
           <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border-card)' }}>
             <tr>
-              {['Employee ID', 'Name', 'Designation', 'Department', 'Status', 'Account', 'Actions'].map(h => (
+              {['Employee ID', 'Name', 'Designation', 'Department', 'Status', 'Employee Profile', 'Account', 'Actions'].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>{h}</th>
               ))}
             </tr>
@@ -97,12 +122,12 @@ export default function Employees() {
           <tbody style={{ borderColor: 'var(--border-subtle)' }}>
             {loading ? (
               [...Array(5)].map((_, i) => (
-                <tr key={i}><td colSpan={7} className="px-4 py-3">
+                <tr key={i}><td colSpan={8} className="px-4 py-3">
                   <div className="h-4 rounded animate-pulse" style={{ background: 'var(--bg-card-alt)' }} />
                 </td></tr>
               ))
             ) : employees.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-10 text-center" style={{ color: 'var(--text-muted)' }}>
+              <tr><td colSpan={8} className="px-4 py-10 text-center" style={{ color: 'var(--text-muted)' }}>
                 <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
                 No employees found
               </td></tr>
@@ -122,6 +147,28 @@ export default function Employees() {
                         style={STATUS_STYLE[emp.employment_status] ?? { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' }}>
                     {emp.employment_status}
                   </span>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-col gap-1">
+                    <EmployeeProfileBadge status={emp.employee_profile_status} />
+                    {emp.employee_profile_status === 'complete' ? (
+                      <button
+                        onClick={() => navigate(`/hrm/employees/${emp.id}`)}
+                        className="text-xs hover:underline"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        View Profile
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => navigate(`/hrm/employees/${emp.id}/edit`)}
+                        className="text-xs hover:underline"
+                        style={{ color: 'var(--text-info)' }}
+                      >
+                        Complete Profile
+                      </button>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col gap-1">

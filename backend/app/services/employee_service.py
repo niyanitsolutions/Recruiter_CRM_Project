@@ -4,7 +4,10 @@ from datetime import datetime, timezone
 from typing import Optional, List
 from bson import ObjectId
 
-from app.models.company.employee import EmployeeCreate, EmployeeUpdate, EmploymentStatus, AccountInfoCreate
+from app.models.company.employee import (
+    EmployeeCreate, EmployeeUpdate, EmploymentStatus, AccountInfoCreate,
+    calculate_profile_completion,
+)
 
 
 class EmployeeService:
@@ -274,7 +277,12 @@ class EmployeeService:
         total = await self.col.count_documents(query)
         skip = (page - 1) * page_size
         cursor = self.col.find(query).sort("created_at", -1).skip(skip).limit(page_size)
-        items = [self._serialize(d) async for d in cursor]
+        items = []
+        async for d in cursor:
+            profile_status = calculate_profile_completion(d)
+            item = self._serialize(d)
+            item["employee_profile_status"] = profile_status
+            items.append(item)
         return {"items": items, "total": total, "page": page, "page_size": page_size}
 
     async def get(self, employee_id: str, company_id: str) -> Optional[dict]:
