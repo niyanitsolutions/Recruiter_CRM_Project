@@ -16,7 +16,7 @@ from app.core.dependencies import (
 from app.models.company.attendance import (
     CheckInRequest, CheckOutRequest, ManualAttendanceUpdate, BreakRequest,
 )
-from app.services.attendance_service import AttendanceService
+from app.services.attendance_service import AttendanceService, recover_missed_punch_outs
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +184,14 @@ async def get_me_today(
     Returns {"employee_id": null, "awaiting_profile": true} when the user has
     no linked employee profile yet (profile is auto-created on first punch-in).
     """
+    # Layer-2 auto punch-out recovery: closes any orphan attendance records left
+    # open from a previous day (e.g. server was offline past shift end).
+    # Throttled per-company internally so dashboard loads stay cheap.
+    try:
+        await recover_missed_punch_outs(db, cu["company_id"], source="dashboard_recovery")
+    except Exception:
+        pass
+
     emp_id = await _resolve_emp_id_optional(cu, db)
     if not emp_id:
         return {"employee_id": None, "awaiting_profile": True}
@@ -546,7 +554,7 @@ async def trigger_auto_checkout(
     _perm=Depends(require_permissions(["hrm:attendance:manage"])),
 ):
     """Punch out all employees who are still checked in. Idempotent — safe to call multiple times."""
-    count = await AttendanceService(db).auto_checkout_all(cu["company_id"])
+    count = await AttendanceService(db).auto_checkout_all(cu["company_id"], source="manual_admin")
     return {"punched_out": count, "company_id": cu["company_id"]}
 
 

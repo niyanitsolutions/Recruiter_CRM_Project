@@ -30,7 +30,7 @@ async def hrm_auto_checkout_loop() -> None:
             # Only run between 00:00 and 00:59 UTC and only once per calendar day
             if now.hour == 0 and _ran_today != today_str:
                 _ran_today = today_str
-                await _run_auto_checkout()
+                await _run_auto_checkout(source="scheduler")
 
         except asyncio.CancelledError:
             break
@@ -38,11 +38,23 @@ async def hrm_auto_checkout_loop() -> None:
             logger.warning("hrm_auto_checkout_loop error (will retry next hour): %s", exc)
 
 
-async def _run_auto_checkout() -> None:
+async def run_startup_recovery() -> None:
+    """Layer-2 recovery sweep run once at app startup.
+
+    Closes any attendance records left open from a previous day because the
+    server was down, restarted, or crashed before the midnight loop above
+    could run for that calendar day. Independent of time-of-day — runs
+    immediately regardless of when the app happens to start.
+    """
+    await _run_auto_checkout(source="startup_recovery")
+
+
+async def _run_auto_checkout(source: str = "scheduler") -> None:
     """Punch out all open attendance records from previous days across every active tenant DB.
 
     auto_checkout_all() now queries for records with date < today, which is the
-    correct set when this runs just after midnight UTC.
+    correct set whether this runs just after midnight UTC (normal schedule) or
+    as a recovery sweep at an arbitrary time (startup/login/dashboard load).
     """
     try:
         from app.core.database import get_master_db, DatabaseManager
@@ -57,15 +69,15 @@ async def _run_auto_checkout() -> None:
         for tid in tenant_ids:
             try:
                 db = DatabaseManager.get_company_db(tid)
-                count = await AttendanceService(db).auto_checkout_all(company_id=tid)
+                count = await AttendanceService(db).auto_checkout_all(company_id=tid, source=source)
                 if count:
-                    logger.info("Auto punch-out: %d record(s) closed for tenant %s", count, tid)
+                    logger.info("Auto punch-out (%s): %d record(s) closed for tenant %s", source, count, tid)
                     total += count
             except Exception as tenant_exc:
                 logger.warning("Auto punch-out failed for tenant %s: %s", tid, tenant_exc)
 
         if total:
-            logger.info("Auto punch-out complete: %d total record(s) closed", total)
+            logger.info("Auto punch-out complete (%s): %d total record(s) closed", source, total)
 
     except Exception as exc:
         logger.error("_run_auto_checkout failed: %s", exc)

@@ -453,17 +453,27 @@ class AttendanceService:
 
     # ── Auto punch-out (called by scheduler / midnight loop) ─────────────────
 
-    async def auto_checkout_all(self, company_id: str) -> int:
+    async def auto_checkout_all(self, company_id: str, source: str = "scheduler") -> int:
         """Close all open attendance records from PREVIOUS days.
 
         This is intentionally NOT limited to today.  The midnight loop runs at
         00:00 UTC which is already 'tomorrow' from the perspective of the open
         records (which were created on 'yesterday').  Filtering by yesterday
         (and any older un-closed records) is correct; filtering by today would
-        miss every open record.
+        miss every open record. This same query also makes the function safe
+        to call repeatedly as a recovery check (e.g. on startup/login/dashboard
+        load) — it only ever touches records that are still open from a past
+        day, never today's record or one that already has a check_out.
 
-        check_out time is set to 23:59:00 of the record's own date so work-hours
-        and overtime are calculated relative to the actual working day.
+        check_out time uses the standard priority: employee shift end time →
+        company attendance-rule office end time → hardcoded default ("18:00"
+        via settings fallback). Falls back to 23:59 of the record's date if
+        the resolved time would be before check_in (e.g. overnight shifts).
+
+        `source` is recorded on the closed record (auto_punch_out_source) purely
+        for traceability of which trigger closed it ("scheduler" = normal hourly
+        midnight loop, anything else = a recovery sweep).
+
         Status is set to AUTO_CLOSED to distinguish from normal check-outs.
         """
         today = _today_dt()
@@ -480,11 +490,25 @@ class AttendanceService:
         count = 0
         async for rec in cursor:
             rec_date = rec["date"]
-            # Set checkout to 23:59:00 of the record's calendar date
+            emp = await self._get_employee(rec["employee_id"], company_id)
+            shift_end_str = (emp.get("shift_end_time") or settings["office_end"]) if emp else settings["office_end"]
+            try:
+                eh, em = map(int, shift_end_str.split(":"))
+            except (ValueError, AttributeError):
+                eh, em = 18, 0
+
             if isinstance(rec_date, datetime):
-                checkout_time = rec_date.replace(hour=23, minute=59, second=0, microsecond=0)
+                checkout_time = rec_date.replace(hour=eh, minute=em, second=0, microsecond=0)
             else:
-                checkout_time = datetime(rec_date.year, rec_date.month, rec_date.day, 23, 59, 0)
+                checkout_time = datetime(rec_date.year, rec_date.month, rec_date.day, eh, em, 0)
+
+            # Shift end time must be after check_in (handles overnight/late edge
+            # cases) — otherwise fall back to end-of-day for that calendar date.
+            if checkout_time <= rec["check_in"]:
+                if isinstance(rec_date, datetime):
+                    checkout_time = rec_date.replace(hour=23, minute=59, second=0, microsecond=0)
+                else:
+                    checkout_time = datetime(rec_date.year, rec_date.month, rec_date.day, 23, 59, 0)
 
             # Close any open break
             breaks = list(rec.get("breaks", []))
@@ -511,6 +535,7 @@ class AttendanceService:
                     "breaks": breaks,
                     "is_half_day": is_half_day,
                     "auto_punched_out": True,
+                    "auto_punch_out_source": source,
                     "status": AttendanceStatus.AUTO_CLOSED,
                     "updated_at": now_utc,
                 }},
@@ -991,3 +1016,43 @@ class AttendanceService:
             "half_day":          half_day,
             "wfh":               wfh,
         }
+
+
+# ── Recovery auto punch-out (Layer 2) ──────────────────────────────────────────
+# Catches attendance records left open because the midnight loop never got to
+# run for that company (server was down/restarting/offline over its shift-end
+# window). Safe to call from many trigger points — app startup, login,
+# attendance dashboard load, daily cron — because auto_checkout_all() only
+# ever touches records strictly before today that are still missing a
+# check_out, so it can never affect today's open record or a closed one.
+_RECOVERY_THROTTLE_SECONDS = 300  # avoid re-querying the same tenant on every page hit
+_last_recovery_run: dict[str, float] = {}
+
+
+async def recover_missed_punch_outs(db, company_id: str, source: str = "recovery") -> int:
+    """Throttled wrapper around AttendanceService.auto_checkout_all for recovery triggers.
+
+    Never raises — callers (login, dashboard load, startup) must not fail because
+    of this best-effort sweep.
+    """
+    import time
+    import logging
+    logger = logging.getLogger(__name__)
+
+    last_run = _last_recovery_run.get(company_id, 0.0)
+    now = time.monotonic()
+    if now - last_run < _RECOVERY_THROTTLE_SECONDS:
+        return 0
+    _last_recovery_run[company_id] = now
+
+    try:
+        count = await AttendanceService(db).auto_checkout_all(company_id, source=source)
+        if count:
+            logger.info(
+                "Recovery auto punch-out (%s): closed %d orphan record(s) for company %s",
+                source, count, company_id,
+            )
+        return count
+    except Exception as exc:
+        logger.warning("recover_missed_punch_outs failed for company %s (source=%s): %s", company_id, source, exc)
+        return 0

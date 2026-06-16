@@ -222,7 +222,16 @@ class PipelineService:
     async def get_stages_for_job(db: AsyncIOMotorDatabase, job_id: str) -> List[Dict]:
         """Return ordered stages for a job's pipeline"""
         collection = db[PipelineService.COLLECTION]
-        doc = await collection.find_one({"job_id": job_id, "is_deleted": False})
+        doc = None
+
+        # Primary source of truth: the job's own pipeline_id field (set in Job creation/edit form)
+        job_doc = await db.jobs.find_one({"_id": job_id}, {"pipeline_id": 1})
+        if job_doc and job_doc.get("pipeline_id"):
+            doc = await collection.find_one({"_id": job_doc["pipeline_id"], "is_deleted": False})
+
+        if not doc:
+            # Legacy linkage: pipeline created with a direct job_id back-reference
+            doc = await collection.find_one({"job_id": job_id, "is_deleted": False})
         if not doc:
             # Fall back to default pipeline
             doc = await collection.find_one({"is_default": True, "is_deleted": False})

@@ -23,7 +23,7 @@ from app.core.limiter import limiter
 from app.core.redis import init_redis, close_redis
 from app.services.plan_service import plan_service
 from app.services.subscription_reminder_service import reminder_background_loop
-from app.services.hrm_auto_checkout_loop import hrm_auto_checkout_loop
+from app.services.hrm_auto_checkout_loop import hrm_auto_checkout_loop, run_startup_recovery
 from app.models.master.global_user import ensure_global_indexes
 
 # ============== Phase 1 - Auth & Tenant Management ==============
@@ -186,6 +186,11 @@ async def lifespan(app: FastAPI):
     print(" Session cleanup scheduler started")
     auto_checkout_task = asyncio.create_task(hrm_auto_checkout_loop())
     print(" HRM midnight auto punch-out scheduler started")
+    # Layer-2 recovery: close any attendance records left open from a previous
+    # day because the server was down/restarting over its last shift-end window.
+    # Fire-and-forget so a large tenant count doesn't delay app readiness.
+    asyncio.create_task(run_startup_recovery())
+    print(" HRM auto punch-out recovery sweep started")
 
     # Ensure sessions TTL index exists (idempotent)
     try:

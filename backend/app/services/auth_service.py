@@ -5,6 +5,7 @@ Handles login, registration, and token management
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
+import asyncio
 import logging
 import uuid
 
@@ -539,6 +540,16 @@ class AuthService:
         company_id  = tenant.get("company_id")
         company_db  = get_company_db(company_id)
         role_name   = user.get("role", "admin")
+
+        # Layer-2 auto punch-out recovery: catches attendance records left open
+        # from a previous day if the server was down/offline over shift end.
+        # Throttled per-company and fire-and-forget so login is never delayed
+        # or blocked by it.
+        try:
+            from app.services.attendance_service import recover_missed_punch_outs
+            asyncio.create_task(recover_missed_punch_outs(company_db, company_id, source="login_recovery"))
+        except Exception:
+            pass
 
         role_doc = await company_db.roles.find_one({"name": role_name, "is_deleted": False})
         effective_perms = await _resolve_effective_permissions(user, role_doc, db=company_db)
