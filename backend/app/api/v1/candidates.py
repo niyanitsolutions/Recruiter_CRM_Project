@@ -112,12 +112,7 @@ async def get_candidate_stats(
     _: bool = Depends(require_permissions(["candidates:view"]))
 ):
     """Get candidate statistics for dashboard"""
-    # If coordinator, show their assigned candidates only
-    user_id = None
-    if current_user.get("role") in ["candidate_coordinator", "client_coordinator"]:
-        user_id = current_user["id"]
-    
-    stats = await CandidateService.get_dashboard_stats(db, user_id)
+    stats = await CandidateService.get_dashboard_stats(db, current_user)
     return {"success": True, "data": stats}
 
 

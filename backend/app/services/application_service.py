@@ -596,14 +596,22 @@ class ApplicationService:
         return True
     
     @staticmethod
-    async def get_dashboard_stats(db: AsyncIOMotorDatabase, user_id: Optional[str] = None) -> Dict[str, Any]:
-        """Get application statistics"""
+    async def get_dashboard_stats(db: AsyncIOMotorDatabase, current_user: Optional[dict] = None) -> Dict[str, Any]:
+        """Get application statistics.
+        Uses the exact same visibility scoping as list_applications so dashboard
+        counts always match what the Applications page shows for this user."""
         collection = db[ApplicationService.COLLECTION]
-        
+
         base_query = {"is_deleted": False}
-        if user_id:
-            base_query["assigned_to"] = user_id
-        
+        if current_user and current_user.get("role") != "partner":
+            from app.services.user_service import UserService
+            user_svc = UserService(db)
+            visible_ids = await user_svc.get_visible_user_ids(current_user, module_name="applications")
+            if visible_ids is not None:
+                base_query["created_by"] = {"$in": visible_ids}
+        elif current_user and current_user.get("role") == "partner":
+            base_query["partner_id"] = current_user.get("id") or current_user.get("sub", "")
+
         total = await collection.count_documents(base_query)
         
         pipeline = [{"$match": base_query}, {"$group": {"_id": "$status", "count": {"$sum": 1}}}]

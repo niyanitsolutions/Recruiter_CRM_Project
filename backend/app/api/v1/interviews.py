@@ -98,11 +98,7 @@ async def get_interview_stats(
     _: bool = Depends(require_permissions(["interviews:view"]))
 ):
     """Get interview statistics"""
-    user_id = None
-    if current_user.get("role") not in ["admin", "candidate_coordinator", "client_coordinator"]:
-        user_id = current_user["id"]
-    
-    stats = await InterviewService.get_dashboard_stats(db, user_id)
+    stats = await InterviewService.get_dashboard_stats(db, current_user)
     return {"success": True, "data": stats}
 
 

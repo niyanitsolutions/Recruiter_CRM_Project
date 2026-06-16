@@ -515,14 +515,24 @@ class JobService:
         return results[:limit]
     
     @staticmethod
-    async def get_dashboard_stats(db: AsyncIOMotorDatabase, user_id: Optional[str] = None) -> Dict[str, Any]:
-        """Get job statistics for dashboard"""
+    async def get_dashboard_stats(db: AsyncIOMotorDatabase, current_user: Optional[dict] = None) -> Dict[str, Any]:
+        """Get job statistics for dashboard.
+        Uses the exact same visibility scoping as list_jobs so dashboard counts
+        always match what the Jobs page shows for this user."""
         collection = db[JobService.COLLECTION]
-        
+
         base_query = {"is_deleted": False}
-        if user_id:
-            base_query["assigned_coordinators"] = user_id
-        
+        if current_user:
+            if current_user.get("role") == "partner":
+                base_query["visible_to_partners"] = True
+                base_query["status"] = JobStatus.OPEN.value
+            else:
+                from app.services.user_service import UserService
+                user_svc = UserService(db)
+                visible_ids = await user_svc.get_visible_user_ids(current_user, module_name="jobs")
+                if visible_ids is not None:
+                    base_query["created_by"] = {"$in": visible_ids}
+
         total = await collection.count_documents(base_query)
         
         pipeline = [{"$match": base_query}, {"$group": {"_id": "$status", "count": {"$sum": 1}}}]

@@ -59,14 +59,7 @@ async def get_application_stats(
     _: bool = Depends(require_permissions(["candidates:view"]))
 ):
     """Get application statistics"""
-    user_id = None
-    if current_user.get("role") in ["candidate_coordinator", "client_coordinator"]:
-        user_id = current_user["id"]
-    elif current_user.get("role") == "partner":
-        # Partners see their own stats (handled differently)
-        pass
-    
-    stats = await ApplicationService.get_dashboard_stats(db, user_id)
+    stats = await ApplicationService.get_dashboard_stats(db, current_user)
     return {"success": True, "data": stats}
 
 

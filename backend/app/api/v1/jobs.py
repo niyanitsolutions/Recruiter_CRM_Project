@@ -93,11 +93,7 @@ async def get_job_stats(
     _: bool = Depends(require_permissions(["jobs:view"]))
 ):
     """Get job statistics for dashboard"""
-    user_id = None
-    if current_user.get("role") in ["candidate_coordinator", "client_coordinator"]:
-        user_id = current_user["id"]
-    
-    stats = await JobService.get_dashboard_stats(db, user_id)
+    stats = await JobService.get_dashboard_stats(db, current_user)
     return {"success": True, "data": stats}
 
 

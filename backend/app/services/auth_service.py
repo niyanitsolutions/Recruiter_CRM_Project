@@ -54,7 +54,15 @@ async def _resolve_effective_permissions(user: dict, role_doc: Optional[dict], d
     # silently restrict their JWT to a partial list, confusing the UI.
     is_owner = bool(user.get("is_owner"))
 
-    if bool(user.get("override_permissions")) and not is_owner:
+    if is_owner:
+        # Owners are internally tagged role="admin" for login/role-doc plumbing,
+        # but they must always resolve to the full OWNER permission set — never
+        # the "admin" role_doc/hardcoded defaults, which are intentionally more
+        # restricted (platform-admin only). Resolving via "admin" here would
+        # silently shrink every owner's permissions whenever the admin role's
+        # defaults are tightened.
+        perms = {p.value for p in ROLE_DEFAULT_PERMISSIONS.get(SystemRole.OWNER, [])}
+    elif bool(user.get("override_permissions")) and not is_owner:
         # Individual override: use exactly what's stored.
         # SAFETY: guarantee dashboard:view is always present so the sidebar
         # never ends up completely empty even if an empty list was stored.
