@@ -8,6 +8,14 @@ import { store } from './store/store'
 import { ThemeProvider } from './contexts/ThemeContext'
 import './styles/index.css'
 
+// Task 11 — numeric input cleanup: block mouse-wheel from changing the value
+// of a focused <input type="number"> anywhere in the app (direct entry only).
+window.addEventListener('wheel', () => {
+  if (document.activeElement?.tagName === 'INPUT' && document.activeElement.type === 'number') {
+    document.activeElement.blur()
+  }
+}, { passive: true })
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <Provider store={store}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, Component } from 'react'
+import React, { useState, useEffect, useCallback, useRef, Component } from 'react'
 import { Link } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import {
@@ -27,6 +27,7 @@ import KpiCard from '../../components/dashboard/KpiCard'
 import HiringTrend from '../../components/dashboard/HiringTrend'
 import PunchInModal from '../../components/hrm/PunchInModal'
 import { formatDateTime } from '../../utils/format'
+import { useLivePolling } from '../../hooks/useLivePolling'
 
 // ── Section-level error boundary — wraps individual grid rows ────────────────
 class WidgetErrorBoundary extends Component {
@@ -150,28 +151,59 @@ const ChartTooltip = ({ active, payload, label }) => {
   )
 }
 
-// ── Period filter ─────────────────────────────────────────────────────────────
+// ── Period filter (Task 2) ────────────────────────────────────────────────────
 const PERIODS = [
-  { key: 'week',    label: '7D',  days: 7   },
-  { key: 'month',   label: '30D', days: 30  },
-  { key: 'quarter', label: '90D', days: 90  },
-  { key: 'year',    label: '1Y',  days: 365 },
+  { key: 'today',    label: 'Today',          days: 1   },
+  { key: 'week',     label: 'This Week',      days: 7   },
+  { key: 'month',    label: 'This Month',     days: 30  },
+  { key: 'quarter',  label: 'This Quarter',   days: 90  },
+  { key: 'half_year', label: 'Last 6 Months', days: 180 },
+  { key: 'year',     label: 'This Year',      days: 365 },
 ]
 
-const PeriodFilter = ({ value, onChange }) => (
-  <div className="flex rounded-lg p-0.5 gap-0.5" style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
-    {PERIODS.map(p => (
+const PeriodFilter = ({ value, onChange }) => {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  const current = PERIODS.find(p => p.key === value) || PERIODS[1]
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative">
       <button
-        key={p.key}
-        onClick={() => onChange(p)}
-        className="px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all duration-200"
-        style={value === p.key ? { background: '#7c3aed', color: '#fff' } : { color: 'var(--text-muted)', background: 'transparent' }}
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+        style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
       >
-        {p.label}
+        {current.label}
+        <ChevronDown className="w-3 h-3" />
       </button>
-    ))}
-  </div>
-)
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1 w-40 rounded-xl shadow-xl z-50 overflow-hidden"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+        >
+          {PERIODS.map(p => (
+            <button
+              key={p.key}
+              onClick={() => { onChange(p); setOpen(false) }}
+              className="w-full text-left px-3 py-2 text-xs font-medium transition-colors"
+              style={p.key === value ? { background: 'rgba(124,58,237,0.1)', color: '#7c3aed' } : { color: 'var(--text-secondary)' }}
+              onMouseEnter={e => { if (p.key !== value) e.currentTarget.style.background = 'var(--bg-hover)' }}
+              onMouseLeave={e => { if (p.key !== value) e.currentTarget.style.background = 'transparent' }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── Format trend data ─────────────────────────────────────────────────────────
 const formatTrendData = (raw) => {
@@ -214,7 +246,7 @@ const AdminDashboard = () => {
   const [announcements,    setAnnouncements]    = useState([])
   const [syncStatus,       setSyncStatus]       = useState(null)
   const [syncPreview,      setSyncPreview]      = useState(null)
-  const [period,           setPeriod]           = useState(PERIODS[1])
+  const [period,           setPeriod]           = useState(PERIODS.find(p => p.key === 'month'))
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [showQuickAction,  setShowQuickAction]  = useState(false)
 
@@ -239,7 +271,9 @@ const AdminDashboard = () => {
   }, [])
 
   // ── Fetch all dashboard data ─────────────────────────────────────────────────
-  const fetchDashboardData = useCallback(async (force = false) => {
+  // silent=true (Task 8 live polling): refetch in the background without
+  // flipping the loading flag, so the skeleton never flashes over real data.
+  const fetchDashboardData = useCallback(async (force = false, silent = false) => {
     if (
       !force &&
       _cache.ts &&
@@ -262,7 +296,7 @@ const AdminDashboard = () => {
     }
 
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const [mainRes, recruitRes, ivStatsRes, todayIvRes, jobRes, candRes, hrmRes, seatRes, annRes, syncRes, syncPreviewRes] =
         await Promise.allSettled([
           adminDashboardService.getDashboardData(),
@@ -336,10 +370,10 @@ const AdminDashboard = () => {
       setSyncPreview(syncPreviewData)
       setError(null)
     } catch (err) {
-      setError('Failed to load dashboard data')
+      if (!silent) setError('Failed to load dashboard data')
       console.error(err)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [user?.company_id])
 
@@ -347,6 +381,9 @@ const AdminDashboard = () => {
     fetchDashboardData()
     fetchTrend(period.days)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Live background refresh (Task 8) — silent, no visible reload
+  useLivePolling(() => fetchDashboardData(true, true), 5000)
 
   useEffect(() => {
     fetchTrend(period.days)
@@ -596,19 +633,9 @@ const AdminDashboard = () => {
           {/* Right — Date + Period + Quick Action */}
           <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
             <span className="text-xs hidden xl:block" style={{ color: 'var(--text-muted)' }}>{dateStr}</span>
-            <button
-              onClick={() => setPeriod(p => {
-                const idx = PERIODS.findIndex(x => x.key === p.key)
-                return PERIODS[(idx + 1) % PERIODS.length]
-              })}
-              className="hidden sm:flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
-              style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-active)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-            >
-              {period.key === 'week' ? 'This Week' : period.key === 'month' ? 'This Month' : period.key === 'quarter' ? 'This Quarter' : 'This Year'}
-              <ChevronDown className="w-3 h-3" />
-            </button>
+            <div className="hidden sm:block">
+              <PeriodFilter value={period.key} onChange={setPeriod} />
+            </div>
             <button
               onClick={() => fetchDashboardData(true)}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"

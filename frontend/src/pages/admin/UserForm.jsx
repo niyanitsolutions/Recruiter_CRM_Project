@@ -10,6 +10,8 @@ import departmentService from '../../services/departmentService'
 import designationService from '../../services/designationService'
 import OrgTree from '../../components/OrgTree'
 import ModalPortal from '../../components/common/ModalPortal'
+import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
+import { useDraftRecovery } from '../../hooks/useDraftRecovery'
 
 // ── Department-based permission system ───────────────────────────────────────
 
@@ -214,6 +216,13 @@ const UserForm = () => {
     department_id: '', designation_id: '', reporting_to: '',
     joining_date: '', status: 'active',
   })
+
+  // Draft recovery (Task 7) — basic fields only, never includes permission state
+  const [submitted, setSubmitted] = useState(false)
+  const { draftAvailable, draftSavedAt, restoreDraft, discardDraft } = useDraftRecovery(
+    'user', id, formData, setFormData,
+    { isDirty: (d) => !!(d.username?.trim() || d.full_name?.trim() || d.email?.trim()), isSubmitted: submitted }
+  )
 
   const [departments,  setDepartments]  = useState([])
   const [designations, setDesignations] = useState([])
@@ -652,6 +661,7 @@ const [errors,       setErrors]       = useState({})
         }
       }
 
+      setSubmitted(true)
       navigate('/users')
     } catch (err) {
       const status = err.response?.status
@@ -815,6 +825,10 @@ const [errors,       setErrors]       = useState({})
           </div>
         </div>
       </ModalPortal>
+
+      {draftAvailable && (
+        <DraftRecoveryBanner savedAt={draftSavedAt} onRestore={restoreDraft} onDiscard={discardDraft} />
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
 

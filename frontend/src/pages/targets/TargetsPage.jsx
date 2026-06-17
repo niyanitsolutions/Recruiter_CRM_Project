@@ -13,6 +13,7 @@ import {
 import targetService from '../../services/targetService';
 import TargetCard from './components/TargetCard';
 import Leaderboard from './Leaderboard';
+import { useLivePolling } from '../../hooks/useLivePolling';
 
 const TargetsPage = () => {
   const navigate = useNavigate();
@@ -33,10 +34,10 @@ const TargetsPage = () => {
     loadData();
   }, [activeTab, filters]);
 
-  const loadData = async () => {
+  const loadData = async (silent = false) => {
     try {
-      setLoading(true);
-      
+      if (!silent) setLoading(true);
+
       const params = {
         target_type: filters.type || undefined,
         period: filters.period || undefined,
@@ -59,9 +60,12 @@ const TargetsPage = () => {
     } catch (error) {
       console.error('Error loading targets:', error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+  // Live background refresh (Task 8) — silent, no visible reload
+  useLivePolling(() => loadData(true), 5000);
 
   const handleDeleteTarget = async (targetId) => {
     if (!window.confirm('Are you sure you want to delete this target?')) return;

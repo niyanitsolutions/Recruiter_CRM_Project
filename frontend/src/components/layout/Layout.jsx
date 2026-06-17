@@ -1,26 +1,15 @@
 import React, { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { clsx } from 'clsx'
-import { useSelector } from 'react-redux'
-import { selectUser } from '../../store/authSlice'
 import SideNav from './SideNav'
 import TopBar from './TopBar'
 import GlobalSearch from '../common/GlobalSearch'
-import AttendanceBanner from '../hrm/AttendanceBanner'
 import AnnouncementPopup from '../hrm/AnnouncementPopup'
 
 const Layout = ({ title, subtitle, actions }) => {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
-  const user = useSelector(selectUser)
-  // Show for ALL non-partner internal users — no permission check needed here.
-  // AttendanceBanner manages its own visibility: it calls /me/today on mount and
-  // handles 'awaiting_profile' for users without an employee record yet.
-  // Gating on has('hrm:attendance:self') broke the banner for users whose JWT was
-  // issued before HRM permissions were added to their role — removed.
-  const showAttendanceBanner = user?.userType !== 'partner'
-
   // Global Ctrl+K / Cmd+K shortcut
   useEffect(() => {
     const handler = (e) => {
@@ -67,10 +56,7 @@ const Layout = ({ title, subtitle, actions }) => {
           onSearchOpen={() => setSearchOpen(true)}
         />
 
-        {/* Attendance Banner — shown for all non-partner users */}
-        {showAttendanceBanner && <AttendanceBanner />}
-
-        {/* Page Content */}
+        {/* Page Content — starts immediately below the header (attendance now lives in TopBar) */}
         <main className="p-6">
           <Outlet />
         </main>

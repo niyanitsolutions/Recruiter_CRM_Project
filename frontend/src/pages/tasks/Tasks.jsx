@@ -9,6 +9,7 @@ import { toast } from 'react-hot-toast'
 import taskService from '../../services/taskService'
 import userService from '../../services/userService'
 import { selectUser } from '../../store/authSlice'
+import { useLivePolling } from '../../hooks/useLivePolling'
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent']
 const STATUSES   = ['pending', 'in_progress', 'completed', 'cancelled']
@@ -532,8 +533,8 @@ export default function Tasks() {
     return () => obs.disconnect()
   }, [])
 
-  const load = async () => {
-    setLoading(true)
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const params = { page_size: 100 }
       if (filterStatus)   params.status   = filterStatus
@@ -542,11 +543,14 @@ export default function Tasks() {
       const res = await taskService.getTasks(params)
       setTasks(res.tasks || [])
       setTotal(res.total || 0)
-    } catch { toast.error('Failed to load tasks') }
-    finally { setLoading(false) }
+    } catch { if (!silent) toast.error('Failed to load tasks') }
+    finally { if (!silent) setLoading(false) }
   }
 
   useEffect(() => { load() }, [filterStatus, filterPriority, myOnly])
+
+  // Live background refresh (Task 8) — silent, no visible reload
+  useLivePolling(() => load(true), 5000)
   useEffect(() => { userService.getUsers({ page_size: 100 }).then(r => setUsers(r.data || [])).catch(() => {}) }, [])
 
   const handleCreate = async (data) => { await taskService.createTask(data); toast.success('Task created'); load() }

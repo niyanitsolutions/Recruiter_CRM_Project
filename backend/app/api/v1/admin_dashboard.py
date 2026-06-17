@@ -8,6 +8,11 @@ import asyncio
 
 from app.services.user_service import UserService
 from app.services.audit_service import AuditService
+from app.services.candidate_service import CandidateService
+from app.services.application_service import ApplicationService
+from app.services.interview_service import InterviewService
+from app.services.job_service import JobService
+from app.services.client_service import ClientService
 from app.core.dependencies import (
     get_company_db, require_permissions
 )
@@ -32,8 +37,11 @@ async def get_dashboard_data(
     db = Depends(get_company_db),
 ):
     """Get complete admin dashboard data"""
-    # Serve from Redis cache for the first 60 s to avoid 15 parallel DB queries
-    cache_key = f"dashboard:{current_user.get('company_id', '')}"
+    # Serve from Redis cache for the first 60 s to avoid 15 parallel DB queries.
+    # Keyed per-user (not just company) because quick_stats is now scoped to the
+    # caller's visibility (Task 3) — a shared company-wide key would leak one
+    # user's restricted counts to another user with different visibility.
+    cache_key = f"dashboard:{current_user.get('company_id', '')}:{current_user.get('id', '')}"
     cached = await get_cache(cache_key)
     if cached:
         return cached
@@ -48,16 +56,11 @@ async def get_dashboard_data(
         audit_service.get_recent_activity(limit=10),
     )
 
-    # All quick counts in parallel
+    # Company-wide counts (no per-user ownership concept for these modules)
     (
         departments_count,
         designations_count,
         roles_count,
-        candidates_count,
-        rejected_candidates_count,
-        active_clients_count,
-        active_jobs_count,
-        interviews_count,
         onboards_count,
         partners_count,
         targets_count,
@@ -66,16 +69,28 @@ async def get_dashboard_data(
         _safe_count(db.departments,   {"is_deleted": False}),
         _safe_count(db.designations,  {"is_deleted": False}),
         _safe_count(db.roles,         {"is_deleted": False}),
-        _safe_count(db.candidates,    {"is_deleted": False}),
-        _safe_count(db.applications,  {"is_deleted": False, "status": "rejected"}),
-        _safe_count(db.clients,       {"is_deleted": False, "status": "active"}),
-        _safe_count(db.jobs,          {"is_deleted": False, "status": {"$in": ["open", "active"]}}),
-        _safe_count(db.interviews,    {"is_deleted": False}),
         _safe_count(db.onboards,      {"is_deleted": False}),
         _safe_count(db.users,         {"is_deleted": False, "role": "partner"}),
         _safe_count(db.targets,       {"is_deleted": False}),
         _safe_count(db.payouts,       {"is_deleted": False}),
     )
+
+    # Candidates/applications/interviews/jobs/clients — use the EXACT SAME
+    # scoped queries as their respective module list pages (Task 3) so the
+    # dashboard never shows a different count than the module itself for
+    # non-admin roles (recruiter/coordinator/etc. with restricted visibility).
+    cand_stats, app_stats, iv_stats, job_stats, client_stats = await asyncio.gather(
+        CandidateService.get_dashboard_stats(db, current_user),
+        ApplicationService.get_dashboard_stats(db, current_user),
+        InterviewService.get_dashboard_stats(db, current_user),
+        JobService.get_dashboard_stats(db, current_user),
+        ClientService.get_dashboard_stats(db, current_user),
+    )
+    candidates_count = cand_stats.get("total", 0)
+    rejected_candidates_count = app_stats.get("rejected", 0)
+    active_clients_count = client_stats.get("active", 0)
+    active_jobs_count = job_stats.get("open", 0)
+    interviews_count = iv_stats.get("total", 0)
 
     result = {
         "success": True,

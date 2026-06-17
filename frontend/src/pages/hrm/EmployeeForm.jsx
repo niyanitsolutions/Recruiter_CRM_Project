@@ -13,6 +13,8 @@ import departmentService from '../../services/departmentService'
 import designationService from '../../services/designationService'
 import toast from 'react-hot-toast'
 import ModalPortal from '../../components/common/ModalPortal'
+import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
+import { useDraftRecovery } from '../../hooks/useDraftRecovery'
 
 // ═══════════════════════════════════════════════════════════════════
 // Permission computation — identical to UserForm.jsx
@@ -374,6 +376,18 @@ export default function EmployeeForm() {
   const [dragOver,          setDragOver]          = useState(false)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Draft recovery (Task 7) — employee + account fields only (lighter, higher-value subset)
+  const [submitted, setSubmitted] = useState(false)
+  const draftData = { form, uForm }
+  const setDraftData = (next) => {
+    if (next.form) setForm(prev => ({ ...prev, ...next.form }))
+    if (next.uForm) setUForm(prev => ({ ...prev, ...next.uForm }))
+  }
+  const { draftAvailable, draftSavedAt, restoreDraft, discardDraft } = useDraftRecovery(
+    'employee', id, draftData, setDraftData,
+    { isDirty: (d) => !!(d.form?.full_name?.trim() || d.form?.employee_code?.trim()), isSubmitted: submitted }
+  )
 
   // ── User Account section state ──────────────────────────────────
   const [createAccount, setCreateAccount] = useState(true)
@@ -759,6 +773,7 @@ export default function EmployeeForm() {
         await hrmService.updateEmployee(id, buildPayload())
         // Upload any staged docs in edit mode (if user dropped new files)
         if (stagedDocs.length > 0) await uploadStagedDocs(id)
+        setSubmitted(true)
         toast.success('Employee updated')
         navigate('/hrm/employees')
         return
@@ -774,6 +789,7 @@ export default function EmployeeForm() {
       }
 
       const hasAccount = createAccount && !linkedUserId && uForm.username && uForm.password
+      setSubmitted(true)
       toast.success(hasAccount ? 'Employee and login account created' : 'Employee profile created')
       navigate('/hrm/employees')
     } catch (err) {
@@ -957,6 +973,10 @@ export default function EmployeeForm() {
 
       {error && !Object.keys(sectionErrors).length && (
         <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 text-sm">{error}</div>
+      )}
+
+      {draftAvailable && (
+        <DraftRecoveryBanner savedAt={draftSavedAt} onRestore={restoreDraft} onDiscard={discardDraft} />
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">

@@ -73,6 +73,13 @@ const authService = {
   },
 
   /**
+   * Verify current password (used to unlock a locked session)
+   */
+  verifyPassword: (password) => {
+    return api.post('/auth/verify-password', { password })
+  },
+
+  /**
    * Validate registration field
    */
   validateField: (field, value) => {

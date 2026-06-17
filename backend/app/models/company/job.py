@@ -34,6 +34,15 @@ class WorkMode(str, Enum):
     HYBRID = "hybrid"
 
 
+class JobLocationType(str, Enum):
+    """Geographic location coverage for a job posting"""
+    SINGLE = "single"
+    MULTIPLE = "multiple"
+    PAN_INDIA = "pan_india"
+    REMOTE = "remote"
+    HYBRID = "hybrid"
+
+
 class Priority(str, Enum):
     """Job priority"""
     LOW = "low"
@@ -84,6 +93,13 @@ class EligibilityCriteria(BaseModel):
     max_notice_period_days: Optional[int] = None
     min_ctc: Optional[float] = None
     max_ctc: Optional[float] = None
+    # Academic eligibility — all optional; absence means "no filtering" (Task 10).
+    # NOTE: not currently consumed by the ATS matching/scoring engine — data
+    # capture only, so existing ATS scoring logic is left untouched.
+    min_10th_percentage: Optional[float] = Field(None, ge=0, le=100)
+    min_12th_percentage: Optional[float] = Field(None, ge=0, le=100)
+    min_diploma_percentage: Optional[float] = Field(None, ge=0, le=100)
+    min_degree_percentage: Optional[float] = Field(None, ge=0, le=100)
 
 
 class CustomFieldValue(BaseModel):
@@ -120,7 +136,11 @@ class JobModel(BaseModel):
     state: Optional[str] = None
     country: str = Field(default="India")
     remote_allowed: bool = Field(default=False)
-    
+    # location_type: single | multiple | pan_india | remote | hybrid (Task 9)
+    location_type: str = Field(default=JobLocationType.SINGLE.value)
+    # City names for location_type in {single, multiple, hybrid}. Empty for pan_india/remote.
+    locations: List[str] = Field(default_factory=list)
+
     # ===== Positions =====
     total_positions: int = Field(default=1, ge=1)
     filled_positions: int = Field(default=0, ge=0)
@@ -213,7 +233,9 @@ class JobCreate(BaseModel):
     state: Optional[str] = None
     country: Optional[str] = Field(default="India")
     remote_allowed: bool = Field(default=False)
-    
+    location_type: Optional[str] = Field(default=JobLocationType.SINGLE.value)
+    locations: List[str] = Field(default_factory=list)
+
     total_positions: int = Field(default=1, ge=1)
     
     salary: Optional[SalaryRange] = None
@@ -263,7 +285,9 @@ class JobUpdate(BaseModel):
     state: Optional[str] = None
     country: Optional[str] = None
     remote_allowed: Optional[bool] = None
-    
+    location_type: Optional[str] = None
+    locations: Optional[List[str]] = None
+
     total_positions: Optional[int] = Field(None, ge=1)
     
     salary: Optional[SalaryRange] = None
@@ -320,7 +344,10 @@ class JobResponse(BaseModel):
     state: Optional[str]
     country: str
     remote_allowed: bool
-    
+    location_type: str = JobLocationType.SINGLE.value
+    locations: List[str] = Field(default_factory=list)
+    location_display: str = ""
+
     total_positions: int
     filled_positions: int
     remaining_positions: int = 0
@@ -371,7 +398,10 @@ class JobListResponse(BaseModel):
     job_type: str
     work_mode: str
     city: Optional[str]
-    
+    location_type: str = JobLocationType.SINGLE.value
+    locations: List[str] = Field(default_factory=list)
+    location_display: str = ""
+
     total_positions: int
     filled_positions: int
     
@@ -401,6 +431,7 @@ class JobSearchParams(BaseModel):
     job_type: Optional[List[str]] = None
     work_mode: Optional[List[str]] = None
     city: Optional[List[str]] = None
+    location_type: Optional[List[str]] = None
     priority: Optional[List[str]] = None
     assigned_to: Optional[str] = None
     min_salary: Optional[float] = None
@@ -445,6 +476,14 @@ PRIORITY_DISPLAY = {
     Priority.URGENT.value: "Urgent"
 }
 
+JOB_LOCATION_TYPE_DISPLAY = {
+    JobLocationType.SINGLE.value: "Single Location",
+    JobLocationType.MULTIPLE.value: "Multiple Locations",
+    JobLocationType.PAN_INDIA.value: "PAN India",
+    JobLocationType.REMOTE.value: "Remote",
+    JobLocationType.HYBRID.value: "Hybrid",
+}
+
 
 def get_job_status_display(status: str) -> str:
     return JOB_STATUS_DISPLAY.get(status, status)
@@ -460,3 +499,18 @@ def get_work_mode_display(work_mode: str) -> str:
 
 def get_priority_display(priority: str) -> str:
     return PRIORITY_DISPLAY.get(priority, priority)
+
+
+def get_job_location_display(job: dict) -> str:
+    """Human-readable location string for a job document (Task 9)."""
+    location_type = job.get("location_type") or JobLocationType.SINGLE.value
+    locations = job.get("locations") or []
+    if location_type == JobLocationType.PAN_INDIA.value:
+        return "PAN India"
+    if location_type == JobLocationType.REMOTE.value:
+        return "Remote"
+    if location_type in (JobLocationType.MULTIPLE.value, JobLocationType.HYBRID.value):
+        label = ", ".join(locations) if locations else (job.get("city") or "")
+        return f"{label} (Hybrid)" if location_type == JobLocationType.HYBRID.value and label else (label or "Hybrid")
+    # single
+    return locations[0] if locations else (job.get("city") or "")

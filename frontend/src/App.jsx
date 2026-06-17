@@ -18,6 +18,7 @@ import designationService from './services/designationService'
 import userService        from './services/userService'
 import SessionExpiryModal    from './components/auth/SessionExpiryModal'
 import SessionWarningModal   from './components/auth/SessionWarningModal'
+import SessionLockOverlay    from './components/auth/SessionLockOverlay'
 import LoginRequestModal     from './components/auth/LoginRequestModal'
 
 // Layouts — kept eager so the app shell (sidebar + topbar) renders immediately
@@ -997,10 +998,12 @@ const SessionManager = () => {
   const dispatch        = useDispatch()
   const navigate        = useNavigate()
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const user             = useSelector(selectUser)
 
   const [warnOpen,      setWarnOpen]      = useState(false)
   const [expiryOpen,    setExpiryOpen]    = useState(false)
   const [expiryReason,  setExpiryReason]  = useState('idle')
+  const [lockOpen,      setLockOpen]      = useState(false)
 
   // Login-request modal (Device A — someone on Device B wants access)
   const [loginReqOpen, setLoginReqOpen]   = useState(false)
@@ -1032,6 +1035,11 @@ const SessionManager = () => {
       setExpiryOpen(false)
       setWarnOpen(false)
     }
+    // Logged out (idle-lock is irrelevant once the session itself has ended,
+    // e.g. a remote revoke arrived while the lock overlay was up).
+    if (prevAuthRef.current && !isAuthenticated) {
+      setLockOpen(false)
+    }
     prevAuthRef.current = isAuthenticated
   }, [isAuthenticated])
 
@@ -1045,12 +1053,16 @@ const SessionManager = () => {
 
     setWarnOpen(false)
     setLoginReqOpen(false)
+    setLockOpen(false)
     if (!expiryReasonLockedRef.current) {
       expiryReasonLockedRef.current = true
       setExpiryReason(e?.detail?.reason || 'idle')
     }
     setExpiryOpen(true)
   }, [])
+
+  const handleSessionLock     = useCallback(() => setLockOpen(true),  [])
+  const handleSessionUnlocked = useCallback(() => setLockOpen(false), [])
 
   const handleLoginRequest = useCallback((e) => {
     const data = e?.detail || {}
@@ -1072,13 +1084,17 @@ const SessionManager = () => {
     window.addEventListener('session:warning:dismiss', handleWarnDismiss)
     window.addEventListener('session:expired',         handleSessionExpired)
     window.addEventListener('session:login_request',   handleLoginRequest)
+    window.addEventListener('session:lock',            handleSessionLock)
+    window.addEventListener('session:unlocked',        handleSessionUnlocked)
     return () => {
       window.removeEventListener('session:warning',         handleSessionWarning)
       window.removeEventListener('session:warning:dismiss', handleWarnDismiss)
       window.removeEventListener('session:expired',         handleSessionExpired)
       window.removeEventListener('session:login_request',   handleLoginRequest)
+      window.removeEventListener('session:lock',            handleSessionLock)
+      window.removeEventListener('session:unlocked',        handleSessionUnlocked)
     }
-  }, [handleSessionWarning, handleWarnDismiss, handleSessionExpired, handleLoginRequest])
+  }, [handleSessionWarning, handleWarnDismiss, handleSessionExpired, handleLoginRequest, handleSessionLock, handleSessionUnlocked])
 
   const handleStayLoggedIn = useCallback(async () => {
     try {
@@ -1120,6 +1136,19 @@ const SessionManager = () => {
     navigate('/login', { replace: true })
   }, [navigate])
 
+  const handleUnlocked = useCallback(() => {
+    // useAutoLogout owns the actual lock state; this just notifies it that the
+    // password was verified. It will dispatch 'session:unlocked' which closes
+    // the overlay via handleSessionUnlocked above (and syncs other tabs).
+    window.dispatchEvent(new CustomEvent('session:unlock'))
+  }, [])
+
+  const handleLockLogout = useCallback(async () => {
+    setLockOpen(false)
+    await dispatch(logoutUser())
+    navigate('/login', { replace: true })
+  }, [dispatch, navigate])
+
   const handleExpiryCancel = useCallback(() => {
     setExpiryOpen(false)
     expiryReasonLockedRef.current = false
@@ -1143,6 +1172,12 @@ const SessionManager = () => {
         isOpen={loginReqOpen}
         requestData={loginReqData}
         onClose={() => setLoginReqOpen(false)}
+      />
+      <SessionLockOverlay
+        isOpen={lockOpen}
+        userName={user?.fullName}
+        onUnlocked={handleUnlocked}
+        onLogout={handleLockLogout}
       />
     </>
   )

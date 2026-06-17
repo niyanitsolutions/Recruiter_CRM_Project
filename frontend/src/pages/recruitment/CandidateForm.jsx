@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Plus, Trash2, Sparkles, Upload, FileText } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import candidateService from '../../services/candidateService'
+import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
+import { useDraftRecovery } from '../../hooks/useDraftRecovery'
 
 const EMPTY_EDU = () => ({ degree: '', field_of_study: '', institution: '', from_year: '', to_year: '', percentage: '' })
 const EMPTY_EXP = () => ({ company_name: '', designation: '', start_date: '', end_date: '', is_current: false })
@@ -81,6 +83,19 @@ const CandidateForm = () => {
 
   const [newSkill, setNewSkill] = useState('')
   const [newLocation, setNewLocation] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+
+  // Draft recovery (Task 7)
+  const draftData = { ...formData, education, workExperience }
+  const setDraftData = (next) => {
+    setFormData(prev => ({ ...prev, ...next }))
+    if (next.education) setEducation(next.education)
+    if (next.workExperience) setWorkExperience(next.workExperience)
+  }
+  const { draftAvailable, draftSavedAt, restoreDraft, discardDraft } = useDraftRecovery(
+    'candidate', id, draftData, setDraftData,
+    { isDirty: (d) => !!(d.first_name?.trim() || d.email?.trim() || d.mobile?.trim()), isSubmitted: submitted }
+  )
 
   useEffect(() => {
     loadDropdowns()
@@ -550,6 +565,7 @@ const CandidateForm = () => {
       if (isEdit) {
         try {
           await candidateService.updateCandidate(id, payload)
+          setSubmitted(true)
           toast.success('Candidate updated successfully')
           navigate('/candidates')
         } catch (error) {
@@ -580,6 +596,7 @@ const CandidateForm = () => {
         }
       }
 
+      setSubmitted(true)
       toast.success('Candidate created successfully')
       navigate('/candidates')
     } catch (error) {
@@ -676,6 +693,10 @@ const CandidateForm = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {draftAvailable && (
+        <DraftRecoveryBanner savedAt={draftSavedAt} onRestore={restoreDraft} onDiscard={discardDraft} />
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">

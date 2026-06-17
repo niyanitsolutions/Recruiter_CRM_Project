@@ -9,6 +9,9 @@ import interviewService from '../../services/interviewService'
 import applicationService from '../../services/applicationService'
 import jobService from '../../services/jobService'
 import pipelineService from '../../services/pipelineService'
+import SearchableSelect from '../../components/common/SearchableSelect'
+import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
+import { useDraftRecovery } from '../../hooks/useDraftRecovery'
 
 // ── Validation panel ──────────────────────────────────────────────────────────
 const ValidationPanel = ({ result, loading }) => {
@@ -80,6 +83,12 @@ const InterviewForm = () => {
     scheduled_time: '',
     instructions:   '',
   })
+
+  const [submitted, setSubmitted] = useState(false)
+  const { draftAvailable, draftSavedAt, restoreDraft, discardDraft } = useDraftRecovery(
+    'interview', null, formData, setFormData,
+    { isDirty: (d) => !!(d.job_id || d.application_id), isSubmitted: submitted }
+  )
 
   // Load jobs on mount
   useEffect(() => {
@@ -197,6 +206,7 @@ const InterviewForm = () => {
         scheduled_time: formData.scheduled_time,
         instructions:   formData.instructions || undefined,
       })
+      setSubmitted(true)
       toast.success('Interview scheduled successfully')
       navigate('/interviews')
     } catch (err) {
@@ -240,6 +250,10 @@ const InterviewForm = () => {
         </div>
       </div>
 
+      {draftAvailable && (
+        <DraftRecoveryBanner savedAt={draftSavedAt} onRestore={restoreDraft} onDiscard={discardDraft} />
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
 
         {/* Job & Candidate */}
@@ -254,13 +268,17 @@ const InterviewForm = () => {
             <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>
               Job <span style={{ color: '#FF4757' }}>*</span>
             </label>
-            <select name="job_id" value={formData.job_id} onChange={handleChange}
-              className="input w-full" required>
-              <option value="">Select Job</option>
-              {jobs.map(j => (
-                <option key={j.value} value={j.value}>{j.title} — {j.client_name || ''}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={formData.job_id}
+              onChange={(val) => setFormData(prev => ({ ...prev, job_id: val }))}
+              options={jobs.map(j => ({
+                value: j.value,
+                label: `${j.title} — ${j.client_name || ''}`,
+                searchText: `${j.title} ${j.client_name || ''}`,
+              }))}
+              placeholder="Search job by title or client…"
+              minChars={3}
+            />
           </div>
 
           {/* Pipeline info badge */}

@@ -10,6 +10,7 @@ import usePermissions from '../../hooks/usePermissions'
 import ModalPortal from '../../components/common/ModalPortal'
 import { SkeletonCards } from '../../components/common/SkeletonLoader'
 import { formatDate } from '../../utils/format'
+import { useLivePolling } from '../../hooks/useLivePolling'
 import TableScroll from '../../components/common/TableScroll'
 
 const FALLBACK_STATUSES = [
@@ -77,9 +78,9 @@ const Applications = () => {
     }
   }
 
-  const loadApplications = async () => {
+  const loadApplications = async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const params = {
         page: pagination.page,
         page_size: 20,
@@ -93,11 +94,14 @@ const Applications = () => {
         totalPages: response.pagination?.total_pages || 0
       }))
     } catch (error) {
-      toast.error('Failed to load applications')
+      if (!silent) toast.error('Failed to load applications')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
+
+  // Live background refresh (Task 8) — silent, no visible reload
+  useLivePolling(() => loadApplications(true), 5000)
 
   const handleStatusUpdate = async (applicationId, newStatus) => {
     try {

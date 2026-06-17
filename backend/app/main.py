@@ -46,7 +46,7 @@ from app.api.v1 import settings as settings_router
 from app.api.v1 import onboards, payouts, notifications
 
 # ============== Phase 5 - Reports, Analytics, Import/Export, Targets, Audit ==============
-from app.api.v1 import reports, analytics, imports_exports, targets, audit, scheduler, tasks
+from app.api.v1 import reports, analytics, imports_exports, targets, audit, scheduler, tasks, search
 
 # ============== Phase 6 - Integrations & Trash ==============
 from app.api.v1 import integrations, trash
@@ -329,6 +329,7 @@ app.include_router(audit.router, prefix=API_V1_PREFIX, tags=["Advanced Audit"])
 app.include_router(scheduler.router, prefix=API_V1_PREFIX, tags=["Scheduler"])
 app.include_router(export.router, prefix=API_V1_PREFIX, tags=["Export"])
 app.include_router(tasks.router, prefix=API_V1_PREFIX, tags=["Tasks"])
+app.include_router(search.router, prefix=API_V1_PREFIX, tags=["Global Search"])
 app.include_router(email_test.router, prefix=API_V1_PREFIX, tags=["Email"])
 
 # ============== SESSION MANAGEMENT + WEBSOCKET ==============

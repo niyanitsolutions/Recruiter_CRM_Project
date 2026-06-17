@@ -20,6 +20,18 @@
   ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 9999px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
   ::selection { background: var(--selection-bg); color: var(--selection-text); }
+
+  /* Numeric input cleanup (Task 11) — remove spinner arrows app-wide.
+     Mouse-wheel value changes are blocked globally in main.jsx. */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }
 
 /* ── Components ─────────────────────────────────────────────────────────────── */

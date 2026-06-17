@@ -17,6 +17,7 @@ from app.schemas.auth import (
     ForgotPasswordRequest,
     ResetPasswordRequest,
     ChangePasswordRequest,
+    VerifyPasswordRequest,
     MessageResponse,
     TokenResponse,
     TenantLoginRequest,
@@ -505,6 +506,44 @@ async def change_password(
         return {"message": "Password changed successfully.", "success": True}
 
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to change password")
+
+
+@router.post("/verify-password", response_model=MessageResponse)
+async def verify_password_endpoint(
+    request: VerifyPasswordRequest,
+    auth: AuthContext = Depends(get_current_user)
+):
+    """
+    Verify the authenticated user's current password without changing it.
+    Used to unlock a locked session (Task 4 — session lock/unlock by password).
+    """
+    from app.core.database import get_master_db as _get_master_db, get_company_db as _get_company_db
+    from app.core.security import verify_password
+
+    password = request.password
+
+    if auth.is_super_admin:
+        master_db = _get_master_db()
+        sa = await master_db.super_admins.find_one({"_id": auth.user_id, "is_deleted": False})
+        if not sa or not verify_password(password, sa.get("password_hash", "")):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect password")
+        return {"message": "Password verified.", "success": True}
+
+    if auth.is_owner and auth.company_id:
+        master_db = _get_master_db()
+        tenant = await master_db.tenants.find_one({"company_id": auth.company_id})
+        if not tenant or not verify_password(password, tenant.get("owner", {}).get("password_hash", "")):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect password")
+        return {"message": "Password verified.", "success": True}
+
+    if auth.company_id:
+        company_db = _get_company_db(auth.company_id)
+        user = await company_db.users.find_one({"_id": auth.user_id, "is_deleted": False})
+        if not user or not verify_password(password, user.get("password_hash", "")):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect password")
+        return {"message": "Password verified.", "success": True}
+
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to verify password")
 
 
 @router.get("/me")

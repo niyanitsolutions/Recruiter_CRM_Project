@@ -20,7 +20,8 @@ from app.models.company.job import (
     get_job_status_display,
     get_job_type_display,
     get_work_mode_display,
-    get_priority_display
+    get_priority_display,
+    get_job_location_display
 )
 from app.services.audit_service import AuditService
 
@@ -217,6 +218,9 @@ class JobService:
             state=job.get("state"),
             country=job.get("country", "India"),
             remote_allowed=job.get("remote_allowed", False),
+            location_type=job.get("location_type", "single"),
+            locations=job.get("locations", []),
+            location_display=get_job_location_display(job),
             total_positions=job.get("total_positions", 1),
             filled_positions=job.get("filled_positions", 0),
             remaining_positions=job.get("total_positions", 1) - job.get("filled_positions", 0),
@@ -291,6 +295,17 @@ class JobService:
                 query["priority"] = {"$in": search_params.priority}
             if search_params.assigned_to:
                 query["assigned_coordinators"] = search_params.assigned_to
+            if search_params.city:
+                # Match jobs whose single city OR any entry in their multi-location
+                # list matches one of the requested cities (Task 9 — filter correctly).
+                query["$and"] = query.get("$and", []) + [{
+                    "$or": [
+                        {"city": {"$in": search_params.city}},
+                        {"locations": {"$in": search_params.city}},
+                    ]
+                }]
+            if search_params.location_type:
+                query["location_type"] = {"$in": search_params.location_type}
         
         total = await collection.count_documents(query)
         skip = (page - 1) * page_size
@@ -308,6 +323,8 @@ class JobService:
                 id=job["_id"], title=job["title"], job_code=job.get("job_code"),
                 client_name=job.get("client_name"), job_type=job.get("job_type", "full_time"),
                 work_mode=job.get("work_mode", "onsite"), city=job.get("city"),
+                location_type=job.get("location_type", "single"), locations=job.get("locations", []),
+                location_display=get_job_location_display(job),
                 total_positions=job.get("total_positions", 1), filled_positions=job.get("filled_positions", 0),
                 salary_min=salary_min, salary_max=salary_max, experience_min=exp_min, experience_max=exp_max,
                 priority=job.get("priority", "medium"), target_date=job.get("target_date"),

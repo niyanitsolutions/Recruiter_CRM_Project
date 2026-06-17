@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2, SlidersHorizontal, X } from 'lucide-react'
+import { Plus, Edit, Trash2, SlidersHorizontal, X, Search } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import pipelineService from '../../services/pipelineService'
 import clientService from '../../services/clientService'
@@ -33,6 +33,8 @@ const InterviewSettings = () => {
   // ─── Main list ───────────────────────────────────────────────────────────────
   const [pipelines, setPipelines] = useState([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const SEARCH_MIN_CHARS = 3
 
   // ─── Panel state ─────────────────────────────────────────────────────────────
   const [panelOpen, setPanelOpen] = useState(false)
@@ -277,6 +279,12 @@ const InterviewSettings = () => {
     }
   }
 
+  // ─── Search filter (Task 13) — only filters once the query reaches the minimum length ───
+  const trimmedQuery = searchQuery.trim().toLowerCase()
+  const visiblePipelines = trimmedQuery.length >= SEARCH_MIN_CHARS
+    ? pipelines.filter(p => `${p.job_title || ''} ${p.name || ''} ${p.client_name || ''}`.toLowerCase().includes(trimmedQuery))
+    : pipelines
+
   // ─── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
@@ -296,6 +304,18 @@ const InterviewSettings = () => {
             Create / Edit Pipeline
           </button>
         )}
+      </div>
+
+      {/* Search (Task 13) — requires 3+ characters before filtering the list */}
+      <div className="relative max-w-sm">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-surface-400" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder={`Search pipelines (min ${SEARCH_MIN_CHARS} characters)…`}
+          className="input w-full pl-9"
+        />
       </div>
 
       {/* Pipelines table */}
@@ -327,8 +347,15 @@ const InterviewSettings = () => {
                   </p>
                 </td>
               </tr>
+            ) : searchQuery.trim().length >= SEARCH_MIN_CHARS && visiblePipelines.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-6 py-12 text-center">
+                  <Search className="w-10 h-10 text-surface-300 mx-auto mb-3" />
+                  <p className="text-surface-500 font-medium">No matching pipelines</p>
+                </td>
+              </tr>
             ) : (
-              pipelines.map(p => (
+              visiblePipelines.map(p => (
                 <tr key={p.id} className="hover:bg-surface-50 transition-colors">
                   <td className="px-6 py-4">
                     <p className="text-sm font-medium text-surface-900">

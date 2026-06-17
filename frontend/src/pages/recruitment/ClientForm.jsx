@@ -4,6 +4,8 @@ import { Building2, ArrowLeft, Save, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import clientService from '../../services/clientService'
 import { useFormValidation, validators } from '../../hooks/useFormValidation'
+import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
+import { useDraftRecovery } from '../../hooks/useDraftRecovery'
 
 const ClientForm = () => {
   const navigate = useNavigate()
@@ -42,6 +44,12 @@ const ClientForm = () => {
     notes: '',
     status: 'active'
   })
+
+  const [submitted, setSubmitted] = useState(false)
+  const { draftAvailable, draftSavedAt, restoreDraft, discardDraft } = useDraftRecovery(
+    'client', id, formData, setFormData,
+    { isDirty: (d) => !!d.name?.trim(), isSubmitted: submitted }
+  )
 
   useEffect(() => {
     loadDropdowns()
@@ -132,6 +140,7 @@ const ClientForm = () => {
         toast.success('Client created successfully')
       }
 
+      setSubmitted(true)
       navigate('/clients')
     } catch (error) {
       const detail = error.response?.data?.detail
@@ -173,6 +182,10 @@ const ClientForm = () => {
           </p>
         </div>
       </div>
+
+      {draftAvailable && (
+        <DraftRecoveryBanner savedAt={draftSavedAt} onRestore={restoreDraft} onDiscard={discardDraft} />
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Information */}

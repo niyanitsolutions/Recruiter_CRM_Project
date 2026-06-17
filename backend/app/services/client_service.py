@@ -261,6 +261,26 @@ class ClientService:
         }
     
     @staticmethod
+    async def get_dashboard_stats(db: AsyncIOMotorDatabase, current_user: Optional[dict] = None) -> Dict[str, Any]:
+        """Get client statistics for dashboard.
+        Uses the exact same visibility scoping as list_clients so dashboard
+        counts always match what the Clients page shows for this user."""
+        collection = db[ClientService.COLLECTION]
+
+        base_query = {"is_deleted": False}
+        if current_user:
+            from app.services.user_service import UserService
+            user_svc = UserService(db)
+            visible_ids = await user_svc.get_visible_user_ids(current_user, module_name="clients")
+            if visible_ids is not None:
+                base_query["created_by"] = {"$in": visible_ids}
+
+        total = await collection.count_documents(base_query)
+        active = await collection.count_documents({**base_query, "status": "active"})
+
+        return {"total": total, "active": active}
+
+    @staticmethod
     async def update_client(
         db: AsyncIOMotorDatabase,
         client_id: str,

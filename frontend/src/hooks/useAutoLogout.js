@@ -3,29 +3,27 @@
  *
  * Enterprise-grade idle-session manager.  Handles:
  *
- * 1. SESSION WARNING  (Part 2)
- *    Fires a `session:warning` CustomEvent 2 minutes before the idle limit
- *    so the app can show a "Session expiring soon" modal.
- *    If the user clicks "Stay Logged In", dispatch `session:extend` → this
- *    hook resets the idle clock without any page reload.
+ * 1. SESSION LOCK  (Part 2 — reworked)
+ *    After LOCK_MS of true inactivity (no mouse/keyboard/touch/click activity,
+ *    no page interaction, and no in-flight API requests), the session is
+ *    LOCKED — not logged out. Fires `session:lock` so the app can show a
+ *    password-only unlock overlay over the current page. The user resumes
+ *    exactly where they were after re-entering their password (no re-login).
  *
- * 2. IDLE TIMEOUT  (Part 2)
- *    Full logout after IDLE_MS of inactivity.  Fires `session:expired` with
- *    reason="idle" so the app shows an "Session Expired" modal instead of a
- *    silent redirect.
+ * 2. SCREEN-LOCK / SLEEP DETECTION  (Part 7 — reworked)
+ *    visibilitychange + blur/focus: records when the tab is hidden/unfocused.
+ *    On return, if hidden for > LOCK_MS, lock the session (same as above,
+ *    not a logout). Short tab switches / focus changes under LOCK_MS never
+ *    trigger anything.
  *
- * 3. SCREEN-LOCK / SLEEP DETECTION  (Part 7)
- *    visibilitychange + blur/focus: records when the tab is hidden.  On
- *    return after > LOCK_MS, logout immediately (no warning needed).
+ * 3. MULTI-TAB SYNC
+ *    BroadcastChannel: locking/unlocking in one tab propagates to all open
+ *    tabs for the same browser profile, since they share one session.
  *
- * 4. MULTI-TAB SYNC  (Part 7)
- *    BroadcastChannel: logout on one tab propagates to all open tabs.
- *    The receiving tab wipes local state only — no duplicate API call.
- *
- * 5. SMART AUTO-ALLOW  (Part 7)
- *    If the existing session's last_activity is older than SMART_ALLOW_MS
- *    at login time, the backend will find no active session; this hook does
- *    not need to do anything extra for that case.
+ * 4. UNLOCK
+ *    `session:unlock` (dispatched by SessionLockOverlay after the backend
+ *    verifies the user's password) clears the lock and resets the idle
+ *    clock — no token refresh or re-login involved.
  *
  * Memory-safe: all timers and listeners are cleaned up on unmount.
  */
@@ -34,11 +32,12 @@ import { useEffect, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { logout, logoutUser, selectIsAuthenticated } from '../store/authSlice'
+import { hasPendingRequests } from '../services/api'
 
 // ── Thresholds ──────────────────────────────────────────────────────────────────
-const IDLE_MS     = 30 * 60 * 1000   // 30 min  — full idle timeout
-const WARNING_MS  =  2 * 60 * 1000   // 2 min   — warning fires this early
-const LOCK_MS     =  5 * 60 * 1000   // 5 min   — screen-lock grace period
+const LOCK_MS       = 5 * 60 * 1000   // 5 min  — true-inactivity lock threshold
+const PENDING_RETRY_MS = 3 * 1000     // re-check this often if a request is in flight
+const PENDING_RETRY_MAX = 10          // give up waiting after ~30s and lock anyway
 
 // ── localStorage / BroadcastChannel keys ───────────────────────────────────────
 const ACTIVITY_KEY  = 'last_activity'
@@ -50,68 +49,70 @@ const ACTIVITY_EVENTS = ['mousemove', 'keydown', 'scroll', 'click', 'touchstart'
 
 export function useAutoLogout() {
   const dispatch        = useDispatch()
-  const navigate        = useNavigate()
+  const navigate         = useNavigate()
   const isAuthenticated = useSelector(selectIsAuthenticated)
 
   const idleTimerRef    = useRef(null)
-  const warnTimerRef    = useRef(null)
-  const warnShownRef    = useRef(false)   // prevent duplicate warning events
   const bcRef           = useRef(null)
+  const lockedRef       = useRef(false)
+  const pendingRetries  = useRef(0)
 
   useEffect(() => {
     if (!isAuthenticated) return
 
-    // ── Core logout (idle / lock) ─────────────────────────────────────────────
-    const doLogout = (reason) => {
+    // ── Lock (called when true inactivity reaches LOCK_MS) ────────────────────
+    const doLock = (broadcast = true) => {
+      if (lockedRef.current) return
+
+      // Don't interrupt an in-flight request (e.g. a slow save) — recheck soon.
+      if (hasPendingRequests() && pendingRetries.current < PENDING_RETRY_MAX) {
+        pendingRetries.current += 1
+        idleTimerRef.current = setTimeout(() => doLock(broadcast), PENDING_RETRY_MS)
+        return
+      }
+      pendingRetries.current = 0
+
+      lockedRef.current = true
       clearTimeout(idleTimerRef.current)
-      clearTimeout(warnTimerRef.current)
-      warnShownRef.current = false
       localStorage.removeItem(HIDDEN_AT_KEY)
 
-      // Broadcast so sibling tabs also log out
-      try { bcRef.current?.postMessage({ type: 'logout', reason }) } catch (_) {}
-
-      // Emit event so App.jsx can show the proper modal before navigating
-      window.dispatchEvent(new CustomEvent('session:expired', { detail: { reason } }))
-
-      // Sync-clear Redux auth state immediately so useSessionWebSocket's
-      // heartbeat timer and WS connection are torn down on the next render
-      // cycle — before they can fire a stale authenticated request that would
-      // trigger a spurious "session:expired" (reason='remote') event.
-      dispatch(logout())
-
-      // Backend cleanup + localStorage token wipe (async, fires in background)
-      dispatch(logoutUser())
-
-      navigate('/login', { replace: true })
+      window.dispatchEvent(new CustomEvent('session:lock'))
+      if (broadcast) {
+        try { bcRef.current?.postMessage({ type: 'lock' }) } catch (_) {}
+      }
     }
 
-    // ── Warning (fires WARNING_MS before idle expiry) ─────────────────────────
-    const doWarn = () => {
-      if (warnShownRef.current) return
-      warnShownRef.current = true
-      window.dispatchEvent(new CustomEvent('session:warning'))
+    // ── Unlock (password verified, or synced from another tab) ───────────────
+    const doUnlock = (broadcast = true) => {
+      if (!lockedRef.current) return
+      lockedRef.current = false
+      window.dispatchEvent(new CustomEvent('session:unlocked'))
+      if (broadcast) {
+        try { bcRef.current?.postMessage({ type: 'unlock' }) } catch (_) {}
+      }
+      resetIdle()
+    }
+
+    // ── Full logout (only for remote/token reasons triggered elsewhere) ───────
+    const doLogout = (reason) => {
+      clearTimeout(idleTimerRef.current)
+      localStorage.removeItem(HIDDEN_AT_KEY)
+      try { bcRef.current?.postMessage({ type: 'logout', reason }) } catch (_) {}
+      window.dispatchEvent(new CustomEvent('session:expired', { detail: { reason } }))
+      dispatch(logout())
+      dispatch(logoutUser())
+      navigate('/login', { replace: true })
     }
 
     // ── Idle timer management ─────────────────────────────────────────────────
     const resetIdle = () => {
+      if (lockedRef.current) return   // ignore activity while the lock overlay is up
       localStorage.setItem(ACTIVITY_KEY, Date.now().toString())
-
-      // Dismiss any active warning when the user resumes activity
-      if (warnShownRef.current) {
-        warnShownRef.current = false
-        window.dispatchEvent(new CustomEvent('session:warning:dismiss'))
-      }
-
       clearTimeout(idleTimerRef.current)
-      clearTimeout(warnTimerRef.current)
-
-      // Set warning timer first, then full-logout timer
-      warnTimerRef.current = setTimeout(doWarn,    IDLE_MS - WARNING_MS)
-      idleTimerRef.current = setTimeout(() => doLogout('idle'), IDLE_MS)
+      idleTimerRef.current = setTimeout(() => doLock(true), LOCK_MS)
     }
 
-    // ── Screen-lock / sleep detection ─────────────────────────────────────────
+    // ── Screen-lock / sleep / tab-switch detection ────────────────────────────
     const onHide = () => {
       if (!localStorage.getItem(HIDDEN_AT_KEY)) {
         localStorage.setItem(HIDDEN_AT_KEY, Date.now().toString())
@@ -119,9 +120,10 @@ export function useAutoLogout() {
     }
 
     const onShow = () => {
+      if (lockedRef.current) return
       const hiddenAt = parseInt(localStorage.getItem(HIDDEN_AT_KEY) || '0', 10)
-      if (hiddenAt && Date.now() - hiddenAt > LOCK_MS) {
-        doLogout('lock')
+      if (hiddenAt && Date.now() - hiddenAt >= LOCK_MS) {
+        doLock(true)
         return
       }
       localStorage.removeItem(HIDDEN_AT_KEY)
@@ -133,27 +135,25 @@ export function useAutoLogout() {
       else onShow()
     }
 
-    // ── "Stay Logged In" handler (from SessionWarningModal via App.jsx) ───────
-    // App.jsx dispatches `session:extend` after refreshing the token.
-    const onExtend = () => {
-      warnShownRef.current = false
-      resetIdle()
-    }
+    // ── Manual unlock event (from SessionLockOverlay) ─────────────────────────
+    const onUnlockEvent = () => doUnlock(true)
+
+    // ── "Stay Logged In" / extend (kept for compatibility with other flows) ───
+    const onExtend = () => resetIdle()
 
     // ── Early idle check on page refresh ─────────────────────────────────────
     const lastActivity = parseInt(localStorage.getItem(ACTIVITY_KEY) || '0', 10)
-    if (lastActivity && Date.now() - lastActivity > IDLE_MS) {
-      doLogout('idle')
-      return   // listeners not registered yet — no cleanup needed
-    }
+    const staleOnLoad = lastActivity && Date.now() - lastActivity >= LOCK_MS
 
     // ── Multi-tab BroadcastChannel ────────────────────────────────────────────
     try {
       bcRef.current = new BroadcastChannel(BC_CHANNEL)
       bcRef.current.onmessage = (e) => {
-        if (e.data?.type === 'logout') {
+        const type = e.data?.type
+        if (type === 'lock') doLock(false)
+        else if (type === 'unlock') doUnlock(false)
+        else if (type === 'logout') {
           clearTimeout(idleTimerRef.current)
-          clearTimeout(warnTimerRef.current)
           dispatch(logout())
           navigate('/login', { replace: true })
         }
@@ -165,20 +165,22 @@ export function useAutoLogout() {
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('blur',  onHide)
     window.addEventListener('focus', onShow)
-    window.addEventListener('session:extend', onExtend)
+    window.addEventListener('session:extend',   onExtend)
+    window.addEventListener('session:unlock',   onUnlockEvent)
 
-    // Kick off the counters
-    resetIdle()
+    // Kick off the counters (or lock immediately if already stale on load)
+    if (staleOnLoad) doLock(true)
+    else resetIdle()
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
     return () => {
       clearTimeout(idleTimerRef.current)
-      clearTimeout(warnTimerRef.current)
       ACTIVITY_EVENTS.forEach(ev => window.removeEventListener(ev, resetIdle))
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('blur',  onHide)
       window.removeEventListener('focus', onShow)
-      window.removeEventListener('session:extend', onExtend)
+      window.removeEventListener('session:extend',   onExtend)
+      window.removeEventListener('session:unlock',   onUnlockEvent)
       try { bcRef.current?.close() } catch (_) {}
     }
   }, [isAuthenticated, dispatch, navigate])

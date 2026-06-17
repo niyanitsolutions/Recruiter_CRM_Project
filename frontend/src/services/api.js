@@ -158,4 +158,18 @@ api.interceptors.response.use(
   }
 )
 
+// ── Pending-request tracker ────────────────────────────────────────────────────
+// Lets useAutoLogout defer the session lock while a request is in flight, so a
+// slow save/upload doesn't get interrupted by a lock screen.
+let _pendingRequestCount = 0
+api.interceptors.request.use((config) => {
+  _pendingRequestCount += 1
+  return config
+})
+api.interceptors.response.use(
+  (response) => { _pendingRequestCount = Math.max(0, _pendingRequestCount - 1); return response },
+  (error) => { _pendingRequestCount = Math.max(0, _pendingRequestCount - 1); return Promise.reject(error) }
+)
+export const hasPendingRequests = () => _pendingRequestCount > 0
+
 export default api

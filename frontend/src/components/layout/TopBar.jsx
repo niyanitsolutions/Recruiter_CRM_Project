@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsOwner, selectIsSeller } from '../../store/authSlice'
 import NotificationBell from '../notifications/NotificationBell'
+import AttendanceBanner from '../hrm/AttendanceBanner'
 import { useTheme } from '../../contexts/ThemeContext'
 
 // ── Breadcrumb path → label map ───────────────────────────────────────────────
@@ -234,6 +235,9 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
 
       <div className="flex items-center gap-2 ml-4">
         {actions && <div className="flex items-center gap-2 mr-2">{actions}</div>}
+
+        {/* Attendance — compact, shown for all non-partner users (Part of Task 1) */}
+        {user?.userType !== 'partner' && <AttendanceBanner />}
 
         {/* Search trigger — opens GlobalSearch overlay */}
         <button

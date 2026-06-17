@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Briefcase, ArrowLeft, Save, Plus, Trash2, ChevronDown, GitBranch, CheckCircle2, X, Pencil } from 'lucide-react'
+import { Briefcase, ArrowLeft, Save, Plus, Trash2, GitBranch, CheckCircle2, X, Pencil } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import jobService from '../../services/jobService'
 import clientService from '../../services/clientService'
 import pipelineService from '../../services/pipelineService'
 import CreatePipelineModal from '../../components/pipeline/CreatePipelineModal'
 import EditPipelineModal from '../../components/pipeline/EditPipelineModal'
+import SearchableSelect from '../../components/common/SearchableSelect'
+import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
+import { useDraftRecovery } from '../../hooks/useDraftRecovery'
 
 const JobForm = () => {
   const navigate = useNavigate()
@@ -15,6 +18,7 @@ const JobForm = () => {
 
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
   const [errors, setErrors] = useState({})
   const [clients, setClients] = useState([])
   const [statuses, setStatuses] = useState([])
@@ -31,6 +35,8 @@ const JobForm = () => {
     responsibilities: '',
     job_type: 'full_time',
     work_mode: 'onsite',
+    location_type: 'single',
+    locations: [],
     city: '',
     state: '',
     country: 'India',
@@ -54,8 +60,20 @@ const JobForm = () => {
     min_percentage: '',
     minimum_match_score: 70,
     pipeline_id: '',
-    gender_eligibility: 'all'
+    gender_eligibility: 'all',
+    min_10th_percentage: '',
+    min_12th_percentage: '',
+    min_diploma_percentage: '',
+    min_degree_percentage: ''
   })
+
+  const [locationInput, setLocationInput] = useState('')
+
+  // Draft recovery (Task 7) — survives refresh/close/session-lock before save
+  const { draftAvailable, draftSavedAt, restoreDraft, discardDraft } = useDraftRecovery(
+    'job', id, formData, setFormData,
+    { isDirty: (d) => !!(d.title?.trim() || d.client_id), isSubmitted: submitted }
+  )
 
   // Maps select value → integer days for max_notice_period_days
   const NOTICE_DAYS_MAP = { immediate: 0, '15_days': 15, '30_days': 30, '60_days': 60, '90_days': 90 }
@@ -108,6 +126,8 @@ const JobForm = () => {
           responsibilities: job.responsibilities || '',
           job_type: job.job_type || 'full_time',
           work_mode: job.work_mode || 'onsite',
+          location_type: job.location_type || 'single',
+          locations: job.locations || [],
           city: job.city || '',
           state: job.state || '',
           country: job.country || 'India',
@@ -134,7 +154,11 @@ const JobForm = () => {
           min_percentage: job.min_percentage ?? '',
           minimum_match_score: job.minimum_match_score ?? 70,
           pipeline_id: job.pipeline_id || '',
-          gender_eligibility: job.gender_eligibility || 'all'
+          gender_eligibility: job.gender_eligibility || 'all',
+          min_10th_percentage: job.eligibility?.min_10th_percentage ?? '',
+          min_12th_percentage: job.eligibility?.min_12th_percentage ?? '',
+          min_diploma_percentage: job.eligibility?.min_diploma_percentage ?? '',
+          min_degree_percentage: job.eligibility?.min_degree_percentage ?? ''
         }))
       }
     } catch (error) {
@@ -171,9 +195,15 @@ const JobForm = () => {
     // Basic
     if (!formData.title.trim()) e.title = 'Job title is required'
     if (!formData.client_id) e.client_id = 'Client is required'
-    // Location
-    if (!formData.city.trim()) e.city = 'City is required'
-    if (!formData.state.trim()) e.state = 'State is required'
+    // Location (Task 9)
+    if (formData.location_type === 'single' || formData.location_type === 'hybrid') {
+      if (!formData.city.trim()) e.city = 'City is required'
+    } else if (formData.location_type === 'multiple') {
+      if (formData.locations.length === 0) e.city = 'Add at least one location'
+    }
+    if (formData.location_type !== 'remote' && formData.location_type !== 'pan_india') {
+      if (!formData.state.trim()) e.state = 'State is required'
+    }
     if (!formData.country.trim()) e.country = 'Country is required'
     // Compensation
     if (formData.salary_min === '' || formData.salary_min === null) e.salary_min = 'Min salary is required'
@@ -249,7 +279,15 @@ const JobForm = () => {
         responsibilities: formData.responsibilities || null,
         job_type: formData.job_type,
         work_mode: formData.work_mode,
-        city: formData.city || null,
+        location_type: formData.location_type,
+        locations: formData.location_type === 'multiple'
+          ? formData.locations
+          : (formData.location_type === 'single' || formData.location_type === 'hybrid')
+          ? (formData.city ? [formData.city] : formData.locations)
+          : [],
+        city: (formData.location_type === 'pan_india' || formData.location_type === 'remote')
+          ? null
+          : (formData.city || formData.locations[0] || null),
         state: formData.state || null,
         country: formData.country || 'India',
         total_positions: Number(formData.total_positions) || 1,
@@ -273,7 +311,11 @@ const JobForm = () => {
           mandatory_skills: formData.mandatory_skills.map(s => s.trim().toLowerCase()).filter(Boolean),
           required_skills: formData.optional_skills.map(s => s.trim().toLowerCase()).filter(Boolean),
           max_ctc: formData.ctc_max ? Number(formData.ctc_max) : null,
-          max_notice_period_days: formData.notice_period_max ? (NOTICE_DAYS_MAP[formData.notice_period_max] ?? null) : null
+          max_notice_period_days: formData.notice_period_max ? (NOTICE_DAYS_MAP[formData.notice_period_max] ?? null) : null,
+          min_10th_percentage: formData.min_10th_percentage !== '' ? Number(formData.min_10th_percentage) : null,
+          min_12th_percentage: formData.min_12th_percentage !== '' ? Number(formData.min_12th_percentage) : null,
+          min_diploma_percentage: formData.min_diploma_percentage !== '' ? Number(formData.min_diploma_percentage) : null,
+          min_degree_percentage: formData.min_degree_percentage !== '' ? Number(formData.min_degree_percentage) : null
         },
         min_percentage: formData.min_percentage !== '' ? Number(formData.min_percentage) : null,
         minimum_match_score: Number(formData.minimum_match_score) || 70,
@@ -288,6 +330,7 @@ const JobForm = () => {
         : await jobService.createJob(payload)
 
       if (result?.success === true) {
+        setSubmitted(true)
         toast.success(result.message || (isEdit ? 'Job updated successfully' : 'Job created successfully'))
         navigate('/jobs')
       } else {
@@ -347,6 +390,10 @@ const JobForm = () => {
           </p>
         </div>
       </div>
+
+      {draftAvailable && (
+        <DraftRecoveryBanner savedAt={draftSavedAt} onRestore={restoreDraft} onDiscard={discardDraft} />
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Information */}
@@ -472,37 +519,106 @@ const JobForm = () => {
         {/* Location */}
         <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
           <h2 className="text-lg font-semibold text-surface-900 mb-4">Location</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                City <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="field-city"
-                type="text"
-                name="city"
-                value={formData.city}
-                onChange={handleChange}
-                className={`input w-full ${errors.city ? 'border-red-400' : ''}`}
-              />
-              {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                State <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="field-state"
-                type="text"
-                name="state"
-                value={formData.state}
-                onChange={handleChange}
-                className={`input w-full ${errors.state ? 'border-red-400' : ''}`}
-              />
-              {errors.state && <p className="text-red-500 text-xs mt-1">{errors.state}</p>}
-            </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-surface-700 mb-1">
+              Location Type
+            </label>
+            <select
+              name="location_type"
+              value={formData.location_type}
+              onChange={(e) => {
+                const value = e.target.value
+                setFormData(prev => ({ ...prev, location_type: value }))
+                if (errors.city) setErrors(prev => ({ ...prev, city: undefined }))
+              }}
+              className="input w-full md:w-64"
+            >
+              <option value="single">Single Location</option>
+              <option value="multiple">Multiple Locations</option>
+              <option value="pan_india">PAN India</option>
+              <option value="remote">Remote</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {(formData.location_type === 'single' || formData.location_type === 'hybrid') && (
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  City <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="field-city"
+                  type="text"
+                  name="city"
+                  value={formData.city}
+                  onChange={handleChange}
+                  className={`input w-full ${errors.city ? 'border-red-400' : ''}`}
+                  placeholder="e.g. Bangalore"
+                />
+                {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
+              </div>
+            )}
+
+            {formData.location_type === 'multiple' && (
+              <div id="field-city" className="md:col-span-2">
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  Locations <span className="text-red-500">*</span>
+                </label>
+                <div className={`flex flex-wrap gap-2 p-2 rounded-lg border ${errors.city ? 'border-red-400' : 'border-surface-200'}`}>
+                  {formData.locations.map(loc => (
+                    <span key={loc} className="flex items-center gap-1 px-2 py-1 rounded-full bg-accent/10 text-accent text-xs font-medium">
+                      {loc}
+                      <button type="button" onClick={() => setFormData(prev => ({ ...prev, locations: prev.locations.filter(l => l !== loc) }))}>
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="text"
+                    value={locationInput}
+                    onChange={(e) => setLocationInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.key === 'Enter' || e.key === ',') && locationInput.trim()) {
+                        e.preventDefault()
+                        const val = locationInput.trim()
+                        setFormData(prev => prev.locations.includes(val) ? prev : { ...prev, locations: [...prev.locations, val] })
+                        setLocationInput('')
+                        if (errors.city) setErrors(prev => ({ ...prev, city: undefined }))
+                      }
+                    }}
+                    placeholder="Type a city and press Enter"
+                    className="flex-1 min-w-[140px] text-sm outline-none bg-transparent"
+                  />
+                </div>
+                {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
+                <p className="text-xs text-surface-400 mt-1">e.g. Bangalore, Chennai, Hyderabad</p>
+              </div>
+            )}
+
+            {(formData.location_type === 'pan_india' || formData.location_type === 'remote') && (
+              <div className="md:col-span-2 flex items-center text-sm text-surface-500">
+                No specific city required for {formData.location_type === 'pan_india' ? 'PAN India' : 'Remote'} jobs.
+              </div>
+            )}
+
+            {formData.location_type !== 'pan_india' && formData.location_type !== 'remote' && (
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1">
+                  State <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="field-state"
+                  type="text"
+                  name="state"
+                  value={formData.state}
+                  onChange={handleChange}
+                  className={`input w-full ${errors.state ? 'border-red-400' : ''}`}
+                />
+                {errors.state && <p className="text-red-500 text-xs mt-1">{errors.state}</p>}
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1">
@@ -695,7 +811,39 @@ const JobForm = () => {
                 : <p className="text-xs text-surface-400 mt-1">Candidates with ATS score below this % will be auto-rejected</p>
               }
             </div>
+          </div>
 
+          {/* Academic Eligibility (Task 10) — all optional, no filtering applied when blank */}
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-surface-700 mb-1">Academic Eligibility <span className="text-surface-400 font-normal">(optional)</span></h3>
+            <p className="text-xs text-surface-400 mb-3">Leave blank for no filtering on a level.</p>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {[
+                { name: 'min_10th_percentage',     label: '10th %' },
+                { name: 'min_12th_percentage',     label: '12th %' },
+                { name: 'min_diploma_percentage',  label: 'Diploma %' },
+                { name: 'min_degree_percentage',   label: 'Degree %' },
+              ].map(({ name, label }) => (
+                <div key={name}>
+                  <label className="block text-sm font-medium text-surface-700 mb-1">{label}</label>
+                  <input
+                    type="number"
+                    name={name}
+                    value={formData[name]}
+                    onChange={handleChange}
+                    onWheel={(e) => e.target.blur()}
+                    className="input w-full"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    placeholder="e.g. 60"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div id="field-pipeline_id">
               <label className="block text-sm font-medium text-surface-700 mb-1">
                 Interview Pipeline <span className="text-red-500">*</span>
@@ -714,22 +862,19 @@ const JobForm = () => {
                 </div>
               ) : (
                 <div className={`relative rounded-lg border ${errors.pipeline_id ? 'border-red-400' : 'border-surface-200'} bg-[var(--bg-card)] overflow-hidden`}>
-                  {/* Selected pipeline display / dropdown trigger */}
-                  <div className="flex items-center gap-2 px-3 py-2 border-b border-surface-100">
-                    <select
-                      name="pipeline_id"
+                  {/* Selected pipeline display / searchable dropdown trigger (Task 14) */}
+                  <div className="px-2 py-1.5 border-b border-surface-100">
+                    <SearchableSelect
                       value={formData.pipeline_id}
-                      onChange={handleChange}
-                      className="flex-1 bg-transparent text-sm text-surface-700 outline-none cursor-pointer appearance-none"
-                    >
-                      <option value="">Select a pipeline…</option>
-                      {pipelines.map(p => (
-                        <option key={p.id} value={p.id}>
-                          {p.job_title || p.name}{p.client_name ? ` - ${p.client_name}` : ''}{p.is_default ? ' (Default)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-surface-400 pointer-events-none flex-shrink-0" />
+                      onChange={(val) => setFormData(prev => ({ ...prev, pipeline_id: val }))}
+                      options={pipelines.map(p => ({
+                        value: p.id,
+                        label: `${p.job_title || p.name}${p.client_name ? ` - ${p.client_name}` : ''}${p.is_default ? ' (Default)' : ''}`,
+                      }))}
+                      placeholder="Search pipeline by name or client…"
+                      minChars={3}
+                      className="border-0"
+                    />
                   </div>
                   {/* Selected pipeline info row */}
                   {formData.pipeline_id && (() => {

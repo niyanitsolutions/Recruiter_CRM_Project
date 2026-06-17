@@ -282,20 +282,23 @@ export default function AttendanceBanner() {
     ? checkInTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
     : null
 
-  const bannerStyle = checkedOut
-    ? { background: 'var(--bg-card-alt)', color: 'var(--text-muted)',    borderBottom: '1px solid var(--border)' }
+  const pillStyle = checkedOut
+    ? { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' }
     : onBreak
-    ? { background: 'var(--bg-warning)',  color: 'var(--text-warning)',  borderBottom: '1px solid var(--border)' }
+    ? { background: 'var(--bg-warning)',  color: 'var(--text-warning)' }
     : checkedIn
-    ? { background: 'var(--bg-success)',  color: 'var(--text-success)',  borderBottom: '1px solid var(--border)' }
+    ? { background: 'var(--bg-success)',  color: 'var(--text-success)' }
     : leaveInfo
-    ? { background: 'var(--bg-info)',     color: 'var(--text-info)',     borderBottom: '1px solid var(--border)' }
+    ? { background: 'var(--bg-info)',     color: 'var(--text-info)' }
     : isHoliday
-    ? { background: 'var(--bg-info)',     color: 'var(--text-info)',     borderBottom: '1px solid var(--border)' }
+    ? { background: 'var(--bg-info)',     color: 'var(--text-info)' }
     : isWeekend
-    ? { background: 'var(--bg-card-alt)', color: 'var(--text-muted)',   borderBottom: '1px solid var(--border)' }
-    : { background: 'var(--bg-danger)',   color: 'var(--text-danger)',   borderBottom: '1px solid var(--border)' }
+    ? { background: 'var(--bg-card-alt)', color: 'var(--text-muted)' }
+    : { background: 'var(--bg-danger)',   color: 'var(--text-danger)' }
 
+  // Compact header widget — fits inline in TopBar (Part of Task 1: attendance
+  // moved out of its own full-width row so dashboard content starts right
+  // below the header).
   return (
     <>
       <PunchInModal
@@ -305,112 +308,68 @@ export default function AttendanceBanner() {
         onPunchedIn={handlePunchedIn}
       />
 
-      <div className="w-full px-4 py-2 flex items-center gap-4 text-sm transition-colors" style={bannerStyle}>
-        <Clock className="w-4 h-4 flex-shrink-0" />
+      <div
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs transition-colors flex-shrink-0"
+        style={pillStyle}
+        title={checkedOut ? `Worked ${formatHM(record.work_hours)} today` : undefined}
+      >
+        <Clock className="w-3.5 h-3.5 flex-shrink-0" />
 
         {checkedOut ? (
-          /* ── Checked out state ── */
-          <span>
-            Punched out — worked{' '}
-            <strong>{formatHM(record.work_hours)}</strong> today
-            {record.is_late ? <span className="ml-2 text-xs opacity-75">(arrived late)</span> : null}
-            {record.is_half_day ? <span className="ml-2 text-xs opacity-75">(half day)</span> : null}
-          </span>
+          <span className="whitespace-nowrap">Worked <strong>{formatHM(record.work_hours)}</strong></span>
 
         ) : checkedIn ? (
-          /* ── Checked in state ── */
           <>
-            <span className="flex items-center gap-2 min-w-0">
-              {onBreak
-                ? <span>On break — <strong>{formatHMS(breakSecs)}</strong></span>
-                : <>
-                    Clocked in at <strong>{checkInStr}</strong>
-                    <span className="font-mono font-semibold ml-1">{formatHMS(workSecs)}</span>
-                  </>
-              }
-              {onBreak && (
-                <span className="text-xs opacity-75 ml-1">
-                  (net work: {formatHMS(workSecs)})
-                </span>
-              )}
-            </span>
-
-            {record.work_mode && record.work_mode !== 'office' && (
-              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-white/60 capitalize flex-shrink-0">
-                {record.work_mode.replace(/_/g, ' ')}
-              </span>
+            {onBreak ? (
+              <span className="whitespace-nowrap">On break <strong className="font-mono">{formatHMS(breakSecs)}</strong></span>
+            ) : (
+              <span className="font-mono font-semibold whitespace-nowrap">{formatHMS(workSecs)}</span>
             )}
-
-            <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-              {!onBreak ? (
-                <button onClick={handleStartBreak} disabled={loading}
-                  className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium whitespace-nowrap"
-                  style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>
-                  <Coffee className="w-3.5 h-3.5" /> Break
-                </button>
-              ) : (
-                <button onClick={handleEndBreak} disabled={loading}
-                  className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium whitespace-nowrap"
-                  style={{ background: 'var(--bg-success)', color: 'var(--text-success)' }}>
-                  <Clock className="w-3.5 h-3.5" /> End Break
-                </button>
-              )}
-              <button onClick={handlePunchOut} disabled={loading}
-                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium whitespace-nowrap"
-                style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
-                Punch Out
+            {!onBreak ? (
+              <button onClick={handleStartBreak} disabled={loading}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap"
+                style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>
+                <Coffee className="w-3 h-3" /> Break
               </button>
-            </div>
+            ) : (
+              <button onClick={handleEndBreak} disabled={loading}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap"
+                style={{ background: 'var(--bg-success)', color: 'var(--text-success)' }}>
+                <Clock className="w-3 h-3" /> End
+              </button>
+            )}
+            <button onClick={handlePunchOut} disabled={loading}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium whitespace-nowrap"
+              style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
+              {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />}
+              Punch Out
+            </button>
           </>
 
         ) : leaveInfo ? (
-          /* ── Approved leave state — no punch-in required ── */
-          <>
-            <Calendar className="w-4 h-4 flex-shrink-0" />
-            <span>
-              You are on <strong>{leaveTypeLabel(leaveInfo.leave_type)}</strong> today.
-              {leaveInfo.from_date !== leaveInfo.to_date && (
-                <span className="ml-1 text-xs opacity-75">
-                  ({leaveInfo.from_date} – {leaveInfo.to_date})
-                </span>
-              )}
-            </span>
-            <span className="ml-auto text-xs opacity-75 flex-shrink-0">No punch-in required</span>
-          </>
+          <span className="whitespace-nowrap" title={`${leaveInfo.from_date} – ${leaveInfo.to_date}`}>
+            <Calendar className="w-3.5 h-3.5 inline mr-1" />On {leaveTypeLabel(leaveInfo.leave_type)}
+          </span>
 
         ) : isHoliday ? (
-          /* ── Holiday state — no punch-in required ── */
-          <>
-            <Sun className="w-4 h-4 flex-shrink-0" />
-            <span>Today is a holiday: <strong>{holidayName}</strong></span>
-            <span className="ml-auto text-xs opacity-75 flex-shrink-0">No punch-in required</span>
-          </>
+          <span className="whitespace-nowrap" title={holidayName}>
+            <Sun className="w-3.5 h-3.5 inline mr-1" />Holiday
+          </span>
 
         ) : isWeekend ? (
-          /* ── Weekend state — no punch-in required ── */
-          <>
-            <Umbrella className="w-4 h-4 flex-shrink-0" />
-            <span>Enjoy your weekend!</span>
-            <span className="ml-auto text-xs opacity-75 flex-shrink-0">No punch-in required</span>
-          </>
+          <span className="whitespace-nowrap">
+            <Umbrella className="w-3.5 h-3.5 inline mr-1" />Weekend
+          </span>
 
         ) : (
-          /* ── Not punched in — normal working day ── */
           <>
-            {resolvedEmpId === '__PENDING__' ? (
-              <span className="flex items-center gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                You haven&apos;t punched in today.
-                <span className="text-xs opacity-70">(Profile will be created on first punch-in)</span>
-              </span>
-            ) : (
-              <span>You haven&apos;t punched in today.</span>
+            {resolvedEmpId === '__PENDING__' && (
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
             )}
             <button onClick={() => setShowModal(true)}
-              className="ml-auto flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold text-white flex-shrink-0"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold text-white whitespace-nowrap"
               style={{ background: 'var(--accent)' }}>
-              <Clock className="w-3.5 h-3.5" /> Punch In
+              <Clock className="w-3 h-3" /> Punch In
             </button>
           </>
         )}

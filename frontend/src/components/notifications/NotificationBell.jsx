@@ -79,7 +79,7 @@ const formatRelative = (iso) => {
   return `${Math.floor(h / 24)}d ago`
 }
 
-const POLL_INTERVAL = 30_000 // 30 seconds
+const POLL_INTERVAL = 5_000 // 5 seconds (Task 8 — live background refresh)
 
 const NotificationBell = () => {
   const navigate   = useNavigate()

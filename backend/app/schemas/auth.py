@@ -125,6 +125,11 @@ class ChangePasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8)
 
 
+class VerifyPasswordRequest(BaseModel):
+    """Verify current password (e.g. to unlock a locked session)"""
+    password: str
+
+
 class VerifyEmailRequest(BaseModel):
     """Email verification request"""
     token: str

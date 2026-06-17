@@ -10,6 +10,7 @@ import { useSelector } from 'react-redux'
 import jobService from '../../services/jobService'
 import usePermissions from '../../hooks/usePermissions'
 import ExportModal from '../../components/common/ExportModal'
+import { useLivePolling } from '../../hooks/useLivePolling'
 import JobImportModal from '../../components/common/JobImportModal'
 import { SkeletonTableRows, SkeletonCards } from '../../components/common/SkeletonLoader'
 import { selectUserType } from '../../store/authSlice'
@@ -98,9 +99,9 @@ const Jobs = () => {
     }
   }
 
-  const loadJobs = async () => {
+  const loadJobs = async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const params = {
         page: pagination.page,
         page_size: 20,
@@ -114,11 +115,14 @@ const Jobs = () => {
         totalPages: response.pagination?.total_pages || 0
       }))
     } catch {
-      toast.error('Failed to load jobs')
+      if (!silent) toast.error('Failed to load jobs')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
+
+  // Live background refresh (Task 8) — silent, no visible reload
+  useLivePolling(() => loadJobs(true), 5000)
 
   const handleDelete = async (jobId, jobTitle) => {
     if (!confirm(`Are you sure you want to delete "${jobTitle}"?`)) return

@@ -13,6 +13,7 @@ import usePermissions from '../../hooks/usePermissions'
 import ExportModal from '../../components/common/ExportModal'
 import CandidateImportModal from '../../components/common/CandidateImportModal'
 import { SkeletonTableRows, SkeletonCards } from '../../components/common/SkeletonLoader'
+import { useLivePolling } from '../../hooks/useLivePolling'
 import ModalPortal from '../../components/common/ModalPortal'
 import { selectUserType } from '../../store/authSlice'
 import { getToken } from '../../utils/token'
@@ -150,9 +151,9 @@ const Candidates = () => {
     }
   }, [])
 
-  const loadCandidates = useCallback(async (overrideFilters) => {
+  const loadCandidates = useCallback(async (overrideFilters, silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const activeFilters = overrideFilters ?? filters
       const params = {
         page: pagination.page,
@@ -169,11 +170,14 @@ const Candidates = () => {
         totalPages: response.pagination?.total_pages || 0
       }))
     } catch (error) {
-      toast.error('Failed to load candidates')
+      if (!silent) toast.error('Failed to load candidates')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [filters, pagination.page, activeTab])
+
+  // Live background refresh (Task 8) — silent, no visible reload
+  useLivePolling(() => loadCandidates(undefined, true), 5000)
 
   useEffect(() => { loadDropdowns() }, [loadDropdowns])
 

@@ -10,6 +10,7 @@ import usePermissions from '../../hooks/usePermissions'
 import { formatDate } from '../../utils/format'
 import ExportModal from '../../components/common/ExportModal'
 import { SkeletonTableRows, SkeletonCards } from '../../components/common/SkeletonLoader'
+import { useLivePolling } from '../../hooks/useLivePolling'
 import TableScroll from '../../components/common/TableScroll'
 
 const STATUS_STYLES = {
@@ -54,9 +55,9 @@ const Interviews = () => {
     }
   }
 
-  const loadData = async () => {
+  const loadData = async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       if (activeTab === 'today') {
         const response = await interviewService.getTodayInterviews()
         setTodayInterviews(response.data || [])
@@ -78,11 +79,14 @@ const Interviews = () => {
         }))
       }
     } catch (error) {
-      toast.error('Failed to load interviews')
+      if (!silent) toast.error('Failed to load interviews')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
+
+  // Live background refresh (Task 8) — silent, no visible reload
+  useLivePolling(() => loadData(true), 5000)
 
   const handleCancel = async (interviewId) => {
     const reason = prompt('Please enter cancellation reason:')

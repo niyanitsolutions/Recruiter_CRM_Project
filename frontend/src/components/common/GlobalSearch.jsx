@@ -4,11 +4,9 @@ import { useNavigate } from 'react-router-dom'
 import {
   Search, Users2, Briefcase, Building2, X, ArrowRight,
   LayoutDashboard, Calendar, FileText, Settings, Target,
-  Loader2, Clock, ChevronRight,
+  Loader2, Clock, ChevronRight, UserCog, ListChecks, GitBranch, FolderOpen,
 } from 'lucide-react'
-import candidateService from '../../services/candidateService'
-import jobService from '../../services/jobService'
-import clientService from '../../services/clientService'
+import api from '../../services/api'
 
 const QUICK_NAV = [
   { label: 'Dashboard',    icon: LayoutDashboard, path: '/dashboard' },
@@ -22,16 +20,34 @@ const QUICK_NAV = [
 ]
 
 const RESULT_ICONS = {
-  candidate: Users2,
-  job:       Briefcase,
-  client:    Building2,
+  candidate:    Users2,
+  job:          Briefcase,
+  application:  ListChecks,
+  interview:    Calendar,
+  client:       Building2,
+  employee:     UserCog,
+  user:         UserCog,
+  task:         ListChecks,
+  target:       Target,
+  pipeline:     GitBranch,
+  document:     FolderOpen,
 }
 
 const RESULT_COLORS = {
-  candidate: 'var(--stat-teal)',
-  job:       'var(--stat-orange)',
-  client:    'var(--stat-blue)',
+  candidate:    'var(--stat-teal)',
+  job:          'var(--stat-orange)',
+  application:  'var(--stat-purple)',
+  interview:    'var(--stat-pink)',
+  client:       'var(--stat-blue)',
+  employee:     'var(--stat-green)',
+  user:         'var(--stat-green)',
+  task:         'var(--stat-yellow)',
+  target:       'var(--stat-red)',
+  pipeline:     'var(--stat-blue)',
+  document:     'var(--stat-teal)',
 }
+
+const MIN_CHARS = 3
 
 const RECENT_KEY = 'crm_recent_searches'
 
@@ -118,45 +134,21 @@ const GlobalSearch = ({ onClose }) => {
   }, [])
 
   const search = useCallback(async (q) => {
-    if (!q.trim()) { setResults([]); return }
+    if (q.trim().length < MIN_CHARS) { setResults([]); return }
     setLoading(true)
     try {
-      const [cRes, jRes, clRes] = await Promise.allSettled([
-        candidateService.getCandidates({ search: q, page_size: 4 }),
-        jobService.getJobs({ search: q, page_size: 4 }),
-        clientService.getClients({ search: q, page_size: 4 }),
-      ])
-      const mapped = []
-      if (cRes.status === 'fulfilled') {
-        const items = cRes.value?.data?.items || cRes.value?.data?.data || cRes.value?.data || []
-        items.slice(0, 4).forEach(c => mapped.push({
-          type: 'candidate',
-          label: c.full_name || c.name,
-          sub: c.current_designation || c.email || '',
-          path: `/candidates/${c.id || c._id}`,
-        }))
-      }
-      if (jRes.status === 'fulfilled') {
-        const items = jRes.value?.data?.items || jRes.value?.data?.data || jRes.value?.data || []
-        items.slice(0, 4).forEach(j => mapped.push({
-          type: 'job',
-          label: j.title || j.job_title,
-          sub: j.client_name || j.department || '',
-          path: `/jobs/${j.id || j._id}`,
-        }))
-      }
-      if (clRes.status === 'fulfilled') {
-        const items = clRes.value?.data?.items || clRes.value?.data?.data || clRes.value?.data || []
-        items.slice(0, 4).forEach(c => mapped.push({
-          type: 'client',
-          label: c.company_name || c.name,
-          sub: c.industry || c.email || '',
-          path: `/clients/${c.id || c._id}`,
-        }))
-      }
-      setResults(mapped)
+      const res = await api.get('/search/global', { params: { q } })
+      const items = res?.data?.data || []
+      setResults(items.map(item => ({
+        type:  item.type,
+        label: item.label,
+        sub:   item.sub,
+        path:  item.path,
+      })))
       setActiveIdx(0)
-    } catch {}
+    } catch {
+      setResults([])
+    }
     setLoading(false)
   }, [])
 
@@ -217,7 +209,7 @@ const GlobalSearch = ({ onClose }) => {
             type="text"
             value={query}
             onChange={e => { setQuery(e.target.value); setActiveIdx(0) }}
-            placeholder="Search candidates, jobs, clients..."
+            placeholder="Search candidates, jobs, clients, employees, tasks…"
             className="flex-1 text-sm bg-transparent outline-none"
             style={{
               color: 'var(--text-primary)',
@@ -255,8 +247,18 @@ const GlobalSearch = ({ onClose }) => {
             </div>
           )}
 
+          {/* Below minimum length */}
+          {query && query.trim().length < MIN_CHARS && (
+            <div className="px-4 py-8 text-center">
+              <Search className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--text-disabled)' }} />
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                Type at least {MIN_CHARS} characters to search
+              </p>
+            </div>
+          )}
+
           {/* No results */}
-          {query && !loading && results.length === 0 && (
+          {query && query.trim().length >= MIN_CHARS && !loading && results.length === 0 && (
             <div className="px-4 py-8 text-center">
               <Search className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--text-disabled)' }} />
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No results for "{query}"</p>
