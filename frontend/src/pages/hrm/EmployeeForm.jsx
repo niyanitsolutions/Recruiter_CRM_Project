@@ -377,7 +377,12 @@ export default function EmployeeForm() {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
+  // ── User Account section state ──────────────────────────────────
+  const [createAccount, setCreateAccount] = useState(true)
+  const [uForm, setUForm]       = useState({ ...EMPTY_USER })
+
   // Draft recovery (Task 7) — employee + account fields only (lighter, higher-value subset)
+  // NOTE: uForm must be declared before draftData to avoid Temporal Dead Zone error
   const [submitted, setSubmitted] = useState(false)
   const draftData = { form, uForm }
   const setDraftData = (next) => {
@@ -388,10 +393,6 @@ export default function EmployeeForm() {
     'employee', id, draftData, setDraftData,
     { isDirty: (d) => !!(d.form?.full_name?.trim() || d.form?.employee_code?.trim()), isSubmitted: submitted }
   )
-
-  // ── User Account section state ──────────────────────────────────
-  const [createAccount, setCreateAccount] = useState(true)
-  const [uForm, setUForm]       = useState({ ...EMPTY_USER })
   const [uErrors, setUErrors]   = useState({})
   const [deptCustom, setDeptCustom]   = useState('')
   const [desigCustom, setDesigCustom] = useState('')

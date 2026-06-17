@@ -35,7 +35,6 @@ import {
   Clock,
   PersonStanding,
   LayoutGrid,
-  ArrowLeftRight,
   Layers,
   BookOpen,
 } from 'lucide-react'
@@ -109,9 +108,6 @@ const PERMISSION_NAV_MAP = [
   // Emp Resources — single page with Documents / Assets / Exit tabs
   { permissions: ['hrm:documents:manage', 'hrm:employees:view', 'hrm:assets:view', 'hrm:assets:manage', 'hrm:exit:manage', 'hrm:exit:view'],
     path: '/hrm/emp-resources',        icon: Layers,          label: 'Emp Resources',   section: 'HRM', hrmOnly: true },
-  // User ↔ Employee Sync
-  { permissions: ['hrm:employees:manage'],
-    path: '/hrm/sync',                 icon: ArrowLeftRight,  label: 'User Sync',       section: 'HRM', hrmOnly: true },
   // Document Center
   { permissions: ['docs:view', 'docs:create', 'docs:manage'],
     path: '/hrm/doc-center',           icon: BookOpen,        label: 'Document Center', section: 'HRM', hrmOnly: true },

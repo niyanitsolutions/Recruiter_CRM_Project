@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Users, Clock, Calendar, Banknote, Briefcase, UserCheck,
-  AlertCircle, RefreshCw, TrendingUp, Megaphone, Link2, Loader2, DoorOpen,
+  AlertCircle, RefreshCw, TrendingUp, Megaphone, DoorOpen,
   Activity, Coffee,
 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
 import Payroll from './Payroll'
 import Performance from './Performance'
@@ -46,160 +45,7 @@ const StatCard = ({ icon: Icon, label, value, sub, to, color = 'blue' }) => {
   return to ? <Link to={to}>{card}</Link> : card
 }
 
-const SYNC_ROLES = [
-  { value: 'hr',                    label: 'HR' },
-  { value: 'candidate_coordinator', label: 'Candidate Coordinator' },
-  { value: 'client_coordinator',    label: 'Client Coordinator' },
-  { value: 'accounts',              label: 'Accounts' },
-  { value: 'admin',                 label: 'Admin' },
-]
-
-function SyncWidget() {
-  const [sync, setSync]               = useState(null)
-  const [loading, setLoading]         = useState(true)
-  const [syncing, setSyncing]         = useState(null)
-  const [unlinkedUsers, setUnlinkedUsers] = useState([])
-  const [unlinkedEmps, setUnlinkedEmps]   = useState([])
-  const [expanded, setExpanded]       = useState(false)
-  const [roleMap, setRoleMap]         = useState({})  // empId → selected role
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      const s = await hrmService.getSyncStatus()
-      setSync(s.data)
-    } catch {}
-    setLoading(false)
-  }
-
-  const loadDetails = async () => {
-    try {
-      const [u, e] = await Promise.all([
-        hrmService.getUnlinkedUsers({ page_size: 5 }),
-        hrmService.getUnlinkedEmployees({ page_size: 5 }),
-      ])
-      setUnlinkedUsers(u.data.items || [])
-      setUnlinkedEmps(e.data.items || [])
-    } catch {}
-  }
-
-  useEffect(() => { load() }, [])
-
-  const handleAddEmployeeProfile = async (userId) => {
-    setSyncing(userId)
-    try {
-      const res = await hrmService.syncUserToEmployee(userId)
-      toast.success(res.data.message || 'Employee profile created')
-      load()
-      loadDetails()
-    } catch { toast.error('Failed to create employee profile') }
-    setSyncing(null)
-  }
-
-  const handleAddLoginAccount = async (empId) => {
-    setSyncing(empId)
-    const role = roleMap[empId] || 'hr'
-    try {
-      const res = await hrmService.syncEmployeeToUser(empId, { role })
-      toast.success(res.data.message || 'Login account created')
-      load()
-      loadDetails()
-    } catch { toast.error('Failed to create login account') }
-    setSyncing(null)
-  }
-
-  const toggleExpand = () => {
-    if (!expanded) loadDetails()
-    setExpanded(e => !e)
-  }
-
-  if (loading || !sync) return null
-  const hasUnlinked = sync.unlinked_users > 0 || sync.unlinked_employees > 0
-  if (!hasUnlinked) return null
-
-  return (
-    <div className="rounded-xl border p-4" style={{ background: 'var(--bg-warning)', borderColor: 'var(--border-card)' }}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Link2 className="w-4 h-4" style={{ color: 'var(--text-warning)' }} />
-          <span className="text-sm font-semibold" style={{ color: 'var(--text-warning)' }}>
-            Sync required: {sync.unlinked_users} user{sync.unlinked_users !== 1 ? 's' : ''} and{' '}
-            {sync.unlinked_employees} employee{sync.unlinked_employees !== 1 ? 's' : ''} not linked
-          </span>
-        </div>
-        <button onClick={toggleExpand} className="text-xs underline" style={{ color: 'var(--text-warning)', background: 'none', border: 'none', cursor: 'pointer' }}>
-          {expanded ? 'Hide' : 'View & Fix'}
-        </button>
-      </div>
-
-      {expanded && (
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {unlinkedUsers.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-muted)' }}>
-                Users without employee profile
-              </p>
-              <div className="space-y-1">
-                {unlinkedUsers.map(u => (
-                  <div key={u.id} className="flex items-center justify-between rounded-lg px-3 py-2 text-sm"
-                       style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-                    <span style={{ color: 'var(--text-body)' }}>{u.full_name || u.email}</span>
-                    <button
-                      onClick={() => handleAddEmployeeProfile(u.id)}
-                      disabled={syncing === u.id}
-                      className="btn-secondary text-xs py-1 flex items-center gap-1"
-                    >
-                      {syncing === u.id ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                      Add Employee Profile
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {unlinkedEmps.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--text-muted)' }}>
-                Employees without login account
-              </p>
-              <div className="space-y-1">
-                {unlinkedEmps.map(e => (
-                  <div key={e.id} className="rounded-lg px-3 py-2 text-sm space-y-2"
-                       style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-                    <div className="flex items-center justify-between">
-                      <span style={{ color: 'var(--text-body)' }}>{e.full_name || e.email}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={roleMap[e.id] || 'hr'}
-                        onChange={ev => setRoleMap(m => ({ ...m, [e.id]: ev.target.value }))}
-                        className="text-xs rounded px-2 py-1 flex-1"
-                        style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)' }}
-                      >
-                        {SYNC_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                      </select>
-                      <button
-                        onClick={() => handleAddLoginAccount(e.id)}
-                        disabled={syncing === e.id}
-                        className="btn-secondary text-xs py-1 flex items-center gap-1"
-                      >
-                        {syncing === e.id ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                        Add Login Account
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function OverviewTab() {
+function OverviewTab({ refreshKey }) {
   const [stats, setStats] = useState(null)
   const [trend, setTrend] = useState([])
   const [loading, setLoading] = useState(true)
@@ -217,17 +63,10 @@ function OverviewTab() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-end">
-        <button onClick={load} className="btn-secondary flex items-center gap-2 text-sm">
-          <RefreshCw className="w-4 h-4" /> Refresh
-        </button>
-      </div>
-
-      <SyncWidget />
 
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -297,6 +136,7 @@ function OverviewTab() {
 
 export default function HRMDashboard() {
   const [activeTab, setActiveTab] = useState('overview')
+  const [refreshKey, setRefreshKey] = useState(0)
 
   return (
     <div className="flex flex-col h-full">
@@ -307,33 +147,43 @@ export default function HRMDashboard() {
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Human Resource Management</p>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 border-b" style={{ borderColor: 'var(--border)' }}>
-          {TABS.map(tab => (
+        {/* Tabs row — Refresh button lives here when on Overview tab */}
+        <div className="flex items-end justify-between border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex gap-1">
+            {TABS.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className="px-4 py-2.5 text-sm font-medium transition-colors relative"
+                style={{
+                  color: activeTab === tab.key ? 'var(--text-link)' : 'var(--text-muted)',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {tab.label}
+                {activeTab === tab.key && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t"
+                        style={{ background: 'var(--text-link)' }} />
+                )}
+              </button>
+            ))}
+          </div>
+          {activeTab === 'overview' && (
             <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className="px-4 py-2.5 text-sm font-medium transition-colors relative"
-              style={{
-                color: activeTab === tab.key ? 'var(--text-link)' : 'var(--text-muted)',
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-              }}
+              onClick={() => setRefreshKey(k => k + 1)}
+              className="btn-secondary flex items-center gap-2 text-sm mb-1"
             >
-              {tab.label}
-              {activeTab === tab.key && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t"
-                      style={{ background: 'var(--text-link)' }} />
-              )}
+              <RefreshCw className="w-4 h-4" /> Refresh
             </button>
-          ))}
+          )}
         </div>
       </div>
 
       {/* Tab content */}
       <div className="flex-1 overflow-auto">
-        {activeTab === 'overview'      && <OverviewTab />}
+        {activeTab === 'overview'      && <OverviewTab refreshKey={refreshKey} />}
         {activeTab === 'payroll'       && <Payroll />}
         {activeTab === 'performance'   && <Performance />}
         {activeTab === 'announcements' && <Announcements />}
