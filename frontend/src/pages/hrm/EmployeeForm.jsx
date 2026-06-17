@@ -337,6 +337,75 @@ function validateSections(form, emergencyContacts, qualifications, documents, st
   return { isValid: Object.keys(errors).length === 0, errors }
 }
 
+// ── Translate raw API errors into user-friendly messages ─────────────
+function friendlyMessage(raw) {
+  if (!raw) return null
+  const s = String(raw).toLowerCase()
+  if (s.includes('email') && (s.includes('exist') || s.includes('duplicate') || s.includes('unique')))
+    return 'An employee with this email address already exists.'
+  if ((s.includes('mobile') || s.includes('phone')) && (s.includes('exist') || s.includes('duplicate') || s.includes('unique')))
+    return 'An employee with this mobile number already exists.'
+  if ((s.includes('employee_id') || s.includes('employee id')) && (s.includes('exist') || s.includes('duplicate') || s.includes('unique')))
+    return 'An employee with this Employee ID already exists.'
+  if (s.includes('pan') && (s.includes('exist') || s.includes('duplicate') || s.includes('unique')))
+    return 'An employee with this PAN number already exists.'
+  if (s.includes('aadhaar') && (s.includes('exist') || s.includes('duplicate') || s.includes('unique')))
+    return 'An employee with this Aadhaar number already exists.'
+  if (s.includes('username') && (s.includes('exist') || s.includes('duplicate') || s.includes('unique')))
+    return 'A user account with this username already exists.'
+  // Return the raw message if it looks like plain prose (not JSON / stack trace)
+  if (raw.length < 250 && !/[{[\n]/.test(raw)) return raw
+  return null
+}
+
+function parseApiError(err) {
+  if (!err?.response) {
+    return {
+      title: 'Unable to save employee.',
+      reason: 'Network error — please check your connection and try again.',
+    }
+  }
+  const status  = err.response.status
+  const data    = err.response.data || {}
+  const detail  = data.detail
+  const message = data.message
+
+  if (status === 402) {
+    if (detail?.seat_limit_reached) {
+      return {
+        title: 'Seat limit reached.',
+        reason: `You have used ${detail.current_active_users} of ${detail.total_user_seats} user seats.\nUpgrade your plan or deactivate an existing user.`,
+      }
+    }
+    return { title: 'Unable to save employee.', reason: message || 'Subscription limit reached.' }
+  }
+
+  if (status === 400 || status === 422) {
+    const raw = message || (typeof detail === 'string' ? detail : null)
+    return {
+      title: 'Unable to save employee.',
+      reason: friendlyMessage(raw) || 'Please review your inputs and try again.',
+    }
+  }
+
+  if (status === 404) {
+    return { title: 'Unable to save employee.', reason: 'Employee record not found. It may have been deleted.' }
+  }
+
+  if (status >= 500) {
+    return {
+      title: 'Unable to save employee.',
+      reason: 'An unexpected error occurred.\nPlease try again or contact your administrator.',
+    }
+  }
+
+  const raw = message || (typeof detail === 'string' ? detail : null)
+  return {
+    title: 'Unable to save employee.',
+    reason: friendlyMessage(raw) || 'An unexpected error occurred.\nPlease try again or contact your administrator.',
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // Main Component
 // ═══════════════════════════════════════════════════════════════════
@@ -362,8 +431,8 @@ export default function EmployeeForm() {
   }
 
   // ── Loading / saving / error ─────────────────────────────────────
-  const [saving, setSaving]   = useState(false)
-  const [error, setError]     = useState('')
+  const [saving, setSaving]         = useState(false)
+  const [errorModal, setErrorModal] = useState(null)   // { title, lines, variant }
   const [sectionErrors, setSectionErrors] = useState({})
 
   // ── Photo upload state ────────────────────────────────────────────
@@ -617,7 +686,7 @@ export default function EmployeeForm() {
     else if (!/\d/.test(uForm.password)) errs.password = 'Need a number'
     if (!isPartner && !permDept) errs.permissions = 'Select a department to assign permissions.'
     setUErrors(errs)
-    return Object.keys(errs).length === 0
+    return errs   // caller checks Object.keys(errs).length === 0
   }
 
   // ── Staged document handlers (create mode) ───────────────────────
@@ -808,7 +877,6 @@ export default function EmployeeForm() {
   // ── Submit ───────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setError('')
 
     // Run section validation
     const { isValid, errors: secErrs } = validateSections(
@@ -817,8 +885,13 @@ export default function EmployeeForm() {
     setSectionErrors(secErrs)
 
     if (!isValid) {
-      setError('Please complete all required sections before saving.')
-      // Scroll to first failing section
+      // Show popup immediately — visible regardless of scroll position
+      setErrorModal({
+        title: 'Required information missing',
+        lines: Object.values(secErrs),
+        variant: 'warning',
+      })
+      // Also scroll to first failing section so inline highlights are visible
       const order = ['personal','employment','bank','emergency','qualifications','documents']
       for (const key of order) {
         if (secErrs[key]) {
@@ -831,9 +904,21 @@ export default function EmployeeForm() {
 
     // Validate user account section when creating an account
     if (!isEdit && createAccount && !linkedUserId && uForm.username && uForm.password) {
-      if (!validateUserSection()) {
-        setError('Please fix the highlighted fields in the User Account section.')
-        if (uErrors.permissions) permRef.current?.scrollIntoView({ behavior:'smooth', block:'center' })
+      const userErrs = validateUserSection()
+      if (Object.keys(userErrs).length > 0) {
+        const lines = []
+        if (userErrs.full_name)   lines.push(`Full name: ${userErrs.full_name}`)
+        if (userErrs.username)    lines.push(`Username: ${userErrs.username}`)
+        if (userErrs.email)       lines.push(`Email: ${userErrs.email}`)
+        if (userErrs.mobile)      lines.push(`Contact: ${userErrs.mobile}`)
+        if (userErrs.password)    lines.push(`Password: ${userErrs.password}`)
+        if (userErrs.permissions) lines.push(userErrs.permissions)
+        setErrorModal({
+          title: 'User Account — required fields',
+          lines: lines.length ? lines : ['Please complete the User Account section.'],
+          variant: 'warning',
+        })
+        if (userErrs.permissions) permRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         return
       }
     }
@@ -884,12 +969,9 @@ export default function EmployeeForm() {
         setSaving(false)
         return
       }
-      if (status === 402 && detail?.seat_limit_reached) {
-        setError(`User seat limit reached. You have used ${detail.current_active_users} of ${detail.total_user_seats} seats.`)
-      } else {
-        const msg = err.response?.data?.message || (typeof detail === 'string' ? detail : null)
-        setError(msg || 'Failed to save employee. Please try again.')
-      }
+
+      const { title, reason } = parseApiError(err)
+      setErrorModal({ title, lines: reason.split('\n').filter(Boolean), variant: 'error' })
     }
     setSaving(false)
   }
@@ -912,8 +994,8 @@ export default function EmployeeForm() {
       toast.success('Employee created')
       navigate('/hrm/employees')
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data?.detail
-      setError(typeof msg === 'string' ? msg : 'Failed to create employee')
+      const { title, reason } = parseApiError(err)
+      setErrorModal({ title, lines: reason.split('\n').filter(Boolean), variant: 'error' })
       setDuplicateModal({ show: false, fields: {}, overrideChecked: false, overrideTouched: false })
     }
     setSaving(false)
@@ -1017,6 +1099,45 @@ export default function EmployeeForm() {
         </div>
       </ModalPortal>
 
+      {/* ── Error Modal ── */}
+      {errorModal && (
+        <ModalPortal isOpen={true}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  errorModal.variant === 'warning' ? 'bg-amber-100' : 'bg-red-100'
+                }`}>
+                  <AlertCircle className={`w-5 h-5 ${
+                    errorModal.variant === 'warning' ? 'text-amber-600' : 'text-red-600'
+                  }`} />
+                </div>
+                <h3 className="text-base font-bold text-gray-900">{errorModal.title}</h3>
+              </div>
+              <ul className="space-y-2 mb-5">
+                {errorModal.lines.map((line, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                    <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      errorModal.variant === 'warning' ? 'bg-amber-400' : 'bg-red-400'
+                    }`} />
+                    {line}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setErrorModal(null)}
+                  className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
       {/* ── Header ── */}
       <div className="flex items-center gap-3">
         <button type="button" onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -1033,28 +1154,6 @@ export default function EmployeeForm() {
           <Info className="w-4 h-4 flex-shrink-0" />
           {prefillBanner} — review and complete the remaining fields.
         </div>
-      )}
-
-      {/* ── Section validation summary ── */}
-      {Object.keys(sectionErrors).length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-            <p className="text-sm font-semibold text-red-700">Please complete all required sections:</p>
-          </div>
-          <ul className="space-y-1">
-            {Object.values(sectionErrors).map((msg, i) => (
-              <li key={i} className="text-sm text-red-600 flex items-start gap-2">
-                <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0 mt-1.5" />
-                {msg}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {error && !Object.keys(sectionErrors).length && (
-        <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg p-3 text-sm">{error}</div>
       )}
 
       {draftAvailable && (
