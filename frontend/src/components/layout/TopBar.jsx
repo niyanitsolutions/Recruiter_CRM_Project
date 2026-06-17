@@ -208,7 +208,7 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
         borderBottom: '1px solid var(--border)',
       }}
     >
-      {/* Left: mobile hamburger + page title */}
+      {/* Left: mobile hamburger + page title (hidden on /dashboard — greeting card replaces it) */}
       <div className="flex items-center gap-2 min-w-0">
         {onMobileToggle && (
           <button
@@ -222,15 +222,17 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
             <Menu className="w-5 h-5" />
           </button>
         )}
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold leading-tight truncate" style={{ color: 'var(--text-heading)' }}>
-            {derivedTitle}
-          </h1>
-          {subtitle
-            ? <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{subtitle}</p>
-            : <Breadcrumbs />
-          }
-        </div>
+        {location.pathname !== '/dashboard' && (
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold leading-tight truncate" style={{ color: 'var(--text-heading)' }}>
+              {derivedTitle}
+            </h1>
+            {subtitle
+              ? <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{subtitle}</p>
+              : <Breadcrumbs />
+            }
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 ml-4">
