@@ -1,8 +1,27 @@
 """HRM — Employee Service"""
 import re
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 from typing import Optional, List
 from bson import ObjectId
+
+
+def _dates_to_datetime(obj):
+    """
+    Recursively replace datetime.date values with datetime.datetime.
+
+    PyMongo / BSON cannot encode bare date objects (only datetime.datetime is
+    a valid BSON date type). datetime subclasses date, so the datetime check
+    must come first to avoid double-converting timezone-aware datetimes.
+    """
+    if isinstance(obj, datetime):
+        return obj   # already a datetime — leave unchanged
+    if isinstance(obj, date):
+        return datetime(obj.year, obj.month, obj.day, tzinfo=timezone.utc)
+    if isinstance(obj, dict):
+        return {k: _dates_to_datetime(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_dates_to_datetime(item) for item in obj]
+    return obj
 
 from app.models.company.employee import (
     EmployeeCreate, EmployeeUpdate, EmploymentStatus, AccountInfoCreate,
@@ -111,6 +130,10 @@ class EmployeeService:
             doc["emergency_contacts"] = [ec.model_dump() for ec in data.emergency_contacts]
         if data.qualifications:
             doc["qualifications"] = [q.model_dump() for q in data.qualifications]
+        # Convert datetime.date → datetime.datetime before insert.
+        # PyMongo's BSON encoder cannot handle bare date objects (e.g. date_of_birth,
+        # date_of_joining). This must run after all model_dump() calls above.
+        doc = _dates_to_datetime(doc)
         await self.col.insert_one(doc)
 
         # ── User ↔ Employee auto-link by email ───────────────────────────────
@@ -298,6 +321,9 @@ class EmployeeService:
             if field in update_data and hasattr(update_data[field], "model_dump"):
                 update_data[field] = update_data[field].model_dump()
         update_data["updated_at"] = datetime.now(timezone.utc)
+        # Same date-serialization fix as in create() — covers date_of_joining,
+        # date_of_leaving, and DisciplinaryRecord.date in EmployeeUpdate payloads.
+        update_data = _dates_to_datetime(update_data)
         await self.col.update_one({"_id": employee_id, "company_id": company_id}, {"$set": update_data})
 
         # Phase 10: sync shared fields to linked CRM user

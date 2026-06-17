@@ -852,7 +852,14 @@ export default function EmployeeForm() {
       pf_number:  form.pf_number  || undefined,
       uan_number: form.uan_number || undefined,
       emergency_contacts: emergencyContacts.filter(c => c.name || c.phone),
-      qualifications:     qualifications.filter(q => q.title),
+      qualifications: qualifications.filter(q => q.title).map(q => ({
+        type:        q.type || 'academic',
+        title:       q.title,
+        ...(q.institution?.trim() ? { institution: q.institution.trim() } : {}),
+        // year must be a number or omitted — never send an empty string (causes 422)
+        ...(q.year !== '' && q.year != null ? { year: Number(q.year) } : {}),
+        ...(q.grade?.trim() ? { grade: q.grade.trim() } : {}),
+      })),
       disciplinary_records: disciplinary.filter(d => d.date || d.incident),
       background_check: { status: form.bg_status, notes: form.bg_notes || undefined },
       account_info,
