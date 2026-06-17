@@ -956,9 +956,15 @@ export default function EmployeeForm() {
         try {
           const fd = new FormData()
           fd.append('file', croppedBlob, 'photo.jpg')
-          await hrmService.uploadEmployeePhoto(newEmpId, fd)
+          const photoRes = await hrmService.uploadEmployeePhoto(newEmpId, fd)
+          const uploadedUrl = photoRes.data?.photo_url
+          // If this employee's email matches the logged-in user, sync TopBar/SideNav immediately
+          if (uploadedUrl && form.email && currentUser?.email &&
+              form.email.trim().toLowerCase() === currentUser.email.trim().toLowerCase()) {
+            window.dispatchEvent(new CustomEvent('employee-photo-updated', { detail: { photoUrl: uploadedUrl } }))
+          }
         } catch {
-          // non-fatal — employee still created
+          toast.error('Photo could not be saved — the employee was created. Re-upload the photo by editing the profile.', { duration: 5000 })
         }
       }
 

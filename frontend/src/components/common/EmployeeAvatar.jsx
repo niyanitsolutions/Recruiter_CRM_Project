@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 const GRADIENTS = [
   ['#7c3aed', '#4f46e5'],
@@ -29,6 +29,8 @@ function colorIndex(name) {
 
 export default function EmployeeAvatar({ name, photoUrl, size = 40, className = '', style = {} }) {
   const [imgError, setImgError] = useState(false)
+  // Reset error state whenever the URL changes so a fresh load is attempted
+  useEffect(() => { setImgError(false) }, [photoUrl])
   const initials = getInitials(name)
   const [c1, c2] = GRADIENTS[colorIndex(name)]
   const fontSize = Math.max(10, Math.round(size * 0.36))
