@@ -596,13 +596,15 @@ class ApplicationService:
         return True
     
     @staticmethod
-    async def get_dashboard_stats(db: AsyncIOMotorDatabase, current_user: Optional[dict] = None) -> Dict[str, Any]:
+    async def get_dashboard_stats(db: AsyncIOMotorDatabase, current_user: Optional[dict] = None, start_date: Optional[datetime] = None) -> Dict[str, Any]:
         """Get application statistics.
         Uses the exact same visibility scoping as list_applications so dashboard
         counts always match what the Applications page shows for this user."""
         collection = db[ApplicationService.COLLECTION]
 
         base_query = {"is_deleted": False}
+        if start_date:
+            base_query["created_at"] = {"$gte": start_date}
         if current_user and current_user.get("role") != "partner":
             from app.services.user_service import UserService
             user_svc = UserService(db)

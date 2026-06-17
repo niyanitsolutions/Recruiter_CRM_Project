@@ -1035,13 +1035,15 @@ class InterviewService:
     # ── get_dashboard_stats ──────────────────────────────────────────────────
 
     @staticmethod
-    async def get_dashboard_stats(db: AsyncIOMotorDatabase, current_user: Optional[dict] = None) -> Dict[str, Any]:
+    async def get_dashboard_stats(db: AsyncIOMotorDatabase, current_user: Optional[dict] = None, start_date: Optional[datetime] = None) -> Dict[str, Any]:
         """Get interview statistics.
         Uses the exact same visibility scoping as list_interviews so dashboard
         counts always match what the Interviews page shows for this user."""
         collection = db[InterviewService.COLLECTION]
 
         base_query: Dict[str, Any] = {"is_deleted": False}
+        if start_date:
+            base_query["created_at"] = {"$gte": start_date}
         if current_user and current_user.get("role") != "partner":
             from app.services.user_service import UserService
             user_svc = UserService(db)

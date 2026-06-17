@@ -2,8 +2,10 @@ import api from './api'
 
 const adminDashboardService = {
   // Get complete dashboard data
-  getDashboardData: async () => {
-    const response = await api.get('/admin/dashboard/')
+  // days=0 means "All Time" (no date filter); days>0 means last N days
+  getDashboardData: async (days = 0) => {
+    const params = days > 0 ? { days } : {}
+    const response = await api.get('/admin/dashboard/', { params })
     return response.data
   },
 

@@ -532,13 +532,15 @@ class JobService:
         return results[:limit]
     
     @staticmethod
-    async def get_dashboard_stats(db: AsyncIOMotorDatabase, current_user: Optional[dict] = None) -> Dict[str, Any]:
+    async def get_dashboard_stats(db: AsyncIOMotorDatabase, current_user: Optional[dict] = None, start_date: Optional[datetime] = None) -> Dict[str, Any]:
         """Get job statistics for dashboard.
         Uses the exact same visibility scoping as list_jobs so dashboard counts
         always match what the Jobs page shows for this user."""
         collection = db[JobService.COLLECTION]
 
         base_query = {"is_deleted": False}
+        if start_date:
+            base_query["created_at"] = {"$gte": start_date}
         if current_user:
             if current_user.get("role") == "partner":
                 base_query["visible_to_partners"] = True

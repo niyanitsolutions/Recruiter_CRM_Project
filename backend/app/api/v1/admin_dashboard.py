@@ -2,8 +2,9 @@
 Company Admin Dashboard API - Phase 2
 Handles company admin dashboard data
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 import asyncio
 
 from app.services.user_service import UserService
@@ -33,15 +34,18 @@ async def _safe_count(collection, query: dict) -> int:
 
 @router.get("/")
 async def get_dashboard_data(
+    days: Optional[int] = Query(None, ge=0, description="Filter stats to last N days; 0 or omit = all time"),
     current_user: dict = Depends(require_permissions(["dashboard:view"])),
     db = Depends(get_company_db),
 ):
     """Get complete admin dashboard data"""
-    # Serve from Redis cache for the first 60 s to avoid 15 parallel DB queries.
-    # Keyed per-user (not just company) because quick_stats is now scoped to the
-    # caller's visibility (Task 3) — a shared company-wide key would leak one
-    # user's restricted counts to another user with different visibility.
-    cache_key = f"dashboard:{current_user.get('company_id', '')}:{current_user.get('id', '')}"
+    # Compute start_date for period filtering (None = all time)
+    start_date: Optional[datetime] = None
+    if days and days > 0:
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
+
+    # Serve from Redis cache per-user per-period to avoid 15 parallel DB queries.
+    cache_key = f"dashboard:{current_user.get('company_id', '')}:{current_user.get('id', '')}:{days or 0}"
     cached = await get_cache(cache_key)
     if cached:
         return cached
@@ -80,11 +84,11 @@ async def get_dashboard_data(
     # dashboard never shows a different count than the module itself for
     # non-admin roles (recruiter/coordinator/etc. with restricted visibility).
     cand_stats, app_stats, iv_stats, job_stats, client_stats = await asyncio.gather(
-        CandidateService.get_dashboard_stats(db, current_user),
-        ApplicationService.get_dashboard_stats(db, current_user),
-        InterviewService.get_dashboard_stats(db, current_user),
-        JobService.get_dashboard_stats(db, current_user),
-        ClientService.get_dashboard_stats(db, current_user),
+        CandidateService.get_dashboard_stats(db, current_user, start_date=start_date),
+        ApplicationService.get_dashboard_stats(db, current_user, start_date=start_date),
+        InterviewService.get_dashboard_stats(db, current_user, start_date=start_date),
+        JobService.get_dashboard_stats(db, current_user, start_date=start_date),
+        ClientService.get_dashboard_stats(db, current_user, start_date=start_date),
     )
     candidates_count = cand_stats.get("total", 0)
     rejected_candidates_count = app_stats.get("rejected", 0)

@@ -84,7 +84,7 @@ export function useDraftRecovery(formName, recordId, formData, setFormData, opti
       const raw = localStorage.getItem(key)
       if (raw) {
         const parsed = JSON.parse(raw)
-        if (parsed?.data) setFormData(prev => ({ ...prev, ...parsed.data }))
+        if (parsed?.data) setFormData(parsed.data)
       }
     } catch { /* ignore */ }
     restoredOrDismissed.current = true

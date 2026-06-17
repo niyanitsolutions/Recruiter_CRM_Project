@@ -941,7 +941,8 @@ class CandidateService:
     @staticmethod
     async def get_dashboard_stats(
         db: AsyncIOMotorDatabase,
-        current_user: Optional[dict] = None
+        current_user: Optional[dict] = None,
+        start_date: Optional[datetime] = None,
     ) -> Dict[str, Any]:
         """Get candidate statistics for dashboard.
         Uses the exact same visibility scoping as list_candidates so dashboard
@@ -949,6 +950,8 @@ class CandidateService:
         collection = db[CandidateService.COLLECTION]
 
         base_query = {"is_deleted": False}
+        if start_date:
+            base_query["created_at"] = {"$gte": start_date}
         if current_user:
             role = current_user.get("role", "")
             user_id = current_user.get("id") or current_user.get("sub", "")

@@ -261,13 +261,15 @@ class ClientService:
         }
     
     @staticmethod
-    async def get_dashboard_stats(db: AsyncIOMotorDatabase, current_user: Optional[dict] = None) -> Dict[str, Any]:
+    async def get_dashboard_stats(db: AsyncIOMotorDatabase, current_user: Optional[dict] = None, start_date: Optional[datetime] = None) -> Dict[str, Any]:
         """Get client statistics for dashboard.
         Uses the exact same visibility scoping as list_clients so dashboard
         counts always match what the Clients page shows for this user."""
         collection = db[ClientService.COLLECTION]
 
         base_query = {"is_deleted": False}
+        if start_date:
+            base_query["created_at"] = {"$gte": start_date}
         if current_user:
             from app.services.user_service import UserService
             user_svc = UserService(db)

@@ -99,14 +99,6 @@ const _cache = {
   ts: 0, company_id: null,
 }
 
-// ── Time-based greeting ───────────────────────────────────────────────────────
-const getGreeting = () => {
-  const h = new Date().getHours()
-  if (h < 12) return 'Good morning'
-  if (h < 17) return 'Good afternoon'
-  return 'Good evening'
-}
-
 // ── Card wrapper ──────────────────────────────────────────────────────────────
 const Card = ({ children, className = '', style = {} }) => (
   <div
@@ -153,12 +145,12 @@ const ChartTooltip = ({ active, payload, label }) => {
 
 // ── Period filter (Task 2) ────────────────────────────────────────────────────
 const PERIODS = [
-  { key: 'today',    label: 'Today',          days: 1   },
-  { key: 'week',     label: 'This Week',      days: 7   },
-  { key: 'month',    label: 'This Month',     days: 30  },
-  { key: 'quarter',  label: 'This Quarter',   days: 90  },
+  { key: 'today',     label: 'Today',         days: 1   },
+  { key: 'week',      label: 'This Week',     days: 7   },
+  { key: 'month',     label: 'This Month',    days: 30  },
+  { key: 'quarter',   label: 'This Quarter',  days: 90  },
   { key: 'half_year', label: 'Last 6 Months', days: 180 },
-  { key: 'year',     label: 'This Year',      days: 365 },
+  { key: 'all_time',  label: 'All Time',      days: 0   },
 ]
 
 const PeriodFilter = ({ value, onChange }) => {
@@ -246,7 +238,7 @@ const AdminDashboard = () => {
   const [announcements,    setAnnouncements]    = useState([])
   const [syncStatus,       setSyncStatus]       = useState(null)
   const [syncPreview,      setSyncPreview]      = useState(null)
-  const [period,           setPeriod]           = useState(PERIODS.find(p => p.key === 'month'))
+  const [period,           setPeriod]           = useState(PERIODS.find(p => p.key === 'today'))
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [showQuickAction,  setShowQuickAction]  = useState(false)
 
@@ -278,6 +270,7 @@ const AdminDashboard = () => {
       !force &&
       _cache.ts &&
       _cache.company_id === user?.company_id &&
+      _cache.periodKey === period.key &&
       (Date.now() - _cache.ts) < DASH_CACHE_TTL
     ) {
       setDashboardData(_cache.main)
@@ -299,7 +292,7 @@ const AdminDashboard = () => {
       if (!silent) setLoading(true)
       const [mainRes, recruitRes, ivStatsRes, todayIvRes, jobRes, candRes, hrmRes, seatRes, annRes, syncRes, syncPreviewRes] =
         await Promise.allSettled([
-          adminDashboardService.getDashboardData(),
+          adminDashboardService.getDashboardData(period.days),
           applicationService.getDashboardStats(),
           interviewService.getDashboardStats(),
           interviewService.getTodayInterviews(),
@@ -356,6 +349,7 @@ const AdminDashboard = () => {
       _cache.syncPreview   = syncPreviewData
       _cache.ts            = Date.now()
       _cache.company_id    = user?.company_id
+      _cache.periodKey     = period.key
 
       setDashboardData(main)
       setRecruitStats(recruit)
@@ -375,12 +369,20 @@ const AdminDashboard = () => {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [user?.company_id])
+  }, [user?.company_id, period])
+
+  const periodMountedRef = useRef(false)
 
   useEffect(() => {
     fetchDashboardData()
     fetchTrend(period.days)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch main stats when period changes (skip on initial mount)
+  useEffect(() => {
+    if (!periodMountedRef.current) { periodMountedRef.current = true; return }
+    fetchDashboardData(true)
+  }, [period.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live background refresh (Task 8) — silent, no visible reload
   useLivePolling(() => fetchDashboardData(true, true), 5000)
@@ -557,10 +559,6 @@ const AdminDashboard = () => {
     { label: 'Interview Rate', value: ivRate,     color: '#F6A535', target: 50 },
   ].filter(m => m.value !== null)
 
-  const dateStr = new Date().toLocaleDateString('en-IN', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-  })
-
   return (
     <div className="p-3 space-y-4 page-enter">
 
@@ -569,130 +567,67 @@ const AdminDashboard = () => {
         <SubscriptionBanner seatStatus={seatStatus} onUpgrade={() => setShowUpgradeModal(true)} />
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* HEADER — Greeting | Subscription (center) | Date + Actions            */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      <Card style={{ padding: '16px 20px' }}>
-        <div className="flex items-center gap-4 min-w-0">
-
-          {/* Left — Greeting */}
-          <div className="flex-shrink-0 min-w-0" style={{ maxWidth: '240px' }}>
-            <h1 className="text-lg font-bold truncate" style={{ color: 'var(--text-heading)' }}>
-              {getGreeting()}, {user?.fullName || 'User'}! 👋
-            </h1>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-              Here's what's happening with your recruitment today.
-            </p>
-          </div>
-
-          {/* Center — Subscription info (admin/owner, lg+ screens only) */}
-          {isAdminOrOwner && seatStatus && (
-            <div className="hidden xl:flex flex-1 items-center justify-center">
-              <div
-                className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
-                style={{ border: '1.5px dashed rgba(124,58,237,0.30)', background: 'rgba(124,58,237,0.03)' }}
-              >
-                <div className="pr-3 flex-shrink-0" style={{ borderRight: '1px solid var(--border)' }}>
-                  <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#7c3aed' }}>Subscription</p>
-                  <p className="text-sm font-bold mt-0.5 leading-tight" style={{ color: 'var(--text-heading)' }}>
-                    {seatStatus.plan_display_name || seatStatus.plan_name}
-                    {seatStatus.is_trial && (
-                      <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full font-bold align-middle" style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>Trial</span>
-                    )}
-                  </p>
-                </div>
-                {[
-                  { label: 'Seats',     val: seatStatus.total_user_seats,    clr: 'var(--text-heading)' },
-                  { label: 'Active',    val: seatStatus.current_active_users, clr: 'var(--text-info)'   },
-                  { label: 'Remaining', val: seatStatus.remaining_seats,
-                    clr: seatStatus.remaining_seats === 0 ? 'var(--text-danger)' : 'var(--text-success)' },
-                  { label: 'Expiry',    val: seatStatus.plan_expiry
-                      ? new Date(seatStatus.plan_expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
-                      : '—', clr: 'var(--text-heading)' },
-                ].map(({ label, val, clr }) => (
-                  <div key={label} className="text-center flex-shrink-0">
-                    <p className="text-base font-bold leading-tight" style={{ color: clr }}>{val}</p>
-                    <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>{label}</p>
-                  </div>
-                ))}
-                <button
-                  onClick={() => setShowUpgradeModal(true)}
-                  className="flex-shrink-0 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg transition-all whitespace-nowrap"
-                  style={{ color: '#7c3aed', border: '1px solid rgba(124,58,237,0.40)', background: 'transparent' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.08)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  Upgrade
-                </button>
-              </div>
-            </div>
-          )}
-          {/* Spacer when no subscription box */}
-          {!(isAdminOrOwner && seatStatus) && <div className="flex-1" />}
-
-          {/* Right — Date + Period + Quick Action */}
-          <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
-            <span className="text-xs hidden xl:block" style={{ color: 'var(--text-muted)' }}>{dateStr}</span>
-            <div className="hidden sm:block">
-              <PeriodFilter value={period.key} onChange={setPeriod} />
-            </div>
+      {/* ── Compact filter + action bar (no greeting header) ─────────────────── */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <PeriodFilter value={period.key} onChange={setPeriod} />
+          <button
+            onClick={() => fetchDashboardData(true)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-active)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+            title="Refresh dashboard"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        {(has('candidates:create') || has('jobs:create')) && (
+          <div className="relative" onClick={e => e.stopPropagation()}>
             <button
-              onClick={() => fetchDashboardData(true)}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-              style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-active)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onClick={() => setShowQuickAction(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition-all"
+              style={{ background: '#7c3aed' }}
+              onMouseEnter={e => e.currentTarget.style.background = '#6d28d9'}
+              onMouseLeave={e => e.currentTarget.style.background = '#7c3aed'}
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5" /> Quick Action
+              <ChevronDown className="w-3 h-3 opacity-80" />
             </button>
-            {(has('candidates:create') || has('jobs:create')) && (
-              <div className="relative" onClick={e => e.stopPropagation()}>
-                <button
-                  onClick={() => setShowQuickAction(v => !v)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition-all"
-                  style={{ background: '#7c3aed' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#6d28d9'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#7c3aed'}
-                >
-                  <Plus className="w-3.5 h-3.5" /> Quick Action
-                  <ChevronDown className="w-3 h-3 opacity-80" />
-                </button>
-                {showQuickAction && (
-                  <div
-                    className="absolute right-0 top-full mt-1 w-44 rounded-xl shadow-xl z-50 overflow-hidden"
-                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+            {showQuickAction && (
+              <div
+                className="absolute right-0 top-full mt-1 w-44 rounded-xl shadow-xl z-50 overflow-hidden"
+                style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+              >
+                {has('candidates:create') && (
+                  <Link
+                    to="/candidates/new"
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm"
+                    style={{ color: 'var(--text-primary)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    onClick={() => setShowQuickAction(false)}
                   >
-                    {has('candidates:create') && (
-                      <Link
-                        to="/candidates/new"
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm"
-                        style={{ color: 'var(--text-primary)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                        onClick={() => setShowQuickAction(false)}
-                      >
-                        <UserPlus className="w-4 h-4" style={{ color: '#7c3aed' }} /> Add Candidate
-                      </Link>
-                    )}
-                    {has('jobs:create') && (
-                      <Link
-                        to="/jobs/new"
-                        className="flex items-center gap-2 px-4 py-2.5 text-sm"
-                        style={{ color: 'var(--text-primary)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                        onClick={() => setShowQuickAction(false)}
-                      >
-                        <Briefcase className="w-4 h-4" style={{ color: '#4FACFE' }} /> Post Job
-                      </Link>
-                    )}
-                  </div>
+                    <UserPlus className="w-4 h-4" style={{ color: '#7c3aed' }} /> Add Candidate
+                  </Link>
+                )}
+                {has('jobs:create') && (
+                  <Link
+                    to="/jobs/new"
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm"
+                    style={{ color: 'var(--text-primary)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    onClick={() => setShowQuickAction(false)}
+                  >
+                    <Briefcase className="w-4 h-4" style={{ color: '#4FACFE' }} /> Post Job
+                  </Link>
                 )}
               </div>
             )}
           </div>
-        </div>
-      </Card>
+        )}
+      </div>
 
       {/* ── Attendance Warning Card ─────────────────────────────────────────────── */}
       {attendanceDismissed && (
