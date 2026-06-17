@@ -1,5 +1,6 @@
 """HRM — Employee API Routes"""
 import os
+import sys
 import uuid
 import pathlib
 from typing import Optional
@@ -86,9 +87,19 @@ async def upload_employee_photo(
     file: UploadFile = File(...),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:employees:manage"])),
 ):
-    """Upload or replace an employee's profile photo (JPG, JPEG, PNG, WEBP)."""
+    """Upload or replace an employee's profile photo (JPG, JPEG, PNG, WEBP).
+
+    Allowed callers:
+      - Users with hrm:employees:manage permission
+      - Company owners and super-admins
+      - Any user uploading their own employee photo (self-service)
+    """
+    is_own = cu.get("hrm_employee_id") == employee_id
+    has_manage = "hrm:employees:manage" in set(cu.get("permissions") or [])
+    if not is_own and not has_manage and not cu.get("is_owner") and not cu.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
     ALLOWED = {".jpg", ".jpeg", ".png", ".webp"}
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED:
@@ -98,24 +109,40 @@ async def upload_employee_photo(
     if len(contents) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Photo must be under 5 MB")
 
-    upload_dir = str(_BACKEND_ROOT / "uploads" / "hrm_docs")
-    os.makedirs(upload_dir, exist_ok=True)
+    # Validate employee belongs to this company BEFORE writing the file so
+    # there is never a write-then-delete cycle on a filter mismatch.
+    emp = await db.hrm_employees.find_one(
+        {"_id": employee_id, "company_id": cu["company_id"], "is_deleted": False},
+        {"_id": 1},
+    )
+    if not emp:
+        print(
+            f"[photo-upload] employee not found — id={employee_id!r}  "
+            f"company_id={cu.get('company_id')!r}",
+            file=sys.stderr,
+            flush=True,
+        )
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    upload_dir = _BACKEND_ROOT / "uploads" / "hrm_docs"
+    upload_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{uuid.uuid4()}{ext}"
-    fpath = os.path.join(upload_dir, fname)
-    with open(fpath, "wb") as f:
-        f.write(contents)
+    fpath = upload_dir / fname
+    fpath.write_bytes(contents)
 
     photo_url = f"/uploads/hrm_docs/{fname}"
 
-    result = await db.hrm_employees.update_one(
-        {"_id": employee_id, "company_id": cu["company_id"], "is_deleted": False},
+    await db.hrm_employees.update_one(
+        {"_id": employee_id},
         {"$set": {"photo_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
     )
 
-    if result.matched_count == 0:
-        os.remove(fpath)
-        raise HTTPException(status_code=404, detail="Employee not found")
-
+    print(
+        f"[photo-upload] ok — employee={employee_id!r}  file={fpath}  "
+        f"size={len(contents)}B  url={photo_url!r}",
+        file=sys.stderr,
+        flush=True,
+    )
     return {"photo_url": photo_url}
 
 
