@@ -437,6 +437,7 @@ export default function EmployeeForm() {
 
   // ── Photo upload state ────────────────────────────────────────────
   const [photoUrl,       setPhotoUrl]       = useState(null)     // current photo (edit: from server; create: from crop)
+  const [photoLoadError, setPhotoLoadError] = useState(false)    // true when photoUrl 404s (file missing on server)
   const [cropFile,       setCropFile]       = useState(null)     // raw file waiting to be cropped
   const [croppedBlob,    setCroppedBlob]    = useState(null)     // blob after crop (create mode, pending upload)
   const [croppedPreview, setCroppedPreview] = useState(null)     // preview URL for cropped blob
@@ -625,6 +626,9 @@ export default function EmployeeForm() {
     }).catch(() => {})
   }, [isEdit, searchParams])
 
+  // Reset photo load error whenever the URL changes (new upload replaces old broken reference)
+  useEffect(() => { setPhotoLoadError(false) }, [photoUrl])
+
   // ── User form field change ───────────────────────────────────────
   const handleUChange = (e) => {
     const { name, value } = e.target
@@ -758,8 +762,8 @@ export default function EmployeeForm() {
         const res = await hrmService.uploadEmployeePhoto(id, fd)
         const url = res.data.photo_url
         setPhotoUrl(url)
-        // Dispatch event so Sidebar/TopBar pick up the new photo
-        window.dispatchEvent(new CustomEvent('employee-photo-updated', { detail: { photoUrl: url } }))
+        // Dispatch with employeeId so TopBar/SideNav only update for the logged-in user's own record
+        window.dispatchEvent(new CustomEvent('employee-photo-updated', { detail: { employeeId: id, photoUrl: url } }))
         toast.success('Profile photo updated')
       } catch {
         toast.error('Failed to upload photo')
@@ -782,7 +786,7 @@ export default function EmployeeForm() {
     if (isEdit && id) {
       try {
         await hrmService.updateEmployee(id, { photo_url: null })
-        window.dispatchEvent(new CustomEvent('employee-photo-updated', { detail: { photoUrl: null } }))
+        window.dispatchEvent(new CustomEvent('employee-photo-updated', { detail: { employeeId: id, photoUrl: null } }))
       } catch { /* non-fatal */ }
     }
   }
@@ -1190,12 +1194,13 @@ export default function EmployeeForm() {
           <div className="flex items-center gap-5">
             {/* Preview */}
             <div className="relative flex-shrink-0">
-              {croppedPreview || photoUrl ? (
+              {croppedPreview || (photoUrl && !photoLoadError) ? (
                 <img
                   src={croppedPreview || photoUrl}
                   alt="Profile"
                   className="w-20 h-20 rounded-2xl object-cover"
                   style={{ border: '2px solid #e5e7eb' }}
+                  onError={() => { if (!croppedPreview) setPhotoLoadError(true) }}
                 />
               ) : (
                 <EmployeeAvatar
@@ -1228,9 +1233,9 @@ export default function EmployeeForm() {
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 hover:bg-gray-50 disabled:opacity-60"
               >
                 <Upload className="w-4 h-4" />
-                {photoUrl || croppedPreview ? 'Change Photo' : 'Upload Photo'}
+                {(photoUrl && !photoLoadError) || croppedPreview ? 'Change Photo' : 'Upload Photo'}
               </button>
-              {(croppedPreview || (isEdit && photoUrl)) && (
+              {(croppedPreview || (isEdit && photoUrl && !photoLoadError)) && (
                 <button
                   type="button"
                   onClick={handleRemovePhoto}

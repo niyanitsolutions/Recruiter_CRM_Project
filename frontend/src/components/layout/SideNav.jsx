@@ -163,12 +163,16 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       .catch(() => {})
   }, [user?.hrmEmployeeId])
 
-  // Listen for photo updates from EmployeeForm
+  // Listen for photo updates from EmployeeForm — only apply when it's the logged-in user's own record
   useEffect(() => {
-    const handler = (e) => setEmployeePhotoUrl(e.detail?.photoUrl || null)
+    const handler = (e) => {
+      const { employeeId, photoUrl } = e.detail || {}
+      if (employeeId && user?.hrmEmployeeId && employeeId !== user.hrmEmployeeId) return
+      setEmployeePhotoUrl(photoUrl || null)
+    }
     window.addEventListener('employee-photo-updated', handler)
     return () => window.removeEventListener('employee-photo-updated', handler)
-  }, [])
+  }, [user?.hrmEmployeeId])
 
   // Close mobile nav on route change
   useEffect(() => {

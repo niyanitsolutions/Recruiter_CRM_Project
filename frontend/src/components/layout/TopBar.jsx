@@ -68,10 +68,15 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
   }, [user?.hrmEmployeeId])
 
   useEffect(() => {
-    const handler = (e) => setEmployeePhotoUrl(e.detail?.photoUrl || null)
+    const handler = (e) => {
+      const { employeeId, photoUrl } = e.detail || {}
+      // If the event carries an employeeId, only update when it matches the logged-in user's record
+      if (employeeId && user?.hrmEmployeeId && employeeId !== user.hrmEmployeeId) return
+      setEmployeePhotoUrl(photoUrl || null)
+    }
     window.addEventListener('employee-photo-updated', handler)
     return () => window.removeEventListener('employee-photo-updated', handler)
-  }, [])
+  }, [user?.hrmEmployeeId])
 
   const handleLogout = () => {
     dispatch(logoutUser())
