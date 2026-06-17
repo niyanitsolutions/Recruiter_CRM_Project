@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
-import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
   Search,
@@ -14,123 +14,13 @@ import {
   Sun,
   Moon,
   Monitor,
-  ChevronRight,
   Menu,
-  Command,
 } from 'lucide-react'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsOwner, selectIsSeller } from '../../store/authSlice'
 import NotificationBell from '../notifications/NotificationBell'
 import AttendanceBanner from '../hrm/AttendanceBanner'
 import { useTheme } from '../../contexts/ThemeContext'
 
-// ── Breadcrumb path → label map ───────────────────────────────────────────────
-const PATH_LABELS = {
-  dashboard: 'Dashboard',
-  candidates: 'Candidates',
-  jobs: 'Jobs',
-  clients: 'Clients',
-  applications: 'Applications',
-  interviews: 'Interviews',
-  onboards: 'Onboarding',
-  users: 'Users',
-  partners: 'Partners',
-  departments: 'Departments',
-  designations: 'Designations',
-  payouts: 'Payouts',
-  invoices: 'Invoices',
-  targets: 'Targets',
-  tasks: 'Tasks',
-  reports: 'Reports',
-  analytics: 'Analytics',
-  'audit-logs': 'Audit Logs',
-  settings: 'Settings',
-  profile: 'Profile',
-  'my-profile': 'My Profile',
-  'company-settings': 'Company Settings',
-  'upgrade-plan': 'Upgrade Plan',
-  notifications: 'Notifications',
-  'super-admin': 'Super Admin',
-  seller: 'Seller',
-  tenants: 'Tenants',
-  sellers: 'Sellers',
-  plans: 'Plans',
-  discounts: 'Discounts',
-  subscriptions: 'Subscriptions',
-  payments: 'Payments',
-  hrm: 'HRM',
-  employees: 'Employees',
-  attendance: 'Attendance',
-  leaves: 'Leave Management',
-  payroll: 'Payroll',
-  performance: 'Performance',
-  announcements: 'Announcements',
-  hiring: 'Hiring',
-  offers: 'Offers',
-  onboarding: 'Onboarding',
-  new: 'New',
-  edit: 'Edit',
-  trash: 'Deleted History',
-  integrations: 'Integrations',
-}
-
-const isIdSegment = (seg) => /^[0-9a-f-]{20,}$|^\d{5,}$/.test(seg)
-
-const segmentLabel = (seg) =>
-  PATH_LABELS[seg] || seg.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-
-const Breadcrumbs = () => {
-  const location = useLocation()
-  const segments = location.pathname.split('/').filter(Boolean)
-
-  if (segments.length <= 1) return null
-
-  // Build cumulative paths for each segment
-  const crumbs = segments.map((seg, i) => {
-    const isId = isIdSegment(seg)
-    // For ID segments, show the parent's singular label e.g. "Candidate"
-    let label = segmentLabel(seg)
-    if (isId && i > 0) {
-      const parentLabel = segmentLabel(segments[i - 1])
-      label = parentLabel.replace(/s$/, '')
-    }
-    return {
-      label,
-      path: '/' + segments.slice(0, i + 1).join('/'),
-      isLast: i === segments.length - 1,
-      isId,
-    }
-  })
-
-  return (
-    <nav className="flex items-center gap-1 text-xs mt-0.5 flex-wrap">
-      {crumbs.map((crumb, i) => (
-        <React.Fragment key={i}>
-          {i > 0 && (
-            <ChevronRight className="w-3 h-3 flex-shrink-0" style={{ color: 'var(--text-disabled)' }} />
-          )}
-          {crumb.isLast || crumb.isId ? (
-            <span
-              className={crumb.isLast ? 'font-medium' : ''}
-              style={{ color: crumb.isLast ? 'var(--accent)' : 'var(--text-muted)' }}
-            >
-              {crumb.label}
-            </span>
-          ) : (
-            <Link
-              to={crumb.path}
-              className="transition-colors hover:underline"
-              style={{ color: 'var(--text-muted)' }}
-              onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
-              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
-            >
-              {crumb.label}
-            </Link>
-          )}
-        </React.Fragment>
-      ))}
-    </nav>
-  )
-}
 
 const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
   const dispatch = useDispatch()
@@ -183,20 +73,6 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
         { icon: HelpCircle, label: 'Help',             onClick: () => window.open('mailto:support@niyanhireflow.com') },
       ]
 
-  const segments = location.pathname.split('/').filter(Boolean)
-  const derivedTitle = title || (() => {
-    if (segments.length === 0) return 'Dashboard'
-    const last = segments[segments.length - 1]
-    const isId = /^[0-9a-f-]{20,}$|^\d{5,}$/.test(last)
-    if (isId && segments.length >= 2) {
-      // /candidates/:id → "Candidate Details"
-      const parentLabel = segmentLabel(segments[segments.length - 2])
-      const singular = parentLabel.replace(/s$/, '')
-      return singular + ' Details'
-    }
-    return segmentLabel(last)
-  })()
-
   // Detect OS for shortcut hint
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 
@@ -208,8 +84,8 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
         borderBottom: '1px solid var(--border)',
       }}
     >
-      {/* Left: mobile hamburger + page title (hidden on /dashboard — greeting card replaces it) */}
-      <div className="flex items-center gap-2 min-w-0">
+      {/* Left: mobile hamburger + attendance section (expanded into freed space) */}
+      <div className="flex items-center gap-3 flex-1 min-w-0">
         {onMobileToggle && (
           <button
             className="md:hidden flex-shrink-0 p-2 rounded-lg transition-colors"
@@ -222,24 +98,11 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
             <Menu className="w-5 h-5" />
           </button>
         )}
-        {location.pathname !== '/dashboard' && (
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold leading-tight truncate" style={{ color: 'var(--text-heading)' }}>
-              {derivedTitle}
-            </h1>
-            {subtitle
-              ? <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{subtitle}</p>
-              : <Breadcrumbs />
-            }
-          </div>
-        )}
+        {user?.userType !== 'partner' && <AttendanceBanner />}
       </div>
 
       <div className="flex items-center gap-2 ml-4">
         {actions && <div className="flex items-center gap-2 mr-2">{actions}</div>}
-
-        {/* Attendance — compact, shown for all non-partner users (Part of Task 1) */}
-        {user?.userType !== 'partner' && <AttendanceBanner />}
 
         {/* Search trigger — opens GlobalSearch overlay */}
         <button
