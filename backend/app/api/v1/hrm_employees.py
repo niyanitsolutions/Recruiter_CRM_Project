@@ -113,7 +113,7 @@ async def upload_employee_photo(
     # there is never a write-then-delete cycle on a filter mismatch.
     emp = await db.hrm_employees.find_one(
         {"_id": employee_id, "company_id": cu["company_id"], "is_deleted": False},
-        {"_id": 1},
+        {"_id": 1, "crm_user_id": 1},
     )
     if not emp:
         print(
@@ -136,6 +136,13 @@ async def upload_employee_photo(
         {"_id": employee_id},
         {"$set": {"photo_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
     )
+
+    # Sync photo to the linked CRM user so the Users list also shows the avatar
+    if emp.get("crm_user_id"):
+        await db.users.update_one(
+            {"_id": emp["crm_user_id"], "is_deleted": {"$ne": True}},
+            {"$set": {"avatar_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
+        )
 
     print(
         f"[photo-upload] ok — employee={employee_id!r}  file={fpath}  "

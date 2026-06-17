@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import userService from '../../services/userService'
+import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 import departmentService from '../../services/departmentService'
 import designationService from '../../services/designationService'
 import subscriptionService from '../../services/subscriptionService'
@@ -1090,9 +1091,7 @@ const Users = () => {
                       <tr key={user.id} className="hover:bg-surface-50">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-accent-100 flex items-center justify-center text-accent-700 font-semibold">
-                              {user.full_name?.charAt(0) || 'U'}
-                            </div>
+                            <EmployeeAvatar name={user.full_name || 'U'} photoUrl={user.avatar_url || null} size={40} />
                             <div>
                               <p className="font-medium text-surface-900">
                                 {user.full_name}
