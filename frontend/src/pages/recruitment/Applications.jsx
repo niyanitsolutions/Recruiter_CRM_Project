@@ -91,6 +91,49 @@ function CandidateAvatar({ name }) {
   )
 }
 
+// ── Application summary (status count breakdown) ──────────────────────────────
+
+const STATUS_DISPLAY_ORDER = [
+  'joined', 'offer_accepted', 'offered', 'selected', 'next_round', 'interview',
+  'shortlisted', 'screening', 'eligible', 'applied', 'on_hold', 'rejected', 'withdrawn',
+]
+
+function StatusSummary({ summary }) {
+  if (!summary || Object.keys(summary).length === 0)
+    return <span style={{ fontSize: 12, color: 'var(--text-disabled)' }}>—</span>
+
+  const entries = Object.entries(summary).sort((a, b) => {
+    const pa = STATUS_DISPLAY_ORDER.indexOf(a[0])
+    const pb = STATUS_DISPLAY_ORDER.indexOf(b[0])
+    return (pa === -1 ? 99 : pa) - (pb === -1 ? 99 : pb)
+  })
+
+  const shown = entries.slice(0, 2)
+  const remaining = entries.length - 2
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+      {shown.map(([status, count]) => {
+        const s = getStatusStyle(status)
+        return (
+          <span key={status} style={{
+            ...s,
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '2px 8px', borderRadius: 999, fontSize: 11, fontWeight: 600,
+            whiteSpace: 'nowrap',
+          }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+            {fmtStatus(status)}{count > 1 ? ` ×${count}` : ''}
+          </span>
+        )
+      })}
+      {remaining > 0 && (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>+{remaining}</span>
+      )}
+    </div>
+  )
+}
+
 // ── Candidates View table row ─────────────────────────────────────────────────
 
 function CandidateRow({ row, onClick }) {
@@ -146,18 +189,9 @@ function CandidateRow({ row, onClick }) {
         )}
       </td>
 
-      {/* Status */}
+      {/* Summary */}
       <td style={{ padding: '14px 16px' }}>
-        {row.latest_status ? (
-          <span style={{
-            ...getStatusStyle(row.latest_status),
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600,
-          }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: getStatusStyle(row.latest_status).color }} />
-            {fmtStatus(row.latest_status)}
-          </span>
-        ) : '—'}
+        <StatusSummary summary={row.status_summary} />
       </td>
 
       {/* ATS */}
@@ -453,7 +487,7 @@ const Applications = () => {
                     <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Candidate</th>
                     <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Applications</th>
                     <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Latest Application</th>
-                    <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Status</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Summary</th>
                     <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Best ATS</th>
                     <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Last Updated</th>
                     <th className="text-right px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Actions</th>

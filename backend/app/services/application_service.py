@@ -691,10 +691,11 @@ class ApplicationService:
                 "total_applications": {"$sum": 1},
                 "latest_job_title": {"$first": "$job_title"},
                 "latest_client_name": {"$first": "$client_name"},
-                "latest_status": {"$first": "$status"},
                 "latest_applied_at": {"$first": "$applied_at"},
                 "best_eligibility_score": {"$max": "$eligibility_score"},
                 "last_updated": {"$max": "$status_changed_at"},
+                # Collect all statuses so we can build an accurate per-status count
+                "statuses": {"$push": "$status"},
             }},
             {"$sort": {"last_updated": -1, "latest_applied_at": -1}},
             {"$facet": {
@@ -714,6 +715,7 @@ class ApplicationService:
         rows = facet.get("data", [])
         total = facet["total_count"][0]["count"] if facet.get("total_count") else 0
 
+        from collections import Counter
         data = [
             {
                 "candidate_id": row["_id"],
@@ -723,7 +725,8 @@ class ApplicationService:
                 "total_applications": row.get("total_applications", 0),
                 "latest_job_title": row.get("latest_job_title"),
                 "latest_client_name": row.get("latest_client_name"),
-                "latest_status": row.get("latest_status"),
+                # status_summary: count per status across all applications — no mixing
+                "status_summary": dict(Counter(row.get("statuses", []))),
                 "latest_applied_at": row.get("latest_applied_at"),
                 "best_eligibility_score": row.get("best_eligibility_score"),
                 "last_updated": row.get("last_updated"),

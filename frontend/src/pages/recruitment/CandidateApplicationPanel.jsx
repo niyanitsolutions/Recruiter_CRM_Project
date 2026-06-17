@@ -642,7 +642,6 @@ const CandidateApplicationPanel = ({ candidateId, onClose }) => {
   // ── Panel ──────────────────────────────────────────────────────────────────
 
   const initials = getInitials(candidate?.full_name || candidate?.first_name || '')
-  const latestApp = applications[0]
 
   return (
     <div style={{
@@ -671,12 +670,9 @@ const CandidateApplicationPanel = ({ candidateId, onClose }) => {
               {initials}
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                  {candidate?.full_name || `${candidate?.first_name || ''} ${candidate?.last_name || ''}`.trim()}
-                </h2>
-                {latestApp && <StatusBadge status={latestApp.status} />}
-              </div>
+              <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                {candidate?.full_name || `${candidate?.first_name || ''} ${candidate?.last_name || ''}`.trim()}
+              </h2>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>{candidate?.email}</p>
             </div>
           </div>
