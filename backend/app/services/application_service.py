@@ -636,3 +636,107 @@ class ApplicationService:
             "joined": by_status.get("joined", 0),
             "rejected": by_status.get("rejected", 0)
         }
+
+    @staticmethod
+    async def list_candidates_view(
+        db: AsyncIOMotorDatabase,
+        page: int = 1,
+        page_size: int = 20,
+        keyword: Optional[str] = None,
+        status_filter: Optional[List[str]] = None,
+        job_id: Optional[str] = None,
+        partner_id: Optional[str] = None,
+        assigned_to: Optional[str] = None,
+        current_user: Optional[dict] = None,
+    ) -> Dict[str, Any]:
+        """Aggregate applications by candidate — returns one row per candidate."""
+        collection = db[ApplicationService.COLLECTION]
+
+        match: Dict[str, Any] = {"is_deleted": False}
+
+        if current_user and current_user.get("role") != "partner":
+            from app.services.user_service import UserService
+            user_svc = UserService(db)
+            visible_ids = await user_svc.get_visible_user_ids(current_user, module_name="applications")
+            if visible_ids is not None:
+                match["created_by"] = {"$in": visible_ids}
+
+        if job_id:
+            match["job_id"] = job_id
+        if status_filter:
+            match["status"] = {"$in": status_filter}
+        if partner_id:
+            match["partner_id"] = partner_id
+        if assigned_to:
+            match["assigned_to"] = assigned_to
+        if keyword:
+            import re as _re
+            pat = _re.escape(keyword.strip())
+            match["$or"] = [
+                {"candidate_name": {"$regex": pat, "$options": "i"}},
+                {"candidate_email": {"$regex": pat, "$options": "i"}},
+                {"candidate_mobile": {"$regex": pat, "$options": "i"}},
+                {"job_title": {"$regex": pat, "$options": "i"}},
+                {"client_name": {"$regex": pat, "$options": "i"}},
+            ]
+
+        pipeline = [
+            {"$match": match},
+            {"$sort": {"applied_at": -1}},
+            {"$group": {
+                "_id": "$candidate_id",
+                "candidate_name": {"$first": "$candidate_name"},
+                "candidate_email": {"$first": "$candidate_email"},
+                "candidate_mobile": {"$first": "$candidate_mobile"},
+                "total_applications": {"$sum": 1},
+                "latest_job_title": {"$first": "$job_title"},
+                "latest_client_name": {"$first": "$client_name"},
+                "latest_status": {"$first": "$status"},
+                "latest_applied_at": {"$first": "$applied_at"},
+                "best_eligibility_score": {"$max": "$eligibility_score"},
+                "last_updated": {"$max": "$status_changed_at"},
+            }},
+            {"$sort": {"last_updated": -1, "latest_applied_at": -1}},
+            {"$facet": {
+                "data": [
+                    {"$skip": (page - 1) * page_size},
+                    {"$limit": page_size},
+                ],
+                "total_count": [{"$count": "count"}],
+            }},
+        ]
+
+        results = await collection.aggregate(pipeline).to_list(1)
+        if not results:
+            return {"data": [], "pagination": {"page": page, "page_size": page_size, "total": 0, "total_pages": 0}}
+
+        facet = results[0]
+        rows = facet.get("data", [])
+        total = facet["total_count"][0]["count"] if facet.get("total_count") else 0
+
+        data = [
+            {
+                "candidate_id": row["_id"],
+                "candidate_name": row.get("candidate_name"),
+                "candidate_email": row.get("candidate_email"),
+                "candidate_mobile": row.get("candidate_mobile"),
+                "total_applications": row.get("total_applications", 0),
+                "latest_job_title": row.get("latest_job_title"),
+                "latest_client_name": row.get("latest_client_name"),
+                "latest_status": row.get("latest_status"),
+                "latest_applied_at": row.get("latest_applied_at"),
+                "best_eligibility_score": row.get("best_eligibility_score"),
+                "last_updated": row.get("last_updated"),
+            }
+            for row in rows
+        ]
+
+        return {
+            "data": data,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": (total + page_size - 1) // page_size,
+            },
+        }

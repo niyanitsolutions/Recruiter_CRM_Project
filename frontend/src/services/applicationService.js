@@ -7,6 +7,12 @@ const applicationService = {
     return response.data
   },
 
+  // Candidates-centric view: one row per candidate
+  getCandidatesView: async (params = {}) => {
+    const response = await api.get('/applications/candidates-view', { params })
+    return response.data
+  },
+
   // Get application by ID
   getApplication: async (applicationId) => {
     const response = await api.get(`/applications/${applicationId}`)

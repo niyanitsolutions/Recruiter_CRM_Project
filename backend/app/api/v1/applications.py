@@ -102,6 +102,40 @@ async def create_application(
     return {"success": True, "message": "Application created successfully", "data": application}
 
 
+@router.get("/candidates-view")
+async def list_candidates_view(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    job_id: Optional[str] = None,
+    status: Optional[str] = None,
+    partner_id: Optional[str] = None,
+    assigned_to: Optional[str] = None,
+    keyword: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db),
+    _: bool = Depends(require_permissions(["candidates:view"]))
+):
+    """Candidate-centric view: one row per candidate with aggregated application data"""
+    status_list = status.split(",") if status else None
+
+    if current_user.get("role") == "partner":
+        partner_id = current_user["id"]
+
+    result = await ApplicationService.list_candidates_view(
+        db=db,
+        page=page,
+        page_size=page_size,
+        keyword=keyword,
+        status_filter=status_list,
+        job_id=job_id,
+        partner_id=partner_id,
+        assigned_to=assigned_to,
+        current_user=current_user,
+    )
+
+    return {"success": True, **result}
+
+
 @router.get("/{application_id}")
 async def get_application(
     application_id: str,
