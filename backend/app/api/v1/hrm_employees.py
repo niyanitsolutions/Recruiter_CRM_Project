@@ -130,7 +130,7 @@ async def upload_employee_photo(
     fpath = upload_dir / fname
     fpath.write_bytes(contents)
 
-    photo_url = f"/uploads/hrm_docs/{fname}"
+    photo_url = f"/api/v1/uploads/hrm_docs/{fname}"
 
     await db.hrm_employees.update_one(
         {"_id": employee_id},

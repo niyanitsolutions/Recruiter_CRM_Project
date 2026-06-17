@@ -374,6 +374,9 @@ os.makedirs(str(_UPLOADS_DIR / "hrm_docs"),  exist_ok=True)
 # absolute directory that StaticFiles serves, regardless of the uvicorn CWD.
 settings.UPLOAD_DIR = str(_UPLOADS_DIR)
 app.mount("/uploads", StaticFiles(directory=str(_UPLOADS_DIR)), name="uploads")
+# Also mount under the API prefix so production reverse proxies (Nginx) that only
+# forward /api/* to FastAPI can still serve uploaded files.
+app.mount(f"{API_V1_PREFIX}/uploads", StaticFiles(directory=str(_UPLOADS_DIR)), name="uploads_v1")
 
 
 @app.get("/", tags=["Health Check"])
