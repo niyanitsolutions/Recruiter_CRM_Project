@@ -6,6 +6,7 @@ import {
   User, Briefcase, CreditCard, Phone, GraduationCap,
   ShieldCheck, FileText, Plus, Trash2, Upload, Info,
   KeyRound, Shield, CheckCircle, AlertCircle, UserPlus, X, FolderOpen,
+  Camera,
 } from 'lucide-react'
 import hrmService from '../../services/hrmService'
 import userService from '../../services/userService'
@@ -15,6 +16,8 @@ import toast from 'react-hot-toast'
 import ModalPortal from '../../components/common/ModalPortal'
 import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
 import { useDraftRecovery } from '../../hooks/useDraftRecovery'
+import EmployeeAvatar from '../../components/common/EmployeeAvatar'
+import ImageCropModal from '../../components/common/ImageCropModal'
 
 // ═══════════════════════════════════════════════════════════════════
 // Permission computation — identical to UserForm.jsx
@@ -363,6 +366,14 @@ export default function EmployeeForm() {
   const [error, setError]     = useState('')
   const [sectionErrors, setSectionErrors] = useState({})
 
+  // ── Photo upload state ────────────────────────────────────────────
+  const [photoUrl,       setPhotoUrl]       = useState(null)     // current photo (edit: from server; create: from crop)
+  const [cropFile,       setCropFile]       = useState(null)     // raw file waiting to be cropped
+  const [croppedBlob,    setCroppedBlob]    = useState(null)     // blob after crop (create mode, pending upload)
+  const [croppedPreview, setCroppedPreview] = useState(null)     // preview URL for cropped blob
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const photoInputRef = useRef(null)
+
   // ── Employee form state ──────────────────────────────────────────
   const [form, setForm]   = useState({ ...EMPTY_EMP })
   const [emergencyContacts, setEmergencyContacts] = useState([{ name:'', relationship:'', phone:'', email:'' }])
@@ -479,6 +490,7 @@ export default function EmployeeForm() {
         bg_status:        e.background_check?.status || 'pending',
         bg_notes:         e.background_check?.notes  || '',
       })
+      if (e.photo_url)                    setPhotoUrl(e.photo_url)
       if (e.emergency_contacts?.length) setEmergencyContacts(e.emergency_contacts)
       if (e.qualifications?.length)     setQualifications(e.qualifications)
       if (e.disciplinary_records?.length) setDisciplinary(e.disciplinary_records)
@@ -648,6 +660,64 @@ export default function EmployeeForm() {
   const onDragOver = (e) => { e.preventDefault(); setDragOver(true) }
   const onDragLeave = () => setDragOver(false)
 
+  // ── Photo handlers ────────────────────────────────────────────────
+  const PHOTO_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+
+  const handlePhotoFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!PHOTO_TYPES.includes(file.type)) {
+      toast.error('Only JPG, JPEG, PNG, WEBP images are allowed')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Photo must be under 5 MB')
+      return
+    }
+    setCropFile(file)
+  }
+
+  const handleCropSave = async (blob) => {
+    setCropFile(null)
+    if (isEdit) {
+      // Upload immediately in edit mode
+      setUploadingPhoto(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', blob, 'photo.jpg')
+        const res = await hrmService.uploadEmployeePhoto(id, fd)
+        const url = res.data.photo_url
+        setPhotoUrl(url)
+        // Dispatch event so Sidebar/TopBar pick up the new photo
+        window.dispatchEvent(new CustomEvent('employee-photo-updated', { detail: { photoUrl: url } }))
+        toast.success('Profile photo updated')
+      } catch {
+        toast.error('Failed to upload photo')
+      }
+      setUploadingPhoto(false)
+    } else {
+      // Create mode: stage for upload after employee creation
+      const preview = URL.createObjectURL(blob)
+      if (croppedPreview) URL.revokeObjectURL(croppedPreview)
+      setCroppedBlob(blob)
+      setCroppedPreview(preview)
+    }
+  }
+
+  const handleRemovePhoto = async () => {
+    if (croppedPreview) URL.revokeObjectURL(croppedPreview)
+    setCroppedBlob(null)
+    setCroppedPreview(null)
+    setPhotoUrl(null)
+    if (isEdit && id) {
+      try {
+        await hrmService.updateEmployee(id, { photo_url: null })
+        window.dispatchEvent(new CustomEvent('employee-photo-updated', { detail: { photoUrl: null } }))
+      } catch { /* non-fatal */ }
+    }
+  }
+
   // ── Build payload ────────────────────────────────────────────────
   const buildPayload = (overrideDuplicate = false) => {
     const deptId   = uForm.department_id === 'custom'  ? undefined : uForm.department_id
@@ -787,6 +857,17 @@ export default function EmployeeForm() {
 
       if (newEmpId && stagedDocs.length > 0) {
         await uploadStagedDocs(newEmpId)
+      }
+
+      // Upload staged photo in create mode
+      if (newEmpId && croppedBlob) {
+        try {
+          const fd = new FormData()
+          fd.append('file', croppedBlob, 'photo.jpg')
+          await hrmService.uploadEmployeePhoto(newEmpId, fd)
+        } catch {
+          // non-fatal — employee still created
+        }
       }
 
       const hasAccount = createAccount && !linkedUserId && uForm.username && uForm.password
@@ -981,6 +1062,79 @@ export default function EmployeeForm() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
+
+        {/* ═══════════════════════════════════════════════════════════
+            PHOTO UPLOAD SECTION
+            ═══════════════════════════════════════════════════════════ */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <span className="w-8 h-8 rounded-lg flex items-center justify-center bg-pink-50 text-pink-600">
+              <Camera className="w-4 h-4" />
+            </span>
+            <h3 className="font-semibold text-gray-900">Profile Photo</h3>
+            <span className="text-xs text-gray-400 ml-1">JPG, JPEG, PNG, WEBP · Max 5 MB</span>
+          </div>
+
+          <div className="flex items-center gap-5">
+            {/* Preview */}
+            <div className="relative flex-shrink-0">
+              {croppedPreview || photoUrl ? (
+                <img
+                  src={croppedPreview || photoUrl}
+                  alt="Profile"
+                  className="w-20 h-20 rounded-2xl object-cover"
+                  style={{ border: '2px solid #e5e7eb' }}
+                />
+              ) : (
+                <EmployeeAvatar
+                  name={form.full_name || 'Employee'}
+                  photoUrl={null}
+                  size={80}
+                  style={{ borderRadius: 16 }}
+                />
+              )}
+              {uploadingPhoto && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-2xl" style={{ background: 'rgba(0,0,0,0.5)' }}>
+                  <Loader2 className="w-5 h-5 text-white animate-spin" />
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-2">
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handlePhotoFileSelect}
+              />
+              <button
+                type="button"
+                disabled={uploadingPhoto}
+                onClick={() => photoInputRef.current?.click()}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 hover:bg-gray-50 disabled:opacity-60"
+              >
+                <Upload className="w-4 h-4" />
+                {photoUrl || croppedPreview ? 'Change Photo' : 'Upload Photo'}
+              </button>
+              {(croppedPreview || (isEdit && photoUrl)) && (
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50"
+                >
+                  <X className="w-4 h-4" /> Remove
+                </button>
+              )}
+              <p className="text-xs text-gray-400">
+                {croppedPreview
+                  ? isEdit ? 'Photo saved.' : 'Photo will upload when you save the employee.'
+                  : 'Upload a professional headshot for this employee.'}
+              </p>
+            </div>
+          </div>
+        </div>
 
         {/* ═══════════════════════════════════════════════════════════
             SECTION 1 — USER ACCOUNT INFORMATION (unchanged logic)
@@ -1753,6 +1907,15 @@ export default function EmployeeForm() {
           </button>
         </div>
       </form>
+
+      {/* ── Image Crop Modal ── */}
+      {cropFile && (
+        <ImageCropModal
+          file={cropFile}
+          onSave={handleCropSave}
+          onClose={() => setCropFile(null)}
+        />
+      )}
     </div>
   )
 }

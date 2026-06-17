@@ -271,6 +271,7 @@ class EmployeeCreate(BaseModel):
     blood_group: Optional[BloodGroup] = None
     address: Optional[str] = None
     address_info: Optional[AddressInfo] = None
+    photo_url: Optional[str] = None
     department_id: Optional[str] = None
     department_name: Optional[str] = None
     designation_id: Optional[str] = None

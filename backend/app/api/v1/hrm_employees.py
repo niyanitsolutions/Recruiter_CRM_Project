@@ -1,10 +1,16 @@
 """HRM — Employee API Routes"""
+import os
+import uuid
+import pathlib
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
 from app.models.company.employee import EmployeeCreate, EmployeeUpdate
 from app.services.employee_service import EmployeeService
+
+_BACKEND_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 
 router = APIRouter(prefix="/hrm/employees", tags=["HRM - Employees"])
 
@@ -72,6 +78,45 @@ async def update_employee(
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
     return emp
+
+
+@router.post("/{employee_id}/photo")
+async def upload_employee_photo(
+    employee_id: str,
+    file: UploadFile = File(...),
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:employees:manage"])),
+):
+    """Upload or replace an employee's profile photo (JPG, JPEG, PNG, WEBP)."""
+    ALLOWED = {".jpg", ".jpeg", ".png", ".webp"}
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in ALLOWED:
+        raise HTTPException(status_code=400, detail="Only JPG, JPEG, PNG, WEBP images are allowed")
+
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo must be under 5 MB")
+
+    upload_dir = str(_BACKEND_ROOT / "uploads" / "hrm_docs")
+    os.makedirs(upload_dir, exist_ok=True)
+    fname = f"{uuid.uuid4()}{ext}"
+    fpath = os.path.join(upload_dir, fname)
+    with open(fpath, "wb") as f:
+        f.write(contents)
+
+    photo_url = f"/uploads/hrm_docs/{fname}"
+
+    result = await db.hrm_employees.update_one(
+        {"_id": employee_id, "company_id": cu["company_id"], "is_deleted": False},
+        {"$set": {"photo_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
+    )
+
+    if result.matched_count == 0:
+        os.remove(fpath)
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    return {"photo_url": photo_url}
 
 
 @router.delete("/{employee_id}", status_code=204)

@@ -44,6 +44,7 @@ import { MY_PORTAL_ALLOWED_ROLES } from '../../config/portalConfig'
 import { useTheme } from '../../contexts/ThemeContext'
 import { notificationService } from '../../services'
 import hrmService from '../../services/hrmService'
+import EmployeeAvatar from '../common/EmployeeAvatar'
 
 // ─── Permission → nav-item mapping ────────────────────────────────────────────
 // `permissions` is an array — the nav item shows if the user has ANY one of them.
@@ -149,8 +150,25 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
   const userType     = useSelector(selectUserType)
   const { isDark, themeMode } = useTheme()
   const location     = useLocation()
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [hrmBadges, setHrmBadges]     = useState({ pendingLeaves: 0, pendingExits: 0 })
+  const [unreadCount, setUnreadCount]       = useState(0)
+  const [hrmBadges, setHrmBadges]           = useState({ pendingLeaves: 0, pendingExits: 0 })
+  const [employeePhotoUrl, setEmployeePhotoUrl] = useState(null)
+
+  // Fetch employee photo for current user
+  useEffect(() => {
+    const empId = user?.hrmEmployeeId
+    if (!empId) { setEmployeePhotoUrl(null); return }
+    hrmService.getEmployee(empId)
+      .then(r => setEmployeePhotoUrl(r.data?.photo_url || null))
+      .catch(() => {})
+  }, [user?.hrmEmployeeId])
+
+  // Listen for photo updates from EmployeeForm
+  useEffect(() => {
+    const handler = (e) => setEmployeePhotoUrl(e.detail?.photoUrl || null)
+    window.addEventListener('employee-photo-updated', handler)
+    return () => window.removeEventListener('employee-photo-updated', handler)
+  }, [])
 
   // Close mobile nav on route change
   useEffect(() => {
@@ -512,9 +530,12 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
         {!isCollapsed ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm flex-shrink-0 text-white" style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', boxShadow: '0 0 10px rgba(124,58,237,0.4)' }}>
-                {user?.fullName?.charAt(0) || user?.full_name?.charAt(0) || 'U'}
-              </div>
+              <EmployeeAvatar
+                name={user?.fullName || user?.full_name || 'U'}
+                photoUrl={employeePhotoUrl}
+                size={36}
+                style={{ boxShadow: '0 0 10px rgba(124,58,237,0.3)' }}
+              />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate" style={{ color: 'var(--text-heading)' }}>{user?.fullName || user?.full_name || 'User'}</p>
                 <p className="text-xs truncate capitalize" style={{ color: 'var(--text-muted)' }}>

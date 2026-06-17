@@ -127,6 +127,12 @@ const getDocumentServeUrl = (employeeId, docId, download = false) => {
   return params.toString() ? `${base}?${params}` : base
 }
 
+// ── Employee Photo ─────────────────────────────────────────────────────────
+const uploadEmployeePhoto = (employeeId, formData) =>
+  api.post(`${BASE}/employees/${employeeId}/photo`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+
 // ── Org Chart ──────────────────────────────────────────────────────────────
 const getOrgChart = () => api.get(`${BASE}/employees/org-chart/tree`)
 
@@ -203,7 +209,7 @@ const getAnnouncements = listAnnouncements
 
 const hrmService = {
   getDashboardStats, getAttendanceTrend,
-  listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee,
+  listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee, uploadEmployeePhoto,
   getTeamAttendanceHistory, getMyAttendanceHistory, getAttendanceRangeStats, exportTeamAttendanceCsv, exportMyAttendanceCsv,
   checkIn, checkOut, startBreak, endBreak, getMyTodayAttendance, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance,
   getAttendanceTodayStats, getAttendanceSettings, updateAttendanceSettings,

@@ -20,6 +20,8 @@ import { logoutUser, selectUser, selectIsSuperAdmin, selectIsOwner, selectIsSell
 import NotificationBell from '../notifications/NotificationBell'
 import AttendanceBanner from '../hrm/AttendanceBanner'
 import { useTheme } from '../../contexts/ThemeContext'
+import EmployeeAvatar from '../common/EmployeeAvatar'
+import hrmService from '../../services/hrmService'
 
 
 const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
@@ -53,6 +55,22 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const [employeePhotoUrl, setEmployeePhotoUrl] = useState(null)
+
+  useEffect(() => {
+    const empId = user?.hrmEmployeeId
+    if (!empId) { setEmployeePhotoUrl(null); return }
+    hrmService.getEmployee(empId)
+      .then(r => setEmployeePhotoUrl(r.data?.photo_url || null))
+      .catch(() => {})
+  }, [user?.hrmEmployeeId])
+
+  useEffect(() => {
+    const handler = (e) => setEmployeePhotoUrl(e.detail?.photoUrl || null)
+    window.addEventListener('employee-photo-updated', handler)
+    return () => window.removeEventListener('employee-photo-updated', handler)
   }, [])
 
   const handleLogout = () => {
@@ -187,12 +205,11 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
             onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={e => e.currentTarget.style.background = ''}
           >
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0"
-              style={{ background: 'var(--gradient-1)' }}
-            >
-              {user?.fullName?.charAt(0)?.toUpperCase() || 'U'}
-            </div>
+            <EmployeeAvatar
+              name={user?.fullName || 'U'}
+              photoUrl={employeePhotoUrl}
+              size={32}
+            />
             <div className="hidden md:block text-left">
               <p className="text-sm font-medium leading-tight" style={{ color: 'var(--text-primary)' }}>
                 {user?.fullName || 'User'}

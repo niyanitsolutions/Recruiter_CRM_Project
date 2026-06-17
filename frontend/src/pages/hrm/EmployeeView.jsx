@@ -1,76 +1,398 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import {
-  ArrowLeft, Edit2, ChevronDown, ChevronUp, Loader2,
-  User, Briefcase, CreditCard, Phone, GraduationCap,
-  ShieldCheck, FileText, KeyRound, CheckCircle, AlertCircle,
-  ExternalLink,
+  ArrowLeft, Edit2, Loader2, CheckCircle, AlertCircle, ExternalLink,
+  Mail, Phone, MapPin, Calendar, Briefcase, CreditCard,
+  GraduationCap, ShieldCheck, FileText, KeyRound, User,
 } from 'lucide-react'
 import hrmService from '../../services/hrmService'
 import userService from '../../services/userService'
+import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 
-// ── UI building blocks ────────────────────────────────────────────────
-const Section = ({ icon: Icon, title, color = 'indigo', children, defaultOpen = true }) => {
-  const [open, setOpen] = useState(defaultOpen)
-  const colorMap = {
-    indigo:'bg-indigo-50 text-indigo-600', blue:'bg-blue-50 text-blue-600',
-    green:'bg-green-50 text-green-600', purple:'bg-purple-50 text-purple-600',
-    orange:'bg-orange-50 text-orange-600', red:'bg-red-50 text-red-600',
-    teal:'bg-teal-50 text-teal-600', violet:'bg-violet-50 text-violet-600',
-  }
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const STATUS_STYLE = {
+  active:     { bg: '#dcfce7', color: '#15803d', label: 'Active' },
+  inactive:   { bg: '#f1f5f9', color: '#64748b', label: 'Inactive' },
+  terminated: { bg: '#fee2e2', color: '#dc2626', label: 'Terminated' },
+  on_leave:   { bg: '#fef9c3', color: '#ca8a04', label: 'On Leave' },
+  resigned:   { bg: '#f1f5f9', color: '#64748b', label: 'Resigned' },
+}
+
+const TABS = ['Overview', 'Personal', 'Employment', 'Bank', 'Emergency', 'Documents']
+
+// ── Profile completion ───────────────────────────────────────────────────────
+
+function calcProfilePct(emp) {
+  if (!emp) return 0
+  const addr = emp.address_info || {}
+  const bank = emp.bank_details || {}
+  const sections = [
+    Boolean(emp.phone && emp.date_of_birth && emp.gender && emp.blood_group &&
+      emp.pan_number && emp.aadhaar_number && addr.street && addr.city && addr.state && addr.zip_code),
+    Boolean((emp.department_id || emp.department_name) &&
+      (emp.designation_id || emp.designation_name) && emp.date_of_joining),
+    Boolean(bank.bank_name && bank.account_number && bank.ifsc_code && bank.account_holder_name),
+    (emp.emergency_contacts || []).some(c => c?.name && c?.relationship && c?.phone) ||
+      Boolean(emp.emergency_contact?.name),
+    (emp.qualifications || []).length >= 1,
+    Boolean(emp.background_check?.status),
+    (emp.documents || []).length >= 1,
+  ]
+  return Math.round((sections.filter(Boolean).length / sections.length) * 100)
+}
+
+// ── UI helpers ───────────────────────────────────────────────────────────────
+
+function InfoRow({ label, value, mono = false }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <button type="button" onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors">
-        <div className="flex items-center gap-3">
-          <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${colorMap[color]||colorMap.indigo}`}>
-            <Icon className="w-4 h-4" />
-          </span>
-          <h3 className="font-semibold text-gray-900">{title}</h3>
-        </div>
-        {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-      </button>
-      {open && <div className="px-6 pb-6 pt-2 border-t border-gray-100">{children}</div>}
+    <div className="py-2.5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+      <p className="text-xs font-semibold uppercase mb-0.5" style={{ color: 'var(--text-muted)' }}>{label}</p>
+      <p className={`text-sm ${mono ? 'font-mono' : ''}`} style={{ color: value ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+        {value || '—'}
+      </p>
     </div>
   )
 }
 
-const ViewField = ({ label, value, mono = false, className = '' }) => (
-  <div className={className}>
-    <p className="text-xs font-semibold text-gray-400 uppercase mb-1">{label}</p>
-    <p className={`text-sm text-gray-900 ${mono ? 'font-mono' : ''} ${!value ? 'text-gray-400 italic' : ''}`}>
-      {value || '—'}
-    </p>
-  </div>
-)
-
-const ROLE_TO_DEPT = {
-  admin:'admin', client_coordinator:'client_coordinator',
-  candidate_coordinator:'candidate_coordinator', recruiter:'recruiter',
-  hr:'hr', accounts:'accounts', partner:'partner',
+function Card({ title, icon: Icon, accent = '#6366f1', children }) {
+  return (
+    <div className="rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+      {title && (
+        <div className="flex items-center gap-2 mb-4">
+          {Icon && (
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: accent + '1a' }}>
+              <Icon className="w-3.5 h-3.5" style={{ color: accent }} />
+            </div>
+          )}
+          <h4 className="font-semibold text-sm" style={{ color: 'var(--text-heading)' }}>{title}</h4>
+        </div>
+      )}
+      {children}
+    </div>
+  )
 }
 
-const PERM_DEPT_LABELS = {
-  owner:'Owner', admin:'Admin', client_coordinator:'Client Coordinator',
-  candidate_coordinator:'Candidate Coordinator', recruiter:'Recruiter',
-  hr:'HR', accounts:'Accounts', partner:'Partner',
+function CircularProgress({ pct, size = 80 }) {
+  const r   = (size - 8) / 2
+  const circ = 2 * Math.PI * r
+  const dash = (pct / 100) * circ
+  const color = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444'
+  return (
+    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border-subtle)" strokeWidth={7} />
+      <circle
+        cx={size / 2} cy={size / 2} r={r}
+        fill="none" stroke={color} strokeWidth={7}
+        strokeDasharray={`${dash} ${circ}`}
+        strokeLinecap="round"
+        style={{ transition: 'stroke-dasharray 0.6s ease' }}
+      />
+      <text
+        x={size / 2} y={size / 2}
+        fill={color} fontSize={size * 0.22} fontWeight={700}
+        textAnchor="middle" dominantBaseline="middle"
+        transform={`rotate(90, ${size / 2}, ${size / 2})`}
+      >
+        {pct}%
+      </text>
+    </svg>
+  )
 }
 
-const STATUS_CHIP = {
-  active:     'bg-green-100 text-green-700',
-  inactive:   'bg-gray-100 text-gray-600',
-  terminated: 'bg-red-100 text-red-700',
-  on_leave:   'bg-yellow-100 text-yellow-700',
-  resigned:   'bg-orange-100 text-orange-700',
+// ── Overview Tab ─────────────────────────────────────────────────────────────
+
+function OverviewTab({ emp, linkedUser }) {
+  const addr = emp.address_info
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* Left column */}
+      <div className="space-y-4">
+        <Card title="Personal Information" icon={User} accent="#6366f1">
+          <InfoRow label="Full Name"  value={emp.full_name} />
+          <InfoRow label="Email"      value={emp.email} />
+          <InfoRow label="Phone"      value={emp.phone} />
+          <InfoRow label="Gender"     value={emp.gender} />
+          <InfoRow label="Date of Birth" value={emp.date_of_birth} />
+          <InfoRow label="Blood Group"   value={emp.blood_group} />
+        </Card>
+
+        {addr && (
+          <Card title="Address" icon={MapPin} accent="#0ea5e9">
+            <InfoRow label="Street"  value={addr.street} />
+            <InfoRow label="City"    value={addr.city} />
+            <InfoRow label="State"   value={addr.state} />
+            <InfoRow label="ZIP"     value={addr.zip_code} />
+            <InfoRow label="Country" value={addr.country} />
+          </Card>
+        )}
+      </div>
+
+      {/* Right column */}
+      <div className="space-y-4">
+        <Card title="Employment Summary" icon={Briefcase} accent="#10b981">
+          <InfoRow label="Department"       value={emp.department_name} />
+          <InfoRow label="Designation"      value={emp.designation_name} />
+          <InfoRow label="Employment Type"  value={emp.employment_type?.replace(/_/g, ' ')} />
+          <InfoRow label="Date of Joining"  value={emp.date_of_joining} />
+          <InfoRow label="Work Location"    value={emp.work_location} />
+          <InfoRow label="Shift"
+            value={emp.shift_start_time && emp.shift_end_time
+              ? `${emp.shift_start_time} – ${emp.shift_end_time}` : null} />
+        </Card>
+
+        {linkedUser ? (
+          <Card title="User Account" icon={KeyRound} accent="#8b5cf6">
+            <div className="flex items-center gap-2 mb-3 p-2.5 rounded-lg" style={{ background: '#dcfce7' }}>
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span className="text-xs font-medium text-green-700">CRM Login Account linked</span>
+              <Link to={`/users/${emp.crm_user_id}`}
+                className="ml-auto flex items-center gap-1 text-xs text-indigo-600 hover:underline">
+                <ExternalLink className="w-3 h-3" /> View
+              </Link>
+            </div>
+            <InfoRow label="Username" value={linkedUser.username} mono />
+            <InfoRow label="Role"     value={linkedUser.role} />
+            <InfoRow label="Status"   value={linkedUser.status} />
+          </Card>
+        ) : (
+          <Card title="User Account" icon={KeyRound} accent="#8b5cf6">
+            <div className="flex items-center justify-between p-3 rounded-lg" style={{ background: '#fef9c3' }}>
+              <div className="flex items-center gap-2 text-sm text-amber-700">
+                <AlertCircle className="w-4 h-4" /> No login account linked
+              </div>
+              <Link to={`/users/new?employee_id=${emp.id}`}
+                className="text-xs text-indigo-600 hover:underline font-medium">
+                Create →
+              </Link>
+            </div>
+          </Card>
+        )}
+
+        {emp.work_description && (
+          <Card title="Role Description" icon={FileText} accent="#f59e0b">
+            <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>
+              {emp.work_description}
+            </p>
+          </Card>
+        )}
+      </div>
+    </div>
+  )
 }
+
+// ── Personal Tab ─────────────────────────────────────────────────────────────
+
+function PersonalTab({ emp }) {
+  const addr = emp.address_info
+  return (
+    <div className="space-y-5">
+      <Card title="Personal Details" icon={User} accent="#6366f1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6">
+          <InfoRow label="Full Name"     value={emp.full_name} />
+          <InfoRow label="Email"         value={emp.email} />
+          <InfoRow label="Phone"         value={emp.phone} />
+          <InfoRow label="Gender"        value={emp.gender} />
+          <InfoRow label="Date of Birth" value={emp.date_of_birth} />
+          <InfoRow label="Blood Group"   value={emp.blood_group} />
+          <InfoRow label="PAN Number"    value={emp.pan_number}    mono />
+          <InfoRow label="Aadhaar"       value={emp.aadhaar_number} mono />
+        </div>
+      </Card>
+
+      {addr && (
+        <Card title="Residential Address" icon={MapPin} accent="#0ea5e9">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6">
+            <InfoRow label="Street"  value={addr.street}   />
+            <InfoRow label="City"    value={addr.city}     />
+            <InfoRow label="State"   value={addr.state}    />
+            <InfoRow label="ZIP"     value={addr.zip_code} />
+            <InfoRow label="Country" value={addr.country}  />
+          </div>
+        </Card>
+      )}
+
+      {emp.qualifications?.length > 0 && (
+        <Card title="Qualifications" icon={GraduationCap} accent="#8b5cf6">
+          <div className="space-y-3">
+            {emp.qualifications.map((q, i) => (
+              <div key={i} className="p-3 rounded-lg" style={{ background: 'var(--bg-card-alt)' }}>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <InfoRow label="Type"        value={q.type} />
+                  <InfoRow label="Degree"      value={q.title} />
+                  <InfoRow label="Institution" value={q.institution} />
+                  <InfoRow label="Year"        value={q.year?.toString()} />
+                  <InfoRow label="Grade"       value={q.grade} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ── Employment Tab ────────────────────────────────────────────────────────────
+
+function EmploymentTab({ emp }) {
+  const salary = emp.salary
+  return (
+    <div className="space-y-5">
+      <Card title="Employment Details" icon={Briefcase} accent="#10b981">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6">
+          <InfoRow label="Department"      value={emp.department_name} />
+          <InfoRow label="Designation"     value={emp.designation_name} />
+          <InfoRow label="Employment Type" value={emp.employment_type?.replace(/_/g, ' ')} />
+          <InfoRow label="Date of Joining" value={emp.date_of_joining} />
+          <InfoRow label="Work Location"   value={emp.work_location} />
+          <InfoRow label="Shift"
+            value={emp.shift_start_time && emp.shift_end_time
+              ? `${emp.shift_start_time} – ${emp.shift_end_time}` : null} />
+        </div>
+        {emp.work_description && (
+          <div className="mt-4">
+            <p className="text-xs font-semibold uppercase mb-1" style={{ color: 'var(--text-muted)' }}>Role Description</p>
+            <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>{emp.work_description}</p>
+          </div>
+        )}
+      </Card>
+
+      {salary && (salary.ctc > 0 || salary.basic > 0) && (
+        <Card title="Salary Structure" icon={CreditCard} accent="#f59e0b">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6">
+            <InfoRow label="Annual CTC (₹)"   value={salary.ctc   ? salary.ctc.toLocaleString('en-IN')   : null} />
+            <InfoRow label="Basic (Monthly)"  value={salary.basic ? salary.basic.toLocaleString('en-IN') : null} />
+            <InfoRow label="HRA (Monthly)"    value={salary.hra   ? salary.hra.toLocaleString('en-IN')   : null} />
+            <InfoRow label="Special Allowance" value={salary.special_allowance ? salary.special_allowance.toLocaleString('en-IN') : null} />
+          </div>
+        </Card>
+      )}
+
+      <Card title="Background Verification" icon={ShieldCheck} accent="#14b8a6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+          <InfoRow label="Status" value={emp.background_check?.status || 'pending'} />
+          <InfoRow label="Notes"  value={emp.background_check?.notes} />
+        </div>
+      </Card>
+
+      {emp.disciplinary_records?.length > 0 && (
+        <Card title="Disciplinary Records" icon={FileText} accent="#ef4444">
+          <div className="space-y-3">
+            {emp.disciplinary_records.map((d, i) => (
+              <div key={i} className="p-3 rounded-lg" style={{ background: '#fee2e21a' }}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <InfoRow label="Date"         value={d.date?.toString()} />
+                  <InfoRow label="Incident"     value={d.incident} />
+                  <InfoRow label="Action Taken" value={d.action_taken} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ── Bank Tab ──────────────────────────────────────────────────────────────────
+
+function BankTab({ emp }) {
+  const bank = emp.bank_details
+  return (
+    <div className="space-y-5">
+      <Card title="Bank Details" icon={CreditCard} accent="#10b981">
+        {bank ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6">
+            <InfoRow label="Bank Name"           value={bank.bank_name} />
+            <InfoRow label="Account Number"      value={bank.account_number} mono />
+            <InfoRow label="IFSC Code"           value={bank.ifsc_code} mono />
+            <InfoRow label="Account Holder Name" value={bank.account_holder_name} />
+            <InfoRow label="PF Number"           value={emp.pf_number} mono />
+            <InfoRow label="UAN Number"          value={emp.uan_number} mono />
+          </div>
+        ) : (
+          <p className="text-sm text-center py-4" style={{ color: 'var(--text-muted)' }}>
+            No bank details on record.
+          </p>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+// ── Emergency Tab ──────────────────────────────────────────────────────────────
+
+function EmergencyTab({ emp }) {
+  const contacts = emp.emergency_contacts?.length
+    ? emp.emergency_contacts
+    : emp.emergency_contact ? [emp.emergency_contact] : []
+  return (
+    <div className="space-y-4">
+      {contacts.length > 0 ? contacts.map((c, i) => (
+        <Card key={i} title={`Contact ${contacts.length > 1 ? i + 1 : ''}`} icon={Phone} accent="#f97316">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6">
+            <InfoRow label="Name"         value={c.name} />
+            <InfoRow label="Relationship" value={c.relationship} />
+            <InfoRow label="Phone"        value={c.phone} />
+            <InfoRow label="Email"        value={c.email} />
+          </div>
+        </Card>
+      )) : (
+        <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
+          <Phone className="w-8 h-8 mx-auto mb-2 opacity-30" />
+          <p>No emergency contacts on record.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Documents Tab ──────────────────────────────────────────────────────────────
+
+function DocumentsTab({ emp }) {
+  const docs = emp.documents || []
+  return (
+    <div className="space-y-3">
+      {docs.length > 0 ? docs.map((doc, i) => (
+        <div key={i}
+          className="flex items-center justify-between p-4 rounded-xl"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-lg"
+              style={{ background: 'var(--bg-card-alt)' }}>
+              📄
+            </div>
+            <div>
+              <p className="font-medium text-sm" style={{ color: 'var(--text-heading)' }}>{doc.doc_name}</p>
+              <p className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>{doc.doc_type?.replace(/_/g, ' ')}</p>
+            </div>
+          </div>
+          <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg"
+            style={{ background: 'var(--bg-info)', color: 'var(--text-info)' }}>
+            <ExternalLink className="w-3 h-3" /> View
+          </a>
+        </div>
+      )) : (
+        <div className="text-center py-10" style={{ color: 'var(--text-muted)' }}>
+          <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
+          <p>No documents uploaded.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
 
 export default function EmployeeView() {
-  const navigate = useNavigate()
-  const { id }   = useParams()
-
-  const [loading, setLoading]         = useState(true)
-  const [emp, setEmp]                 = useState(null)
-  const [linkedUser, setLinkedUser]   = useState(null)
+  const navigate       = useNavigate()
+  const { id }         = useParams()
+  const [loading, setLoading]       = useState(true)
+  const [emp, setEmp]               = useState(null)
+  const [linkedUser, setLinkedUser] = useState(null)
+  const [tab, setTab]               = useState('Overview')
 
   useEffect(() => {
     if (!id) return
@@ -91,7 +413,7 @@ export default function EmployeeView() {
 
   if (loading) {
     return (
-      <div className="p-10 flex items-center justify-center text-gray-400">
+      <div className="p-10 flex items-center justify-center" style={{ color: 'var(--text-muted)' }}>
         <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading…
       </div>
     )
@@ -99,252 +421,174 @@ export default function EmployeeView() {
 
   if (!emp) {
     return (
-      <div className="p-10 text-center text-gray-500">
+      <div className="p-10 text-center" style={{ color: 'var(--text-muted)' }}>
         Employee not found.{' '}
         <button onClick={() => navigate('/hrm/employees')} className="text-indigo-600 underline">Go back</button>
       </div>
     )
   }
 
-  const statusStyle = STATUS_CHIP[emp.employment_status] || 'bg-gray-100 text-gray-600'
+  const pct    = calcProfilePct(emp)
+  const ss     = STATUS_STYLE[emp.employment_status] || STATUS_STYLE.inactive
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-4">
+    <div className="p-6 max-w-5xl mx-auto space-y-5">
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => navigate(-1)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{emp.full_name}</h1>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusStyle}`}>
-                {emp.employment_status}
-              </span>
-            </div>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {emp.employee_id} {emp.designation_name ? `· ${emp.designation_name}` : ''} {emp.department_name ? `· ${emp.department_name}` : ''}
-            </p>
-          </div>
-        </div>
-        <Link to={`/hrm/employees/${id}/edit`}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700">
-          <Edit2 className="w-4 h-4" /> Edit
-        </Link>
-      </div>
+      {/* ── Back ── */}
+      <button
+        onClick={() => navigate(-1)}
+        className="flex items-center gap-2 text-sm hover:underline"
+        style={{ color: 'var(--text-muted)' }}
+      >
+        <ArrowLeft className="w-4 h-4" /> Back to Employees
+      </button>
 
-      {/* ── SECTION 1 — USER ACCOUNT INFORMATION ── */}
-      <Section icon={KeyRound} title="User Account Information" color="violet">
-        {linkedUser ? (
-          <div className="mt-2 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-              <div className="flex items-center gap-2 text-green-700">
-                <CheckCircle className="w-4 h-4" />
-                <span className="text-sm font-medium">CRM Login Account linked</span>
+      {/* ── Hero card ── */}
+      <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+        {/* Coloured banner */}
+        <div className="h-24" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }} />
+
+        <div className="px-6 pb-6">
+          {/* Photo row */}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 -mt-10">
+            <div className="flex items-end gap-4">
+              <div
+                className="rounded-2xl ring-4"
+                style={{ ringColor: 'var(--bg-card)', background: 'var(--bg-card)' }}
+              >
+                <EmployeeAvatar
+                  name={emp.full_name}
+                  photoUrl={emp.photo_url}
+                  size={80}
+                  style={{ borderRadius: 16, border: '4px solid var(--bg-card)' }}
+                />
               </div>
-              <Link to={`/users/${emp.crm_user_id}`}
-                className="flex items-center gap-1 text-xs text-indigo-600 hover:underline font-medium">
-                <ExternalLink className="w-3 h-3" /> View User Account
-              </Link>
+              <div className="pb-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>
+                    {emp.full_name}
+                  </h1>
+                  <span
+                    className="px-2.5 py-0.5 rounded-full text-xs font-semibold"
+                    style={{ background: ss.bg, color: ss.color }}
+                  >
+                    {ss.label}
+                  </span>
+                </div>
+                <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  {[emp.designation_name, emp.department_name].filter(Boolean).join(' · ')}
+                </p>
+              </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-2">
-              <ViewField label="Username" value={linkedUser.username} mono />
-              <ViewField label="Email" value={linkedUser.email} />
-              <ViewField label="Mobile" value={linkedUser.mobile} />
-              <ViewField label="Role" value={PERM_DEPT_LABELS[ROLE_TO_DEPT[linkedUser.role]] || linkedUser.role} />
-              <ViewField label="User Type" value={linkedUser.user_type === 'partner' ? 'Partner' : 'Internal Employee'} />
-              <ViewField label="Account Status" value={linkedUser.status} />
-              {linkedUser.joining_date && (
-                <ViewField label="Joining Date" value={linkedUser.joining_date?.split?.('T')?.[0]} />
-              )}
-              {linkedUser.department && (
-                <ViewField label="Department" value={linkedUser.department} />
-              )}
-              {linkedUser.designation && (
-                <ViewField label="Designation" value={linkedUser.designation} />
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="mt-2 flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-xl">
-            <div className="flex items-center gap-2 text-amber-700 text-sm">
-              <AlertCircle className="w-4 h-4" />
-              No CRM login account linked to this employee.
-            </div>
-            <Link to={`/users/new?employee_id=${id}`}
-              className="text-xs text-indigo-600 hover:underline font-medium whitespace-nowrap">
-              Create Account →
+
+            <Link
+              to={`/hrm/employees/${id}/edit`}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white self-end sm:self-auto"
+              style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
+            >
+              <Edit2 className="w-4 h-4" /> Edit Profile
             </Link>
           </div>
-        )}
-      </Section>
 
-      {/* ── SECTION 2 — PERSONAL INFORMATION ── */}
-      <Section icon={User} title="Personal Information" color="indigo">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-5 mt-2">
-          <ViewField label="Full Name" value={emp.full_name} />
-          <ViewField label="Email" value={emp.email} />
-          <ViewField label="Phone" value={emp.phone} />
-          <ViewField label="Gender" value={emp.gender} />
-          <ViewField label="Date of Birth" value={emp.date_of_birth} />
-          <ViewField label="Blood Group" value={emp.blood_group} />
-          <ViewField label="PAN Number" value={emp.pan_number} mono />
-          <ViewField label="Aadhaar Number" value={emp.aadhaar_number} mono />
-        </div>
-        {emp.address_info && (
-          <>
-            <div className="mt-5 mb-3 text-xs font-semibold text-gray-400 uppercase">Residential Address</div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <ViewField label="Street" value={emp.address_info.street} className="md:col-span-3" />
-              <ViewField label="City" value={emp.address_info.city} />
-              <ViewField label="State" value={emp.address_info.state} />
-              <ViewField label="ZIP / PIN" value={emp.address_info.zip_code} />
-              <ViewField label="Country" value={emp.address_info.country} />
+          {/* Metadata chips */}
+          <div className="flex flex-wrap gap-4 mt-4">
+            <span className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+              <Briefcase className="w-4 h-4" />
+              {emp.employee_id}
+            </span>
+            {emp.date_of_joining && (
+              <span className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+                <Calendar className="w-4 h-4" />
+                Joined {emp.date_of_joining}
+              </span>
+            )}
+            {emp.work_location && (
+              <span className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
+                <MapPin className="w-4 h-4" />
+                {emp.work_location}
+              </span>
+            )}
+            {emp.email && (
+              <a href={`mailto:${emp.email}`} className="flex items-center gap-1.5 text-sm hover:underline" style={{ color: 'var(--text-muted)' }}>
+                <Mail className="w-4 h-4" />
+                {emp.email}
+              </a>
+            )}
+            {emp.phone && (
+              <a href={`tel:${emp.phone}`} className="flex items-center gap-1.5 text-sm hover:underline" style={{ color: 'var(--text-muted)' }}>
+                <Phone className="w-4 h-4" />
+                {emp.phone}
+              </a>
+            )}
+          </div>
+
+          {/* Profile completion */}
+          <div className="mt-4 flex items-center gap-4 p-4 rounded-xl" style={{ background: 'var(--bg-card-alt)' }}>
+            <CircularProgress pct={pct} size={64} />
+            <div>
+              <p className="font-semibold text-sm" style={{ color: 'var(--text-heading)' }}>Profile Completion</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                {pct === 100
+                  ? 'All sections complete'
+                  : `${7 - Math.round((pct / 100) * 7)} of 7 sections remaining`}
+              </p>
+              {pct < 100 && (
+                <Link
+                  to={`/hrm/employees/${id}/edit`}
+                  className="text-xs font-medium hover:underline mt-1 inline-block"
+                  style={{ color: '#6366f1' }}
+                >
+                  Complete Profile →
+                </Link>
+              )}
             </div>
-          </>
-        )}
-      </Section>
-
-      {/* ── SECTION 3 — EMPLOYMENT DETAILS ── */}
-      <Section icon={Briefcase} title="Employment Details" color="blue">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-5 mt-2">
-          <ViewField label="Department" value={emp.department_name} />
-          <ViewField label="Designation" value={emp.designation_name} />
-          <ViewField label="Employment Type" value={emp.employment_type?.replace('_', ' ')} />
-          <ViewField label="Date of Joining" value={emp.date_of_joining} />
-          <ViewField label="Work Location" value={emp.work_location} />
-          <ViewField label="Shift" value={emp.shift_start_time && emp.shift_end_time ? `${emp.shift_start_time} – ${emp.shift_end_time}` : null} />
+          </div>
         </div>
-        {emp.work_description && (
-          <div className="mt-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase mb-1">Role Description</p>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{emp.work_description}</p>
-          </div>
-        )}
-        {emp.salary && (emp.salary.ctc > 0 || emp.salary.basic > 0) && (
-          <>
-            <div className="mt-5 mb-3 text-xs font-semibold text-gray-400 uppercase">Salary Structure</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <ViewField label="Annual CTC (₹)" value={emp.salary.ctc ? emp.salary.ctc.toLocaleString('en-IN') : null} />
-              <ViewField label="Basic (Monthly)" value={emp.salary.basic ? emp.salary.basic.toLocaleString('en-IN') : null} />
-              <ViewField label="HRA (Monthly)" value={emp.salary.hra ? emp.salary.hra.toLocaleString('en-IN') : null} />
-              <ViewField label="Special Allowance" value={emp.salary.special_allowance ? emp.salary.special_allowance.toLocaleString('en-IN') : null} />
-            </div>
-          </>
-        )}
-      </Section>
+      </div>
 
-      {/* ── SECTION 4 — BANK DETAILS ── */}
-      <Section icon={CreditCard} title="Bank Details" color="green" defaultOpen={false}>
-        {emp.bank_details ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-5 mt-2">
-            <ViewField label="Bank Name" value={emp.bank_details.bank_name} />
-            <ViewField label="Account Number" value={emp.bank_details.account_number} mono />
-            <ViewField label="IFSC Code" value={emp.bank_details.ifsc_code} mono />
-            <ViewField label="Account Holder Name" value={emp.bank_details.account_holder_name} />
-            <ViewField label="PF Number" value={emp.pf_number} mono />
-            <ViewField label="UAN Number" value={emp.uan_number} mono />
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400 text-center py-4 mt-2">No bank details on record.</p>
-        )}
-      </Section>
+      {/* ── Tabs ── */}
+      <div
+        className="flex gap-1 p-1 rounded-xl overflow-x-auto"
+        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+      >
+        {TABS.map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className="px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all"
+            style={
+              tab === t
+                ? { background: '#6366f1', color: '#fff' }
+                : { color: 'var(--text-muted)', background: 'transparent' }
+            }
+          >
+            {t}
+          </button>
+        ))}
+      </div>
 
-      {/* ── SECTION 5 — EMERGENCY CONTACTS ── */}
-      <Section icon={Phone} title="Emergency Contacts" color="orange" defaultOpen={false}>
-        {emp.emergency_contacts?.length > 0 ? (
-          <div className="space-y-3 mt-2">
-            {emp.emergency_contacts.map((c, i) => (
-              <div key={i} className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
-                <ViewField label="Name" value={c.name} />
-                <ViewField label="Relationship" value={c.relationship} />
-                <ViewField label="Phone" value={c.phone} />
-                <ViewField label="Email" value={c.email} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400 text-center py-4 mt-2">No emergency contacts on record.</p>
-        )}
-      </Section>
+      {/* ── Tab content ── */}
+      {tab === 'Overview'    && <OverviewTab emp={emp} linkedUser={linkedUser} />}
+      {tab === 'Personal'    && <PersonalTab emp={emp} />}
+      {tab === 'Employment'  && <EmploymentTab emp={emp} />}
+      {tab === 'Bank'        && <BankTab emp={emp} />}
+      {tab === 'Emergency'   && <EmergencyTab emp={emp} />}
+      {tab === 'Documents'   && <DocumentsTab emp={emp} />}
 
-      {/* ── SECTION 6 — QUALIFICATIONS ── */}
-      <Section icon={GraduationCap} title="Qualifications" color="purple" defaultOpen={false}>
-        {emp.qualifications?.length > 0 ? (
-          <div className="space-y-3 mt-2">
-            {emp.qualifications.map((q, i) => (
-              <div key={i} className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-gray-50 rounded-lg">
-                <ViewField label="Type" value={q.type} />
-                <ViewField label="Degree / Certificate" value={q.title} />
-                <ViewField label="Institution" value={q.institution} />
-                <ViewField label="Year" value={q.year?.toString()} />
-                <ViewField label="Grade / Score" value={q.grade} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400 text-center py-4 mt-2">No qualifications on record.</p>
-        )}
-      </Section>
-
-      {/* ── SECTION 7 — BACKGROUND VERIFICATION ── */}
-      <Section icon={ShieldCheck} title="Background Verification" color="teal" defaultOpen={false}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-2">
-          <ViewField label="Verification Status" value={emp.background_check?.status || 'pending'} />
-          <ViewField label="Notes" value={emp.background_check?.notes} />
-        </div>
-      </Section>
-
-      {/* ── SECTION 8 — DISCIPLINARY RECORDS ── */}
-      <Section icon={FileText} title="Disciplinary Records" color="red" defaultOpen={false}>
-        {emp.disciplinary_records?.length > 0 ? (
-          <div className="space-y-3 mt-2">
-            {emp.disciplinary_records.map((d, i) => (
-              <div key={i} className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-red-50 rounded-lg">
-                <ViewField label="Date" value={d.date?.toString()} />
-                <ViewField label="Incident" value={d.incident} />
-                <ViewField label="Action Taken" value={d.action_taken} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400 text-center py-4 mt-2">No disciplinary records.</p>
-        )}
-      </Section>
-
-      {/* ── SECTION 9 — DOCUMENTS ── */}
-      <Section icon={FileText} title="Documents" color="blue" defaultOpen={false}>
-        {emp.documents?.length > 0 ? (
-          <div className="space-y-2 mt-2">
-            {emp.documents.map((doc, i) => (
-              <div key={i} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{doc.doc_name}</p>
-                  <p className="text-xs text-gray-500">{doc.doc_type}</p>
-                </div>
-                <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-xs text-indigo-600 hover:underline">
-                  <ExternalLink className="w-3 h-3" /> View
-                </a>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-gray-400 text-center py-4 mt-2">No documents uploaded.</p>
-        )}
-      </Section>
-
-      {/* Footer action */}
+      {/* ── Bottom actions ── */}
       <div className="flex justify-end gap-3 pt-2">
-        <button type="button" onClick={() => navigate(-1)}
-          className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
+        <button
+          onClick={() => navigate(-1)}
+          className="px-5 py-2.5 rounded-xl text-sm font-medium"
+          style={{ border: '1px solid var(--border-card)', color: 'var(--text-secondary)' }}
+        >
           Back
         </button>
-        <Link to={`/hrm/employees/${id}/edit`}
-          className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700">
+        <Link
+          to={`/hrm/employees/${id}/edit`}
+          className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold text-white"
+          style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
+        >
           <Edit2 className="w-4 h-4" /> Edit Employee
         </Link>
       </div>
