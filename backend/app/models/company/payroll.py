@@ -30,6 +30,12 @@ class Payslip(BaseModel):
     employee_id: str
     employee_name: Optional[str] = None
     employee_code: Optional[str] = None
+    # Employee snapshot fields (populated at generation time)
+    employee_department:  Optional[str] = None
+    employee_designation: Optional[str] = None
+    employee_doj:         Optional[str] = None
+    employee_pf_number:   Optional[str] = None
+    employee_uan_number:  Optional[str] = None
 
     month: int           # 1-12
     year: int
@@ -87,7 +93,7 @@ class UpdatePayslipStatus(BaseModel):
 
 
 class UpdatePayslipData(BaseModel):
-    """Editable fields for a draft payslip."""
+    """Editable fields for a payslip."""
     basic: Optional[float] = None
     hra: Optional[float] = None
     special_allowance: Optional[float] = None
@@ -106,16 +112,21 @@ class UpdatePayslipData(BaseModel):
     leave_days: Optional[float] = None
 
 
-# ── Payroll Structure Configuration (one per tenant) ───────────────────────
+# ── Payroll Structure Configuration (one per tenant) ──────────────────────────
 
 class PayrollComponent(BaseModel):
-    key: str           # machine key e.g. "basic_salary", "hra", "travel_allowance"
-    label: str         # display label
+    key: str                    # machine key, e.g. "basic_salary", "hra"
+    label: str                  # display label shown to HR
     component_type: str = "earning"   # "earning" or "deduction"
-    show_in_payslip: bool = True
+    show_in_payslip: bool = True      # whether this line appears on the printed payslip
+    is_selected: bool = True          # whether this component is active for this tenant
+    is_custom: bool = False           # True for tenant-created custom components
+
 
 class PayrollStructureConfig(BaseModel):
-    """Stored in hrm_payroll_structure — one document per company."""
+    """Stored in hrm_payroll_structure — one document per company.
+    Always stores ALL components (defaults + customs) with is_selected flags.
+    """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), alias="_id")
     company_id: str
     components: List[PayrollComponent] = Field(default_factory=list)
@@ -126,23 +137,25 @@ class PayrollStructureConfig(BaseModel):
 
 
 class UpsertPayrollStructure(BaseModel):
+    """Payload to save the full component list (selected + unselected)."""
     components: List[PayrollComponent]
 
 
+# ── Default component pool (all available, is_selected=True for basics) ───────
 DEFAULT_PAYROLL_COMPONENTS: List[dict] = [
-    # Earnings
-    {"key": "basic_salary",         "label": "Basic Salary",          "component_type": "earning",   "show_in_payslip": True},
-    {"key": "hra",                  "label": "HRA",                   "component_type": "earning",   "show_in_payslip": True},
-    {"key": "travel_allowance",     "label": "Travel Allowance",      "component_type": "earning",   "show_in_payslip": True},
-    {"key": "medical_allowance",    "label": "Medical Allowance",     "component_type": "earning",   "show_in_payslip": True},
-    {"key": "food_allowance",       "label": "Food Allowance",        "component_type": "earning",   "show_in_payslip": True},
-    {"key": "conveyance_allowance", "label": "Conveyance Allowance",  "component_type": "earning",   "show_in_payslip": True},
-    {"key": "special_allowance",    "label": "Special Allowance",     "component_type": "earning",   "show_in_payslip": True},
-    {"key": "bonus",                "label": "Bonus",                 "component_type": "earning",   "show_in_payslip": True},
-    {"key": "incentive",            "label": "Incentive",             "component_type": "earning",   "show_in_payslip": True},
-    {"key": "fixed_allowance",      "label": "Fixed Allowance",       "component_type": "earning",   "show_in_payslip": True},
-    # Deductions
-    {"key": "epf_contribution",     "label": "EPF Contribution",      "component_type": "deduction", "show_in_payslip": True},
-    {"key": "professional_tax",     "label": "Professional Tax",      "component_type": "deduction", "show_in_payslip": True},
-    {"key": "loan_deduction",       "label": "Loan Deduction",        "component_type": "deduction", "show_in_payslip": True},
+    # Earnings — basic and HRA selected by default, rest optional
+    {"key": "basic_salary",         "label": "Basic Salary",         "component_type": "earning",   "show_in_payslip": True,  "is_selected": True,  "is_custom": False},
+    {"key": "hra",                   "label": "HRA",                  "component_type": "earning",   "show_in_payslip": True,  "is_selected": True,  "is_custom": False},
+    {"key": "travel_allowance",      "label": "Travel Allowance",     "component_type": "earning",   "show_in_payslip": True,  "is_selected": False, "is_custom": False},
+    {"key": "medical_allowance",     "label": "Medical Allowance",    "component_type": "earning",   "show_in_payslip": True,  "is_selected": False, "is_custom": False},
+    {"key": "food_allowance",        "label": "Food Allowance",       "component_type": "earning",   "show_in_payslip": True,  "is_selected": False, "is_custom": False},
+    {"key": "conveyance_allowance",  "label": "Conveyance Allowance", "component_type": "earning",   "show_in_payslip": True,  "is_selected": False, "is_custom": False},
+    {"key": "special_allowance",     "label": "Special Allowance",    "component_type": "earning",   "show_in_payslip": True,  "is_selected": False, "is_custom": False},
+    {"key": "bonus",                 "label": "Bonus",                "component_type": "earning",   "show_in_payslip": True,  "is_selected": False, "is_custom": False},
+    {"key": "incentive",             "label": "Incentive",            "component_type": "earning",   "show_in_payslip": True,  "is_selected": False, "is_custom": False},
+    {"key": "fixed_allowance",       "label": "Fixed Allowance",      "component_type": "earning",   "show_in_payslip": True,  "is_selected": False, "is_custom": False},
+    # Deductions — EPF and PT selected by default
+    {"key": "epf_contribution",      "label": "EPF Contribution",     "component_type": "deduction", "show_in_payslip": True,  "is_selected": True,  "is_custom": False},
+    {"key": "professional_tax",      "label": "Professional Tax",     "component_type": "deduction", "show_in_payslip": True,  "is_selected": True,  "is_custom": False},
+    {"key": "loan_deduction",        "label": "Loan Deduction",       "component_type": "deduction", "show_in_payslip": True,  "is_selected": False, "is_custom": False},
 ]

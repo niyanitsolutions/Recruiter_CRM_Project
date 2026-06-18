@@ -44,13 +44,15 @@ const fmt = (n) => n != null ? n.toLocaleString('en-IN', { style: 'currency', cu
 function PayslipDocument({ ps, companyName, structure }) {
   if (!ps) return null
 
-  // Build visibility map from structure
+  // Build visibility map: only is_selected + show_in_payslip components appear on payslip
   const visMap = {}
   if (structure?.components) {
-    structure.components.forEach(c => { visMap[c.key] = c.show_in_payslip !== false })
+    structure.components.forEach(c => {
+      visMap[c.key] = c.is_selected !== false && c.show_in_payslip !== false
+    })
   }
-
-  const showItem = (key) => visMap[key] !== false  // default: show if not explicitly hidden
+  // Default show if key not in visMap (legacy data without structure)
+  const showItem = (key) => key in visMap ? visMap[key] : true
 
   // Earnings rows
   const earnRows = []
@@ -94,11 +96,11 @@ function PayslipDocument({ ps, companyName, structure }) {
         {[
           ['Employee Name',  ps.employee_name],
           ['Employee ID',    ps.employee_code],
-          ['Designation',    ps.designation || '—'],
-          ['Department',     ps.department  || '—'],
-          ['Date of Joining',ps.date_of_joining || '—'],
-          ['PF Number',      ps.pf_number   || '—'],
-          ['UAN Number',     ps.uan_number  || '—'],
+          ['Designation',    ps.employee_designation || '—'],
+          ['Department',     ps.employee_department  || '—'],
+          ['Date of Joining',ps.employee_doj         || '—'],
+          ['PF Number',      ps.employee_pf_number   || '—'],
+          ['UAN Number',     ps.employee_uan_number  || '—'],
           ['Payment Month',  `${MONTH_NAMES[ps.month]} ${ps.year}`],
         ].map(([label, value]) => (
           <div key={label} style={{ display: 'flex', gap: 6, padding: '2px 0' }}>

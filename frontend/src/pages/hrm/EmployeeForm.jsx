@@ -411,6 +411,213 @@ function parseApiError(err) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// Salary Structure Section Component
+// ═══════════════════════════════════════════════════════════════════
+
+function SalaryStructureSection({
+  payrollStructure, setPayrollStructure,
+  structureSelecting, setStructureSelecting,
+  pendingStructureKeys, setPendingStructureKeys,
+  pendingPayslipKeys, setPendingPayslipKeys,
+  salaryComps, setSalaryComps,
+  ctc, onCtcChange, inp,
+}) {
+  const [customEarningInput, setCustomEarningInput] = useState('')
+  const [customDeductionInput, setCustomDeductionInput] = useState('')
+
+  const openPicker = () => {
+    const comps = payrollStructure?.components || []
+    setPendingStructureKeys(new Set(comps.filter(c => c.is_selected).map(c => c.key)))
+    setPendingPayslipKeys(new Set(comps.filter(c => c.show_in_payslip !== false).map(c => c.key)))
+    setStructureSelecting(true)
+  }
+
+  const addCustom = (type) => {
+    const label = type === 'earning' ? customEarningInput.trim() : customDeductionInput.trim()
+    if (!label) return
+    const key = `custom_${type === 'earning' ? 'earn' : 'ded'}_${Date.now()}`
+    const newComp = { key, label, component_type: type, show_in_payslip: true, is_selected: true, is_custom: true }
+    setPayrollStructure(prev => ({
+      ...prev,
+      components: [...(prev?.components || []), newComp],
+    }))
+    setPendingStructureKeys(prev => new Set([...prev, key]))
+    setPendingPayslipKeys(prev => new Set([...prev, key]))
+    if (type === 'earning') setCustomEarningInput('')
+    else setCustomDeductionInput('')
+  }
+
+  const saveStructure = async () => {
+    try {
+      const allComponents = (payrollStructure?.components || []).map(c => ({
+        ...c,
+        is_selected: pendingStructureKeys.has(c.key),
+        show_in_payslip: pendingPayslipKeys.has(c.key),
+      }))
+      const res = await hrmService.updatePayrollStructure({ components: allComponents })
+      setPayrollStructure(res.data)
+      setStructureSelecting(false)
+      setSalaryComps(prev => {
+        const next = {}
+        allComponents.filter(c => c.is_selected).forEach(c => {
+          if (prev[c.key] !== undefined) next[c.key] = prev[c.key]
+        })
+        return next
+      })
+    } catch {
+      toast.error('Failed to save structure')
+    }
+  }
+
+  const selectedComponents = (payrollStructure?.components || []).filter(c => c.is_selected)
+  const earnings   = selectedComponents.filter(c => c.component_type === 'earning')
+  const deductions = selectedComponents.filter(c => c.component_type === 'deduction')
+  const grossEarnings   = earnings.reduce((s, c) => s + (Number(salaryComps[c.key]) || 0), 0)
+  const totalDeductions = deductions.reduce((s, c) => s + (Number(salaryComps[c.key]) || 0), 0)
+  const netPay = grossEarnings - totalDeductions
+
+  return (
+    <div className="mt-5 border-t pt-4" style={{ borderColor: 'var(--border-subtle)' }}>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs font-semibold text-gray-500 uppercase">Salary Structure</p>
+        {payrollStructure?.is_configured && !structureSelecting && (
+          <button type="button" onClick={openPicker}
+            className="text-xs text-blue-600 hover:underline">Configure Structure</button>
+        )}
+      </div>
+
+      {/* Annual CTC always visible */}
+      <div className="mb-4">
+        <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Annual CTC (₹)</label>
+        <input type="number" min="0" className={inp} value={ctc} onChange={onCtcChange} placeholder="0" />
+      </div>
+
+      {/* Structure picker */}
+      {structureSelecting && payrollStructure && (
+        <div className="mb-4 p-4 rounded-lg border" style={{ background: 'var(--bg-subtle)', borderColor: 'var(--border)' }}>
+          <p className="text-xs font-semibold mb-3" style={{ color: 'var(--text-heading)' }}>
+            {payrollStructure.is_configured ? 'Reconfigure' : 'Select'} salary components
+            {!payrollStructure.is_configured && <span className="ml-2 text-xs font-normal text-blue-600">(saved for all employees)</span>}
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {['earning', 'deduction'].map(type => {
+              const typeComps = (payrollStructure.components || []).filter(c => c.component_type === type)
+              const inputVal = type === 'earning' ? customEarningInput : customDeductionInput
+              const setInput = type === 'earning' ? setCustomEarningInput : setCustomDeductionInput
+              return (
+                <div key={type}>
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 items-center text-xs font-semibold uppercase mb-1.5">
+                    <span className={type === 'earning' ? 'text-green-700' : 'text-red-700'}>
+                      {type === 'earning' ? 'Earnings' : 'Deductions'}
+                    </span>
+                    <span className="text-gray-400">Include</span>
+                    <span className="text-gray-400">Payslip</span>
+                  </div>
+                  {typeComps.map(c => (
+                    <div key={c.key} className="grid grid-cols-[1fr_auto_auto] gap-x-2 items-center py-0.5">
+                      <span className="text-sm text-gray-700 truncate" title={c.label}>
+                        {c.label}
+                        {c.is_custom && <span className="ml-1 text-xs text-purple-500">(custom)</span>}
+                      </span>
+                      <input type="checkbox" checked={pendingStructureKeys.has(c.key)}
+                        className={`w-3.5 h-3.5 rounded ${type === 'earning' ? 'accent-green-600' : 'accent-red-600'}`}
+                        onChange={e => {
+                          const next = new Set(pendingStructureKeys)
+                          if (e.target.checked) next.add(c.key); else next.delete(c.key)
+                          setPendingStructureKeys(next)
+                        }} />
+                      <input type="checkbox" checked={pendingPayslipKeys.has(c.key)}
+                        disabled={!pendingStructureKeys.has(c.key)}
+                        className="w-3.5 h-3.5 rounded accent-indigo-600 disabled:opacity-30"
+                        onChange={e => {
+                          const next = new Set(pendingPayslipKeys)
+                          if (e.target.checked) next.add(c.key); else next.delete(c.key)
+                          setPendingPayslipKeys(next)
+                        }} />
+                    </div>
+                  ))}
+                  {/* Add custom component row */}
+                  <div className="flex items-center gap-1 mt-2">
+                    <input
+                      type="text"
+                      value={inputVal}
+                      onChange={e => setInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustom(type) } }}
+                      placeholder={`Add custom ${type === 'earning' ? 'earning' : 'deduction'}…`}
+                      className="flex-1 text-xs px-2 py-1 rounded border"
+                      style={{ borderColor: 'var(--border)', background: 'var(--bg-card)', color: 'var(--text-body)' }}
+                    />
+                    <button type="button" onClick={() => addCustom(type)}
+                      className={`text-xs px-2 py-1 rounded text-white ${type === 'earning' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'}`}>
+                      Add
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div className="flex gap-2 mt-4">
+            <button type="button" onClick={saveStructure}
+              className="px-3 py-1.5 text-sm rounded-lg text-white bg-blue-600 hover:bg-blue-700">
+              Save Structure
+            </button>
+            {payrollStructure.is_configured && (
+              <button type="button" onClick={() => setStructureSelecting(false)}
+                className="px-3 py-1.5 text-sm rounded-lg border" style={{ borderColor: 'var(--border)' }}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Component value inputs */}
+      {!structureSelecting && payrollStructure?.is_configured && (
+        <div>
+          {earnings.length > 0 && (
+            <>
+              <p className="text-xs font-semibold text-green-700 uppercase mb-2">Earnings (Monthly)</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                {earnings.map(c => (
+                  <div key={c.key}>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>{c.label}</label>
+                    <input type="number" min="0" className={inp} placeholder="0"
+                      value={salaryComps[c.key] ?? ''}
+                      onChange={e => setSalaryComps(prev => ({ ...prev, [c.key]: e.target.value }))} />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {deductions.length > 0 && (
+            <>
+              <p className="text-xs font-semibold text-red-700 uppercase mb-2">Deductions (Monthly)</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                {deductions.map(c => (
+                  <div key={c.key}>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>{c.label}</label>
+                    <input type="number" min="0" className={inp} placeholder="0"
+                      value={salaryComps[c.key] ?? ''}
+                      onChange={e => setSalaryComps(prev => ({ ...prev, [c.key]: e.target.value }))} />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {(grossEarnings > 0 || totalDeductions > 0) && (
+            <div className="flex gap-4 text-xs p-3 rounded-lg mt-1" style={{ background: 'var(--bg-subtle)' }}>
+              <span className="text-green-700 font-medium">Gross ₹{grossEarnings.toLocaleString('en-IN')}</span>
+              <span className="text-red-700 font-medium">Deductions ₹{totalDeductions.toLocaleString('en-IN')}</span>
+              <span className="font-semibold" style={{ color: 'var(--text-heading)' }}>Net ₹{netPay.toLocaleString('en-IN')}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // Main Component
 // ═══════════════════════════════════════════════════════════════════
 
@@ -527,21 +734,15 @@ export default function EmployeeForm() {
         setUsers(usersRes.data || [])
         const structure = structureRes.data
         setPayrollStructure(structure)
-        // Initialize payslip visibility from existing config
-        const payslipKeys = new Set(
-          (structure?.components || [])
-            .filter(c => c.show_in_payslip !== false)
-            .map(c => c.key)
-        )
-        setPendingPayslipKeys(payslipKeys)
-        // If not yet configured, pre-check basic defaults (first 2 earnings + all deductions)
+        // Init both pending sets from the stored flags
+        setPendingPayslipKeys(new Set(
+          (structure?.components || []).filter(c => c.show_in_payslip !== false).map(c => c.key)
+        ))
+        setPendingStructureKeys(new Set(
+          (structure?.components || []).filter(c => c.is_selected !== false).map(c => c.key)
+        ))
+        // Auto-open picker on first visit (structure not yet saved)
         if (!structure?.is_configured) {
-          const defaultKeys = new Set(
-            (structure?.components || [])
-              .filter(c => ['basic_salary','hra','epf_contribution','professional_tax'].includes(c.key))
-              .map(c => c.key)
-          )
-          setPendingStructureKeys(defaultKeys)
           setStructureSelecting(true)
         }
       } catch (err) { console.error('EmployeeForm: reference data load failed', err) }
@@ -1705,145 +1906,21 @@ export default function EmployeeForm() {
                 onChange={e => set('work_description', e.target.value)} placeholder="Responsibilities, notes…" />
             </Field>
           </div>
-          <div className="mt-5 border-t pt-4" style={{ borderColor: 'var(--border-subtle)' }}>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase">Salary Structure</p>
-              {payrollStructure?.is_configured && !structureSelecting && (
-                <button type="button" onClick={() => { setPendingStructureKeys(new Set((payrollStructure.components||[]).map(c=>c.key))); setStructureSelecting(true) }}
-                  className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                  Configure Structure
-                </button>
-              )}
-            </div>
-
-            {/* Annual CTC field always visible */}
-            <div className="mb-4">
-              <Field label="Annual CTC (₹)">
-                <input type="number" min="0" className={inp} value={form.ctc} onChange={e => set('ctc', e.target.value)} placeholder="0" />
-              </Field>
-            </div>
-
-            {/* Structure picker — shown when not configured or editing structure */}
-            {structureSelecting && payrollStructure && (
-              <div className="mb-4 p-4 rounded-lg border" style={{ background: 'var(--bg-subtle)', borderColor: 'var(--border)' }}>
-                <p className="text-xs font-semibold mb-3" style={{ color: 'var(--text-heading)' }}>
-                  {payrollStructure.is_configured ? 'Reconfigure' : 'Select'} salary components for your company
-                  {!payrollStructure.is_configured && <span className="ml-2 text-xs font-normal text-blue-600">(saved once, applied to all employees)</span>}
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {['earning', 'deduction'].map(type => (
-                    <div key={type}>
-                      <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 items-center text-xs font-semibold uppercase mb-1.5">
-                        <span className={type === 'earning' ? 'text-green-700' : 'text-red-700'}>{type === 'earning' ? 'Earnings' : 'Deductions'}</span>
-                        <span className="text-gray-400">Include</span>
-                        <span className="text-gray-400">In Payslip</span>
-                      </div>
-                      {(payrollStructure.components || []).filter(c => c.component_type === type).map(c => (
-                        <div key={c.key} className="grid grid-cols-[1fr_auto_auto] gap-x-2 items-center py-0.5">
-                          <span className="text-sm text-gray-700">{c.label}</span>
-                          <input type="checkbox" checked={pendingStructureKeys.has(c.key)}
-                            className={`w-3.5 h-3.5 rounded ${type === 'earning' ? 'accent-green-600' : 'accent-red-600'}`}
-                            onChange={e => {
-                              const next = new Set(pendingStructureKeys)
-                              if (e.target.checked) next.add(c.key); else next.delete(c.key)
-                              setPendingStructureKeys(next)
-                            }} />
-                          <input type="checkbox" checked={pendingStructureKeys.has(c.key) && pendingPayslipKeys.has(c.key)}
-                            disabled={!pendingStructureKeys.has(c.key)}
-                            className="w-3.5 h-3.5 rounded accent-indigo-600 disabled:opacity-30"
-                            onChange={e => {
-                              const next = new Set(pendingPayslipKeys)
-                              if (e.target.checked) next.add(c.key); else next.delete(c.key)
-                              setPendingPayslipKeys(next)
-                            }} />
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2 mt-3">
-                  <button type="button"
-                    onClick={async () => {
-                      try {
-                        const selectedComponents = (payrollStructure.components || [])
-                          .filter(c => pendingStructureKeys.has(c.key))
-                          .map(c => ({ ...c, show_in_payslip: pendingPayslipKeys.has(c.key) }))
-                        const res = await hrmService.updatePayrollStructure({ components: selectedComponents })
-                        setPayrollStructure(res.data)
-                        setStructureSelecting(false)
-                        // Reset salary comps to only selected keys
-                        setSalaryComps(prev => {
-                          const next = {}
-                          selectedComponents.forEach(c => { if (prev[c.key] !== undefined) next[c.key] = prev[c.key] })
-                          return next
-                        })
-                      } catch { toast.error('Failed to save structure') }
-                    }}
-                    className="px-3 py-1.5 text-sm rounded-lg text-white bg-blue-600 hover:bg-blue-700">
-                    Save Structure
-                  </button>
-                  {payrollStructure.is_configured && (
-                    <button type="button" onClick={() => setStructureSelecting(false)}
-                      className="px-3 py-1.5 text-sm rounded-lg border" style={{ borderColor: 'var(--border)' }}>
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Component value inputs — shown after structure is configured */}
-            {!structureSelecting && payrollStructure?.is_configured && (
-              <div>
-                {(() => {
-                  const earnings = (payrollStructure.components || []).filter(c => c.component_type === 'earning')
-                  const deductions = (payrollStructure.components || []).filter(c => c.component_type === 'deduction')
-                  const grossEarnings = earnings.reduce((s, c) => s + (Number(salaryComps[c.key]) || 0), 0)
-                  const totalDeductions = deductions.reduce((s, c) => s + (Number(salaryComps[c.key]) || 0), 0)
-                  const netPay = grossEarnings - totalDeductions
-                  return (
-                    <>
-                      {earnings.length > 0 && (
-                        <>
-                          <p className="text-xs font-semibold text-green-700 uppercase mb-2">Earnings (Monthly)</p>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-                            {earnings.map(c => (
-                              <Field key={c.key} label={c.label}>
-                                <input type="number" min="0" className={inp} placeholder="0"
-                                  value={salaryComps[c.key] ?? ''}
-                                  onChange={e => setSalaryComps(prev => ({ ...prev, [c.key]: e.target.value }))} />
-                              </Field>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                      {deductions.length > 0 && (
-                        <>
-                          <p className="text-xs font-semibold text-red-700 uppercase mb-2">Deductions (Monthly)</p>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-                            {deductions.map(c => (
-                              <Field key={c.key} label={c.label}>
-                                <input type="number" min="0" className={inp} placeholder="0"
-                                  value={salaryComps[c.key] ?? ''}
-                                  onChange={e => setSalaryComps(prev => ({ ...prev, [c.key]: e.target.value }))} />
-                              </Field>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                      {(grossEarnings > 0 || totalDeductions > 0) && (
-                        <div className="flex gap-4 text-xs p-3 rounded-lg mt-1" style={{ background: 'var(--bg-subtle)' }}>
-                          <span className="text-green-700 font-medium">Gross ₹{grossEarnings.toLocaleString('en-IN')}</span>
-                          <span className="text-red-700 font-medium">Deductions ₹{totalDeductions.toLocaleString('en-IN')}</span>
-                          <span className="font-semibold" style={{ color: 'var(--text-heading)' }}>Net ₹{netPay.toLocaleString('en-IN')}</span>
-                        </div>
-                      )}
-                    </>
-                  )
-                })()}
-              </div>
-            )}
-          </div>
+          <SalaryStructureSection
+            payrollStructure={payrollStructure}
+            setPayrollStructure={setPayrollStructure}
+            structureSelecting={structureSelecting}
+            setStructureSelecting={setStructureSelecting}
+            pendingStructureKeys={pendingStructureKeys}
+            setPendingStructureKeys={setPendingStructureKeys}
+            pendingPayslipKeys={pendingPayslipKeys}
+            setPendingPayslipKeys={setPendingPayslipKeys}
+            salaryComps={salaryComps}
+            setSalaryComps={setSalaryComps}
+            ctc={form.ctc}
+            onCtcChange={e => set('ctc', e.target.value)}
+            inp={inp}
+          />
         </Section>
 
         {/* ═══════════════════════════════════════════════════════════
