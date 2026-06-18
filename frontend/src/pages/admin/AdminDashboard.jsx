@@ -110,7 +110,7 @@ const getGreeting = () => {
 // ── Card wrapper ──────────────────────────────────────────────────────────────
 const Card = ({ children, className = '', style = {} }) => (
   <div
-    className={`rounded-2xl p-5 ${className}`}
+    className={`rounded-xl p-4 ${className}`}
     style={{
       backgroundColor: 'var(--bg-card)',
       border: '1px solid var(--border-card)',
@@ -124,7 +124,7 @@ const Card = ({ children, className = '', style = {} }) => (
 
 // ── Section header ────────────────────────────────────────────────────────────
 const SectionHeader = ({ icon: Icon, title, subtitle, action, iconColor }) => (
-  <div className="flex items-center justify-between mb-4">
+  <div className="flex items-center justify-between mb-3">
     <div>
       <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--text-heading)' }}>
         {Icon && <Icon className="w-4 h-4" style={{ color: iconColor || 'var(--accent)' }} />}
@@ -410,20 +410,20 @@ const AdminDashboard = () => {
   // ── Loading skeleton ──────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="p-3 space-y-4 page-enter">
-        <div className="h-20 rounded-2xl skeleton" />
-        <div className="grid grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-3">
-          {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-28 rounded-2xl skeleton" />)}
+      <div className="p-2 space-y-3 page-enter">
+        <div className="h-16 rounded-xl skeleton" />
+        <div className="grid grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2">
+          {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-24 rounded-xl skeleton" />)}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {[1,2,3,4].map(i => <div key={i} className="h-72 rounded-2xl skeleton" />)}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          {[1,2,3,4].map(i => <div key={i} className="h-60 rounded-xl skeleton" />)}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {[1,2,3,4].map(i => <div key={i} className="h-56 rounded-2xl skeleton" />)}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          {[1,2,3,4].map(i => <div key={i} className="h-48 rounded-xl skeleton" />)}
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="h-48 rounded-2xl skeleton" />
-          <div className="h-48 rounded-2xl skeleton" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className="h-40 rounded-xl skeleton" />
+          <div className="h-40 rounded-xl skeleton" />
         </div>
       </div>
     )
@@ -572,7 +572,7 @@ const AdminDashboard = () => {
   })
 
   return (
-    <div className="p-3 space-y-4 page-enter">
+    <div className="p-2 space-y-3 page-enter">
 
       {/* ── Subscription Banner ─────────────────────────────────────────────────── */}
       {isAdminOrOwner && (
@@ -583,7 +583,7 @@ const AdminDashboard = () => {
       {/* HEADER — Greeting | Subscription | Period | Refresh | Quick Action   */}
       {/* Responsive: all controls always visible; wraps to 2 rows if needed.  */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
-      <Card style={{ padding: '16px 20px' }}>
+      <Card style={{ padding: '12px 16px' }}>
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
 
           {/* Left — Greeting */}
@@ -777,7 +777,7 @@ const AdminDashboard = () => {
           ? trendData.map(d => d.value)
           : [1, 1, 1, 1, 1, 1, 1]
         return (
-          <div className="grid grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-3">
+          <div className="grid grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2">
             {has('candidates:view') && (
               <KpiCard
                 title="Total Candidates"
@@ -908,7 +908,7 @@ const AdminDashboard = () => {
       {/* MIDDLE ROW — Pipeline | Interviews | AI Assistant | Pending Approvals  */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <WidgetErrorBoundary>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
 
         {/* Hiring Pipeline */}
         {has('candidates:view') && (
@@ -925,7 +925,7 @@ const AdminDashboard = () => {
             />
             {funnelData.some(d => d.value > 0) ? (
               <>
-                <div className="space-y-2.5">
+                <div className="space-y-2">
                   {funnelData.map((item, i) => {
                     const maxVal = Math.max(...funnelData.map(d => d.value), 1)
                     const pct    = Math.max(Math.round((item.value / maxVal) * 100), 5)
@@ -963,7 +963,7 @@ const AdminDashboard = () => {
                   })}
                 </div>
                 {recruitStats?.rejected > 0 && (
-                  <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                  <div className="mt-2 pt-2 flex items-center justify-between" style={{ borderTop: '1px solid var(--border-subtle)' }}>
                     <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Rejected</span>
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,71,87,0.10)', color: '#ef4444' }}>
                       {recruitStats.rejected.toLocaleString('en-IN')}
@@ -972,7 +972,7 @@ const AdminDashboard = () => {
                 )}
               </>
             ) : (
-              <div className="flex flex-col items-center justify-center py-10 gap-2">
+              <div className="flex flex-col items-center justify-center py-6 gap-2">
                 <BarChart2 className="w-8 h-8" style={{ color: 'var(--text-disabled)' }} />
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No pipeline data yet</p>
               </div>
@@ -1006,7 +1006,7 @@ const AdminDashboard = () => {
                   return (
                     <div
                       key={iv._id || iv.id || i}
-                      className="flex items-start gap-3 py-2.5"
+                      className="flex items-start gap-3 py-2"
                       style={{ borderBottom: i < Math.min(todayIvs.length, 5) - 1 ? '1px solid var(--border-subtle)' : 'none' }}
                     >
                       <div className="flex-shrink-0 text-center w-10">
@@ -1036,14 +1036,14 @@ const AdminDashboard = () => {
                   )
                 })
               : (
-                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                <div className="flex flex-col items-center justify-center py-6 gap-2">
                   <CheckCircle2 className="w-8 h-8" style={{ color: 'var(--text-disabled)' }} />
                   <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No interviews today</p>
                 </div>
               )
             }
             {todayIvs.length > 5 && (
-              <Link to="/interviews" className="flex items-center gap-1 text-xs font-medium mt-3 pt-3" style={{ borderTop: '1px solid var(--border)', color: '#7c3aed' }}>
+              <Link to="/interviews" className="flex items-center gap-1 text-xs font-medium mt-2 pt-2" style={{ borderTop: '1px solid var(--border)', color: '#7c3aed' }}>
                 +{todayIvs.length - 5} more <ArrowRight className="w-3 h-3" />
               </Link>
             )}
@@ -1059,13 +1059,13 @@ const AdminDashboard = () => {
             iconColor="#7c3aed"
           />
           {aiInsights.length > 0 ? (
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {aiInsights.map((ins, i) => {
                 const InsIcon = ins.icon
                 return (
                   <div
                     key={i}
-                    className="flex items-start gap-2.5 rounded-xl px-3 py-2.5"
+                    className="flex items-start gap-2.5 rounded-lg px-3 py-2"
                     style={{ background: `${ins.color}0d`, border: `1px solid ${ins.color}22` }}
                   >
                     <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: `${ins.color}20` }}>
@@ -1089,7 +1089,7 @@ const AdminDashboard = () => {
             </div>
           )}
           {(offerRate !== null || joinRate !== null) && (
-            <div className="mt-3 pt-3 grid grid-cols-2 gap-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+            <div className="mt-2 pt-2 grid grid-cols-2 gap-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
               {offerRate !== null && (
                 <div className="rounded-lg p-2 text-center" style={{ background: 'var(--bg-hover)' }}>
                   <p className="text-sm font-bold" style={{ color: offerRate >= 20 ? '#22c55e' : '#f59e0b' }}>{offerRate}%</p>
@@ -1115,7 +1115,7 @@ const AdminDashboard = () => {
             iconColor="#FF4757"
           />
           {pendingItems.length > 0 ? (
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {pendingItems.map((item, i) => {
                 const ItemIcon = item.icon
                 const hasNames = item.names && item.names.length > 0
@@ -1123,7 +1123,7 @@ const AdminDashboard = () => {
                   <Link
                     key={i}
                     to={item.path}
-                    className="flex flex-col gap-1.5 rounded-xl p-3 transition-all block"
+                    className="flex flex-col gap-1 rounded-xl p-2.5 transition-all block"
                     style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}
                     onMouseEnter={e => { e.currentTarget.style.background = `${item.color}0d`; e.currentTarget.style.borderColor = `${item.color}30` }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.borderColor = 'var(--border)' }}
@@ -1160,7 +1160,7 @@ const AdminDashboard = () => {
               })}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <div className="flex flex-col items-center justify-center py-6 gap-2">
               <CheckCircle2 className="w-8 h-8" style={{ color: '#22c55e' }} />
               <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>All caught up!</p>
               <p className="text-xs" style={{ color: 'var(--text-disabled)' }}>No pending approvals</p>
@@ -1175,7 +1175,7 @@ const AdminDashboard = () => {
       {/* LOWER ROW — Top Recruiters | Source Analytics | Activity | Health     */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <WidgetErrorBoundary>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
 
         {/* Top Recruiters */}
         {(isAdminOrOwner || has('users:view')) && topRecruiters.length > 0 ? (
@@ -1190,13 +1190,13 @@ const AdminDashboard = () => {
                 )
               }
             />
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {topRecruiters.map((r, i) => {
                 const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
                 return (
                   <div
                     key={i}
-                    className="flex items-center gap-3 p-2.5 rounded-xl"
+                    className="flex items-center gap-2.5 p-2 rounded-xl"
                     style={{
                       background: i === 0 ? 'rgba(246,165,53,0.08)' : 'var(--bg-hover)',
                       border: i === 0 ? '1px solid rgba(246,165,53,0.22)' : '1px solid transparent',
@@ -1229,7 +1229,7 @@ const AdminDashboard = () => {
           /* Placeholder if no recruiters — keeps grid layout intact */
           <Card>
             <SectionHeader icon={Trophy} title="Top Recruiters" subtitle="By activity (7 days)" />
-            <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <div className="flex flex-col items-center justify-center py-6 gap-2">
               <Trophy className="w-8 h-8" style={{ color: 'var(--text-disabled)' }} />
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No data yet</p>
             </div>
@@ -1251,8 +1251,8 @@ const AdminDashboard = () => {
           {sourceData.length > 0 ? (
             <>
               {roleData.length > 0 && (
-                <div className="mb-2 -mx-1">
-                  <ResponsiveContainer width="100%" height={100}>
+                <div className="mb-1.5 -mx-1">
+                  <ResponsiveContainer width="100%" height={80}>
                     <PieChart>
                       <Pie
                         data={roleData}
@@ -1291,7 +1291,7 @@ const AdminDashboard = () => {
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <div className="flex flex-col items-center justify-center py-6 gap-2">
               <Target className="w-8 h-8" style={{ color: 'var(--text-disabled)' }} />
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No source data yet</p>
             </div>
@@ -1308,7 +1308,7 @@ const AdminDashboard = () => {
               action={<PeriodFilter value={period.key} onChange={setPeriod} />}
             />
             {barData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={145}>
+              <ResponsiveContainer width="100%" height={120}>
                 <BarChart data={barData} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
                   <XAxis dataKey="label" tick={{ fill: 'var(--text-muted)', fontSize: 9 }} axisLine={false} tickLine={false} />
@@ -1322,10 +1322,10 @@ const AdminDashboard = () => {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <HiringTrend data={trendData} loading={trendLoading} height={145} />
+              <HiringTrend data={trendData} loading={trendLoading} height={120} />
             )}
             {activity_stats && (
-              <div className="flex gap-4 mt-3 pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+              <div className="flex gap-4 mt-2 pt-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
                 <div>
                   <p className="text-sm font-bold" style={{ color: 'var(--text-heading)' }}>
                     {(activity_stats.total_actions || 0).toLocaleString('en-IN')}
@@ -1345,10 +1345,10 @@ const AdminDashboard = () => {
             subtitle="Pipeline efficiency"
           />
           {healthMetrics.length > 0 ? (
-            <div className="space-y-3.5">
+            <div className="space-y-2.5">
               {healthMetrics.map(m => (
                 <div key={m.label}>
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{m.label}</span>
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-bold" style={{ color: m.value >= m.target ? '#22c55e' : '#f59e0b' }}>{m.value}%</span>
@@ -1368,13 +1368,13 @@ const AdminDashboard = () => {
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <div className="flex flex-col items-center justify-center py-6 gap-2">
               <Zap className="w-8 h-8" style={{ color: 'var(--text-disabled)' }} />
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No health data yet</p>
             </div>
           )}
           {rejectRate !== null && (
-            <div className="mt-3 pt-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+            <div className="mt-2 pt-2 flex items-center justify-between" style={{ borderTop: '1px solid var(--border-subtle)' }}>
               <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Rejection Rate</span>
               <span
                 className="text-xs font-bold px-2 py-0.5 rounded-full"
@@ -1396,7 +1396,7 @@ const AdminDashboard = () => {
       {/* BOTTOM ROW — Recent Activity | Announcements                           */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <WidgetErrorBoundary>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
         {/* Recent Activity */}
         {isAdminOrOwner && has('audit:view') && (
@@ -1420,7 +1420,7 @@ const AdminDashboard = () => {
                   return (
                     <div
                       key={a.id || i}
-                      className="flex items-start gap-3 py-2.5"
+                      className="flex items-start gap-3 py-2"
                       style={{ borderBottom: i < Math.min(recent_activity.length, 7) - 1 ? '1px solid var(--border-subtle)' : 'none' }}
                     >
                       <span className="px-2 py-0.5 rounded text-[9px] font-bold flex-shrink-0 mt-0.5 uppercase" style={{ background: cfg.bg, color: cfg.color }}>
@@ -1436,7 +1436,7 @@ const AdminDashboard = () => {
                   )
                 })
               : (
-                <div className="flex flex-col items-center justify-center py-10 gap-2">
+                <div className="flex flex-col items-center justify-center py-6 gap-2">
                   <History className="w-8 h-8" style={{ color: 'var(--text-disabled)' }} />
                   <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No recent activity</p>
                 </div>
@@ -1456,13 +1456,13 @@ const AdminDashboard = () => {
             }
           />
           {Array.isArray(announcements) && announcements.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {announcements.slice(0, 3).map((ann, i) => {
                 const isHigh = ann.priority === 'high' || ann.priority === 'urgent'
                 return (
                   <div
                     key={ann._id || ann.id || i}
-                    className="p-3 rounded-xl"
+                    className="p-2.5 rounded-xl"
                     style={{
                       background: isHigh ? 'rgba(255,71,87,0.05)' : 'var(--bg-hover)',
                       border: isHigh ? '1px solid rgba(255,71,87,0.20)' : '1px solid var(--border-subtle)',
@@ -1489,7 +1489,7 @@ const AdminDashboard = () => {
               })}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <div className="flex flex-col items-center justify-center py-6 gap-2">
               <Bell className="w-8 h-8" style={{ color: 'var(--text-disabled)' }} />
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No announcements</p>
               <p className="text-xs text-center" style={{ color: 'var(--text-disabled)' }}>

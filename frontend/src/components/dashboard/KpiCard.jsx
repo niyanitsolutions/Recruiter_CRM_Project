@@ -89,11 +89,11 @@ const KpiCard = ({
 
   const card = (
     <div
-      className="rounded-2xl relative overflow-hidden cursor-default"
+      className="rounded-xl relative overflow-hidden cursor-default"
       style={{
         background:  'var(--bg-card)',
         border:      '1px solid var(--border-card)',
-        padding:     compact ? '12px 14px 10px' : '16px 16px 0',
+        padding:     compact ? '10px 12px 8px' : '12px 14px 0',
         boxShadow:   hov
           ? `0 8px 24px ${pal.glow}, var(--shadow-card)`
           : `0 2px 8px ${pal.glow.replace(/[\d.]+\)$/, '0.06)')}, var(--shadow-card)`,
@@ -115,24 +115,24 @@ const KpiCard = ({
       />
 
       {/* Content wrapper — adds bottom padding if no sparkline */}
-      <div style={{ paddingBottom: compact || !sparkPaths?.line ? 0 : '4px' }}>
+      <div style={{ paddingBottom: compact || !sparkPaths?.line ? 0 : '2px' }}>
         {/* Icon */}
         <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center mb-2.5"
+          className="w-7 h-7 rounded-lg flex items-center justify-center mb-2"
           style={{
             background: `${pal.a}18`,
             transform: hov ? 'scale(1.08)' : 'scale(1)',
             transition: 'transform 0.25s ease',
           }}
         >
-          {Icon && <Icon className="w-[17px] h-[17px]" style={{ color: pal.a }} />}
+          {Icon && <Icon className="w-[15px] h-[15px]" style={{ color: pal.a }} />}
         </div>
 
         {/* Value */}
         <p
-          className="font-bold leading-none mb-1"
+          className="font-bold leading-none mb-0.5"
           style={{
-            fontSize: compact ? '22px' : '26px',
+            fontSize: compact ? '20px' : '22px',
             color: 'var(--text-heading)',
             letterSpacing: '-0.5px',
           }}
@@ -163,12 +163,12 @@ const KpiCard = ({
         )}
 
         {/* Bottom padding for non-sparkline compact cards */}
-        {(compact || !sparkPaths?.line) && <div style={{ height: compact ? 0 : '10px' }} />}
+        {(compact || !sparkPaths?.line) && <div style={{ height: compact ? 0 : '6px' }} />}
       </div>
 
       {/* SVG sparkline — full-width, flush to card bottom */}
       {!compact && sparkPaths?.line && (
-        <div style={{ height: '40px', marginTop: '8px' }}>
+        <div style={{ height: '32px', marginTop: '4px' }}>
           <svg
             viewBox="0 0 100 28"
             preserveAspectRatio="none"
