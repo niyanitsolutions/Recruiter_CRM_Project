@@ -20,6 +20,7 @@ class EmploymentStatus(str, Enum):
     ON_LEAVE = "on_leave"
     TERMINATED = "terminated"
     RESIGNED = "resigned"
+    PENDING_HR_REVIEW = "pending_hr_review"
 
 
 class Gender(str, Enum):

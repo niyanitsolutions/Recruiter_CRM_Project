@@ -205,6 +205,12 @@ const deleteShift = (id) => api.delete(`${BASE}/shifts/${id}`)
 const seedDefaultShifts = () => api.post(`${BASE}/shifts/seed-defaults`)
 const assignShift = (data) => api.post(`${BASE}/shifts/assign`, data)
 
+// ── Employee Onboarding Links ──────────────────────────────────────────────────
+const generateOnboardingLink = (data) => api.post(`${BASE}/employees/generate-onboarding-link`, data)
+
+// ── Employee Export ────────────────────────────────────────────────────────────
+const exportEmployees = (params) => api.get(`${BASE}/employees/export`, { params, responseType: 'blob' })
+
 const getAnnouncements = listAnnouncements
 
 const hrmService = {
@@ -238,6 +244,7 @@ const hrmService = {
   checkHoliday, exportHolidaysCsv, copyHolidaysToNextYear, importHolidaysCsv,
   listLeavePolicies, createLeavePolicy, getLeavePolicy, updateLeavePolicy, deleteLeavePolicy, seedDefaultLeavePolicies,
   listShifts, createShift, updateShift, deleteShift, seedDefaultShifts, assignShift,
+  generateOnboardingLink, exportEmployees,
 }
 
 export default hrmService

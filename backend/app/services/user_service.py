@@ -310,7 +310,20 @@ class UserService:
             return True, "User created successfully", user_doc
             
         except Exception as e:
-            return False, f"Error creating user: {str(e)}", None
+            err_str = str(e)
+            logger.error("Error creating user '%s': %s", user_data.username, err_str)
+            if "E11000" in err_str or "duplicate key" in err_str.lower():
+                dupes = []
+                if "username" in err_str:
+                    dupes.append(f"username:{user_data.username}")
+                if "email" in err_str:
+                    dupes.append(f"email:{user_data.email}")
+                if "mobile" in err_str:
+                    dupes.append(f"mobile:{user_data.mobile}")
+                if not dupes:
+                    dupes.append(f"username:{user_data.username}")
+                return False, "DUPLICATE|" + "|".join(dupes), None
+            return False, "Failed to save user. Please try again.", None
     
     async def get_user(self, user_id: str) -> Optional[Dict]:
         """Get user by ID"""
@@ -623,7 +636,15 @@ class UserService:
             return True, "User updated successfully", updated_user
             
         except Exception as e:
-            return False, f"Error updating user: {str(e)}", None
+            err_str = str(e)
+            logger.error("Error updating user '%s': %s", user_id, err_str)
+            if "E11000" in err_str or "duplicate key" in err_str.lower():
+                if "mobile" in err_str:
+                    return False, "The mobile number already exists in the system. Please use a different mobile number.", None
+                if "email" in err_str:
+                    return False, "The email address is already registered. Please use another email address.", None
+                return False, "The provided information conflicts with an existing user. Please check and try again.", None
+            return False, "Failed to save user. Please try again.", None
     
     async def update_profile(
         self,

@@ -192,6 +192,8 @@ const UserForm = () => {
   const [loading, setLoading]   = useState(false)
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState(null)
+  const [errorModal, setErrorModal] = useState({ show: false, title: '', message: '' })
+  const showError = (title, message) => setErrorModal({ show: true, title, message })
   const [createEmployeeProfile, setCreateEmployeeProfile] = useState(false)
   const [prefillBanner, setPrefillBanner] = useState('')      // "Prefilled from Employee: John Doe"
   const [linkedEmployeeId, setLinkedEmployeeId] = useState('')  // existing hrm_employee_id (edit mode)
@@ -667,7 +669,7 @@ const [errors,       setErrors]       = useState({})
       const status = err.response?.status
       const detail = err.response?.data?.detail
 
-      // 409 — duplicate user: show the override modal
+      // 409 — duplicate user: show the override modal (keep existing flow)
       if (status === 409 && detail?.duplicate) {
         pendingSubmitData.current = submitData
         setDuplicateModal({ show: true, fields: detail.fields || {}, overrideChecked: false, overrideTouched: false })
@@ -676,12 +678,65 @@ const [errors,       setErrors]       = useState({})
 
       // 402 — seat limit reached
       if (status === 402 && detail?.seat_limit_reached) {
-        setError(`User seat limit reached. You have used ${detail.current_active_users} of ${detail.total_user_seats} seats. Please upgrade your plan to add more users.`)
-      } else {
-        // Use clean message from backend (422 now returns {success, message}, others return detail string)
-        const msg = err.response?.data?.message || (typeof detail === 'string' ? detail : null)
-        setError(msg || 'Failed to save user. Please try again.')
+        showError(
+          'User Limit Reached',
+          `You have used ${detail.current_active_users} of ${detail.total_user_seats} user seats. Please upgrade your plan to add more users.`
+        )
+        return
       }
+
+      // 422 — FastAPI validation errors (rare, frontend validates first)
+      if (status === 422 && Array.isArray(detail)) {
+        const FIELD_LABELS = {
+          full_name: 'Full Name', username: 'Username', email: 'Email Address',
+          mobile: 'Contact Number', password: 'Password', role: 'Role',
+        }
+        const fields = detail
+          .map(e => FIELD_LABELS[e.loc?.[e.loc.length - 1]] || e.loc?.[e.loc.length - 1])
+          .filter(Boolean)
+        showError(
+          'Please Complete Required Fields',
+          fields.length > 0
+            ? `Please fill in the following required fields: ${fields.join(', ')}.`
+            : 'Please fill in all required fields and try again.'
+        )
+        return
+      }
+
+      // Log raw technical error to console only — never show to user
+      const rawDetail = typeof detail === 'string' ? detail : JSON.stringify(detail)
+      console.error('[UserForm] Save error (status', status, '):', rawDetail || err.message || err)
+
+      const rawMsg = (typeof detail === 'string' ? detail : '') || (err.response?.data?.message || '')
+
+      // Map raw DB duplicate-key errors to friendly messages
+      if (rawMsg.includes('E11000') || rawMsg.toLowerCase().includes('duplicate key')) {
+        if (rawMsg.includes('username')) {
+          showError('User Cannot Be Created', `The username "${formData.username}" is already being used by another user. Please choose a different username and try again.`)
+        } else if (rawMsg.includes('email')) {
+          showError('User Cannot Be Created', 'The email address is already registered. Please use another email address.')
+        } else if (rawMsg.includes('mobile')) {
+          showError('User Cannot Be Created', 'The mobile number already exists in the system. Please use a different mobile number.')
+        } else {
+          showError('User Cannot Be Created', 'Some user details are already in use. Please check your details and try again.')
+        }
+        return
+      }
+
+      // Map known clean backend messages (mobile/email duplicate on update)
+      if (rawMsg.includes('mobile number already exists')) {
+        showError('User Cannot Be Created', 'The mobile number already exists in the system. Please use a different mobile number.')
+        return
+      }
+      if (rawMsg.includes('email address is already registered')) {
+        showError('User Cannot Be Created', 'The email address is already registered. Please use another email address.')
+        return
+      }
+
+      showError(
+        isEdit ? 'Unable to Update User' : 'Unable to Create User',
+        'An unexpected error occurred. Please try again or contact support if the issue persists.'
+      )
     } finally { setSaving(false) }
   }
 
@@ -699,8 +754,8 @@ const [errors,       setErrors]       = useState({})
       navigate('/users')
     } catch (err) {
       const detail = err.response?.data?.detail
-      const msg = err.response?.data?.message
-      setError(typeof detail === 'string' ? detail : msg || 'Failed to create user')
+      console.error('[UserForm] Override submit error:', detail || err.message || err)
+      showError('Unable to Create User', 'An unexpected error occurred while creating the user. Please try again.')
       setDuplicateModal({ show: false, fields: {}, overrideChecked: false, overrideTouched: false })
     } finally { setSaving(false) }
   }, [duplicateModal.overrideChecked, navigate])
@@ -763,14 +818,21 @@ const [errors,       setErrors]       = useState({})
               </div>
             </div>
 
-            {/* Duplicate fields */}
-            <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-1.5">
-              {Object.entries(duplicateModal.fields).map(([field, value]) => (
-                <div key={field} className="flex items-center gap-2 text-sm">
-                  <span className="font-semibold text-amber-800 capitalize w-20">{field}:</span>
-                  <span className="text-amber-700 font-mono">{value}</span>
-                </div>
-              ))}
+            {/* Duplicate fields — user-friendly messages */}
+            <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
+              {Object.entries(duplicateModal.fields).map(([field, value]) => {
+                let msg
+                if (field === 'username') msg = `The username "${value}" is already being used by another user.`
+                else if (field === 'email') msg = 'The email address is already registered in the system.'
+                else if (field === 'mobile') msg = 'The mobile number already exists in the system.'
+                else msg = `${field.charAt(0).toUpperCase() + field.slice(1)} "${value}" already exists.`
+                return (
+                  <div key={field} className="flex items-start gap-2 text-sm">
+                    <span className="text-amber-500 mt-0.5 flex-shrink-0">•</span>
+                    <span className="text-amber-800">{msg}</span>
+                  </div>
+                )
+              })}
             </div>
 
             {/* Override section */}
@@ -822,6 +884,33 @@ const [errors,       setErrors]       = useState({})
               </button>
             </div>
 
+          </div>
+        </div>
+      </ModalPortal>
+
+      {/* ── Error Modal ──────────────────────────────────────────────── */}
+      <ModalPortal isOpen={errorModal.show}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md animate-fade-in">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-surface-900">{errorModal.title}</h3>
+            </div>
+            <p className="text-sm text-surface-700 mb-5 leading-relaxed">{errorModal.message}</p>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setErrorModal({ show: false, title: '', message: '' })}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-xl transition-colors"
+              >
+                OK
+              </button>
+            </div>
           </div>
         </div>
       </ModalPortal>

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Plus, Search, Edit2, Trash2, Eye, Users, UserPlus,
   CheckCircle2, AlertCircle, Building2, TrendingUp, UserMinus,
   Filter, ChevronLeft, ChevronRight,
+  Link2, Download, ChevronDown, Mail, Copy, Check, Loader2,
 } from 'lucide-react'
 import hrmService from '../../services/hrmService'
 import EmployeeAvatar from '../../components/common/EmployeeAvatar'
@@ -11,11 +12,12 @@ import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_STYLE = {
-  active:     { bg: 'var(--bg-success)',  color: 'var(--text-success)',  label: 'Active' },
-  inactive:   { bg: 'var(--bg-card-alt)', color: 'var(--text-muted)',   label: 'Inactive' },
-  terminated: { bg: 'var(--bg-danger)',   color: 'var(--text-danger)',   label: 'Terminated' },
-  on_leave:   { bg: 'var(--bg-warning)', color: 'var(--text-warning)',  label: 'On Leave' },
-  resigned:   { bg: 'var(--bg-card-alt)', color: 'var(--text-muted)',   label: 'Resigned' },
+  active:             { bg: 'var(--bg-success)',  color: 'var(--text-success)',  label: 'Active' },
+  inactive:           { bg: 'var(--bg-card-alt)', color: 'var(--text-muted)',   label: 'Inactive' },
+  terminated:         { bg: 'var(--bg-danger)',   color: 'var(--text-danger)',   label: 'Terminated' },
+  on_leave:           { bg: 'var(--bg-warning)', color: 'var(--text-warning)',  label: 'On Leave' },
+  resigned:           { bg: 'var(--bg-card-alt)', color: 'var(--text-muted)',   label: 'Resigned' },
+  pending_hr_review:  { bg: '#fef3c7',            color: '#92400e',              label: 'Pending HR Review' },
 }
 
 function calcProfilePct(emp) {
@@ -183,6 +185,83 @@ export default function Employees() {
     load()
   }
 
+  // ── Send Form Link ─────────────────────────────────────────────────
+  const [linkModal,    setLinkModal]    = useState(false)
+  const [linkEmail,    setLinkEmail]    = useState('')
+  const [linkSending,  setLinkSending]  = useState(false)
+  const [linkResult,   setLinkResult]   = useState(null) // { url, email_sent }
+  const [linkCopied,   setLinkCopied]   = useState(false)
+
+  const openLinkModal = () => {
+    setLinkModal(true)
+    setLinkEmail('')
+    setLinkResult(null)
+    setLinkSending(false)
+    setLinkCopied(false)
+  }
+
+  const handleGenerateLink = async () => {
+    setLinkSending(true)
+    try {
+      const base = window.location.origin
+      const res = await hrmService.generateOnboardingLink({
+        email: linkEmail.trim() || undefined,
+        frontend_base_url: base,
+      })
+      setLinkResult(res.data)
+    } catch (err) {
+      setLinkResult({ error: err.response?.data?.detail || 'Failed to generate link.' })
+    } finally {
+      setLinkSending(false)
+    }
+  }
+
+  const handleCopyLink = () => {
+    if (!linkResult?.form_url) return
+    navigator.clipboard.writeText(linkResult.form_url)
+    setLinkCopied(true)
+    setTimeout(() => setLinkCopied(false), 2000)
+  }
+
+  // ── Export ─────────────────────────────────────────────────────────
+  const [exportOpen,    setExportOpen]    = useState(false)
+  const [exportLoading, setExportLoading] = useState(false)
+  const exportRef = useRef(null)
+
+  useEffect(() => {
+    const handler = e => {
+      if (exportRef.current && !exportRef.current.contains(e.target)) setExportOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleExport = async (format) => {
+    setExportOpen(false)
+    setExportLoading(true)
+    try {
+      const res = await hrmService.exportEmployees({
+        format,
+        status:  status  || undefined,
+        search:  search  || undefined,
+      })
+      const ext = format === 'xlsx' ? 'xlsx' : format === 'pdf' ? 'pdf' : 'csv'
+      const mime = format === 'xlsx'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : format === 'pdf' ? 'application/pdf' : 'text/csv'
+      const url = URL.createObjectURL(new Blob([res.data], { type: mime }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `employees_${new Date().toISOString().slice(0, 10)}.${ext}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      // export error is non-critical
+    } finally {
+      setExportLoading(false)
+    }
+  }
+
   return (
     <div className="p-6 space-y-5">
 
@@ -194,9 +273,63 @@ export default function Employees() {
             {total} total employee{total !== 1 ? 's' : ''}
           </p>
         </div>
-        <Link to="/hrm/employees/new" className="btn-primary flex items-center gap-2 text-sm">
-          <Plus className="w-4 h-4" /> Add Employee
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* Send Form Link */}
+          <button
+            onClick={openLinkModal}
+            className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg font-medium border transition-colors"
+            style={{
+              color: 'var(--text-info)',
+              borderColor: 'var(--text-info)',
+              background: 'transparent',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-info)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <Link2 className="w-4 h-4" /> Send Form Link
+          </button>
+
+          {/* Export dropdown */}
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setExportOpen(v => !v)}
+              disabled={exportLoading}
+              className="flex items-center gap-2 text-sm px-3 py-2 rounded-lg font-medium border transition-colors disabled:opacity-50"
+              style={{
+                color: 'var(--text-secondary)',
+                borderColor: 'var(--border-card)',
+                background: 'var(--bg-card)',
+              }}
+            >
+              {exportLoading
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Download className="w-4 h-4" />}
+              Export
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+            {exportOpen && (
+              <div
+                className="absolute right-0 mt-1 w-36 rounded-xl shadow-lg py-1 z-50 border"
+                style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}
+              >
+                {['csv', 'xlsx', 'pdf'].map(fmt => (
+                  <button
+                    key={fmt}
+                    onClick={() => handleExport(fmt)}
+                    className="w-full text-left px-4 py-2 text-sm hover:bg-[var(--bg-hover)] transition-colors"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    Export as {fmt.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <Link to="/hrm/employees/new" className="btn-primary flex items-center gap-2 text-sm">
+            <Plus className="w-4 h-4" /> Add Employee
+          </Link>
+        </div>
       </div>
 
       {/* ── Summary cards ── */}
@@ -237,6 +370,7 @@ export default function Employees() {
             <option value="on_leave">On Leave</option>
             <option value="terminated">Terminated</option>
             <option value="resigned">Resigned</option>
+            <option value="pending_hr_review">Pending HR Review</option>
           </select>
         </div>
       </div>
@@ -446,6 +580,119 @@ export default function Employees() {
           </div>
         )}
       </div>
+
+      {/* ── Send Form Link Modal ─────────────────────────────────────────── */}
+      {linkModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                <Link2 className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Send Onboarding Form Link</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Generate a one-time link for an employee to fill in their own details.
+                </p>
+              </div>
+            </div>
+
+            {!linkResult ? (
+              <>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Employee Email <span className="text-gray-400 font-normal">(optional — to send the link by email)</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="email"
+                      value={linkEmail}
+                      onChange={e => setLinkEmail(e.target.value)}
+                      placeholder="employee@example.com"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none"
+                      onKeyDown={e => e.key === 'Enter' && handleGenerateLink()}
+                    />
+                    <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setLinkModal(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleGenerateLink}
+                    disabled={linkSending}
+                    className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl disabled:opacity-50"
+                  >
+                    {linkSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                    Generate Link
+                  </button>
+                </div>
+              </>
+            ) : linkResult.error ? (
+              <>
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                  {linkResult.error}
+                </p>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setLinkResult(null)}
+                    className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-xl hover:bg-gray-50 text-gray-700"
+                  >
+                    Try Again
+                  </button>
+                  <button
+                    onClick={() => setLinkModal(false)}
+                    className="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-xl hover:bg-gray-700"
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                    <span className="text-sm font-semibold text-green-800">
+                      Link Generated{linkResult.email_sent ? ' & Emailed' : ''}
+                    </span>
+                  </div>
+                  {linkResult.email_sent && (
+                    <p className="text-xs text-green-700 mb-2">Email sent to {linkEmail}.</p>
+                  )}
+                  <div className="flex items-center gap-2 bg-white border border-green-200 rounded-lg px-3 py-2">
+                    <span className="flex-1 text-xs font-mono text-gray-700 truncate">{linkResult.form_url}</span>
+                    <button onClick={handleCopyLink} className="flex-shrink-0 text-indigo-600 hover:text-indigo-800">
+                      {linkCopied
+                        ? <Check className="w-4 h-4 text-green-600" />
+                        : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">This link expires in 7 days and can only be used once.</p>
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={openLinkModal}
+                    className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-xl hover:bg-gray-50 text-gray-700"
+                  >
+                    Generate Another
+                  </button>
+                  <button
+                    onClick={() => setLinkModal(false)}
+                    className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-xl hover:bg-indigo-700"
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

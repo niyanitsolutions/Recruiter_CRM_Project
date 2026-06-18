@@ -817,6 +817,45 @@ async def send_candidate_form_link_email(
     )
 
 
+async def send_employee_onboarding_link_email(
+    to_email: str,
+    form_url: str,
+    sent_by_name: str,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    """Email the employee self-onboarding form link."""
+    subject = f"Complete Your Onboarding — {company_name}"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Employee Onboarding Form</h2>
+      <p>Hello,</p>
+      <p>You have been invited by <strong>{sent_by_name}</strong> from
+         <strong>{company_name}</strong> to complete your onboarding information.</p>
+      <p>Please click the button below to fill in your personal details:</p>
+      <div style="text-align:center;margin:32px 0">
+        <a href="{form_url}"
+           style="background:#4F46E5;color:#fff;padding:14px 28px;border-radius:8px;
+                  text-decoration:none;font-weight:700;display:inline-block;font-size:14px">
+          Complete Onboarding
+        </a>
+      </div>
+      <p style="color:#6B7280;font-size:13px">
+        Or copy this link:<br>
+        <a href="{form_url}" style="color:#4F46E5;word-break:break-all">{form_url}</a>
+      </p>
+      <p style="color:#9CA3AF;font-size:12px">
+        &#x23F1; This link expires in 7 days and can only be used once.
+      </p>""")
+    text = (
+        f"Employee Onboarding — {company_name}\n\n"
+        f"Invited by {sent_by_name}.\n\nComplete your onboarding here: {form_url}\n\n"
+        "Link expires in 7 days."
+    )
+    return await send_email(
+        to_email, subject, html, text, "employee_onboarding_link", company_id=company_id
+    )
+
+
 async def send_interview_scheduled_email(
     to_email: str,
     candidate_name: str,

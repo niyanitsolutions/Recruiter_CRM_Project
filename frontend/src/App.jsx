@@ -89,6 +89,7 @@ const Candidates            = lazy(() => import('./pages/recruitment').then(m =>
 const CandidateForm         = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidateForm })))
 const CandidateDetails      = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidateDetails })))
 const CandidatePublicForm   = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidatePublicForm })))
+const EmployeeOnboardForm   = lazy(() => import('./pages/hrm/EmployeeOnboardForm'))
 const Jobs                  = lazy(() => import('./pages/recruitment').then(m => ({ default: m.Jobs })))
 const JobForm               = lazy(() => import('./pages/recruitment').then(m => ({ default: m.JobForm })))
 const JobDetails            = lazy(() => import('./pages/recruitment').then(m => ({ default: m.JobDetails })))
@@ -1185,6 +1186,9 @@ function App() {
 
       {/* Candidate self-registration via form link — public, no auth */}
       <Route path="/apply/:token" element={<CandidatePublicForm />} />
+
+      {/* Employee self-onboarding form — public, no auth */}
+      <Route path="/employee-onboard/:token" element={<EmployeeOnboardForm />} />
 
       {/* Employee secure document upload — public, no auth */}
       <Route path="/document-upload/:token" element={<EmployeeDocUpload />} />
