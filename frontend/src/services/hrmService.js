@@ -54,7 +54,10 @@ const listPayslips = (params) => api.get(`${BASE}/payroll`, { params })
 const listOwnPayslips = (params) => api.get(`${BASE}/payroll/self`, { params })
 const getPayslip = (id) => api.get(`${BASE}/payroll/${id}`)
 const updatePayslipStatus = (id, data) => api.patch(`${BASE}/payroll/${id}/status`, data)
+const updatePayslip = (id, data) => api.patch(`${BASE}/payroll/${id}`, data)
 const deletePayslip = (id) => api.delete(`${BASE}/payroll/${id}`)
+const getPayrollStructure = () => api.get(`${BASE}/payroll/structure`)
+const updatePayrollStructure = (data) => api.put(`${BASE}/payroll/structure`, data)
 
 // ── Performance ────────────────────────────────────────────────────────────
 const createReview = (data) => api.post(`${BASE}/performance`, data)
@@ -220,7 +223,7 @@ const hrmService = {
   checkIn, checkOut, startBreak, endBreak, getMyTodayAttendance, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance,
   getAttendanceTodayStats, getAttendanceSettings, updateAttendanceSettings,
   applyLeave, listLeaves, listMyLeaves, getLeave, leaveAction, cancelLeave, getLeaveBalance, getMyLeaveBalance,
-  generatePayroll, listPayslips, listOwnPayslips, getPayslip, updatePayslipStatus, deletePayslip,
+  generatePayroll, listPayslips, listOwnPayslips, getPayslip, updatePayslipStatus, updatePayslip, deletePayslip, getPayrollStructure, updatePayrollStructure,
   createReview, listReviews, getReview, submitSelfReview, submitManagerReview, deleteReview,
   createAnnouncement, listAnnouncements, getAnnouncement, updateAnnouncement, deleteAnnouncement,
   markAnnouncementRead, getAnnouncementReadStats,

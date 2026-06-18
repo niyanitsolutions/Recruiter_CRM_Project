@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Briefcase, Users, Calendar, UserCheck } from 'lucide-react'
+import { Briefcase, Users, Calendar, UserCheck, FileText, LayoutTemplate } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import HRJobs from './HRJobs'
 import HRCandidates from './HRCandidates'

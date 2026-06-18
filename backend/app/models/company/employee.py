@@ -205,6 +205,8 @@ class EmployeeModel(BaseModel):
 
     # Salary
     salary: SalaryStructure = Field(default_factory=SalaryStructure)
+    # Dynamic per-component values keyed by component key (e.g. "basic_salary": 30000)
+    salary_components: Dict[str, float] = Field(default_factory=dict)
 
     # Bank & Compliance
     bank_details: Optional[BankDetails] = None
@@ -284,6 +286,7 @@ class EmployeeCreate(BaseModel):
     shift_start_time: str = "09:00"
     shift_end_time: str = "18:00"
     salary: Optional[SalaryStructure] = None
+    salary_components: Optional[Dict[str, float]] = None
     bank_details: Optional[BankDetails] = None
     pan_number: Optional[str] = None
     aadhaar_number: Optional[str] = None
@@ -319,6 +322,7 @@ class EmployeeUpdate(BaseModel):
     shift_start_time: Optional[str] = None
     shift_end_time: Optional[str] = None
     salary: Optional[SalaryStructure] = None
+    salary_components: Optional[Dict[str, float]] = None
     bank_details: Optional[BankDetails] = None
     pan_number: Optional[str] = None
     aadhaar_number: Optional[str] = None

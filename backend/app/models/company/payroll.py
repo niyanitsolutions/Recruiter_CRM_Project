@@ -84,3 +84,65 @@ class UpdatePayslipStatus(BaseModel):
     status: PayrollStatus
     payment_reference: Optional[str] = None
     paid_on: Optional[datetime] = None
+
+
+class UpdatePayslipData(BaseModel):
+    """Editable fields for a draft payslip."""
+    basic: Optional[float] = None
+    hra: Optional[float] = None
+    special_allowance: Optional[float] = None
+    overtime: Optional[float] = None
+    bonus: Optional[float] = None
+    other_earnings: Optional[List[Earning]] = None
+    pf_employee: Optional[float] = None
+    professional_tax: Optional[float] = None
+    tds: Optional[float] = None
+    advance_deduction: Optional[float] = None
+    other_deductions: Optional[List[Deduction]] = None
+    working_days: Optional[int] = None
+    present_days: Optional[float] = None
+    lop_days: Optional[float] = None
+    absent_days: Optional[float] = None
+    leave_days: Optional[float] = None
+
+
+# ── Payroll Structure Configuration (one per tenant) ───────────────────────
+
+class PayrollComponent(BaseModel):
+    key: str           # machine key e.g. "basic_salary", "hra", "travel_allowance"
+    label: str         # display label
+    component_type: str = "earning"   # "earning" or "deduction"
+    show_in_payslip: bool = True
+
+class PayrollStructureConfig(BaseModel):
+    """Stored in hrm_payroll_structure — one document per company."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), alias="_id")
+    company_id: str
+    components: List[PayrollComponent] = Field(default_factory=list)
+    is_configured: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class UpsertPayrollStructure(BaseModel):
+    components: List[PayrollComponent]
+
+
+DEFAULT_PAYROLL_COMPONENTS: List[dict] = [
+    # Earnings
+    {"key": "basic_salary",         "label": "Basic Salary",          "component_type": "earning",   "show_in_payslip": True},
+    {"key": "hra",                  "label": "HRA",                   "component_type": "earning",   "show_in_payslip": True},
+    {"key": "travel_allowance",     "label": "Travel Allowance",      "component_type": "earning",   "show_in_payslip": True},
+    {"key": "medical_allowance",    "label": "Medical Allowance",     "component_type": "earning",   "show_in_payslip": True},
+    {"key": "food_allowance",       "label": "Food Allowance",        "component_type": "earning",   "show_in_payslip": True},
+    {"key": "conveyance_allowance", "label": "Conveyance Allowance",  "component_type": "earning",   "show_in_payslip": True},
+    {"key": "special_allowance",    "label": "Special Allowance",     "component_type": "earning",   "show_in_payslip": True},
+    {"key": "bonus",                "label": "Bonus",                 "component_type": "earning",   "show_in_payslip": True},
+    {"key": "incentive",            "label": "Incentive",             "component_type": "earning",   "show_in_payslip": True},
+    {"key": "fixed_allowance",      "label": "Fixed Allowance",       "component_type": "earning",   "show_in_payslip": True},
+    # Deductions
+    {"key": "epf_contribution",     "label": "EPF Contribution",      "component_type": "deduction", "show_in_payslip": True},
+    {"key": "professional_tax",     "label": "Professional Tax",      "component_type": "deduction", "show_in_payslip": True},
+    {"key": "loan_deduction",       "label": "Loan Deduction",        "component_type": "deduction", "show_in_payslip": True},
+]

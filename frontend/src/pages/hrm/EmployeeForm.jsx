@@ -239,7 +239,7 @@ const EMPTY_EMP = {
   shift_start_time:'09:00', shift_end_time:'18:00', work_description:'',
   ctc:'', basic:'', hra:'', special_allowance:'',
   bank_name:'', account_number:'', ifsc_code:'', account_holder_name:'',
-  pf_number:'', uan_number:'',
+  pf_number:'', uan_number:'', no_pf_uan: false,
   bg_status:'pending', bg_notes:'',
 }
 
@@ -310,6 +310,10 @@ function validateSections(form, emergencyContacts, qualifications, documents, st
   if (!form.bank_name?.trim())      bankMissing.push('Bank Name')
   if (!form.account_number?.trim()) bankMissing.push('Account Number')
   if (!form.ifsc_code?.trim())      bankMissing.push('IFSC Code')
+  if (!form.no_pf_uan) {
+    if (!form.pf_number?.trim())  bankMissing.push('PF Number')
+    if (!form.uan_number?.trim()) bankMissing.push('UAN Number')
+  }
   if (bankMissing.length) errors.bank = `Bank Details incomplete — missing: ${bankMissing.join(', ')}.`
 
   // Emergency Contacts — at least 1 with name, relationship, phone
@@ -446,6 +450,12 @@ export default function EmployeeForm() {
 
   // ── Employee form state ──────────────────────────────────────────
   const [form, setForm]   = useState({ ...EMPTY_EMP })
+  // Payroll structure state
+  const [payrollStructure, setPayrollStructure] = useState(null)    // full config from API
+  const [salaryComps, setSalaryComps]   = useState({})              // key → value (entered amounts)
+  const [structureSelecting, setStructureSelecting] = useState(false) // editing structure in-place
+  const [pendingStructureKeys, setPendingStructureKeys] = useState(new Set()) // keys checked during select
+  const [pendingPayslipKeys,   setPendingPayslipKeys]   = useState(new Set()) // show_in_payslip checked keys
   const [emergencyContacts, setEmergencyContacts] = useState([{ name:'', relationship:'', phone:'', email:'' }])
   const [qualifications,    setQualifications]    = useState([])
   const [disciplinary,      setDisciplinary]      = useState([])
@@ -506,14 +516,34 @@ export default function EmployeeForm() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptsRes, desigsRes, usersRes] = await Promise.all([
+        const [deptsRes, desigsRes, usersRes, structureRes] = await Promise.all([
           departmentService.getDepartments(),
           designationService.getDesignations(),
           userService.getUsers({ page_size: 100 }),
+          hrmService.getPayrollStructure(),
         ])
         setDepartments(deptsRes.data || [])
         setDesignations(desigsRes.data || [])
         setUsers(usersRes.data || [])
+        const structure = structureRes.data
+        setPayrollStructure(structure)
+        // Initialize payslip visibility from existing config
+        const payslipKeys = new Set(
+          (structure?.components || [])
+            .filter(c => c.show_in_payslip !== false)
+            .map(c => c.key)
+        )
+        setPendingPayslipKeys(payslipKeys)
+        // If not yet configured, pre-check basic defaults (first 2 earnings + all deductions)
+        if (!structure?.is_configured) {
+          const defaultKeys = new Set(
+            (structure?.components || [])
+              .filter(c => ['basic_salary','hra','epf_contribution','professional_tax'].includes(c.key))
+              .map(c => c.key)
+          )
+          setPendingStructureKeys(defaultKeys)
+          setStructureSelecting(true)
+        }
       } catch (err) { console.error('EmployeeForm: reference data load failed', err) }
     }
     fetchData()
@@ -557,9 +587,14 @@ export default function EmployeeForm() {
         account_holder_name: e.bank_details?.account_holder_name || '',
         pf_number:        e.pf_number         || '',
         uan_number:       e.uan_number        || '',
+        no_pf_uan:        !e.pf_number && !e.uan_number,
         bg_status:        e.background_check?.status || 'pending',
         bg_notes:         e.background_check?.notes  || '',
       })
+      // Load dynamic salary components if present
+      if (e.salary_components && Object.keys(e.salary_components).length > 0) {
+        setSalaryComps(e.salary_components)
+      }
       if (e.photo_url)                    setPhotoUrl(e.photo_url)
       if (e.emergency_contacts?.length) setEmergencyContacts(e.emergency_contacts)
       if (e.qualifications?.length)     setQualifications(e.qualifications)
@@ -842,19 +877,19 @@ export default function EmployeeForm() {
       shift_end_time:      form.shift_end_time,
       work_description:    form.work_description || undefined,
       salary: {
-        ctc:               Number(form.ctc)               || 0,
-        basic:             Number(form.basic)             || 0,
-        hra:               Number(form.hra)               || 0,
-        special_allowance: Number(form.special_allowance) || 0,
+        ctc: Number(form.ctc) || 0,
       },
+      salary_components: Object.keys(salaryComps).length > 0
+        ? Object.fromEntries(Object.entries(salaryComps).map(([k, v]) => [k, Number(v) || 0]))
+        : undefined,
       bank_details: {
         bank_name:           form.bank_name           || undefined,
         account_number:      form.account_number      || undefined,
         ifsc_code:           form.ifsc_code           || undefined,
         account_holder_name: form.account_holder_name || undefined,
       },
-      pf_number:  form.pf_number  || undefined,
-      uan_number: form.uan_number || undefined,
+      pf_number:  form.no_pf_uan ? undefined : (form.pf_number  || undefined),
+      uan_number: form.no_pf_uan ? undefined : (form.uan_number || undefined),
       emergency_contacts: emergencyContacts.filter(c => c.name || c.phone),
       qualifications: qualifications.filter(q => q.title).map(q => ({
         type:        q.type || 'academic',
@@ -1670,13 +1705,144 @@ export default function EmployeeForm() {
                 onChange={e => set('work_description', e.target.value)} placeholder="Responsibilities, notes…" />
             </Field>
           </div>
-          <p className="text-xs font-semibold text-gray-500 uppercase mt-5 mb-3">Salary Structure</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[['ctc','Annual CTC (₹)'],['basic','Basic (Monthly)'],['hra','HRA (Monthly)'],['special_allowance','Special Allowance']].map(([k,l]) => (
-              <Field key={k} label={l}>
-                <input type="number" min="0" className={inp} value={form[k]} onChange={e => set(k, e.target.value)} />
+          <div className="mt-5 border-t pt-4" style={{ borderColor: 'var(--border-subtle)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase">Salary Structure</p>
+              {payrollStructure?.is_configured && !structureSelecting && (
+                <button type="button" onClick={() => { setPendingStructureKeys(new Set((payrollStructure.components||[]).map(c=>c.key))); setStructureSelecting(true) }}
+                  className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                  Configure Structure
+                </button>
+              )}
+            </div>
+
+            {/* Annual CTC field always visible */}
+            <div className="mb-4">
+              <Field label="Annual CTC (₹)">
+                <input type="number" min="0" className={inp} value={form.ctc} onChange={e => set('ctc', e.target.value)} placeholder="0" />
               </Field>
-            ))}
+            </div>
+
+            {/* Structure picker — shown when not configured or editing structure */}
+            {structureSelecting && payrollStructure && (
+              <div className="mb-4 p-4 rounded-lg border" style={{ background: 'var(--bg-subtle)', borderColor: 'var(--border)' }}>
+                <p className="text-xs font-semibold mb-3" style={{ color: 'var(--text-heading)' }}>
+                  {payrollStructure.is_configured ? 'Reconfigure' : 'Select'} salary components for your company
+                  {!payrollStructure.is_configured && <span className="ml-2 text-xs font-normal text-blue-600">(saved once, applied to all employees)</span>}
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {['earning', 'deduction'].map(type => (
+                    <div key={type}>
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-x-2 items-center text-xs font-semibold uppercase mb-1.5">
+                        <span className={type === 'earning' ? 'text-green-700' : 'text-red-700'}>{type === 'earning' ? 'Earnings' : 'Deductions'}</span>
+                        <span className="text-gray-400">Include</span>
+                        <span className="text-gray-400">In Payslip</span>
+                      </div>
+                      {(payrollStructure.components || []).filter(c => c.component_type === type).map(c => (
+                        <div key={c.key} className="grid grid-cols-[1fr_auto_auto] gap-x-2 items-center py-0.5">
+                          <span className="text-sm text-gray-700">{c.label}</span>
+                          <input type="checkbox" checked={pendingStructureKeys.has(c.key)}
+                            className={`w-3.5 h-3.5 rounded ${type === 'earning' ? 'accent-green-600' : 'accent-red-600'}`}
+                            onChange={e => {
+                              const next = new Set(pendingStructureKeys)
+                              if (e.target.checked) next.add(c.key); else next.delete(c.key)
+                              setPendingStructureKeys(next)
+                            }} />
+                          <input type="checkbox" checked={pendingStructureKeys.has(c.key) && pendingPayslipKeys.has(c.key)}
+                            disabled={!pendingStructureKeys.has(c.key)}
+                            className="w-3.5 h-3.5 rounded accent-indigo-600 disabled:opacity-30"
+                            onChange={e => {
+                              const next = new Set(pendingPayslipKeys)
+                              if (e.target.checked) next.add(c.key); else next.delete(c.key)
+                              setPendingPayslipKeys(next)
+                            }} />
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button type="button"
+                    onClick={async () => {
+                      try {
+                        const selectedComponents = (payrollStructure.components || [])
+                          .filter(c => pendingStructureKeys.has(c.key))
+                          .map(c => ({ ...c, show_in_payslip: pendingPayslipKeys.has(c.key) }))
+                        const res = await hrmService.updatePayrollStructure({ components: selectedComponents })
+                        setPayrollStructure(res.data)
+                        setStructureSelecting(false)
+                        // Reset salary comps to only selected keys
+                        setSalaryComps(prev => {
+                          const next = {}
+                          selectedComponents.forEach(c => { if (prev[c.key] !== undefined) next[c.key] = prev[c.key] })
+                          return next
+                        })
+                      } catch { toast.error('Failed to save structure') }
+                    }}
+                    className="px-3 py-1.5 text-sm rounded-lg text-white bg-blue-600 hover:bg-blue-700">
+                    Save Structure
+                  </button>
+                  {payrollStructure.is_configured && (
+                    <button type="button" onClick={() => setStructureSelecting(false)}
+                      className="px-3 py-1.5 text-sm rounded-lg border" style={{ borderColor: 'var(--border)' }}>
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Component value inputs — shown after structure is configured */}
+            {!structureSelecting && payrollStructure?.is_configured && (
+              <div>
+                {(() => {
+                  const earnings = (payrollStructure.components || []).filter(c => c.component_type === 'earning')
+                  const deductions = (payrollStructure.components || []).filter(c => c.component_type === 'deduction')
+                  const grossEarnings = earnings.reduce((s, c) => s + (Number(salaryComps[c.key]) || 0), 0)
+                  const totalDeductions = deductions.reduce((s, c) => s + (Number(salaryComps[c.key]) || 0), 0)
+                  const netPay = grossEarnings - totalDeductions
+                  return (
+                    <>
+                      {earnings.length > 0 && (
+                        <>
+                          <p className="text-xs font-semibold text-green-700 uppercase mb-2">Earnings (Monthly)</p>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                            {earnings.map(c => (
+                              <Field key={c.key} label={c.label}>
+                                <input type="number" min="0" className={inp} placeholder="0"
+                                  value={salaryComps[c.key] ?? ''}
+                                  onChange={e => setSalaryComps(prev => ({ ...prev, [c.key]: e.target.value }))} />
+                              </Field>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      {deductions.length > 0 && (
+                        <>
+                          <p className="text-xs font-semibold text-red-700 uppercase mb-2">Deductions (Monthly)</p>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                            {deductions.map(c => (
+                              <Field key={c.key} label={c.label}>
+                                <input type="number" min="0" className={inp} placeholder="0"
+                                  value={salaryComps[c.key] ?? ''}
+                                  onChange={e => setSalaryComps(prev => ({ ...prev, [c.key]: e.target.value }))} />
+                              </Field>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      {(grossEarnings > 0 || totalDeductions > 0) && (
+                        <div className="flex gap-4 text-xs p-3 rounded-lg mt-1" style={{ background: 'var(--bg-subtle)' }}>
+                          <span className="text-green-700 font-medium">Gross ₹{grossEarnings.toLocaleString('en-IN')}</span>
+                          <span className="text-red-700 font-medium">Deductions ₹{totalDeductions.toLocaleString('en-IN')}</span>
+                          <span className="font-semibold" style={{ color: 'var(--text-heading)' }}>Net ₹{netPay.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
+            )}
           </div>
         </Section>
 
@@ -1701,13 +1867,41 @@ export default function EmployeeForm() {
             <Field label="Account Holder Name">
               <input className={inp} value={form.account_holder_name} onChange={e => set('account_holder_name', e.target.value)} />
             </Field>
-            <Field label="PF Number">
-              <input className={inp} value={form.pf_number} onChange={e => set('pf_number', e.target.value)} />
+            <Field label="PF Number" required={!form.no_pf_uan} error={sectionErrors.bank && !form.no_pf_uan && !form.pf_number?.trim() ? 'Required' : ''}>
+              <input
+                className={sectionErrors.bank && !form.no_pf_uan && !form.pf_number?.trim() ? inpErr : inp}
+                value={form.pf_number}
+                onChange={e => set('pf_number', e.target.value)}
+                disabled={form.no_pf_uan}
+                placeholder={form.no_pf_uan ? 'N/A — no PF' : ''}
+              />
             </Field>
-            <Field label="UAN Number">
-              <input className={inp} value={form.uan_number} onChange={e => set('uan_number', e.target.value)} />
+            <Field label="UAN Number" required={!form.no_pf_uan} error={sectionErrors.bank && !form.no_pf_uan && !form.uan_number?.trim() ? 'Required' : ''}>
+              <input
+                className={sectionErrors.bank && !form.no_pf_uan && !form.uan_number?.trim() ? inpErr : inp}
+                value={form.uan_number}
+                onChange={e => set('uan_number', e.target.value)}
+                disabled={form.no_pf_uan}
+                placeholder={form.no_pf_uan ? 'N/A — no UAN' : ''}
+              />
             </Field>
           </div>
+          {/* PF / UAN exemption checkbox */}
+          <label className="mt-3 flex items-center gap-2 cursor-pointer w-fit">
+            <input
+              type="checkbox"
+              checked={!!form.no_pf_uan}
+              onChange={e => {
+                set('no_pf_uan', e.target.checked)
+                if (e.target.checked) {
+                  set('pf_number', '')
+                  set('uan_number', '')
+                }
+              }}
+              className="w-4 h-4 rounded accent-blue-600"
+            />
+            <span className="text-sm text-gray-600">Employee does not have PF / UAN</span>
+          </label>
         </Section>
 
         {/* ═══════════════════════════════════════════════════════════

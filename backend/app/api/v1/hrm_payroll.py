@@ -3,11 +3,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
-from app.models.company.payroll import GeneratePayrollRequest, UpdatePayslipStatus
-from app.services.payroll_service import PayrollService
+from app.models.company.payroll import GeneratePayrollRequest, UpdatePayslipStatus, UpdatePayslipData, UpsertPayrollStructure
+from app.services.payroll_service import PayrollService, PayrollStructureService
 
 router = APIRouter(prefix="/hrm/payroll", tags=["HRM - Payroll"])
 
+
+# ── Static / sub-path routes FIRST to avoid /{payslip_id} swallowing them ──
 
 @router.post("/generate", status_code=201)
 async def generate_payroll(
@@ -17,6 +19,38 @@ async def generate_payroll(
     _perm=Depends(require_permissions(["hrm:payroll:manage"])),
 ):
     return await PayrollService(db).generate(cu["company_id"], data.month, data.year, data.employee_ids, cu["id"])
+
+
+@router.get("/structure")
+async def get_payroll_structure(
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+):
+    return await PayrollStructureService(db).get_or_create(cu["company_id"])
+
+
+@router.put("/structure")
+async def upsert_payroll_structure(
+    data: UpsertPayrollStructure,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:payroll:manage"])),
+):
+    components = [c.model_dump() for c in data.components]
+    return await PayrollStructureService(db).upsert(cu["company_id"], components)
+
+
+@router.get("/self")
+async def list_own_payslips(
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    page: int = 1,
+    page_size: int = 20,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:payroll:view_self"])),
+):
+    return await PayrollService(db).list(cu["company_id"], month, year, cu["id"], None, page, page_size)
 
 
 @router.get("")
@@ -34,18 +68,7 @@ async def list_payslips(
     return await PayrollService(db).list(cu["company_id"], month, year, employee_id, status, page, page_size)
 
 
-@router.get("/self")
-async def list_own_payslips(
-    month: Optional[int] = None,
-    year: Optional[int] = None,
-    page: int = 1,
-    page_size: int = 20,
-    cu: dict = Depends(require_hrm_module),
-    db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:payroll:view_self"])),
-):
-    return await PayrollService(db).list(cu["company_id"], month, year, cu["id"], None, page, page_size)
-
+# ── Parameterised routes AFTER static routes ────────────────────────────────
 
 @router.get("/{payslip_id}")
 async def get_payslip(
@@ -69,6 +92,21 @@ async def update_status(
     _perm=Depends(require_permissions(["hrm:payroll:manage"])),
 ):
     ps = await PayrollService(db).update_status(payslip_id, cu["company_id"], data.status, data.payment_reference, data.paid_on)
+    if not ps:
+        raise HTTPException(status_code=404, detail="Payslip not found")
+    return ps
+
+
+@router.patch("/{payslip_id}")
+async def update_payslip(
+    payslip_id: str,
+    data: UpdatePayslipData,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:payroll:manage"])),
+):
+    payload = {k: v for k, v in data.model_dump().items() if v is not None}
+    ps = await PayrollService(db).update_payslip(payslip_id, cu["company_id"], payload)
     if not ps:
         raise HTTPException(status_code=404, detail="Payslip not found")
     return ps

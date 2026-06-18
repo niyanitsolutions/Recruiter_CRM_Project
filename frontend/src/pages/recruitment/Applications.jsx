@@ -243,6 +243,16 @@ const Applications = () => {
   const [candidatesLoading, setCandidatesLoading] = useState(true)
   const [selectedCandidateId, setSelectedCandidateId] = useState(null)
 
+  // Lock background scroll when candidate panel is open
+  useEffect(() => {
+    if (selectedCandidateId) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [selectedCandidateId])
+
   // ── Applications view state ────────────────────────────────────────────────
   const [applications, setApplications] = useState([])
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 })
