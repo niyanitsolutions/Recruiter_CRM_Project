@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   Users, Plus, Search, Filter, Eye, Edit, Trash2,
   Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2, Send, Upload,
-  LayoutGrid, List, Clock, Building2
+  LayoutGrid, List, Clock, Building2, MoreVertical,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -18,6 +18,7 @@ import ModalPortal from '../../components/common/ModalPortal'
 import { selectUserType } from '../../store/authSlice'
 import { getToken } from '../../utils/token'
 import TableScroll from '../../components/common/TableScroll'
+import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 
 // Module-level cache — survives navigation, resets only on hard reload.
 // Dropdown options (statuses, sources, notice periods) are static reference
@@ -121,6 +122,17 @@ const Candidates = () => {
   const [eligibleJobs, setEligibleJobs] = useState([])
   const [eligibleLoading, setEligibleLoading] = useState(false)
   const [applyingJobId, setApplyingJobId] = useState(null)
+  const [openMenuId, setOpenMenuId] = useState(null)
+
+  // Close 3-dot menu when clicking outside
+  useEffect(() => {
+    if (!openMenuId) return
+    const handler = (e) => {
+      if (!e.target.closest('[data-menu-container]')) setOpenMenuId(null)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [openMenuId])
 
   // Debounce refs — keyword waits 400 ms, all other changes are immediate
   const _debounceTimer  = useRef(null)
@@ -289,6 +301,12 @@ const Candidates = () => {
   const getStatusStyle = (status) => status === 'blacklisted'
     ? { background: 'rgba(255,71,87,0.15)', color: '#FF4757' }
     : { background: 'rgba(67,233,123,0.15)', color: '#43E97B' }
+
+  const NOTICE_DISPLAY = {
+    immediate: 'Immediate', '15_days': '15 Days', '30_days': '30 Days',
+    '60_days': '60 Days', '90_days': '90 Days', more_than_90: '90+ Days',
+  }
+  const formatNotice = (v) => NOTICE_DISPLAY[v] || (v ? v.replace(/_/g, ' ') : '—')
 
   // Fetch resume bytes with auth header, then open/download via Blob URL
   const fetchResumeBlob = async (candidateId) => {
@@ -583,12 +601,7 @@ const Candidates = () => {
             >
               {/* Avatar + Name + Status */}
               <div className="flex items-start gap-3 mb-3">
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-                  style={{ background: getAvatarGradient(candidate.full_name) }}
-                >
-                  {candidate.full_name?.charAt(0)?.toUpperCase() || '?'}
-                </div>
+                <EmployeeAvatar name={candidate.full_name} photoUrl={candidate.photo_url} size={40} />
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
                     {candidate.full_name}
@@ -650,82 +663,117 @@ const Candidates = () => {
 
               {/* Footer: notice + apps + actions */}
               <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  {candidate.notice_period?.replace('_', ' ') || '—'}
+                <div className="text-xs flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+                  <span
+                    className="px-2 py-0.5 rounded-full font-medium"
+                    style={{
+                      background: candidate.notice_period === 'immediate'
+                        ? 'rgba(16,185,129,0.12)' : 'var(--bg-hover)',
+                      color: candidate.notice_period === 'immediate'
+                        ? '#10b981' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {formatNotice(candidate.notice_period)}
+                  </span>
                   {candidate.total_applications > 0 && (
                     <Link
                       to={`/applications?candidate_id=${candidate.id}`}
-                      className="ml-2 font-medium"
+                      className="font-medium flex items-center gap-1"
                       style={{ color: 'var(--accent)' }}
                     >
+                      <Briefcase className="w-3 h-3" />
                       {candidate.total_applications} app{candidate.total_applications !== 1 ? 's' : ''}
                     </Link>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
-                  {/* Resume View */}
-                  <button
-                    onClick={() => candidate.resume_url ? openResume(candidate.id) : toast.error('No resume uploaded for this candidate')}
-                    className="p-1.5 rounded-lg transition-colors flex items-center gap-1"
-                    style={{
-                      color: candidate.resume_url ? 'var(--accent)' : 'var(--text-disabled)',
-                      cursor: candidate.resume_url ? 'pointer' : 'default',
-                    }}
-                    onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--accent-light)' }}
-                    onMouseLeave={e => e.currentTarget.style.background = ''}
-                    title={candidate.resume_url ? 'View Resume' : 'No resume uploaded'}
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium hidden sm:inline">Resume</span>
-                  </button>
-                  {/* Resume Download */}
-                  <button
-                    onClick={() => candidate.resume_url ? downloadResume(candidate.id, candidate.full_name, candidate.resume_url) : toast.error('No resume uploaded for this candidate')}
-                    className="p-1.5 rounded-lg transition-colors"
-                    style={{
-                      color: candidate.resume_url ? '#43E97B' : 'var(--text-disabled)',
-                      cursor: candidate.resume_url ? 'pointer' : 'default',
-                    }}
-                    onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'rgba(67,233,123,0.12)' }}
-                    onMouseLeave={e => e.currentTarget.style.background = ''}
-                    title={candidate.resume_url ? 'Download Resume' : 'No resume uploaded'}
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
+                <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => navigate(`/candidates/${candidate.id}`)}
-                    className="p-1.5 rounded-lg transition-colors"
-                    style={{ color: 'var(--text-muted)' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                    onMouseLeave={e => e.currentTarget.style.background = ''}
-                    title="View"
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-opacity"
+                    style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
+                    onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+                    onMouseLeave={e => e.currentTarget.style.opacity = '1'}
                   >
-                    <Eye className="w-3.5 h-3.5" />
+                    View
                   </button>
-                  {has('candidates:edit') && (
+
+                  <div className="relative" data-menu-container>
                     <button
-                      onClick={() => navigate(`/candidates/${candidate.id}/edit`)}
-                      className="p-1.5 rounded-lg transition-colors"
+                      onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === `card-${candidate.id}` ? null : `card-${candidate.id}`) }}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
                       style={{ color: 'var(--text-muted)' }}
                       onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                       onMouseLeave={e => e.currentTarget.style.background = ''}
-                      title="Edit"
                     >
-                      <Edit className="w-3.5 h-3.5" />
+                      <MoreVertical className="w-4 h-4" />
                     </button>
-                  )}
-                  {has('candidates:delete') && (
-                    <button
-                      onClick={() => handleDelete(candidate.id, candidate.full_name)}
-                      className="p-1.5 rounded-lg transition-colors"
-                      style={{ color: '#FF4757' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,71,87,0.10)'}
-                      onMouseLeave={e => e.currentTarget.style.background = ''}
-                      title="Delete"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+
+                    {openMenuId === `card-${candidate.id}` && (
+                      <div
+                        className="absolute right-0 z-50 py-1 rounded-xl"
+                        style={{
+                          top: 'calc(100% + 4px)',
+                          minWidth: 176,
+                          background: 'var(--bg-card)',
+                          border: '1px solid var(--border-card)',
+                          boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                        }}
+                      >
+                        <button
+                          onClick={() => { openResume(candidate.id); setOpenMenuId(null) }}
+                          disabled={!candidate.resume_url}
+                          className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors disabled:opacity-40 disabled:cursor-default"
+                          style={{ color: 'var(--text-primary)' }}
+                          onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}
+                        >
+                          <FileText className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#6366f1' }} />
+                          View Resume
+                        </button>
+
+                        <button
+                          onClick={() => { downloadResume(candidate.id, candidate.full_name, candidate.resume_url); setOpenMenuId(null) }}
+                          disabled={!candidate.resume_url}
+                          className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors disabled:opacity-40 disabled:cursor-default"
+                          style={{ color: 'var(--text-primary)' }}
+                          onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}
+                        >
+                          <Download className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#10b981' }} />
+                          Download Resume
+                        </button>
+
+                        {has('candidates:edit') && (
+                          <>
+                            <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 12px' }} />
+                            <button
+                              onClick={() => { navigate(`/candidates/${candidate.id}/edit`); setOpenMenuId(null) }}
+                              className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors"
+                              style={{ color: 'var(--text-primary)' }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                              onMouseLeave={e => e.currentTarget.style.background = ''}
+                            >
+                              <Edit className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#f59e0b' }} />
+                              Edit Candidate
+                            </button>
+                          </>
+                        )}
+
+                        {has('candidates:delete') && (
+                          <button
+                            onClick={() => { handleDelete(candidate.id, candidate.full_name); setOpenMenuId(null) }}
+                            className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors"
+                            style={{ color: '#ef4444' }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
+                            onMouseLeave={e => e.currentTarget.style.background = ''}
+                          >
+                            <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
+                            Delete Candidate
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -738,16 +786,16 @@ const Candidates = () => {
         <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
           <TableScroll>
           <table className="w-full">
-            <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
+            <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '2px solid var(--border)' }}>
               <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Candidate</th>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Experience</th>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Skills</th>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Notice</th>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Added By</th>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Applied Jobs</th>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Status</th>
-                <th className="text-right px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Actions</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 240 }}>Candidate</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 140 }}>Experience</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 180 }}>Skills</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 140 }}>Added By</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 160 }}>Applied Jobs</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 120 }}>Notice Period</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 120 }}>Status</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 160 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -759,37 +807,56 @@ const Candidates = () => {
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                   onMouseLeave={e => e.currentTarget.style.background = ''}
                 >
-                  <td className="px-4 py-4">
-                    <div>
-                      <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{candidate.full_name}</p>
-                      <div className="flex items-center gap-3 text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-                        <span className="flex items-center gap-1">
-                          <Mail className="w-3 h-3" />
-                          {candidate.email}
-                        </span>
-                        {candidate.current_city && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {candidate.current_city}
-                          </span>
+                  {/* Candidate */}
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <EmployeeAvatar name={candidate.full_name} photoUrl={candidate.photo_url} size={40} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold leading-tight truncate" style={{ color: 'var(--text-primary)' }}>
+                          {candidate.full_name}
+                        </p>
+                        {candidate.current_designation && (
+                          <p className="text-xs truncate mt-0.5 font-medium" style={{ color: 'var(--accent)' }}>
+                            {candidate.current_designation}
+                          </p>
                         )}
+                        <div className="flex items-center gap-2 mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                          <span className="flex items-center gap-1 text-xs" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <Mail className="w-3 h-3 flex-shrink-0" />
+                            {candidate.email}
+                          </span>
+                          {candidate.current_city && (
+                            <span className="flex items-center gap-1 text-xs flex-shrink-0">
+                              <MapPin className="w-3 h-3" />
+                              {candidate.current_city}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-4">
-                    <div className="text-sm">
-                      <p style={{ color: 'var(--text-primary)' }}>{candidate.total_experience_years || 0} years</p>
-                      {candidate.current_company && (
-                        <p style={{ color: 'var(--text-muted)' }}>{candidate.current_company}</p>
-                      )}
-                    </div>
+
+                  {/* Experience */}
+                  <td className="px-4 py-3.5">
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      {candidate.total_experience_years
+                        ? `${candidate.total_experience_years} Yr${candidate.total_experience_years !== 1 ? 's' : ''}`
+                        : 'Fresher'}
+                    </p>
+                    {candidate.current_company && (
+                      <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--text-muted)', maxWidth: 120 }}>
+                        {candidate.current_company}
+                      </p>
+                    )}
                   </td>
-                  <td className="px-4 py-4">
+
+                  {/* Skills */}
+                  <td className="px-4 py-3.5">
                     <div className="flex flex-wrap gap-1">
                       {(candidate.skill_tags || []).slice(0, 3).map((skill, i) => (
                         <span
                           key={i}
-                          className="px-2 py-0.5 text-xs rounded-full"
+                          className="px-2 py-0.5 text-xs rounded-md font-medium"
                           style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
                         >
                           {skill}
@@ -797,119 +864,208 @@ const Candidates = () => {
                       ))}
                       {(candidate.skill_tags || []).length > 3 && (
                         <span
-                          className="px-2 py-0.5 text-xs rounded-full"
-                          style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)' }}
+                          className="px-2 py-0.5 text-xs rounded-md font-medium"
+                          style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)' }}
                         >
                           +{candidate.skill_tags.length - 3}
                         </span>
                       )}
+                      {(candidate.skill_tags || []).length === 0 && (
+                        <span className="text-xs" style={{ color: 'var(--text-disabled)' }}>—</span>
+                      )}
                     </div>
                   </td>
-                  <td className="px-4 py-4">
-                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                      {candidate.notice_period?.replace('_', ' ') || '-'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                      {candidate.partner_id
-                        ? `Partner (${candidate.partner_name || 'Unknown'})`
-                        : (candidate.created_by_name || '—')}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    {candidate.total_applications > 0 ? (
-                      <Link
-                        to={`/applications?candidate_id=${candidate.id}`}
-                        className="flex items-center gap-1 text-sm font-medium"
-                        style={{ color: 'var(--accent)' }}
-                      >
-                        <Briefcase className="w-3.5 h-3.5" />
-                        {candidate.total_applications} job{candidate.total_applications !== 1 ? 's' : ''}
-                      </Link>
+
+                  {/* Added By */}
+                  <td className="px-4 py-3.5">
+                    {candidate.partner_id ? (
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                          {candidate.partner_name || 'Partner'}
+                        </p>
+                        <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ background: 'rgba(139,92,246,0.12)', color: '#8b5cf6' }}>
+                          Partner
+                        </span>
+                      </div>
+                    ) : candidate.created_by_name ? (
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                          {candidate.created_by_name}
+                        </p>
+                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Admin</span>
+                      </div>
                     ) : (
-                      <span className="text-sm" style={{ color: 'var(--text-disabled)' }}>—</span>
+                      <span className="text-xs px-2 py-0.5 rounded font-medium" style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)' }}>
+                        System
+                      </span>
                     )}
                   </td>
-                  <td className="px-4 py-4">
+
+                  {/* Applied Jobs */}
+                  <td className="px-4 py-3.5">
+                    {candidate.total_applications > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {candidate.current_job_title && (
+                          <Link
+                            to={`/applications?candidate_id=${candidate.id}`}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium"
+                            style={{ background: 'rgba(99,102,241,0.1)', color: '#6366f1' }}
+                          >
+                            <Briefcase className="w-3 h-3 flex-shrink-0" />
+                            <span style={{ maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {candidate.current_job_title}
+                            </span>
+                          </Link>
+                        )}
+                        {candidate.total_applications > 1 && (
+                          <Link
+                            to={`/applications?candidate_id=${candidate.id}`}
+                            className="px-2 py-0.5 rounded-md text-xs font-medium"
+                            style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)' }}
+                          >
+                            +{candidate.total_applications - (candidate.current_job_title ? 1 : 0)} more
+                          </Link>
+                        )}
+                        {!candidate.current_job_title && (
+                          <Link
+                            to={`/applications?candidate_id=${candidate.id}`}
+                            className="flex items-center gap-1 text-xs font-medium"
+                            style={{ color: 'var(--accent)' }}
+                          >
+                            <Briefcase className="w-3.5 h-3.5" />
+                            {candidate.total_applications} job{candidate.total_applications !== 1 ? 's' : ''}
+                          </Link>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs" style={{ color: 'var(--text-disabled)' }}>—</span>
+                    )}
+                  </td>
+
+                  {/* Notice Period */}
+                  <td className="px-4 py-3.5">
+                    <span
+                      className="text-xs font-medium px-2.5 py-1 rounded-full"
+                      style={{
+                        background: candidate.notice_period === 'immediate'
+                          ? 'rgba(16,185,129,0.12)' : 'var(--bg-hover)',
+                        color: candidate.notice_period === 'immediate'
+                          ? '#10b981' : 'var(--text-secondary)',
+                      }}
+                    >
+                      {formatNotice(candidate.notice_period)}
+                    </span>
+                  </td>
+
+                  {/* Status */}
+                  <td className="px-4 py-3.5">
                     <select
                       value={candidate.status}
                       onChange={(e) => handleStatusChange(candidate, e.target.value)}
                       onClick={(e) => e.stopPropagation()}
-                      className="text-xs font-medium rounded-full px-2 py-1 border-0 cursor-pointer focus:outline-none focus:ring-2"
-                      style={{
-                        ...getStatusStyle(candidate.status),
-                        focusRingColor: 'var(--accent)',
-                      }}
+                      className="text-xs font-semibold rounded-full px-3 py-1.5 border-0 cursor-pointer focus:outline-none appearance-none"
+                      style={getStatusStyle(candidate.status)}
                     >
-                      <option value="active">Active</option>
-                      <option value="blacklisted">Blacklisted</option>
+                      <option value="active">● Active</option>
+                      <option value="blacklisted">● Blacklisted</option>
                       {userType !== 'partner' && (
-                        <option
-                          value="apply"
-                          disabled={candidate.status === 'blacklisted'}
-                        >
+                        <option value="apply" disabled={candidate.status === 'blacklisted'}>
                           Apply →
                         </option>
                       )}
                     </select>
                   </td>
-                  <td className="px-4 py-4">
+
+                  {/* Actions */}
+                  <td className="px-4 py-3.5">
                     <div className="flex items-center justify-end gap-2">
                       <button
-                        onClick={() => candidate.resume_url ? openResume(candidate.id) : toast.error('No resume uploaded for this candidate')}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0"
-                        style={{ color: candidate.resume_url ? 'var(--accent)' : 'var(--text-disabled)' }}
-                        onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--accent-light)' }}
-                        onMouseLeave={e => e.currentTarget.style.background = ''}
-                        title={candidate.resume_url ? 'View Resume' : 'No resume uploaded'}
-                      >
-                        <FileText className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => candidate.resume_url ? downloadResume(candidate.id, candidate.full_name, candidate.resume_url) : toast.error('No resume uploaded for this candidate')}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0"
-                        style={{ color: candidate.resume_url ? '#43E97B' : 'var(--text-disabled)' }}
-                        onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'rgba(67,233,123,0.12)' }}
-                        onMouseLeave={e => e.currentTarget.style.background = ''}
-                        title={candidate.resume_url ? 'Download Resume' : 'No resume uploaded'}
-                      >
-                        <Download className="w-4 h-4" />
-                      </button>
-                      <button
                         onClick={() => navigate(`/candidates/${candidate.id}`)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0"
-                        style={{ color: 'var(--text-muted)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                        onMouseLeave={e => e.currentTarget.style.background = ''}
-                        title="View Candidate"
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity flex-shrink-0"
+                        style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+                        onMouseLeave={e => e.currentTarget.style.opacity = '1'}
                       >
-                        <Eye className="w-4 h-4" />
+                        View Profile
                       </button>
-                      {has('candidates:edit') && (
+
+                      <div className="relative flex-shrink-0" data-menu-container>
                         <button
-                          onClick={() => navigate(`/candidates/${candidate.id}/edit`)}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0"
+                          onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === candidate.id ? null : candidate.id) }}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
                           style={{ color: 'var(--text-muted)' }}
                           onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                           onMouseLeave={e => e.currentTarget.style.background = ''}
-                          title="Edit Candidate"
                         >
-                          <Edit className="w-4 h-4" />
+                          <MoreVertical className="w-4 h-4" />
                         </button>
-                      )}
-                      {has('candidates:delete') && (
-                        <button
-                          onClick={() => handleDelete(candidate.id, candidate.full_name)}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors flex-shrink-0"
-                          style={{ color: '#FF4757' }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,71,87,0.10)'}
-                          onMouseLeave={e => e.currentTarget.style.background = ''}
-                          title="Delete Candidate"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+
+                        {openMenuId === candidate.id && (
+                          <div
+                            className="absolute right-0 z-50 py-1 rounded-xl"
+                            style={{
+                              top: 'calc(100% + 4px)',
+                              minWidth: 176,
+                              background: 'var(--bg-card)',
+                              border: '1px solid var(--border-card)',
+                              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                            }}
+                          >
+                            <button
+                              onClick={() => { openResume(candidate.id); setOpenMenuId(null) }}
+                              disabled={!candidate.resume_url}
+                              className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors disabled:opacity-40 disabled:cursor-default"
+                              style={{ color: 'var(--text-primary)' }}
+                              onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                              onMouseLeave={e => e.currentTarget.style.background = ''}
+                            >
+                              <FileText className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#6366f1' }} />
+                              View Resume
+                            </button>
+
+                            <button
+                              onClick={() => { downloadResume(candidate.id, candidate.full_name, candidate.resume_url); setOpenMenuId(null) }}
+                              disabled={!candidate.resume_url}
+                              className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors disabled:opacity-40 disabled:cursor-default"
+                              style={{ color: 'var(--text-primary)' }}
+                              onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                              onMouseLeave={e => e.currentTarget.style.background = ''}
+                            >
+                              <Download className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#10b981' }} />
+                              Download Resume
+                            </button>
+
+                            {has('candidates:edit') && (
+                              <>
+                                <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 12px' }} />
+                                <button
+                                  onClick={() => { navigate(`/candidates/${candidate.id}/edit`); setOpenMenuId(null) }}
+                                  className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors"
+                                  style={{ color: 'var(--text-primary)' }}
+                                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                                  onMouseLeave={e => e.currentTarget.style.background = ''}
+                                >
+                                  <Edit className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#f59e0b' }} />
+                                  Edit Candidate
+                                </button>
+                              </>
+                            )}
+
+                            {has('candidates:delete') && (
+                              <button
+                                onClick={() => { handleDelete(candidate.id, candidate.full_name); setOpenMenuId(null) }}
+                                className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors"
+                                style={{ color: '#ef4444' }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
+                                onMouseLeave={e => e.currentTarget.style.background = ''}
+                              >
+                                <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
+                                Delete Candidate
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </td>
                 </tr>

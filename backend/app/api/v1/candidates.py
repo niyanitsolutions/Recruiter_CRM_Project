@@ -477,6 +477,69 @@ async def view_candidate_resume(
     return FileResponse(file_path, media_type=media_type, filename=os.path.basename(file_path))
 
 
+@router.post("/{candidate_id}/photo")
+async def upload_candidate_photo(
+    candidate_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db),
+    _: bool = Depends(require_permissions(["candidates:edit"]))
+):
+    """Upload or replace a candidate's profile photo (JPG, JPEG, PNG, WEBP — max 5 MB)"""
+    import os, sys, pathlib
+
+    ALLOWED = {".jpg", ".jpeg", ".png", ".webp"}
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in ALLOWED:
+        raise HTTPException(status_code=400, detail="Only JPG, JPEG, PNG, WEBP images are allowed")
+
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Profile photo must be smaller than 5 MB")
+
+    candidate = await db.candidates.find_one(
+        {"_id": candidate_id, "is_deleted": {"$ne": True}},
+        {"_id": 1},
+    )
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    _backend_root = pathlib.Path(__file__).resolve().parent.parent.parent.parent
+    upload_dir = _backend_root / "uploads" / "candidate_photos"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    fname = f"{uuid.uuid4()}{ext}"
+    (upload_dir / fname).write_bytes(contents)
+
+    photo_url = f"/api/v1/uploads/candidate_photos/{fname}"
+    await db.candidates.update_one(
+        {"_id": candidate_id},
+        {"$set": {"photo_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
+    )
+    return {"success": True, "photo_url": photo_url}
+
+
+@router.delete("/{candidate_id}/photo")
+async def delete_candidate_photo(
+    candidate_id: str,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db),
+    _: bool = Depends(require_permissions(["candidates:edit"]))
+):
+    """Remove a candidate's profile photo"""
+    candidate = await db.candidates.find_one(
+        {"_id": candidate_id, "is_deleted": {"$ne": True}},
+        {"_id": 1},
+    )
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    await db.candidates.update_one(
+        {"_id": candidate_id},
+        {"$set": {"photo_url": None, "updated_at": datetime.now(timezone.utc)}},
+    )
+    return {"success": True}
+
+
 @router.post("/{candidate_id}/resume")
 async def upload_candidate_resume(
     candidate_id: str,
@@ -1358,3 +1421,57 @@ async def public_upload_candidate_resume(token: str, candidate_id: str, file: Up
     )
 
     return {"success": True, "resume_url": resume_url}
+
+
+@public_router.post("/candidate-form/{token}/photo")
+async def public_upload_candidate_photo(token: str, candidate_id: str, file: UploadFile = File(...)):
+    """
+    Public endpoint — no auth.
+    Upload a profile photo for a candidate created via a form link.
+    Validates that the token was used and the candidate_id matches.
+    """
+    import os, pathlib
+
+    from app.core.database import get_master_db as _master, get_company_db as _cdb
+
+    master_db = _master()
+    tenants = await master_db.tenants.find({}, {"company_id": 1}).to_list(length=500)
+    company_db = None
+    for t in tenants:
+        cid = t.get("company_id")
+        if not cid:
+            continue
+        cdb = _cdb(cid)
+        doc = await cdb.candidate_form_tokens.find_one({"_id": token})
+        if doc:
+            if not doc.get("used") or doc.get("candidate_id") != candidate_id:
+                raise HTTPException(status_code=403, detail="Invalid upload request.")
+            company_db = cdb
+            break
+
+    if not company_db:
+        raise HTTPException(status_code=404, detail="Invalid token.")
+
+    ALLOWED = {".jpg", ".jpeg", ".png", ".webp"}
+    MAX_SIZE = 5 * 1024 * 1024
+    _, ext = os.path.splitext((file.filename or "").lower())
+    if ext not in ALLOWED:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG, WEBP images are allowed.")
+
+    content = await file.read()
+    if len(content) > MAX_SIZE:
+        raise HTTPException(status_code=400, detail="Profile photo must be smaller than 5 MB.")
+
+    _backend_root = pathlib.Path(__file__).resolve().parent.parent.parent.parent
+    upload_dir = _backend_root / "uploads" / "candidate_photos"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    fname = f"{uuid.uuid4()}{ext}"
+    (upload_dir / fname).write_bytes(content)
+
+    photo_url = f"/api/v1/uploads/candidate_photos/{fname}"
+    await company_db.candidates.update_one(
+        {"_id": candidate_id},
+        {"$set": {"photo_url": photo_url}},
+    )
+
+    return {"success": True, "photo_url": photo_url}

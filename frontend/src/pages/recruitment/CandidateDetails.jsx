@@ -12,6 +12,7 @@ import candidateService from '../../services/candidateService'
 import applicationService from '../../services/applicationService'
 import { selectUserType } from '../../store/authSlice'
 import { formatDate, formatDateTime, getInitials } from '../../utils/format'
+import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const CANDIDATE_STATUS = {
@@ -459,8 +460,13 @@ const CandidateDetails = () => {
           <div className="bg-white border border-surface-200 rounded-xl p-5 sticky top-6">
             {/* Avatar + name */}
             <div className="flex flex-col items-center text-center mb-5 pb-5 border-b border-surface-100">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center text-white text-2xl font-bold mb-3 shadow-md">
-                {getInitials(candidate.full_name)}
+              <div className="mb-3">
+                <EmployeeAvatar
+                  name={candidate.full_name}
+                  photoUrl={candidate.photo_url}
+                  size={80}
+                  style={{ borderRadius: 16, boxShadow: '0 4px 12px rgba(0,0,0,0.12)' }}
+                />
               </div>
               <h2 className="text-base font-bold text-surface-900">{candidate.full_name}</h2>
               {(candidate.current_designation || candidate.current_company) && (

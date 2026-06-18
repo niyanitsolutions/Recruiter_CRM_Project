@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Save, Plus, Trash2, Sparkles, Upload, FileText } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Sparkles, Upload, FileText, Camera, X } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import candidateService from '../../services/candidateService'
 import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
 import { useDraftRecovery } from '../../hooks/useDraftRecovery'
+import ImageCropModal from '../../components/common/ImageCropModal'
 
 const EMPTY_EDU = () => ({ degree: '', field_of_study: '', institution: '', from_year: '', to_year: '', percentage: '' })
 const EMPTY_EXP = () => ({ company_name: '', designation: '', start_date: '', end_date: '', is_current: false })
@@ -41,6 +42,14 @@ const CandidateForm = () => {
   const [pendingResumeFile, setPendingResumeFile] = useState(null)
   const [isFresher, setIsFresher] = useState(false)
   const [errors, setErrors] = useState({})
+
+  // Photo upload state
+  const [photoUrl, setPhotoUrl] = useState(null)
+  const [cropFile, setCropFile] = useState(null)
+  const [croppedBlob, setCroppedBlob] = useState(null)
+  const [croppedPreview, setCroppedPreview] = useState(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const photoInputRef = useRef(null)
 
   // Array states
   const [education, setEducation] = useState([EMPTY_EDU()])
@@ -156,6 +165,7 @@ const CandidateForm = () => {
           setIsFresher(true)
         }
 
+        if (data.photo_url) setPhotoUrl(data.photo_url)
         setFormData(prev => ({
           ...prev,
           first_name: data.first_name || '',
@@ -251,6 +261,58 @@ const CandidateForm = () => {
     }
   }
   const removeLocation = (location) => setFormData(prev => ({ ...prev, preferred_locations: prev.preferred_locations.filter(l => l !== location) }))
+
+  // ── Photo handlers ────────────────────────────────────────────────
+  const PHOTO_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+
+  const handlePhotoFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!PHOTO_TYPES.includes(file.type)) {
+      toast.error('Please upload a JPG, PNG or WEBP image.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Profile photo must be smaller than 5 MB.')
+      return
+    }
+    setCropFile(file)
+  }
+
+  const handleCropSave = async (blob) => {
+    setCropFile(null)
+    if (isEdit) {
+      setUploadingPhoto(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', blob, 'photo.jpg')
+        const res = await candidateService.uploadPhoto(id, fd)
+        setPhotoUrl(res.photo_url)
+        toast.success('Profile photo updated')
+      } catch {
+        toast.error('Failed to upload photo')
+      }
+      setUploadingPhoto(false)
+    } else {
+      const preview = URL.createObjectURL(blob)
+      if (croppedPreview) URL.revokeObjectURL(croppedPreview)
+      setCroppedBlob(blob)
+      setCroppedPreview(preview)
+    }
+  }
+
+  const handleRemovePhoto = async () => {
+    if (croppedPreview) URL.revokeObjectURL(croppedPreview)
+    setCroppedBlob(null)
+    setCroppedPreview(null)
+    setPhotoUrl(null)
+    if (isEdit && id) {
+      try {
+        await candidateService.deletePhoto(id)
+      } catch { /* non-fatal */ }
+    }
+  }
 
   const handleResumeUpload = async (e) => {
     const file = e.target.files?.[0]
@@ -587,6 +649,15 @@ const CandidateForm = () => {
 
       const newId = createRes?.data?.id || createRes?.data?._id
 
+      // Upload photo if staged (non-fatal — candidate was already created)
+      if (croppedBlob && newId) {
+        try {
+          const fd = new FormData()
+          fd.append('file', croppedBlob, 'photo.jpg')
+          await candidateService.uploadPhoto(newId, fd)
+        } catch { /* non-fatal */ }
+      }
+
       // Upload resume in a separate try-catch so a failed upload never hides a successful create
       if (pendingResumeFile && newId) {
         try {
@@ -699,7 +770,76 @@ const CandidateForm = () => {
         <DraftRecoveryBanner savedAt={draftSavedAt} onRestore={restoreDraft} onDiscard={discardDraft} />
       )}
 
+      {cropFile && (
+        <ImageCropModal
+          file={cropFile}
+          onSave={handleCropSave}
+          onClose={() => setCropFile(null)}
+        />
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
+
+        {/* Profile Photo */}
+        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
+          <h2 className="text-lg font-semibold text-surface-900 mb-4">Profile Photo</h2>
+          <div className="flex items-center gap-6">
+            {/* Preview */}
+            <div className="flex-shrink-0">
+              {(croppedPreview || photoUrl) ? (
+                <img
+                  src={croppedPreview || photoUrl}
+                  alt="Profile"
+                  className="w-24 h-24 rounded-full object-cover border-2 border-surface-200 shadow-sm"
+                  onError={(e) => { e.currentTarget.style.display = 'none' }}
+                />
+              ) : (
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center text-white text-3xl font-bold shadow-sm">
+                  {formData.first_name?.charAt(0)?.toUpperCase() || <Camera className="w-8 h-8 opacity-70" />}
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex-1">
+              <p className="text-sm text-surface-500 mb-3">JPG, PNG or WEBP · Max 5 MB</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={uploadingPhoto}
+                  className="btn-secondary flex items-center gap-2 text-sm"
+                >
+                  <Camera className="w-4 h-4" />
+                  {(croppedPreview || photoUrl) ? 'Change Photo' : 'Upload Photo'}
+                </button>
+                {(croppedPreview || photoUrl) && (
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                    Remove
+                  </button>
+                )}
+              </div>
+              {uploadingPhoto && (
+                <p className="text-xs text-accent-600 mt-2 flex items-center gap-1">
+                  <span className="inline-block w-3 h-3 border-2 border-accent-500 border-t-transparent rounded-full animate-spin" />
+                  Uploading…
+                </p>
+              )}
+            </div>
+          </div>
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/jpeg,image/jpg,image/png,image/webp"
+            className="hidden"
+            onChange={handlePhotoFileSelect}
+          />
+        </div>
 
         {/* Resume Upload */}
         <div ref={resumeRef} className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">

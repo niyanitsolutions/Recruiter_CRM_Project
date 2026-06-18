@@ -482,6 +482,7 @@ class CandidateListResponse(BaseModel):
     assigned_to: Optional[str]
     assigned_to_name: Optional[str] = None
     resume_url: Optional[str] = None
+    photo_url: Optional[str] = None
     partner_id: Optional[str] = None
     partner_name: Optional[str] = None
     created_by: Optional[str] = None

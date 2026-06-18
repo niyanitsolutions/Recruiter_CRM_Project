@@ -371,10 +371,11 @@ import pathlib as _pathlib
 _APP_DIR     = _pathlib.Path(__file__).resolve().parent          # .../backend/app
 _BACKEND_DIR = _APP_DIR.parent                                    # .../backend
 _UPLOADS_DIR = _BACKEND_DIR / "uploads"
-os.makedirs(str(_UPLOADS_DIR / "resumes"),   exist_ok=True)
-os.makedirs(str(_UPLOADS_DIR / "documents"), exist_ok=True)
-os.makedirs(str(_UPLOADS_DIR / "profiles"),  exist_ok=True)
-os.makedirs(str(_UPLOADS_DIR / "hrm_docs"),  exist_ok=True)
+os.makedirs(str(_UPLOADS_DIR / "resumes"),          exist_ok=True)
+os.makedirs(str(_UPLOADS_DIR / "documents"),        exist_ok=True)
+os.makedirs(str(_UPLOADS_DIR / "profiles"),         exist_ok=True)
+os.makedirs(str(_UPLOADS_DIR / "hrm_docs"),         exist_ok=True)
+os.makedirs(str(_UPLOADS_DIR / "candidate_photos"), exist_ok=True)
 # Override the relative default so _save_to_local always writes to the same
 # absolute directory that StaticFiles serves, regardless of the uvicorn CWD.
 settings.UPLOAD_DIR = str(_UPLOADS_DIR)

@@ -130,6 +130,29 @@ const candidateService = {
     return response.data
   },
 
+  // Upload candidate profile photo (JPG / PNG / WEBP)
+  uploadPhoto: async (candidateId, formData) => {
+    const response = await api.post(`/candidates/${candidateId}/photo`, formData)
+    return response.data
+  },
+
+  // Remove candidate profile photo
+  deletePhoto: async (candidateId) => {
+    const response = await api.delete(`/candidates/${candidateId}/photo`)
+    return response.data
+  },
+
+  // Upload profile photo via public form link (no auth)
+  uploadPhotoPublic: async (token, candidateId, file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const response = await api.post(
+      `/public/candidate-form/${token}/photo?candidate_id=${candidateId}`,
+      fd,
+    )
+    return response.data
+  },
+
   // Upload resume file (PDF / DOC / DOCX)
   uploadResume: async (candidateId, file) => {
     const formData = new FormData()

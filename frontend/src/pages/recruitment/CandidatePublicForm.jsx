@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import { CheckCircle, XCircle, Loader2, Plus, Trash2, Upload } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, Plus, Trash2, Upload, Camera, X } from 'lucide-react'
 import api from '../../services/api'
 import candidateService from '../../services/candidateService'
+import ImageCropModal from '../../components/common/ImageCropModal'
 
 const EMPTY_EDU = () => ({ degree: '', field_of_study: '', institution: '', from_year: '', to_year: '', percentage: '' })
 const EMPTY_EXP = () => ({ company_name: '', designation: '', start_date: '', end_date: '', is_current: false })
@@ -22,6 +23,12 @@ const CandidatePublicForm = () => {
   const [isFresher, setIsFresher] = useState(false)
   const [errors, setErrors] = useState({})
   const [resumeFile, setResumeFile] = useState(null)
+
+  // Photo upload state
+  const [cropFile, setCropFile] = useState(null)
+  const [croppedBlob, setCroppedBlob] = useState(null)
+  const [croppedPreview, setCroppedPreview] = useState(null)
+  const photoInputRef = useRef(null)
 
   // Array states
   const [education, setEducation] = useState([EMPTY_EDU()])
@@ -123,6 +130,38 @@ const CandidatePublicForm = () => {
     setNewLocation('')
   }
   const removeLocation = (l) => set('preferred_locations', form.preferred_locations.filter(x => x !== l))
+
+  // ── Photo handlers ────────────────────────────────────────────────
+  const PHOTO_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+
+  const handlePhotoFileSelect = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!PHOTO_TYPES.includes(file.type)) {
+      setError('Please upload a JPG, PNG or WEBP image.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Profile photo must be smaller than 5 MB.')
+      return
+    }
+    setCropFile(file)
+  }
+
+  const handlePhotoCropSave = (blob) => {
+    setCropFile(null)
+    const preview = URL.createObjectURL(blob)
+    if (croppedPreview) URL.revokeObjectURL(croppedPreview)
+    setCroppedBlob(blob)
+    setCroppedPreview(preview)
+  }
+
+  const handleRemovePhoto = () => {
+    if (croppedPreview) URL.revokeObjectURL(croppedPreview)
+    setCroppedBlob(null)
+    setCroppedPreview(null)
+  }
 
   const handleResumeChange = async (e) => {
     const file = e.target.files?.[0]
@@ -293,6 +332,12 @@ const CandidatePublicForm = () => {
       const submitRes = await api.post(`/public/candidate-form/${token}`, payload)
       const candidateId = submitRes.data?.candidate_id
 
+      if (croppedBlob && candidateId) {
+        try {
+          await candidateService.uploadPhotoPublic(token, candidateId, croppedBlob)
+        } catch { /* non-fatal */ }
+      }
+
       if (resumeFile && candidateId) {
         try {
           await candidateService.uploadResumePublic(token, candidateId, resumeFile)
@@ -352,7 +397,65 @@ const CandidatePublicForm = () => {
 
         {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
+        {cropFile && (
+          <ImageCropModal
+            file={cropFile}
+            onSave={handlePhotoCropSave}
+            onClose={() => setCropFile(null)}
+          />
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
+
+          {/* Profile Photo */}
+          <div className="bg-white rounded-xl shadow-sm border border-surface-100 p-6">
+            <h2 className="text-base font-semibold text-surface-900 mb-4">Profile Photo <span className="text-surface-400 text-xs font-normal">(Optional)</span></h2>
+            <div className="flex items-center gap-6">
+              <div className="flex-shrink-0">
+                {croppedPreview ? (
+                  <img
+                    src={croppedPreview}
+                    alt="Profile"
+                    className="w-20 h-20 rounded-full object-cover border-2 border-surface-200 shadow-sm"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center text-white">
+                    <Camera className="w-7 h-7 opacity-70" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-surface-500 mb-3">JPG, PNG or WEBP · Max 5 MB</p>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium border border-surface-300 rounded-lg hover:bg-surface-50 transition-colors text-surface-700"
+                  >
+                    <Camera className="w-4 h-4" />
+                    {croppedPreview ? 'Change Photo' : 'Upload Photo'}
+                  </button>
+                  {croppedPreview && (
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
+              className="hidden"
+              onChange={handlePhotoFileSelect}
+            />
+          </div>
 
           {/* Resume Upload */}
           <div ref={resumeRef} className="bg-white rounded-xl shadow-sm border border-surface-100 p-6">

@@ -370,8 +370,8 @@ class CandidateService:
             "current_designation": 1, "current_ctc": 1, "expected_ctc": 1,
             "notice_period": 1, "skill_tags": 1, "source": 1, "status": 1,
             "assigned_to": 1, "partner_id": 1, "created_by": 1,
-            "resume_url": 1, "total_applications": 1, "current_job_title": 1,
-            "current_stage": 1, "created_at": 1,
+            "resume_url": 1, "photo_url": 1, "total_applications": 1,
+            "current_job_title": 1, "current_stage": 1, "created_at": 1,
         }
 
         total, candidates = await asyncio.gather(
@@ -423,12 +423,13 @@ class CandidateService:
                 created_by=candidate.get("created_by"),
                 created_by_name=users_map.get(candidate.get("created_by")),
                 resume_url=candidate.get("resume_url"),
+                photo_url=candidate.get("photo_url"),
                 total_applications=candidate.get("total_applications", 0),
                 current_job_title=candidate.get("current_job_title"),
                 current_stage=candidate.get("current_stage"),
                 created_at=candidate["created_at"]
             ))
-        
+
         return {
             "data": result,
             "pagination": {
@@ -918,6 +919,7 @@ class CandidateService:
                 source=candidate.get("source", "direct"),
                 status=candidate.get("status", "new"),
                 assigned_to=candidate.get("assigned_to"),
+                photo_url=candidate.get("photo_url"),
                 current_job_title=candidate.get("current_job_title"),
                 current_stage=candidate.get("current_stage"),
                 created_at=candidate["created_at"]
