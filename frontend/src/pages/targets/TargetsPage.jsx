@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   Target, Plus, Trophy, TrendingUp, Users, DollarSign, Calendar,
-  ChevronRight, Filter, Search, MoreVertical, Edit, Trash2,
+  ChevronRight, Filter, Search,
   CheckCircle, Clock, AlertCircle, Award
 } from 'lucide-react';
 import targetService from '../../services/targetService';

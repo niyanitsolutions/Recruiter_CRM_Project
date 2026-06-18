@@ -412,7 +412,7 @@ const AdminDashboard = () => {
     return (
       <div className="p-3 space-y-4 page-enter">
         <div className="h-20 rounded-2xl skeleton" />
-        <div className="grid grid-cols-3 xl:grid-cols-9 gap-3">
+        <div className="grid grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-3">
           {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-28 rounded-2xl skeleton" />)}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -583,7 +583,7 @@ const AdminDashboard = () => {
       {/* HEADER — Greeting | Subscription (center) | Date + Actions            */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <Card style={{ padding: '16px 20px' }}>
-        <div className="flex items-center gap-4 min-w-0">
+        <div className="flex flex-wrap items-center gap-3 min-w-0">
 
           {/* Left — Greeting */}
           <div className="flex-shrink-0 min-w-0" style={{ maxWidth: '240px' }}>
@@ -595,9 +595,9 @@ const AdminDashboard = () => {
             </p>
           </div>
 
-          {/* Center — Subscription info (admin/owner, lg+ screens only) */}
+          {/* Center — Subscription info (admin/owner, 2xl screens only) */}
           {isAdminOrOwner && seatStatus && (
-            <div className="hidden xl:flex flex-1 items-center justify-center">
+            <div className="hidden 2xl:flex flex-1 items-center justify-center">
               <div
                 className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
                 style={{ border: '1.5px dashed rgba(124,58,237,0.30)', background: 'rgba(124,58,237,0.03)' }}
@@ -642,8 +642,8 @@ const AdminDashboard = () => {
 
           {/* Right — Date + Period + Quick Action */}
           <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
-            <span className="text-xs hidden xl:block" style={{ color: 'var(--text-muted)' }}>{dateStr}</span>
-            <div className="hidden sm:block">
+            <span className="text-xs hidden 2xl:block" style={{ color: 'var(--text-muted)' }}>{dateStr}</span>
+            <div className="hidden xs:block">
               <PeriodFilter value={period.key} onChange={setPeriod} />
             </div>
             <button
@@ -759,7 +759,7 @@ const AdminDashboard = () => {
           ? trendData.map(d => d.value)
           : [1, 1, 1, 1, 1, 1, 1]
         return (
-          <div className="grid grid-cols-3 xl:grid-cols-9 gap-3">
+          <div className="grid grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-3">
             {has('candidates:view') && (
               <KpiCard
                 title="Total Candidates"

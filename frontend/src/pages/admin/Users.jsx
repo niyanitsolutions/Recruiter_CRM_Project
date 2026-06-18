@@ -774,20 +774,20 @@ const Users = () => {
         <table className="w-full">
           <thead className="bg-surface-50 border-b border-surface-200">
             <tr>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Department</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Code</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Head</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Users</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Status</th>
-              <th className="text-right px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Actions</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Department</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Code</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Head</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Users</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Status</th>
+              <th className="text-right px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-100">
             {deptLoading ? (
-              <tr><td colSpan={6} className="px-6 py-8 text-center text-surface-500">Loading…</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-surface-500">Loading…</td></tr>
             ) : deptList.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-16 text-center">
+                <td colSpan={6} className="px-4 py-16 text-center">
                   <Building className="w-10 h-10 text-surface-300 mx-auto mb-3" />
                   <p className="text-surface-500 font-medium">No departments yet</p>
                   {has('departments:create') && (
@@ -803,26 +803,26 @@ const Users = () => {
             ) : (
               deptList.map(dept => (
                 <tr key={dept.id} className="hover:bg-surface-50">
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <Building className="w-5 h-5 text-surface-400 flex-shrink-0" />
                       <span className="font-medium text-surface-900">{dept.name}</span>
                     </div>
                     {dept.description && <p className="text-xs text-surface-400 mt-0.5 ml-8 line-clamp-1">{dept.description}</p>}
                   </td>
-                  <td className="px-6 py-4 text-surface-600 text-sm">{dept.code || '-'}</td>
-                  <td className="px-6 py-4 text-surface-600 text-sm">{dept.head_user_name || '-'}</td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3 text-surface-600 text-sm">{dept.code || '-'}</td>
+                  <td className="px-4 py-3 text-surface-600 text-sm">{dept.head_user_name || '-'}</td>
+                  <td className="px-4 py-3">
                     <span className="flex items-center gap-1 text-surface-600 text-sm">
                       <UsersIcon className="w-4 h-4" /> {dept.user_count || 0}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${dept.is_active ? 'bg-green-100 text-green-700' : 'bg-surface-100 text-surface-600'}`}>
                       {dept.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
                       {has('departments:edit') && (
                         <button
@@ -860,20 +860,20 @@ const Users = () => {
         <table className="w-full">
           <thead className="bg-surface-50 border-b border-surface-200">
             <tr>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Designation</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Level</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Department</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Users</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Status</th>
-              <th className="text-right px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Actions</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Designation</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Level</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Department</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Users</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Status</th>
+              <th className="text-right px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-100">
             {desigLoading ? (
-              <tr><td colSpan={6} className="px-6 py-8 text-center text-surface-500">Loading…</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-surface-500">Loading…</td></tr>
             ) : desigList.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-16 text-center">
+                <td colSpan={6} className="px-4 py-16 text-center">
                   <Award className="w-10 h-10 text-surface-300 mx-auto mb-3" />
                   <p className="text-surface-500 font-medium">No designations yet</p>
                   {has('designations:create') && (
@@ -889,30 +889,30 @@ const Users = () => {
             ) : (
               desigList.map(desig => (
                 <tr key={desig.id} className="hover:bg-surface-50">
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <Award className="w-5 h-5 text-surface-400 flex-shrink-0" />
                       <span className="font-medium text-surface-900">{desig.name}</span>
                     </div>
                     {desig.description && <p className="text-xs text-surface-400 mt-0.5 ml-8 line-clamp-1">{desig.description}</p>}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <span className="px-2 py-1 bg-surface-100 text-surface-700 rounded text-sm">
                       {desig.level_name || (desig.level ? `Level ${desig.level}` : '-')}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-surface-600 text-sm">{desig.department_name || '-'}</td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3 text-surface-600 text-sm">{desig.department_name || '-'}</td>
+                  <td className="px-4 py-3">
                     <span className="flex items-center gap-1 text-surface-600 text-sm">
                       <UsersIcon className="w-4 h-4" /> {desig.user_count || 0}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${desig.is_active ? 'bg-green-100 text-green-700' : 'bg-surface-100 text-surface-600'}`}>
                       {desig.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
                       {has('designations:edit') && (
                         <button
@@ -962,8 +962,8 @@ const Users = () => {
       />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-surface-900">Users</h1>
           <p className="text-surface-500 mt-1">Manage your organization's users, departments, and designations</p>
         </div>
@@ -1072,24 +1072,24 @@ const Users = () => {
               <table className="w-full">
                 <thead className="bg-surface-50 border-b border-surface-200">
                   <tr>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">User</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Designation</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Department</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Status</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Employee Profile</th>
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Last Login</th>
-                    <th className="text-right px-6 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider">Actions</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '25%' }}>User</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '14%' }}>Designation</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '14%' }}>Department</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '10%' }}>Status</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '16%' }}>Employee Profile</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '13%' }}>Last Login</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '8%' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100">
                   {loading ? (
-                    <tr><td colSpan={7} className="px-6 py-8 text-center text-surface-500">Loading...</td></tr>
+                    <tr><td colSpan={7} className="px-4 py-8 text-center text-surface-500">Loading...</td></tr>
                   ) : users.length === 0 ? (
-                    <tr><td colSpan={7} className="px-6 py-8 text-center text-surface-500">No users found</td></tr>
+                    <tr><td colSpan={7} className="px-4 py-8 text-center text-surface-500">No users found</td></tr>
                   ) : (
                     users.map(user => (
                       <tr key={user.id} className="hover:bg-surface-50">
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <EmployeeAvatar name={user.full_name || 'U'} photoUrl={user.avatar_url || null} size={40} />
                             <div>
@@ -1103,7 +1103,7 @@ const Users = () => {
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3">
                           {user.designation === 'Owner' || user.is_owner || user.role === 'owner' ? (
                             <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs font-medium rounded">Owner</span>
                           ) : user.designation === 'Admin' ? (
@@ -1112,9 +1112,9 @@ const Users = () => {
                             <span className="text-surface-600 text-sm">{user.designation || '-'}</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-surface-600 text-sm">{user.department || '-'}</td>
-                        <td className="px-6 py-4"><StatusBadge status={user.status} /></td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 py-3 text-surface-600 text-sm">{user.department || '-'}</td>
+                        <td className="px-4 py-3"><StatusBadge status={user.status} /></td>
+                        <td className="px-4 py-3">
                           <div className="flex flex-col gap-1">
                             <EmployeeProfileBadge user={user} />
                             {(user.employee_profile_status === 'missing' || user.employee_profile_status === 'incomplete') && user.user_type !== 'partner' && (
@@ -1138,10 +1138,10 @@ const Users = () => {
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-surface-500">
+                        <td className="px-4 py-3 text-sm text-surface-500">
                           {user.last_login ? formatDateTime(user.last_login) : 'Never'}
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-4 py-3 text-right">
                           <UserActions
                             user={user}
                             onEdit={(u) => navigate(`/users/${u.id}/edit`)}

@@ -146,12 +146,12 @@ const Jobs = () => {
   return (
     <div className="p-6 page-enter">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Jobs</h1>
           <p style={{ color: 'var(--text-muted)' }}>Manage job postings and requirements</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {has('exports:create') && (
             <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
               <Download className="w-4 h-4" />

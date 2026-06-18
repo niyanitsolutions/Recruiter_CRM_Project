@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   Users, Plus, Search, Filter, Eye, Edit, Trash2,
   Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2, Send, Upload,
-  LayoutGrid, List, Clock, Building2, MoreVertical,
+  LayoutGrid, List, Clock, Building2,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -19,6 +19,7 @@ import { selectUserType } from '../../store/authSlice'
 import { getToken } from '../../utils/token'
 import TableScroll from '../../components/common/TableScroll'
 import EmployeeAvatar from '../../components/common/EmployeeAvatar'
+import ActionMenu, { ActionMenuItem } from '../../components/common/ActionMenu'
 
 // Module-level cache — survives navigation, resets only on hard reload.
 // Dropdown options (statuses, sources, notice periods) are static reference
@@ -122,17 +123,6 @@ const Candidates = () => {
   const [eligibleJobs, setEligibleJobs] = useState([])
   const [eligibleLoading, setEligibleLoading] = useState(false)
   const [applyingJobId, setApplyingJobId] = useState(null)
-  const [openMenuId, setOpenMenuId] = useState(null)
-
-  // Close 3-dot menu when clicking outside
-  useEffect(() => {
-    if (!openMenuId) return
-    const handler = (e) => {
-      if (!e.target.closest('[data-menu-container]')) setOpenMenuId(null)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [openMenuId])
 
   // Debounce refs — keyword waits 400 ms, all other changes are immediate
   const _debounceTimer  = useRef(null)
@@ -348,12 +338,12 @@ const Candidates = () => {
   return (
     <div className="p-6 page-enter">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Candidates</h1>
           <p style={{ color: 'var(--text-muted)' }}>Master talent pool — manage candidate profiles</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {has('exports:create') && (
             <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
               <Download className="w-4 h-4" />
@@ -696,84 +686,49 @@ const Candidates = () => {
                   >
                     View
                   </button>
-
-                  <div className="relative" data-menu-container>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === `card-${candidate.id}` ? null : `card-${candidate.id}`) }}
-                      className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
-                      style={{ color: 'var(--text-muted)' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                      onMouseLeave={e => e.currentTarget.style.background = ''}
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-
-                    {openMenuId === `card-${candidate.id}` && (
-                      <div
-                        className="absolute right-0 z-50 py-1 rounded-xl"
-                        style={{
-                          top: 'calc(100% + 4px)',
-                          minWidth: 176,
-                          background: 'var(--bg-card)',
-                          border: '1px solid var(--border-card)',
-                          boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                        }}
-                      >
-                        <button
-                          onClick={() => { openResume(candidate.id); setOpenMenuId(null) }}
+                  <ActionMenu size={26}>
+                    {(close) => (
+                      <>
+                        <ActionMenuItem
+                          label="View Profile"
+                          icon={Eye}
+                          iconColor="var(--accent)"
+                          onClick={() => { navigate(`/candidates/${candidate.id}`); close() }}
+                        />
+                        <ActionMenuItem
+                          label="View Resume"
+                          icon={FileText}
+                          iconColor="#6366f1"
                           disabled={!candidate.resume_url}
-                          className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors disabled:opacity-40 disabled:cursor-default"
-                          style={{ color: 'var(--text-primary)' }}
-                          onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--bg-hover)' }}
-                          onMouseLeave={e => e.currentTarget.style.background = ''}
-                        >
-                          <FileText className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#6366f1' }} />
-                          View Resume
-                        </button>
-
-                        <button
-                          onClick={() => { downloadResume(candidate.id, candidate.full_name, candidate.resume_url); setOpenMenuId(null) }}
+                          onClick={() => { openResume(candidate.id); close() }}
+                        />
+                        <ActionMenuItem
+                          label="Download Resume"
+                          icon={Download}
+                          iconColor="#10b981"
                           disabled={!candidate.resume_url}
-                          className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors disabled:opacity-40 disabled:cursor-default"
-                          style={{ color: 'var(--text-primary)' }}
-                          onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--bg-hover)' }}
-                          onMouseLeave={e => e.currentTarget.style.background = ''}
-                        >
-                          <Download className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#10b981' }} />
-                          Download Resume
-                        </button>
-
+                          onClick={() => { downloadResume(candidate.id, candidate.full_name, candidate.resume_url); close() }}
+                        />
+                        {has('candidates:edit') && <ActionMenuItem divider />}
                         {has('candidates:edit') && (
-                          <>
-                            <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 12px' }} />
-                            <button
-                              onClick={() => { navigate(`/candidates/${candidate.id}/edit`); setOpenMenuId(null) }}
-                              className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors"
-                              style={{ color: 'var(--text-primary)' }}
-                              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                              onMouseLeave={e => e.currentTarget.style.background = ''}
-                            >
-                              <Edit className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#f59e0b' }} />
-                              Edit Candidate
-                            </button>
-                          </>
+                          <ActionMenuItem
+                            label="Edit Candidate"
+                            icon={Edit}
+                            iconColor="#f59e0b"
+                            onClick={() => { navigate(`/candidates/${candidate.id}/edit`); close() }}
+                          />
                         )}
-
                         {has('candidates:delete') && (
-                          <button
-                            onClick={() => { handleDelete(candidate.id, candidate.full_name); setOpenMenuId(null) }}
-                            className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors"
-                            style={{ color: '#ef4444' }}
-                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
-                            onMouseLeave={e => e.currentTarget.style.background = ''}
-                          >
-                            <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
-                            Delete Candidate
-                          </button>
+                          <ActionMenuItem
+                            label="Delete Candidate"
+                            icon={Trash2}
+                            danger
+                            onClick={() => { handleDelete(candidate.id, candidate.full_name); close() }}
+                          />
                         )}
-                      </div>
+                      </>
                     )}
-                  </div>
+                  </ActionMenu>
                 </div>
               </div>
             </div>
@@ -788,14 +743,14 @@ const Candidates = () => {
           <table className="w-full">
             <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '2px solid var(--border)' }}>
               <tr>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 240 }}>Candidate</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 140 }}>Experience</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 180 }}>Skills</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 140 }}>Added By</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 160 }}>Applied Jobs</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 120 }}>Notice Period</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 120 }}>Status</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', minWidth: 160 }}>Actions</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '22%' }}>Candidate</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '11%' }}>Experience</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '14%' }}>Skills</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '12%' }}>Added By</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '13%' }}>Applied Jobs</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '10%' }}>Notice Period</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '9%' }}>Status</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '9%' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -978,94 +933,59 @@ const Candidates = () => {
 
                   {/* Actions */}
                   <td className="px-4 py-3.5">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => navigate(`/candidates/${candidate.id}`)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity flex-shrink-0"
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-opacity flex-shrink-0 whitespace-nowrap"
                         style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
                         onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
                         onMouseLeave={e => e.currentTarget.style.opacity = '1'}
                       >
-                        View Profile
+                        View
                       </button>
-
-                      <div className="relative flex-shrink-0" data-menu-container>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === candidate.id ? null : candidate.id) }}
-                          className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
-                          style={{ color: 'var(--text-muted)' }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                          onMouseLeave={e => e.currentTarget.style.background = ''}
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-
-                        {openMenuId === candidate.id && (
-                          <div
-                            className="absolute right-0 z-50 py-1 rounded-xl"
-                            style={{
-                              top: 'calc(100% + 4px)',
-                              minWidth: 176,
-                              background: 'var(--bg-card)',
-                              border: '1px solid var(--border-card)',
-                              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                            }}
-                          >
-                            <button
-                              onClick={() => { openResume(candidate.id); setOpenMenuId(null) }}
+                      <ActionMenu>
+                        {(close) => (
+                          <>
+                            <ActionMenuItem
+                              label="View Profile"
+                              icon={Eye}
+                              iconColor="var(--accent)"
+                              onClick={() => { navigate(`/candidates/${candidate.id}`); close() }}
+                            />
+                            <ActionMenuItem
+                              label="View Resume"
+                              icon={FileText}
+                              iconColor="#6366f1"
                               disabled={!candidate.resume_url}
-                              className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors disabled:opacity-40 disabled:cursor-default"
-                              style={{ color: 'var(--text-primary)' }}
-                              onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--bg-hover)' }}
-                              onMouseLeave={e => e.currentTarget.style.background = ''}
-                            >
-                              <FileText className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#6366f1' }} />
-                              View Resume
-                            </button>
-
-                            <button
-                              onClick={() => { downloadResume(candidate.id, candidate.full_name, candidate.resume_url); setOpenMenuId(null) }}
+                              onClick={() => { openResume(candidate.id); close() }}
+                            />
+                            <ActionMenuItem
+                              label="Download Resume"
+                              icon={Download}
+                              iconColor="#10b981"
                               disabled={!candidate.resume_url}
-                              className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors disabled:opacity-40 disabled:cursor-default"
-                              style={{ color: 'var(--text-primary)' }}
-                              onMouseEnter={e => { if (candidate.resume_url) e.currentTarget.style.background = 'var(--bg-hover)' }}
-                              onMouseLeave={e => e.currentTarget.style.background = ''}
-                            >
-                              <Download className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#10b981' }} />
-                              Download Resume
-                            </button>
-
+                              onClick={() => { downloadResume(candidate.id, candidate.full_name, candidate.resume_url); close() }}
+                            />
+                            {has('candidates:edit') && <ActionMenuItem divider />}
                             {has('candidates:edit') && (
-                              <>
-                                <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 12px' }} />
-                                <button
-                                  onClick={() => { navigate(`/candidates/${candidate.id}/edit`); setOpenMenuId(null) }}
-                                  className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors"
-                                  style={{ color: 'var(--text-primary)' }}
-                                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                                  onMouseLeave={e => e.currentTarget.style.background = ''}
-                                >
-                                  <Edit className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#f59e0b' }} />
-                                  Edit Candidate
-                                </button>
-                              </>
+                              <ActionMenuItem
+                                label="Edit Candidate"
+                                icon={Edit}
+                                iconColor="#f59e0b"
+                                onClick={() => { navigate(`/candidates/${candidate.id}/edit`); close() }}
+                              />
                             )}
-
                             {has('candidates:delete') && (
-                              <button
-                                onClick={() => { handleDelete(candidate.id, candidate.full_name); setOpenMenuId(null) }}
-                                className="w-full text-left px-4 py-2 text-sm flex items-center gap-2.5 transition-colors"
-                                style={{ color: '#ef4444' }}
-                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
-                                onMouseLeave={e => e.currentTarget.style.background = ''}
-                              >
-                                <Trash2 className="w-3.5 h-3.5 flex-shrink-0" />
-                                Delete Candidate
-                              </button>
+                              <ActionMenuItem
+                                label="Delete Candidate"
+                                icon={Trash2}
+                                danger
+                                onClick={() => { handleDelete(candidate.id, candidate.full_name); close() }}
+                              />
                             )}
-                          </div>
+                          </>
                         )}
-                      </div>
+                      </ActionMenu>
                     </div>
                   </td>
                 </tr>

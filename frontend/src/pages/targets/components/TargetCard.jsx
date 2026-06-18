@@ -5,9 +5,10 @@
 import React from 'react';
 import {
   Target, TrendingUp, DollarSign, Calendar, Users,
-  CheckCircle, Clock, AlertCircle, MoreVertical, Edit, Trash2
+  CheckCircle, Clock, AlertCircle, Edit, Trash2
 } from 'lucide-react';
 import targetService from '../../../services/targetService';
+import ActionMenu, { ActionMenuItem } from '../../../components/common/ActionMenu';
 
 const TargetCard = ({ target, onEdit, onDelete, onClick }) => {
   const {
@@ -43,51 +44,31 @@ const TargetCard = ({ target, onEdit, onDelete, onClick }) => {
 
   const TypeIcon = getTypeIcon();
 
-  const [showMenu, setShowMenu] = React.useState(false);
-
   return (
     <div
       className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg transition-all cursor-pointer relative"
       onClick={onClick}
     >
       {/* Menu */}
-      <div className="absolute top-4 right-4">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowMenu(!showMenu);
-          }}
-          className="p-1 hover:bg-gray-100 rounded-lg"
-        >
-          <MoreVertical className="w-4 h-4 text-gray-400" />
-        </button>
-        
-        {showMenu && (
-          <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowMenu(false);
-                onEdit();
-              }}
-              className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-            >
-              <Edit className="w-4 h-4" />
-              Edit
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowMenu(false);
-                onDelete();
-              }}
-              className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </button>
-          </div>
-        )}
+      <div className="absolute top-4 right-4" onClick={e => e.stopPropagation()}>
+        <ActionMenu>
+          {(close) => (
+            <>
+              <ActionMenuItem
+                label="Edit"
+                icon={Edit}
+                iconColor="#f59e0b"
+                onClick={() => { onEdit(); close() }}
+              />
+              <ActionMenuItem
+                label="Delete"
+                icon={Trash2}
+                danger
+                onClick={() => { onDelete(); close() }}
+              />
+            </>
+          )}
+        </ActionMenu>
       </div>
 
       {/* Header */}

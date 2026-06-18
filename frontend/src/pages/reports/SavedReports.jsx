@@ -6,8 +6,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FileText, Search, Filter, Plus, Play, Edit, Trash2, Clock,
-  Calendar, Star, MoreVertical, Download, Copy, Share2
+  Calendar, Star, Download, Copy, Share2
 } from 'lucide-react';
+import ActionMenu, { ActionMenuItem } from '../../components/common/ActionMenu';
 import reportService from '../../services/reportService';
 import ScheduleReportModal from './components/ScheduleReportModal';
 
@@ -196,53 +197,23 @@ const SavedReports = () => {
 
 // Report Card Component
 const ReportCard = ({ report, onRun, onEdit, onDelete, onDuplicate, onSchedule }) => {
-  const [showMenu, setShowMenu] = useState(false);
-
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg transition-all">
       <div className="flex items-start justify-between mb-4">
         <div className="p-3 bg-blue-50 rounded-xl">
           <FileText className="w-6 h-6 text-blue-600" />
         </div>
-        
-        <div className="relative">
-          <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="p-1 hover:bg-gray-100 rounded-lg"
-          >
-            <MoreVertical className="w-4 h-4 text-gray-400" />
-          </button>
-          
-          {showMenu && (
-            <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-              <button
-                onClick={() => { setShowMenu(false); onEdit(); }}
-                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Edit className="w-4 h-4" /> Edit
-              </button>
-              <button
-                onClick={() => { setShowMenu(false); onDuplicate(); }}
-                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Copy className="w-4 h-4" /> Duplicate
-              </button>
-              <button
-                onClick={() => { setShowMenu(false); onSchedule(); }}
-                className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-              >
-                <Clock className="w-4 h-4" /> Schedule
-              </button>
-              <hr className="my-1" />
-              <button
-                onClick={() => { setShowMenu(false); onDelete(); }}
-                className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-              >
-                <Trash2 className="w-4 h-4" /> Delete
-              </button>
-            </div>
+        <ActionMenu>
+          {(close) => (
+            <>
+              <ActionMenuItem label="Edit" icon={Edit} iconColor="#f59e0b" onClick={() => { onEdit(); close() }} />
+              <ActionMenuItem label="Duplicate" icon={Copy} iconColor="#6366f1" onClick={() => { onDuplicate(); close() }} />
+              <ActionMenuItem label="Schedule" icon={Clock} iconColor="#10b981" onClick={() => { onSchedule(); close() }} />
+              <ActionMenuItem divider />
+              <ActionMenuItem label="Delete" icon={Trash2} danger onClick={() => { onDelete(); close() }} />
+            </>
           )}
-        </div>
+        </ActionMenu>
       </div>
 
       <h3 className="font-semibold text-gray-900 mb-1">{report.name}</h3>

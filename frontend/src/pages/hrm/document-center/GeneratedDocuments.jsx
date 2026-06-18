@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
@@ -18,17 +19,48 @@ const STATUS_COLORS = {
 function DocMenu({ doc, onRefresh }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState('')
+  const [pos, setPos]   = useState({ top: 0, right: 0 })
+  const btnRef          = useRef(null)
   const id   = doc._id || doc.id
   const pdf  = documentCenterService.downloadPDF(id)
   const docx = documentCenterService.downloadDOCX(id)
 
+  useEffect(() => {
+    if (!open) return
+    const close = (e) => { if (!btnRef.current?.contains(e.target)) setOpen(false) }
+    const onScroll = () => setOpen(false)
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', close)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const toggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      const above = rect.bottom + 240 > window.innerHeight
+      setPos({
+        top: above ? rect.top - 240 : rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      })
+    }
+    setOpen(v => !v)
+  }
+
   const doArchive = async () => {
+    setOpen(false)
     setBusy('arc')
     try { await documentCenterService.archiveGenerated(id); toast.success('Archived'); onRefresh() }
     catch { toast.error('Failed') }
     finally { setBusy('') }
   }
   const doDelete = async () => {
+    setOpen(false)
     if (!confirm('Permanently delete this document?')) return
     setBusy('del')
     try { await documentCenterService.deleteGenerated(id); toast.success('Deleted'); onRefresh() }
@@ -37,54 +69,93 @@ function DocMenu({ doc, onRefresh }) {
   }
 
   return (
-    <div className="relative">
-      <button onClick={() => setOpen(m => !m)}
+    <>
+      <button
+        ref={btnRef}
+        onClick={toggle}
         className="p-1.5 rounded-lg border transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
-        style={{ borderColor: 'var(--border)' }}>
-        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: 'var(--text-muted)' }} />
-              : <MoreVertical className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />}
+        style={{ borderColor: 'var(--border)' }}
+      >
+        {busy
+          ? <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: 'var(--text-muted)' }} />
+          : <MoreVertical className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />}
       </button>
-      {open && (
+      {open && createPortal(
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 bottom-full mb-1 w-44 rounded-xl border shadow-lg z-20 overflow-hidden"
-            style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+          <div className="fixed inset-0 z-[9998]" onClick={() => setOpen(false)} />
+          <div
+            className="fixed z-[9999] py-1 rounded-xl overflow-hidden"
+            style={{
+              top: pos.top,
+              right: pos.right,
+              width: 176,
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-card)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+            }}
+          >
             {doc.pdf_url && (
               <a href={doc.pdf_url} target="_blank" rel="noreferrer"
-                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
-                style={{ color: 'var(--text-body)' }} onClick={() => setOpen(false)}>
-                <ExternalLink className="w-3.5 h-3.5" /> View PDF
+                className="flex items-center gap-2 px-3 py-2 text-sm"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                onMouseLeave={e => e.currentTarget.style.background = ''}
+                onClick={() => setOpen(false)}
+              >
+                <ExternalLink className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} /> View PDF
               </a>
             )}
             <a href={pdf}
-              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
-              style={{ color: 'var(--text-body)' }} onClick={() => setOpen(false)}>
-              <Download className="w-3.5 h-3.5" /> Download PDF
+              className="flex items-center gap-2 px-3 py-2 text-sm"
+              style={{ color: 'var(--text-primary)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={e => e.currentTarget.style.background = ''}
+              onClick={() => setOpen(false)}
+            >
+              <Download className="w-3.5 h-3.5" style={{ color: '#10b981' }} /> Download PDF
             </a>
             <a href={docx}
-              className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
-              style={{ color: 'var(--text-body)' }} onClick={() => setOpen(false)}>
-              <Download className="w-3.5 h-3.5" /> Download DOCX
+              className="flex items-center gap-2 px-3 py-2 text-sm"
+              style={{ color: 'var(--text-primary)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={e => e.currentTarget.style.background = ''}
+              onClick={() => setOpen(false)}
+            >
+              <Download className="w-3.5 h-3.5" style={{ color: '#10b981' }} /> Download DOCX
             </a>
-            <button onClick={() => { window.open(pdf, '_blank'); setOpen(false) }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
-              style={{ color: 'var(--text-body)' }}>
-              <Printer className="w-3.5 h-3.5" /> Print
+            <button
+              onClick={() => { window.open(pdf, '_blank'); setOpen(false) }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm"
+              style={{ color: 'var(--text-primary)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={e => e.currentTarget.style.background = ''}
+            >
+              <Printer className="w-3.5 h-3.5" style={{ color: '#6366f1' }} /> Print
             </button>
-            <div className="border-t my-1" style={{ borderColor: 'var(--border)' }} />
-            <button onClick={() => { doArchive(); setOpen(false) }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800"
-              style={{ color: 'var(--text-body)' }}>
-              <Archive className="w-3.5 h-3.5" /> Archive
+            <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 12px' }} />
+            <button
+              onClick={doArchive}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm"
+              style={{ color: 'var(--text-primary)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+              onMouseLeave={e => e.currentTarget.style.background = ''}
+            >
+              <Archive className="w-3.5 h-3.5" style={{ color: '#f59e0b' }} /> Archive
             </button>
-            <button onClick={() => { doDelete(); setOpen(false) }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20">
+            <button
+              onClick={doDelete}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm"
+              style={{ color: '#ef4444' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
+              onMouseLeave={e => e.currentTarget.style.background = ''}
+            >
               <Trash2 className="w-3.5 h-3.5" /> Delete
             </button>
           </div>
-        </>
+        </>,
+        document.body
       )}
-    </div>
+    </>
   )
 }
 

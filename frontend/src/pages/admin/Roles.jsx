@@ -1,26 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
-import { Plus, Edit, Trash2, Shield, Users, MoreVertical, Lock } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Plus, Edit, Trash2, Shield, Users, Lock } from 'lucide-react'
 import roleService from '../../services/roleService'
 import ModalPortal from '../../components/common/ModalPortal'
+import ActionMenu, { ActionMenuItem } from '../../components/common/ActionMenu'
 
 const Roles = () => {
+  const navigate = useNavigate()
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(true)
   const [deleteDialog, setDeleteDialog] = useState({ open: false, role: null })
-  const [openMenuId, setOpenMenuId] = useState(null)   // which role's 3-dot menu is open
-  const menuRef = useRef(null)
-
-  // Close menu when clicking anywhere outside it
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setOpenMenuId(null)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
 
   useEffect(() => {
     fetchRoles()
@@ -45,7 +34,7 @@ const Roles = () => {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-surface-900">Roles</h1>
           <p className="text-surface-500 mt-1">Manage roles and permissions</p>
@@ -78,31 +67,24 @@ const Roles = () => {
                   </div>
                 </div>
                 {!role.is_system_role && (
-                  <div className="relative" ref={openMenuId === role.id ? menuRef : null}>
-                    <button
-                      className="p-1 hover:bg-surface-100 rounded"
-                      onClick={() => setOpenMenuId(openMenuId === role.id ? null : role.id)}
-                    >
-                      <MoreVertical className="w-4 h-4 text-surface-400" />
-                    </button>
-                    {openMenuId === role.id && (
-                      <div className="absolute right-0 mt-1 w-32 bg-white rounded-lg shadow-lg border z-10">
-                        <Link
-                          to={`/roles/${role.id}/edit`}
-                          className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-50"
-                          onClick={() => setOpenMenuId(null)}
-                        >
-                          <Edit className="w-4 h-4" /> Edit
-                        </Link>
-                        <button
-                          onClick={() => { setDeleteDialog({ open: true, role }); setOpenMenuId(null) }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" /> Delete
-                        </button>
-                      </div>
+                  <ActionMenu>
+                    {(close) => (
+                      <>
+                        <ActionMenuItem
+                          label="Edit"
+                          icon={Edit}
+                          iconColor="#f59e0b"
+                          onClick={() => { navigate(`/roles/${role.id}/edit`); close() }}
+                        />
+                        <ActionMenuItem
+                          label="Delete"
+                          icon={Trash2}
+                          danger
+                          onClick={() => { setDeleteDialog({ open: true, role }); close() }}
+                        />
+                      </>
                     )}
-                  </div>
+                  </ActionMenu>
                 )}
               </div>
               <p className="text-sm text-surface-500 mb-4">{role.description || 'No description'}</p>

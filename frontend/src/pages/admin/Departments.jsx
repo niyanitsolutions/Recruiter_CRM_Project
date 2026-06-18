@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Edit, Trash2, Building, Users, MoreVertical } from 'lucide-react'
+import { Plus, Edit, Trash2, Building, Users } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import departmentService from '../../services/departmentService'
 import usePermissions from '../../hooks/usePermissions'

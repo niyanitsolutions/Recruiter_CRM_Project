@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Building2, Plus, Search, Filter, MoreVertical,
+  Building2, Plus, Search, Filter,
   Edit, Trash2, Eye, Phone, Mail, MapPin, Briefcase, Download, Upload,
   List, LayoutGrid
 } from 'lucide-react'
@@ -119,12 +119,12 @@ const Clients = () => {
   return (
     <div className="p-6 page-enter">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Clients</h1>
           <p style={{ color: 'var(--text-muted)' }}>Manage hiring companies and vendors</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {has('exports:create') && (
             <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
               <Download className="w-4 h-4" />

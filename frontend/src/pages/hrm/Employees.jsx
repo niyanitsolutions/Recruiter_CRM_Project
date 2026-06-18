@@ -284,14 +284,14 @@ export default function Employees() {
     <div className="p-6 space-y-5">
 
       {/* ── Page header ── */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Employees</h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
             {total} total employee{total !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Send Form Link */}
           <button
             onClick={openLinkModal}

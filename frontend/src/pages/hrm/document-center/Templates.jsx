@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
@@ -260,8 +261,37 @@ function VersionModal({ template, onClose }) {
 function TemplateCard({ template, onRefresh, onGenerate }) {
   const navigate  = useNavigate()
   const [menu, setMenu]         = useState(false)
+  const [menuPos, setMenuPos]   = useState({ top: 0, right: 0 })
   const [busy, setBusy]         = useState('')
   const [showVersions, setShowVersions] = useState(false)
+  const menuBtnRef = useRef(null)
+
+  useEffect(() => {
+    if (!menu) return
+    const close = (e) => { if (!menuBtnRef.current?.contains(e.target)) setMenu(false) }
+    const onScroll = () => setMenu(false)
+    const onKey = (e) => { if (e.key === 'Escape') setMenu(false) }
+    document.addEventListener('mousedown', close)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      window.removeEventListener('scroll', onScroll, true)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [menu])
+
+  const toggleMenu = () => {
+    if (!menu && menuBtnRef.current) {
+      const rect = menuBtnRef.current.getBoundingClientRect()
+      const above = rect.bottom + 160 > window.innerHeight
+      setMenuPos({
+        top: above ? rect.top - 160 : rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      })
+    }
+    setMenu(v => !v)
+  }
 
   const id   = template._id || template.id
   const type = template.template_type || 'simple'
@@ -399,42 +429,51 @@ function TemplateCard({ template, onRefresh, onGenerate }) {
             </button>
 
             {/* More menu */}
-            <div className="relative ml-auto">
+            <div className="ml-auto">
               <button
-                onClick={() => setMenu(m => !m)}
+                ref={menuBtnRef}
+                onClick={toggleMenu}
                 className="p-1.5 rounded-lg border transition-colors hover:bg-gray-100 dark:hover:bg-gray-700"
                 style={{ borderColor: 'var(--border)' }}
               >
                 {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: 'var(--text-muted)' }} />
                       : <MoreVertical className="w-3.5 h-3.5" style={{ color: 'var(--text-muted)' }} />}
               </button>
-              {menu && (
+              {menu && createPortal(
                 <>
-                  <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-                  <div className="absolute right-0 bottom-full mb-1 w-44 rounded-xl border shadow-lg z-20 overflow-hidden"
-                    style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
+                  <div className="fixed inset-0 z-[9998]" onClick={() => setMenu(false)} />
+                  <div
+                    className="fixed z-[9999] py-1 rounded-xl overflow-hidden"
+                    style={{
+                      top: menuPos.top,
+                      right: menuPos.right,
+                      width: 176,
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--border-card)',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+                    }}
+                  >
                     {[
-                      { icon: History, label: 'Version History', fn: () => { setShowVersions(true); setMenu(false) } },
-                      { icon: Copy,    label: 'Duplicate',        fn: () => { handleDuplicate(); setMenu(false) } },
-                      { icon: Archive, label: 'Archive',          fn: () => { handleArchive(); setMenu(false) } },
-                      { icon: Trash2,  label: 'Delete',           fn: () => { handleDelete(); setMenu(false) }, danger: true },
+                      { icon: History, label: 'Version History', color: '#6366f1', fn: () => { setShowVersions(true); setMenu(false) } },
+                      { icon: Copy,    label: 'Duplicate',        color: '#10b981', fn: () => { handleDuplicate(); setMenu(false) } },
+                      { icon: Archive, label: 'Archive',          color: '#f59e0b', fn: () => { handleArchive(); setMenu(false) } },
+                      { icon: Trash2,  label: 'Delete',           danger: true,     fn: () => { handleDelete(); setMenu(false) } },
                     ].map(m => (
                       <button
                         key={m.label}
                         onClick={m.fn}
-                        className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
-                          m.danger
-                            ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
-                            : 'hover:bg-gray-50 dark:hover:bg-gray-800'
-                        }`}
-                        style={m.danger ? {} : { color: 'var(--text-body)' }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm"
+                        style={{ color: m.danger ? '#ef4444' : 'var(--text-primary)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = m.danger ? 'rgba(239,68,68,0.08)' : 'var(--bg-hover)'}
+                        onMouseLeave={e => e.currentTarget.style.background = ''}
                       >
-                        <m.icon className="w-3.5 h-3.5" />
+                        <m.icon className="w-3.5 h-3.5" style={{ color: m.danger ? '#ef4444' : m.color }} />
                         {m.label}
                       </button>
                     ))}
                   </div>
-                </>
+                </>,
+                document.body
               )}
             </div>
           </div>
