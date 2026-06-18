@@ -226,6 +226,7 @@ export default function Employees() {
   // ── Export ─────────────────────────────────────────────────────────
   const [exportOpen,    setExportOpen]    = useState(false)
   const [exportLoading, setExportLoading] = useState(false)
+  const [exportError,   setExportError]   = useState(false)
   const exportRef = useRef(null)
 
   useEffect(() => {
@@ -242,21 +243,38 @@ export default function Employees() {
     try {
       const res = await hrmService.exportEmployees({
         format,
-        status:  status  || undefined,
-        search:  search  || undefined,
+        status: status || undefined,
+        search: search || undefined,
       })
+
+      const blob = res.data
+      if (!(blob instanceof Blob) || blob.size === 0) {
+        throw new Error('Empty response')
+      }
+
+      // Detect error responses returned as blobs (HTML page or JSON error)
+      const contentType = res.headers?.['content-type'] || ''
+      if (contentType.startsWith('text/html') || contentType.includes('application/json')) {
+        throw new Error('Server returned an error response instead of the file')
+      }
+
+      // Secondary guard: peek at first bytes — HTML and JSON errors start with < or {
+      const prefix = await blob.slice(0, 5).text()
+      const firstChar = prefix.trimStart()[0] || ''
+      if (firstChar === '<' || firstChar === '{') {
+        throw new Error('Corrupt response content detected')
+      }
+
       const ext = format === 'xlsx' ? 'xlsx' : format === 'pdf' ? 'pdf' : 'csv'
-      const mime = format === 'xlsx'
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : format === 'pdf' ? 'application/pdf' : 'text/csv'
-      const url = URL.createObjectURL(new Blob([res.data], { type: mime }))
+      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `employees_${new Date().toISOString().slice(0, 10)}.${ext}`
       a.click()
       URL.revokeObjectURL(url)
-    } catch {
-      // export error is non-critical
+    } catch (err) {
+      console.error('[Employee Export] failed:', err)
+      setExportError(true)
     } finally {
       setExportLoading(false)
     }
@@ -580,6 +598,33 @@ export default function Employees() {
           </div>
         )}
       </div>
+
+      {/* ── Export Error Modal ──────────────────────────────────────────── */}
+      {exportError && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-gray-900">Export Failed</h3>
+            </div>
+            <p className="text-sm text-gray-600 mb-5 leading-relaxed">
+              Unable to generate export file. Please try again.
+            </p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setExportError(false)}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-xl"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Send Form Link Modal ─────────────────────────────────────────── */}
       {linkModal && (

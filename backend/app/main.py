@@ -342,6 +342,10 @@ app.include_router(trash.router, prefix=API_V1_PREFIX, tags=["Trash"])
 
 # ============== HRM MODULE ROUTERS ==============
 app.include_router(hrm_dashboard.router, prefix=API_V1_PREFIX, tags=["HRM - Dashboard"])
+# Register onboarding router BEFORE hrm_employees so that static routes like
+# GET /hrm/employees/export are not swallowed by GET /hrm/employees/{employee_id}.
+app.include_router(hrm_employee_onboarding.router,        prefix=API_V1_PREFIX, tags=["HRM - Employee Onboarding"])
+app.include_router(hrm_employee_onboarding.public_router, prefix=API_V1_PREFIX, tags=["HRM - Employee Onboarding (Public)"])
 app.include_router(hrm_employees.router, prefix=API_V1_PREFIX, tags=["HRM - Employees"])
 app.include_router(hrm_attendance.router, prefix=API_V1_PREFIX, tags=["HRM - Attendance"])
 app.include_router(hrm_leaves.router, prefix=API_V1_PREFIX, tags=["HRM - Leaves"])
@@ -359,8 +363,6 @@ app.include_router(hrm_holidays.router,           prefix=API_V1_PREFIX, tags=["H
 app.include_router(hrm_leave_policies.router,    prefix=API_V1_PREFIX, tags=["HRM - Leave Policies"])
 app.include_router(hrm_shifts.router,            prefix=API_V1_PREFIX, tags=["HRM - Shifts"])
 app.include_router(hrm_doc_upload_tokens.router,          prefix=API_V1_PREFIX, tags=["HRM - Doc Upload Tokens"])
-app.include_router(hrm_employee_onboarding.router,        prefix=API_V1_PREFIX, tags=["HRM - Employee Onboarding"])
-app.include_router(hrm_employee_onboarding.public_router, prefix=API_V1_PREFIX, tags=["HRM - Employee Onboarding (Public)"])
 app.include_router(document_center.router,       prefix=API_V1_PREFIX, tags=["Document Center"])
 
 

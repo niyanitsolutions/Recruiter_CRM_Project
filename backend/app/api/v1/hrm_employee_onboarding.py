@@ -473,7 +473,10 @@ async def upload_onboarding_photo(token: str, file: UploadFile = File(...)):
 @public_router.post("/employee-onboarding/{token}/document")
 async def upload_onboarding_document(
     token: str,
-    doc_type: str = Query(..., pattern="^(aadhaar|pan|resume|other)$"),
+    doc_type: str = Query(
+        ...,
+        pattern="^(aadhaar|pan|degree_cert|resume|other|experience_letter|relieving_letter|payslip)$",
+    ),
     file: UploadFile = File(...),
 ):
     """Upload a document (Aadhaar, PAN, Resume, Other) after form submission."""
@@ -504,7 +507,16 @@ async def upload_onboarding_document(
     (upload_dir / fname).write_bytes(contents)
     file_url = f"/api/v1/uploads/hrm_docs/{fname}"
 
-    doc_labels = {"aadhaar": "Aadhaar Card", "pan": "PAN Card", "resume": "Resume", "other": "Document"}
+    doc_labels = {
+        "aadhaar":           "Aadhaar Card",
+        "pan":               "PAN Card",
+        "degree_cert":       "Degree / Provisional Certificate",
+        "resume":            "Resume",
+        "other":             "Document",
+        "experience_letter": "Experience Letter",
+        "relieving_letter":  "Relieving Letter",
+        "payslip":           "Latest Payslip",
+    }
     doc_entry = {
         "doc_id": str(uuid.uuid4()),
         "doc_type": doc_type,
