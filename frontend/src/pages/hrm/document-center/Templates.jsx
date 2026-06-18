@@ -261,7 +261,7 @@ function VersionModal({ template, onClose }) {
 function TemplateCard({ template, onRefresh, onGenerate }) {
   const navigate  = useNavigate()
   const [menu, setMenu]         = useState(false)
-  const [menuPos, setMenuPos]   = useState({ top: 0, right: 0 })
+  const [menuPos, setMenuPos]   = useState({ top: 0, bottom: 'auto', right: 0 })
   const [busy, setBusy]         = useState('')
   const [showVersions, setShowVersions] = useState(false)
   const menuBtnRef = useRef(null)
@@ -285,10 +285,10 @@ function TemplateCard({ template, onRefresh, onGenerate }) {
     if (!menu && menuBtnRef.current) {
       const rect = menuBtnRef.current.getBoundingClientRect()
       const above = rect.bottom + 160 > window.innerHeight
-      setMenuPos({
-        top: above ? rect.top - 160 : rect.bottom + 4,
-        right: window.innerWidth - rect.right,
-      })
+      setMenuPos(above
+        ? { top: 'auto', bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right }
+        : { top: rect.bottom + 4, bottom: 'auto', right: window.innerWidth - rect.right }
+      )
     }
     setMenu(v => !v)
   }
@@ -446,6 +446,7 @@ function TemplateCard({ template, onRefresh, onGenerate }) {
                     className="fixed z-[9999] py-1 rounded-xl overflow-hidden"
                     style={{
                       top: menuPos.top,
+                      bottom: menuPos.bottom,
                       right: menuPos.right,
                       width: 176,
                       background: 'var(--bg-card)',

@@ -580,14 +580,15 @@ const AdminDashboard = () => {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* HEADER — Greeting | Subscription (center) | Date + Actions            */}
+      {/* HEADER — Greeting | Subscription | Period | Refresh | Quick Action   */}
+      {/* Responsive: all controls always visible; wraps to 2 rows if needed.  */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <Card style={{ padding: '16px 20px' }}>
-        <div className="flex flex-wrap items-center gap-3 min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
 
           {/* Left — Greeting */}
-          <div className="flex-shrink-0 min-w-0" style={{ maxWidth: '240px' }}>
-            <h1 className="text-lg font-bold truncate" style={{ color: 'var(--text-heading)' }}>
+          <div className="flex-shrink-0" style={{ minWidth: '180px' }}>
+            <h1 className="text-lg font-bold" style={{ color: 'var(--text-heading)' }}>
               {getGreeting()}, {user?.fullName || 'User'}! 👋
             </h1>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
@@ -595,39 +596,56 @@ const AdminDashboard = () => {
             </p>
           </div>
 
-          {/* Center — Subscription info (admin/owner, 2xl screens only) */}
-          {isAdminOrOwner && seatStatus && (
-            <div className="hidden 2xl:flex flex-1 items-center justify-center">
+          {/* Right — Subscription widget + all controls (always visible) */}
+          <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+
+            {/* Subscription widget — always visible for admin/owner */}
+            {isAdminOrOwner && seatStatus && (
               <div
-                className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl flex-shrink-0"
                 style={{ border: '1.5px dashed rgba(124,58,237,0.30)', background: 'rgba(124,58,237,0.03)' }}
               >
-                <div className="pr-3 flex-shrink-0" style={{ borderRight: '1px solid var(--border)' }}>
-                  <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#7c3aed' }}>Subscription</p>
-                  <p className="text-sm font-bold mt-0.5 leading-tight" style={{ color: 'var(--text-heading)' }}>
+                {/* Plan name */}
+                <div className="flex-shrink-0">
+                  <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#7c3aed' }}>Plan</p>
+                  <p className="text-xs font-bold mt-0.5 leading-tight whitespace-nowrap" style={{ color: 'var(--text-heading)' }}>
                     {seatStatus.plan_display_name || seatStatus.plan_name}
                     {seatStatus.is_trial && (
-                      <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full font-bold align-middle" style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>Trial</span>
+                      <span className="ml-1 text-[9px] px-1 py-0.5 rounded-full font-bold align-middle" style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>Trial</span>
                     )}
                   </p>
                 </div>
-                {[
-                  { label: 'Seats',     val: seatStatus.total_user_seats,    clr: 'var(--text-heading)' },
-                  { label: 'Active',    val: seatStatus.current_active_users, clr: 'var(--text-info)'   },
-                  { label: 'Remaining', val: seatStatus.remaining_seats,
-                    clr: seatStatus.remaining_seats === 0 ? 'var(--text-danger)' : 'var(--text-success)' },
-                  { label: 'Expiry',    val: seatStatus.plan_expiry
-                      ? new Date(seatStatus.plan_expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
-                      : '—', clr: 'var(--text-heading)' },
-                ].map(({ label, val, clr }) => (
-                  <div key={label} className="text-center flex-shrink-0">
-                    <p className="text-base font-bold leading-tight" style={{ color: clr }}>{val}</p>
-                    <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>{label}</p>
+                {/* Divider */}
+                <div className="w-px self-stretch mx-0.5 flex-shrink-0" style={{ background: 'var(--border)' }} />
+                {/* Stats */}
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <div className="text-center">
+                    <p className="text-sm font-bold leading-tight" style={{ color: 'var(--text-heading)' }}>{seatStatus.total_user_seats}</p>
+                    <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>Seats</p>
                   </div>
-                ))}
+                  <div className="text-center">
+                    <p className="text-sm font-bold leading-tight" style={{ color: 'var(--text-info)' }}>{seatStatus.current_active_users}</p>
+                    <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>Active</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm font-bold leading-tight" style={{ color: seatStatus.remaining_seats === 0 ? 'var(--text-danger)' : 'var(--text-success)' }}>
+                      {seatStatus.remaining_seats}
+                    </p>
+                    <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>Left</p>
+                  </div>
+                  {seatStatus.plan_expiry && (
+                    <div className="text-center hidden xl:block">
+                      <p className="text-xs font-bold leading-tight whitespace-nowrap" style={{ color: 'var(--text-heading)' }}>
+                        {new Date(seatStatus.plan_expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })}
+                      </p>
+                      <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>Expiry</p>
+                    </div>
+                  )}
+                </div>
+                {/* Upgrade button */}
                 <button
                   onClick={() => setShowUpgradeModal(true)}
-                  className="flex-shrink-0 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg transition-all whitespace-nowrap"
+                  className="flex-shrink-0 text-[10px] font-semibold px-2 py-1 rounded-lg transition-all whitespace-nowrap ml-1"
                   style={{ color: '#7c3aed', border: '1px solid rgba(124,58,237,0.40)', background: 'transparent' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.08)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -635,31 +653,31 @@ const AdminDashboard = () => {
                   Upgrade
                 </button>
               </div>
-            </div>
-          )}
-          {/* Spacer when no subscription box */}
-          {!(isAdminOrOwner && seatStatus) && <div className="flex-1" />}
+            )}
 
-          {/* Right — Date + Period + Quick Action */}
-          <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
-            <span className="text-xs hidden 2xl:block" style={{ color: 'var(--text-muted)' }}>{dateStr}</span>
-            <div className="hidden xs:block">
-              <PeriodFilter value={period.key} onChange={setPeriod} />
-            </div>
+            {/* Date string — informational, xl+ only */}
+            <span className="text-xs hidden xl:block whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>{dateStr}</span>
+
+            {/* Period filter — always visible */}
+            <PeriodFilter value={period.key} onChange={setPeriod} />
+
+            {/* Refresh button */}
             <button
               onClick={() => fetchDashboardData(true)}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0"
               style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-active)'}
               onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-hover)'}
             >
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
+
+            {/* Quick Action */}
             {(has('candidates:create') || has('jobs:create')) && (
-              <div className="relative" onClick={e => e.stopPropagation()}>
+              <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
                 <button
                   onClick={() => setShowQuickAction(v => !v)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition-all whitespace-nowrap"
                   style={{ background: '#7c3aed' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#6d28d9'}
                   onMouseLeave={e => e.currentTarget.style.background = '#7c3aed'}

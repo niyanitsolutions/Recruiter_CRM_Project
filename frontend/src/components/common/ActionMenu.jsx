@@ -20,9 +20,9 @@ import { MoreVertical } from 'lucide-react'
  * Or pass plain children if they handle closing themselves.
  */
 export default function ActionMenu({ children, size = 28 }) {
-  const [open, setOpen]   = useState(false)
-  const [pos, setPos]     = useState({ top: 0, right: 0 })
-  const btnRef            = useRef(null)
+  const [open, setOpen] = useState(false)
+  const [pos, setPos]   = useState({ top: 0, bottom: 'auto', right: 0 })
+  const btnRef          = useRef(null)
 
   const close = () => setOpen(false)
 
@@ -50,10 +50,21 @@ export default function ActionMenu({ children, size = 28 }) {
       const rect  = btnRef.current.getBoundingClientRect()
       const menuH = 260
       const above = rect.bottom + menuH > window.innerHeight
-      setPos({
-        top:   above ? rect.top - menuH : rect.bottom + 4,
-        right: window.innerWidth - rect.right,
-      })
+      if (above) {
+        // Anchor the BOTTOM edge of the menu 4px above the button top —
+        // eliminates the gap that occurs when actual menu height < menuH.
+        setPos({
+          top:    'auto',
+          bottom: window.innerHeight - rect.top + 4,
+          right:  window.innerWidth - rect.right,
+        })
+      } else {
+        setPos({
+          top:    rect.bottom + 4,
+          bottom: 'auto',
+          right:  window.innerWidth - rect.right,
+        })
+      }
     }
     setOpen(v => !v)
   }
@@ -84,6 +95,7 @@ export default function ActionMenu({ children, size = 28 }) {
             className="fixed z-[9999] py-1 rounded-xl"
             style={{
               top:       pos.top,
+              bottom:    pos.bottom,
               right:     pos.right,
               minWidth:  176,
               background: 'var(--bg-card)',

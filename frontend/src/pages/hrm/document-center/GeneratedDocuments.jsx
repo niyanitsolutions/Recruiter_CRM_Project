@@ -19,7 +19,7 @@ const STATUS_COLORS = {
 function DocMenu({ doc, onRefresh }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState('')
-  const [pos, setPos]   = useState({ top: 0, right: 0 })
+  const [pos, setPos]   = useState({ top: 0, bottom: 'auto', right: 0 })
   const btnRef          = useRef(null)
   const id   = doc._id || doc.id
   const pdf  = documentCenterService.downloadPDF(id)
@@ -44,10 +44,10 @@ function DocMenu({ doc, onRefresh }) {
     if (!open && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect()
       const above = rect.bottom + 240 > window.innerHeight
-      setPos({
-        top: above ? rect.top - 240 : rect.bottom + 4,
-        right: window.innerWidth - rect.right,
-      })
+      setPos(above
+        ? { top: 'auto', bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right }
+        : { top: rect.bottom + 4, bottom: 'auto', right: window.innerWidth - rect.right }
+      )
     }
     setOpen(v => !v)
   }
@@ -87,6 +87,7 @@ function DocMenu({ doc, onRefresh }) {
             className="fixed z-[9999] py-1 rounded-xl overflow-hidden"
             style={{
               top: pos.top,
+              bottom: pos.bottom,
               right: pos.right,
               width: 176,
               background: 'var(--bg-card)',
