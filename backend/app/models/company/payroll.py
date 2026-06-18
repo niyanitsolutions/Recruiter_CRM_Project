@@ -16,11 +16,13 @@ class PayrollStatus(str, Enum):
 class Deduction(BaseModel):
     name: str
     amount: float
+    key: Optional[str] = None   # component key for visibility lookup
 
 
 class Earning(BaseModel):
     name: str
     amount: float
+    key: Optional[str] = None   # component key for visibility lookup
 
 
 class Payslip(BaseModel):

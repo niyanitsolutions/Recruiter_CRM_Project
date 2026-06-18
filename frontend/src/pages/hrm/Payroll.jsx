@@ -61,7 +61,10 @@ function PayslipDocument({ ps, companyName, structure }) {
   if (ps.special_allowance > 0 && showItem('special_allowance')) earnRows.push({ label: 'Special Allowance',    amount: ps.special_allowance })
   if (ps.overtime > 0 && showItem('overtime'))                   earnRows.push({ label: 'Overtime',             amount: ps.overtime })
   if (ps.bonus > 0 && showItem('bonus'))                         earnRows.push({ label: 'Bonus',                amount: ps.bonus })
-  ;(ps.other_earnings || []).forEach(e => earnRows.push({ label: e.name, amount: e.amount }))
+  // other_earnings: apply visibility using stored key (backwards-compatible: show if no key)
+  ;(ps.other_earnings || []).forEach(e => {
+    if (!e.key || showItem(e.key)) earnRows.push({ label: e.name, amount: e.amount })
+  })
 
   // Deduction rows
   const dedRows = []
@@ -69,7 +72,10 @@ function PayslipDocument({ ps, companyName, structure }) {
   if (ps.professional_tax > 0 && showItem('professional_tax'))   dedRows.push({ label: 'Professional Tax',      amount: ps.professional_tax })
   if (ps.tds > 0 && showItem('tds'))                             dedRows.push({ label: 'TDS',                   amount: ps.tds })
   if (ps.advance_deduction > 0 && showItem('loan_deduction'))    dedRows.push({ label: 'Loan / Advance',        amount: ps.advance_deduction })
-  ;(ps.other_deductions || []).forEach(d => dedRows.push({ label: d.name, amount: d.amount }))
+  // other_deductions: apply visibility using stored key (backwards-compatible: show if no key)
+  ;(ps.other_deductions || []).forEach(d => {
+    if (!d.key || showItem(d.key)) dedRows.push({ label: d.name, amount: d.amount })
+  })
 
   const maxRows = Math.max(earnRows.length, dedRows.length)
   const rows = Array.from({ length: maxRows }, (_, i) => ({
@@ -205,8 +211,10 @@ function EditPayslipModal({ ps, onClose, onSave }) {
   const [saving, setSaving] = useState(false)
   const inp = 'w-full px-3 py-2 rounded-lg border text-sm'
 
-  const gross = data.basic + data.hra + data.special_allowance + data.overtime + data.bonus
-  const totalDed = data.pf_employee + data.professional_tax + data.tds + data.advance_deduction
+  const otherEarnSum = (ps.other_earnings || []).reduce((s, e) => s + (e.amount || 0), 0)
+  const otherDedSum  = (ps.other_deductions || []).reduce((s, d) => s + (d.amount || 0), 0)
+  const gross = data.basic + data.hra + data.special_allowance + data.overtime + data.bonus + otherEarnSum
+  const totalDed = data.pf_employee + data.professional_tax + data.tds + data.advance_deduction + otherDedSum
   const net = gross - totalDed
 
   const handleSave = async () => {
