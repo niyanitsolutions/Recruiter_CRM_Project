@@ -9,7 +9,7 @@ from datetime import datetime
 from app.models.company.audit_log import AuditLogFilter, AuditAction, EntityType
 from app.services.audit_service import AuditService
 from app.core.dependencies import (
-    get_current_user, get_company_db, require_permissions
+    get_current_user, get_company_db, require_any_permission
 )
 
 router = APIRouter(prefix="/audit-logs", tags=["Audit Logs"])
@@ -28,7 +28,7 @@ async def list_audit_logs(
     search: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
-    _: bool = Depends(require_permissions(["audit:view"]))
+    _: bool = Depends(require_any_permission([["audit:view"], ["audit_logs:view"]]))
 ):
     """List audit logs with filters and pagination"""
     audit_service = AuditService(db)
@@ -64,7 +64,7 @@ async def get_recent_activity(
     limit: int = Query(10, ge=1, le=50),
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
-    _: bool = Depends(require_permissions(["audit:view"]))
+    _: bool = Depends(require_any_permission([["audit:view"], ["audit_logs:view"]]))
 ):
     """Get most recent audit logs"""
     audit_service = AuditService(db)
@@ -81,7 +81,7 @@ async def get_activity_stats(
     days: int = Query(7, ge=1, le=90),
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
-    _: bool = Depends(require_permissions(["audit:view"]))
+    _: bool = Depends(require_any_permission([["audit:view"], ["audit_logs:view"]]))
 ):
     """Get activity statistics for dashboard"""
     audit_service = AuditService(db)
@@ -96,7 +96,7 @@ async def get_activity_stats(
 @router.get("/actions")
 async def get_available_actions(
     current_user: dict = Depends(get_current_user),
-    _: bool = Depends(require_permissions(["audit:view"]))
+    _: bool = Depends(require_any_permission([["audit:view"], ["audit_logs:view"]]))
 ):
     """Get list of available audit actions for filtering"""
     actions = [
@@ -113,7 +113,7 @@ async def get_available_actions(
 @router.get("/entity-types")
 async def get_available_entity_types(
     current_user: dict = Depends(get_current_user),
-    _: bool = Depends(require_permissions(["audit:view"]))
+    _: bool = Depends(require_any_permission([["audit:view"], ["audit_logs:view"]]))
 ):
     """Get list of available entity types for filtering"""
     entity_types = [
@@ -135,7 +135,7 @@ async def get_entity_history(
     page_size: int = Query(20, ge=1, le=100),
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
-    _: bool = Depends(require_permissions(["audit:view"]))
+    _: bool = Depends(require_any_permission([["audit:view"], ["audit_logs:view"]]))
 ):
     """Get audit history for a specific entity"""
     audit_service = AuditService(db)
@@ -165,7 +165,7 @@ async def get_user_activity(
     page_size: int = Query(20, ge=1, le=100),
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
-    _: bool = Depends(require_permissions(["audit:view"]))
+    _: bool = Depends(require_any_permission([["audit:view"], ["audit_logs:view"]]))
 ):
     """Get audit history for a specific user's actions"""
     audit_service = AuditService(db)
@@ -192,7 +192,7 @@ async def get_audit_log(
     log_id: str,
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
-    _: bool = Depends(require_permissions(["audit:view"]))
+    _: bool = Depends(require_any_permission([["audit:view"], ["audit_logs:view"]]))
 ):
     """Get detailed audit log entry"""
     audit_service = AuditService(db)

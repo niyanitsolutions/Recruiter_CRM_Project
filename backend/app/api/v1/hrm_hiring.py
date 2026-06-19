@@ -2,7 +2,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
+from app.core.dependencies import get_company_db, require_hrm_module, require_permissions, require_any_permission
 from app.models.company.hrm_job import HRMJobCreate, HRMJobUpdate
 from app.models.company.hrm_candidate import HRMCandidateCreate, HRMCandidateUpdate
 from app.models.company.hrm_interview import HRMInterviewCreate, HRMInterviewFeedback
@@ -20,7 +20,7 @@ async def create_job(
     data: HRMJobCreate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:hiring:manage"])),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
     return await HRMHiringService(db).create_job(cu["company_id"], data.model_dump(exclude_none=True), cu["id"])
 
@@ -56,7 +56,7 @@ async def update_job(
     data: HRMJobUpdate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:hiring:manage"])),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
     job = await HRMHiringService(db).update_job(job_id, cu["company_id"], data.model_dump(exclude_none=True))
     if not job:
@@ -69,7 +69,7 @@ async def delete_job(
     job_id: str,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:hiring:manage"])),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
     deleted = await HRMHiringService(db).delete_job(job_id, cu["company_id"])
     if not deleted:
@@ -83,7 +83,7 @@ async def create_candidate(
     data: HRMCandidateCreate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:hiring:manage"])),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
     return await HRMHiringService(db).create_candidate(cu["company_id"], data.model_dump(exclude_none=True), cu["id"])
 
@@ -120,7 +120,7 @@ async def update_candidate(
     data: HRMCandidateUpdate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:hiring:manage"])),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
     cand = await HRMHiringService(db).update_candidate(cand_id, cu["company_id"], data.model_dump(exclude_none=True))
     if not cand:
@@ -135,7 +135,7 @@ async def create_interview(
     data: HRMInterviewCreate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:hiring:manage"])),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
     return await HRMHiringService(db).create_interview(cu["company_id"], data.model_dump(exclude_none=True), cu["id"])
 
@@ -158,7 +158,7 @@ async def submit_feedback(
     data: HRMInterviewFeedback,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:hiring:manage"])),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
     result = await HRMHiringService(db).submit_feedback(interview_id, cu["company_id"], data.model_dump(exclude_none=True))
     if not result:
@@ -173,7 +173,7 @@ async def create_offer(
     data: HRMOfferCreate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:hiring:manage"])),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
     return await HRMHiringService(db).create_offer(cu["company_id"], data.model_dump(exclude_none=True), cu["id"])
 
@@ -210,7 +210,7 @@ async def respond_offer(
     data: HRMOfferRespond,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:hiring:manage"])),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
     result = await HRMHiringService(db).respond_offer(offer_id, cu["company_id"], data.action, data.rejection_reason)
     if not result:
@@ -225,7 +225,7 @@ async def create_onboarding(
     data: HRMOnboardingCreate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:hiring:manage"])),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
     return await HRMHiringService(db).create_onboarding(cu["company_id"], data.model_dump(exclude_none=True), cu["id"])
 
@@ -261,7 +261,7 @@ async def update_onboarding(
     data: HRMOnboardingUpdate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:hiring:manage"])),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
     result = await HRMHiringService(db).update_onboarding(onb_id, cu["company_id"], data.model_dump(exclude_none=True))
     if not result:
@@ -274,7 +274,7 @@ async def complete_onboarding(
     onb_id: str,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:hiring:manage"])),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
     result = await HRMHiringService(db).complete_onboarding(onb_id, cu["company_id"])
     if not result:

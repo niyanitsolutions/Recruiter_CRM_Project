@@ -7,7 +7,7 @@ from typing import Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
-from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
+from app.core.dependencies import get_company_db, require_hrm_module, require_permissions, require_any_permission
 from app.models.company.employee import EmployeeCreate, EmployeeUpdate
 from app.services.employee_service import EmployeeService
 
@@ -21,7 +21,7 @@ async def create_employee(
     data: EmployeeCreate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:employees:manage"])),
+    _perm=Depends(require_any_permission([["hrm:employees:manage"], ["hrm:employees:create"]])),
 ):
     return await EmployeeService(db).create(
         data,
@@ -73,7 +73,7 @@ async def update_employee(
     data: EmployeeUpdate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:employees:manage"])),
+    _perm=Depends(require_any_permission([["hrm:employees:manage"], ["hrm:employees:edit"]])),
 ):
     emp = await EmployeeService(db).update(employee_id, data, cu["company_id"])
     if not emp:
@@ -96,7 +96,8 @@ async def upload_employee_photo(
       - Any user uploading their own employee photo (self-service)
     """
     is_own = cu.get("hrm_employee_id") == employee_id
-    has_manage = "hrm:employees:manage" in set(cu.get("permissions") or [])
+    user_perms = set(cu.get("permissions") or [])
+    has_manage = bool(user_perms & {"hrm:employees:manage", "hrm:employees:edit"})
     if not is_own and not has_manage and not cu.get("is_owner") and not cu.get("is_super_admin"):
         raise HTTPException(status_code=403, detail="Permission denied")
 

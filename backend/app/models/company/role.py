@@ -192,6 +192,26 @@ class Permission(str, Enum):
     DOCS_APPROVE  = "docs:approve"   # Approve / reject template submissions
     DOCS_MANAGE   = "docs:manage"    # Full admin access (includes all above)
 
+    # ── Granular HR-role permissions ──────────────────────────────────────────
+    HRM_EMPLOYEES_CREATE  = "hrm:employees:create"
+    HRM_EMPLOYEES_EDIT    = "hrm:employees:edit"
+    HRM_ATTENDANCE_VIEW   = "hrm:attendance:view"
+    HRM_ATTENDANCE_CREATE = "hrm:attendance:create"
+    HRM_ATTENDANCE_EDIT   = "hrm:attendance:edit"
+    HRM_PORTAL_VIEW       = "hrm:portal:view"
+    HRM_PORTAL_EDIT_SELF  = "hrm:portal:edit_self"
+    HRM_RESOURCES_VIEW    = "hrm:resources:view"
+    HRM_RESOURCES_CREATE  = "hrm:resources:create"
+    HRM_RESOURCES_EDIT    = "hrm:resources:edit"
+    DOCUMENTS_VIEW        = "documents:view"
+    DOCUMENTS_CREATE      = "documents:create"
+    DOCUMENTS_EDIT        = "documents:edit"
+    HRM_HIRING_CREATE     = "hrm:hiring:create"
+    HRM_HIRING_EDIT       = "hrm:hiring:edit"
+    AUDIT_LOGS_VIEW       = "audit_logs:view"
+    PROFILE_VIEW          = "profile:view"
+    PROFILE_EDIT_SELF     = "profile:edit_self"
+
 
 # ── Convenience sets ──────────────────────────────────────────────────────────
 
@@ -404,15 +424,53 @@ ROLE_DEFAULT_PERMISSIONS = {
         *_HRM_ESS_MINIMUM,
     ],
 
-    # ── HR: CRM onboarding tasks + full HRM access ────────────────────────────
+    # ── HR: Granular HR-specific permission set ───────────────────────────────
     SystemRole.HR: [
         Permission.DASHBOARD_VIEW,
+        Permission.HRM_DASHBOARD_VIEW,
+        # Employee management
+        Permission.HRM_EMPLOYEES_VIEW,
+        Permission.HRM_EMPLOYEES_CREATE,
+        Permission.HRM_EMPLOYEES_EDIT,
+        # User management (view/create/edit only — no delete, no role management)
         Permission.USERS_VIEW,
-        Permission.CANDIDATES_VIEW,
-        Permission.ONBOARDS_VIEW, Permission.ONBOARDS_CREATE, Permission.ONBOARDS_EDIT,
+        Permission.USERS_CREATE,
+        Permission.USERS_EDIT,
+        # Partner management
+        Permission.PARTNERS_VIEW,
+        Permission.PARTNERS_CREATE,
+        Permission.PARTNERS_EDIT,
+        # Attendance management
+        Permission.HRM_ATTENDANCE_VIEW,
+        Permission.HRM_ATTENDANCE_CREATE,
+        Permission.HRM_ATTENDANCE_EDIT,
+        # Employee self-service portal
+        Permission.HRM_PORTAL_VIEW,
+        Permission.HRM_PORTAL_EDIT_SELF,
+        # Employee resources
+        Permission.HRM_RESOURCES_VIEW,
+        Permission.HRM_RESOURCES_CREATE,
+        Permission.HRM_RESOURCES_EDIT,
+        # Document Center
+        Permission.DOCUMENTS_VIEW,
+        Permission.DOCUMENTS_CREATE,
+        Permission.DOCUMENTS_EDIT,
+        # Internal hiring pipeline
+        Permission.HRM_HIRING_VIEW,
+        Permission.HRM_HIRING_CREATE,
+        Permission.HRM_HIRING_EDIT,
+        # Tasks
+        Permission.TASKS_VIEW,
+        Permission.TASKS_CREATE,
+        Permission.TASKS_EDIT,
+        # Read-only access
+        Permission.TARGETS_VIEW,
         Permission.REPORTS_VIEW,
-        Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
-        *_HRM_FULL,
+        Permission.AUDIT_LOGS_VIEW,
+        Permission.NOTIFICATIONS_VIEW,
+        # Profile
+        Permission.PROFILE_VIEW,
+        Permission.PROFILE_EDIT_SELF,
     ],
 
     SystemRole.ACCOUNTS: [

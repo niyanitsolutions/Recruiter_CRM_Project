@@ -595,7 +595,7 @@ const CandidateForm = () => {
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors)
       scrollToFirstError(validationErrors)
-      toast.error(`Please fix ${Object.keys(validationErrors).length} required field(s) before submitting`)
+      toast.error(`Please Fill all ${Object.keys(validationErrors).length} required field(s) before submitting`)
       return
     }
     setErrors({})

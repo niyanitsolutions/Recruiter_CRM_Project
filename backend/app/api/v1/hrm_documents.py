@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Q
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 
-from app.core.dependencies import get_company_db, get_company_db_by_id, require_hrm_module, require_permissions, get_current_user
+from app.core.dependencies import get_company_db, get_company_db_by_id, require_hrm_module, require_permissions, require_any_permission, get_current_user
 
 router = APIRouter(prefix="/hrm/documents", tags=["HRM - Documents"])
 
@@ -92,7 +92,7 @@ async def upload_document(
     file: UploadFile = File(...),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:documents:manage"])),
+    _perm=Depends(require_any_permission([["hrm:documents:manage"], ["hrm:resources:create"], ["hrm:resources:edit"]])),
 ):
     """Upload a single document for an employee."""
     if not _allowed(file.filename or ""):
@@ -154,7 +154,7 @@ async def multi_upload_documents(
     doc_names: str = Form(...),   # comma-separated list of doc_name per file
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:documents:manage"])),
+    _perm=Depends(require_any_permission([["hrm:documents:manage"], ["hrm:resources:create"], ["hrm:resources:edit"]])),
 ):
     """Upload multiple documents at once for an employee."""
     type_list = [t.strip() for t in doc_types.split(",")]
@@ -223,7 +223,7 @@ async def update_document_status(
     body: DocumentStatusUpdate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:documents:manage"])),
+    _perm=Depends(require_any_permission([["hrm:documents:manage"], ["hrm:resources:create"], ["hrm:resources:edit"]])),
 ):
     """Approve, reject, or mark a document for reupload."""
     if body.status not in DOC_STATUSES:
@@ -474,7 +474,7 @@ async def delete_document(
     doc_id: str,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:documents:manage"])),
+    _perm=Depends(require_any_permission([["hrm:documents:manage"], ["hrm:resources:create"], ["hrm:resources:edit"]])),
 ):
     """Remove a document from an employee's record by its doc_id."""
     emp = await db.hrm_employees.find_one(

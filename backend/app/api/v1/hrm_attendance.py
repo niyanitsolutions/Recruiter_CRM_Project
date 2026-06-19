@@ -12,6 +12,7 @@ from bson import ObjectId
 
 from app.core.dependencies import (
     get_company_db, require_hrm_module, require_permissions, require_non_partner,
+    require_any_permission,
 )
 from app.models.company.attendance import (
     CheckInRequest, CheckOutRequest, ManualAttendanceUpdate, BreakRequest,
@@ -328,7 +329,7 @@ async def get_monthly(
 async def get_team_today(
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:team"])),
+    _perm=Depends(require_any_permission([["hrm:attendance:team"], ["hrm:attendance:view"]])),
 ):
     return await AttendanceService(db).get_team_today(cu["company_id"])
 
@@ -339,7 +340,7 @@ async def get_team_today(
 async def get_stats_today(
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:team"])),
+    _perm=Depends(require_any_permission([["hrm:attendance:team"], ["hrm:attendance:view"]])),
 ):
     """Return all attendance counters for today.
 
@@ -423,7 +424,7 @@ async def get_stats_range(
     end_date:   str,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:team"])),
+    _perm=Depends(require_any_permission([["hrm:attendance:team"], ["hrm:attendance:view"]])),
 ):
     """Return aggregated attendance counters + daily trend for any date range."""
     try:
@@ -450,7 +451,7 @@ async def get_history(
     page_size: int = Query(50, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:team"])),
+    _perm=Depends(require_any_permission([["hrm:attendance:team"], ["hrm:attendance:view"]])),
 ):
     """Return paginated team attendance records for a date range."""
     try:
@@ -512,7 +513,7 @@ async def export_team_csv(
     status:      Optional[str] = None,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:team"])),
+    _perm=Depends(require_any_permission([["hrm:attendance:team"], ["hrm:attendance:view"]])),
 ):
     """Download team attendance as CSV for the specified date range."""
     try:
@@ -552,7 +553,7 @@ async def export_my_csv(
 async def trigger_auto_checkout(
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
+    _perm=Depends(require_any_permission([["hrm:attendance:manage"], ["hrm:attendance:edit"]])),
 ):
     """Punch out all employees who are still checked in. Idempotent — safe to call multiple times."""
     count = await AttendanceService(db).auto_checkout_all(cu["company_id"], source="manual_admin")
@@ -566,7 +567,7 @@ async def manual_update(
     data: ManualAttendanceUpdate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
+    _perm=Depends(require_any_permission([["hrm:attendance:manage"], ["hrm:attendance:edit"]])),
 ):
     return await AttendanceService(db).manual_update(cu["company_id"], data.model_dump(exclude_none=True))
 
@@ -579,7 +580,7 @@ async def recover_attendance(
     data: RecoverAttendanceRequest,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
+    _perm=Depends(require_any_permission([["hrm:attendance:manage"], ["hrm:attendance:edit"]])),
 ):
     """Reopen an accidentally closed attendance record.
 
@@ -615,7 +616,7 @@ async def recover_attendance(
 async def get_attendance_settings(
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
+    _perm=Depends(require_any_permission([["hrm:attendance:manage"], ["hrm:attendance:edit"]])),
 ):
     """Return the full attendance configuration for this company."""
     doc = await db["company_settings"].find_one({}) or {}
@@ -642,7 +643,7 @@ async def update_attendance_settings(
     data: AttendanceSettingsUpdate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
+    _perm=Depends(require_any_permission([["hrm:attendance:manage"], ["hrm:attendance:edit"]])),
 ):
     """Save attendance configuration for this company."""
     await db["company_settings"].update_one(
@@ -676,7 +677,7 @@ async def update_attendance_settings(
 async def get_office_ips(
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
+    _perm=Depends(require_any_permission([["hrm:attendance:manage"], ["hrm:attendance:edit"]])),
 ):
     doc = await db["company_settings"].find_one({}) or {}
     return {
@@ -690,7 +691,7 @@ async def update_office_ips(
     data: OfficeIPSettings,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
+    _perm=Depends(require_any_permission([["hrm:attendance:manage"], ["hrm:attendance:edit"]])),
 ):
     await db["company_settings"].update_one(
         {},

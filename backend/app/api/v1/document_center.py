@@ -6,7 +6,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import Response
 
-from app.core.dependencies import get_current_user, get_company_db, require_permissions
+from app.core.dependencies import get_current_user, get_company_db, require_permissions, require_any_permission
 from app.models.company.document_center import (
     DocCategoryCreate, DocCategoryUpdate,
     DocTemplateCreate, DocTemplateUpdate,
@@ -17,16 +17,13 @@ from app.services.document_center_service import document_center_service
 
 router = APIRouter(prefix="/doc-center", tags=["Document Center"])
 
-PERM_VIEW     = "docs:view"
-PERM_CREATE   = "docs:create"
-PERM_DELETE   = "docs:delete"
-PERM_GENERATE = "docs:generate"
-PERM_APPROVE  = "docs:approve"
-PERM_MANAGE   = "docs:manage"
-
-
-def _perm(p: str):
-    return Depends(require_permissions(p))
+# Permission callables — accept both legacy docs: strings and new documents: strings
+PERM_VIEW     = require_any_permission([["docs:view"],     ["documents:view"]])
+PERM_CREATE   = require_any_permission([["docs:create"],   ["documents:create"]])
+PERM_DELETE   = require_permissions("docs:delete")
+PERM_GENERATE = require_permissions("docs:generate")
+PERM_APPROVE  = require_permissions("docs:approve")
+PERM_MANAGE   = require_any_permission([["docs:manage"],   ["documents:edit"]])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -36,7 +33,7 @@ def _perm(p: str):
 @router.get("/categories")
 async def list_categories(
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     cats = await document_center_service.list_categories(db)
     return {"success": True, "data": cats}
@@ -46,7 +43,7 @@ async def list_categories(
 async def create_category(
     data: DocCategoryCreate,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_CREATE)),
+    user = Depends(PERM_CREATE),
 ):
     cat = await document_center_service.create_category(db, data, user["_id"])
     return {"success": True, "message": "Category created", "data": cat}
@@ -57,7 +54,7 @@ async def update_category(
     category_id: str,
     data: DocCategoryUpdate,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_CREATE)),
+    user = Depends(PERM_CREATE),
 ):
     ok, msg = await document_center_service.update_category(db, category_id, data)
     if not ok:
@@ -69,7 +66,7 @@ async def update_category(
 async def delete_category(
     category_id: str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_DELETE)),
+    user = Depends(PERM_DELETE),
 ):
     ok, msg = await document_center_service.delete_category(db, category_id)
     if not ok:
@@ -93,7 +90,7 @@ async def list_templates(
     skip:          int            = Query(0, ge=0),
     limit:         int            = Query(50, le=200),
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     tag_list = [t.strip() for t in tags.split(",")] if tags else None
     docs, total = await document_center_service.list_templates(
@@ -115,7 +112,7 @@ async def list_templates(
 async def get_template(
     template_id: str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     doc = await document_center_service.get_template(db, template_id)
     if not doc:
@@ -127,7 +124,7 @@ async def get_template(
 async def create_template(
     data: DocTemplateCreate,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_CREATE)),
+    user = Depends(PERM_CREATE),
 ):
     doc = await document_center_service.create_template(
         db, data,
@@ -142,7 +139,7 @@ async def update_template(
     template_id: str,
     data: DocTemplateUpdate,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_CREATE)),
+    user = Depends(PERM_CREATE),
 ):
     ok, msg = await document_center_service.update_template(
         db, template_id, data,
@@ -158,7 +155,7 @@ async def update_template(
 async def delete_template(
     template_id: str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_DELETE)),
+    user = Depends(PERM_DELETE),
 ):
     ok, msg = await document_center_service.delete_template(db, template_id)
     if not ok:
@@ -170,7 +167,7 @@ async def delete_template(
 async def duplicate_template(
     template_id: str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_CREATE)),
+    user = Depends(PERM_CREATE),
 ):
     ok, msg, doc = await document_center_service.duplicate_template(
         db, template_id,
@@ -186,7 +183,7 @@ async def duplicate_template(
 async def toggle_favorite(
     template_id: str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     ok, msg, new_val = await document_center_service.toggle_favorite(db, template_id)
     if not ok:
@@ -200,7 +197,7 @@ async def toggle_favorite(
 async def list_versions(
     template_id: str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     versions = await document_center_service.list_versions(db, template_id)
     return {"success": True, "data": versions}
@@ -211,7 +208,7 @@ async def restore_version(
     template_id: str,
     version_id:  str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_CREATE)),
+    user = Depends(PERM_CREATE),
 ):
     ok, msg = await document_center_service.restore_version(
         db, template_id, version_id,
@@ -227,7 +224,7 @@ async def delete_version(
     template_id: str,
     version_id:  str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_DELETE)),
+    user = Depends(PERM_DELETE),
 ):
     ok, msg = await document_center_service.delete_version(db, template_id, version_id)
     if not ok:
@@ -243,7 +240,7 @@ async def delete_version(
 async def generate_document(
     req:  DocGenerateRequest,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_GENERATE)),
+    user = Depends(PERM_GENERATE),
 ):
     ok, msg, doc = await document_center_service.generate_document(
         db, req,
@@ -261,7 +258,7 @@ async def generate_document(
 async def download_pdf(
     doc_id: str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     gen = await db.doc_generated.find_one({"_id": doc_id, "is_deleted": {"$ne": True}})
     if not gen:
@@ -292,7 +289,7 @@ async def download_pdf(
 async def download_docx(
     doc_id: str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     gen = await db.doc_generated.find_one({"_id": doc_id, "is_deleted": {"$ne": True}})
     if not gen:
@@ -325,7 +322,7 @@ async def list_generated(
     skip:        int             = Query(0, ge=0),
     limit:       int             = Query(50, le=200),
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     docs, total = await document_center_service.list_generated(
         db,
@@ -343,7 +340,7 @@ async def list_generated(
 async def archive_generated(
     doc_id: str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     from datetime import datetime, timezone
     result = await db.doc_generated.update_one(
@@ -359,7 +356,7 @@ async def archive_generated(
 async def delete_generated(
     doc_id: str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_DELETE)),
+    user = Depends(PERM_DELETE),
 ):
     ok, msg = await document_center_service.delete_generated(db, doc_id)
     if not ok:
@@ -375,7 +372,7 @@ async def delete_generated(
 async def request_approval(
     data: DocApprovalCreate,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_CREATE)),
+    user = Depends(PERM_CREATE),
 ):
     ok, msg, doc = await document_center_service.request_approval(
         db, data, user["_id"], user.get("full_name", ""),
@@ -392,7 +389,7 @@ async def list_approvals(
     skip:   int           = Query(0, ge=0),
     limit:  int           = Query(50, le=200),
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     user_filter = user["_id"] if mine else None
     docs, total = await document_center_service.list_approvals(
@@ -406,7 +403,7 @@ async def review_approval(
     approval_id: str,
     data: DocApprovalReview,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_APPROVE)),
+    user = Depends(PERM_APPROVE),
 ):
     ok, msg = await document_center_service.review_approval(
         db, approval_id, data, user["_id"], user.get("full_name", ""),
@@ -431,7 +428,7 @@ async def import_document(
     category_id: Optional[str] = Form(None),
     tags:        str            = Form(""),
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_CREATE)),
+    user = Depends(PERM_CREATE),
 ):
     ext = (file.filename or "").rsplit(".", 1)[-1].lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -471,7 +468,7 @@ async def list_all_versions(
     skip:        int            = Query(0, ge=0),
     limit:       int            = Query(50, le=200),
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     docs, total = await document_center_service.list_all_versions(
         db, template_id=template_id, search=search, skip=skip, limit=limit,
@@ -485,7 +482,7 @@ async def list_all_versions(
 
 @router.get("/library")
 async def get_library(
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     items = document_center_service.get_library_list()
     return {"success": True, "data": items}
@@ -496,7 +493,7 @@ async def create_from_library(
     key:         str,
     category_id: Optional[str] = Query(None),
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_CREATE)),
+    user = Depends(PERM_CREATE),
 ):
     ok, msg, doc = await document_center_service.create_from_library(
         db, key, user["_id"], user.get("full_name", ""), category_id=category_id,
@@ -515,7 +512,7 @@ async def list_archive(
     skip:  int = Query(0, ge=0),
     limit: int = Query(50, le=200),
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_VIEW)),
+    user = Depends(PERM_VIEW),
 ):
     docs, total = await document_center_service.list_archived(db, skip=skip, limit=limit)
     return {"success": True, "data": {"templates": docs, "total": total}}
@@ -525,7 +522,7 @@ async def list_archive(
 async def unarchive(
     template_id: str,
     db   = Depends(get_company_db),
-    user = Depends(require_permissions(PERM_CREATE)),
+    user = Depends(PERM_CREATE),
 ):
     ok, msg = await document_center_service.unarchive_template(db, template_id)
     if not ok:
