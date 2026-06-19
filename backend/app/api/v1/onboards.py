@@ -14,7 +14,7 @@ from app.core.dependencies import (
 from app.models.company.onboard import (
     OnboardCreate, OnboardUpdate, OnboardStatusUpdate,
     OnboardResponse, OnboardListResponse, OnboardDashboardStats,
-    DOJExtension, DocumentUpdate, OnboardStatus
+    DOJExtension, DocumentUpdate, OnboardStatus, ReleaseOfferRequest
 )
 from app.services.onboard_service import OnboardService
 
@@ -338,6 +338,48 @@ async def mark_no_show(
         company_id=current_user["company_id"],
         updated_by=current_user["id"]
     )
+
+
+@router.post("/{onboard_id}/release-offer", response_model=OnboardResponse)
+async def release_offer(
+    onboard_id: str,
+    data: ReleaseOfferRequest,
+    current_user: dict = Depends(require_permissions(["onboards:edit"])),
+    db = Depends(get_company_db)
+):
+    """Release offer for a candidate in 'selected' status, filling in offer details."""
+    service = OnboardService(db)
+    result = await service.release_offer(
+        onboard_id=onboard_id,
+        data=data,
+        company_id=current_user["company_id"],
+        updated_by=current_user["id"],
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onboard record not found")
+    return result
+
+
+@router.post("/{onboard_id}/reject", response_model=OnboardResponse)
+async def reject_onboard(
+    onboard_id: str,
+    rejection_reason: str,
+    notes: Optional[str] = None,
+    current_user: dict = Depends(require_permissions(["onboards:edit"])),
+    db = Depends(get_company_db)
+):
+    """Reject a candidate at any onboarding stage (selected / offer / post-joining)."""
+    service = OnboardService(db)
+    result = await service.reject_onboard(
+        onboard_id=onboard_id,
+        rejection_reason=rejection_reason,
+        company_id=current_user["company_id"],
+        updated_by=current_user["id"],
+        notes=notes,
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onboard record not found")
+    return result
 
 
 # ============== Document Management ==============

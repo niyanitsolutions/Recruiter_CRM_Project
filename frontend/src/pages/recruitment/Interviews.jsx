@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  Calendar, Plus, Eye, Clock, User,
-  XCircle, Download, MessageSquare, List, LayoutGrid
+  Calendar, Plus, Eye, Clock,
+  User, XCircle, Download, MessageSquare,
+  List, LayoutGrid, CheckCircle, PauseCircle, AlertCircle
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import interviewService from '../../services/interviewService'
@@ -21,9 +22,37 @@ const STATUS_STYLES = {
   completed:   { background: 'rgba(67,233,123,0.15)', color: '#43E97B' },
   cancelled:   { background: 'rgba(255,71,87,0.15)',  color: '#FF4757' },
   no_show:     { background: 'rgba(139,143,168,0.15)', color: '#8B8FA8' },
+  selected:    { background: 'rgba(56,249,215,0.15)', color: '#38F9D7' },
+  failed:      { background: 'rgba(255,71,87,0.15)',  color: '#FF4757' },
+  on_hold:     { background: 'rgba(245,158,11,0.15)', color: '#F59E0B' },
 }
 
 const getStatusStyle = (status) => STATUS_STYLES[status] || STATUS_STYLES.no_show
+
+// Map each tab key to the overall_status value to filter by
+const TAB_OVERALL_STATUS = {
+  scheduled: 'in_progress',
+  selected:  'selected',
+  rejected:  'failed',
+  on_hold:   'on_hold',
+}
+
+const TABS = [
+  { key: 'all',       label: 'All',        icon: null },
+  { key: 'scheduled', label: 'Scheduled',  icon: Clock },
+  { key: 'selected',  label: 'Selected',   icon: CheckCircle },
+  { key: 'rejected',  label: 'Rejected',   icon: AlertCircle },
+  { key: 'on_hold',   label: 'On Hold',    icon: PauseCircle },
+  { key: 'today',     label: 'Today',      icon: Calendar },
+  { key: 'pending',   label: 'Pending Feedback', icon: MessageSquare },
+]
+
+const STAT_CARDS = [
+  { key: 'scheduled', label: 'Scheduled',  color: '#4FACFE', icon: Clock },
+  { key: 'selected',  label: 'Selected',   color: '#38F9D7', icon: CheckCircle },
+  { key: 'rejected',  label: 'Rejected',   color: '#FF4757', icon: AlertCircle },
+  { key: 'on_hold',   label: 'On Hold',    color: '#F59E0B', icon: PauseCircle },
+]
 
 const Interviews = () => {
   const navigate = useNavigate()
@@ -31,14 +60,11 @@ const Interviews = () => {
   const [interviews, setInterviews] = useState([])
   const [todayInterviews, setTodayInterviews] = useState([])
   const [pendingFeedback, setPendingFeedback] = useState([])
+  const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('all')
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 })
-  const [filters, setFilters] = useState({
-    status: '',
-    date_from: '',
-    date_to: ''
-  })
+  const [filters, setFilters] = useState({ date_from: '', date_to: '' })
   const [statuses, setStatuses] = useState([])
   const [exportOpen, setExportOpen] = useState(false)
   const [viewMode, setViewMode] = useState('table')
@@ -55,9 +81,16 @@ const Interviews = () => {
     }
   }
 
-  const loadData = async (silent = false) => {
+  const loadStats = async () => {
     try {
-      if (!silent) setLoading(true)
+      const res = await interviewService.getDashboardStats()
+      setStats(res.data || null)
+    } catch (_) {}
+  }
+
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true)
+    try {
       if (activeTab === 'today') {
         const response = await interviewService.getTodayInterviews()
         setTodayInterviews(response.data || [])
@@ -68,14 +101,17 @@ const Interviews = () => {
         const params = {
           page: pagination.page,
           page_size: 20,
-          ...Object.fromEntries(Object.entries(filters).filter(([_, v]) => v))
+          ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
+        }
+        if (TAB_OVERALL_STATUS[activeTab]) {
+          params.overall_status = TAB_OVERALL_STATUS[activeTab]
         }
         const response = await interviewService.getInterviews(params)
         setInterviews(response.data || [])
         setPagination(prev => ({
           ...prev,
           total: response.pagination?.total || 0,
-          totalPages: response.pagination?.total_pages || 0
+          totalPages: response.pagination?.total_pages || 0,
         }))
       }
     } catch (error) {
@@ -85,8 +121,10 @@ const Interviews = () => {
     }
   }
 
-  // Live background refresh (Task 8) — silent, no visible reload
-  useLivePolling(() => loadData(true), 5000)
+  useEffect(() => { loadStats() }, [])
+
+  // Live background refresh — silent, no visible reload
+  useLivePolling(() => { loadData(true); loadStats() }, 5000)
 
   const handleCancel = async (interviewId) => {
     const reason = prompt('Please enter cancellation reason:')
@@ -95,9 +133,15 @@ const Interviews = () => {
       await interviewService.cancelInterview(interviewId, reason)
       toast.success('Interview cancelled')
       loadData()
+      loadStats()
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to cancel interview')
     }
+  }
+
+  const handleTabChange = (key) => {
+    setActiveTab(key)
+    setPagination(prev => ({ ...prev, page: 1 }))
   }
 
   const currentData = activeTab === 'today'
@@ -105,12 +149,6 @@ const Interviews = () => {
     : activeTab === 'pending'
       ? pendingFeedback
       : interviews
-
-  const TABS = [
-    { key: 'all', label: 'All Interviews', icon: null },
-    { key: 'today', label: 'Today', icon: Clock },
-    { key: 'pending', label: 'Pending Feedback', icon: MessageSquare },
-  ]
 
   return (
     <div className="p-6 page-enter">
@@ -136,17 +174,48 @@ const Interviews = () => {
         </div>
       </div>
 
+      {/* Summary Stat Cards */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {STAT_CARDS.map(({ key, label, color, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => handleTabChange(key)}
+              className="rounded-xl p-4 text-left transition-all"
+              style={{
+                background: 'var(--bg-card)',
+                border: activeTab === key ? `2px solid ${color}` : '1px solid var(--border-card)',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={e => { if (activeTab !== key) e.currentTarget.style.borderColor = color }}
+              onMouseLeave={e => { if (activeTab !== key) e.currentTarget.style.borderColor = 'var(--border-card)' }}
+            >
+              <div
+                className="w-9 h-9 rounded-lg mb-3 flex items-center justify-center"
+                style={{ background: `${color}22` }}
+              >
+                <Icon className="w-5 h-5" style={{ color }} />
+              </div>
+              <p className="text-sm mb-1" style={{ color: 'var(--text-muted)' }}>{label}</p>
+              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+                {stats[key] ?? 0}
+              </p>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Tabs */}
-      <div className="flex items-center gap-2 mb-6">
+      <div className="flex items-center gap-1 mb-6 flex-wrap">
         <div
-          className="flex rounded-lg p-1"
+          className="flex rounded-lg p-1 flex-wrap gap-1"
           style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}
         >
           {TABS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
-              onClick={() => setActiveTab(key)}
-              className="px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2"
+              onClick={() => handleTabChange(key)}
+              className="px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5"
               style={activeTab === key
                 ? { background: 'var(--accent)', color: '#fff' }
                 : { color: 'var(--text-secondary)' }
@@ -154,7 +223,7 @@ const Interviews = () => {
               onMouseEnter={e => { if (activeTab !== key) e.currentTarget.style.background = 'var(--bg-hover)' }}
               onMouseLeave={e => { if (activeTab !== key) e.currentTarget.style.background = '' }}
             >
-              {Icon && <Icon className="w-4 h-4" />}
+              {Icon && <Icon className="w-3.5 h-3.5" />}
               {label}
             </button>
           ))}
@@ -167,34 +236,32 @@ const Interviews = () => {
         <button onClick={() => setViewMode('card')} className="p-2 rounded-lg transition-colors" style={viewMode === 'card' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Card view"><LayoutGrid className="w-4 h-4" /></button>
       </div>
 
-      {/* Filters (only for All tab) */}
-      {activeTab === 'all' && (
+      {/* Date Filters (all/status tabs) */}
+      {!['today', 'pending'].includes(activeTab) && (
         <div className="rounded-xl p-4 mb-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
           <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-                className="input w-full"
-              >
-                <option value="">All Statuses</option>
-                {statuses.map(s => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
-            </div>
             <input
               type="date"
               value={filters.date_from}
               onChange={(e) => setFilters(prev => ({ ...prev, date_from: e.target.value }))}
               className="input"
+              title="From date"
             />
             <input
               type="date"
               value={filters.date_to}
               onChange={(e) => setFilters(prev => ({ ...prev, date_to: e.target.value }))}
               className="input"
+              title="To date"
             />
+            {(filters.date_from || filters.date_to) && (
+              <button
+                onClick={() => setFilters({ date_from: '', date_to: '' })}
+                className="btn-secondary text-sm"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -244,7 +311,7 @@ const Interviews = () => {
                       </div>
                     </div>
                     <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={getStatusStyle(interview.overall_status || interview.status)}>
-                      {(interview.overall_status || interview.status)?.replace('_', ' ')}
+                      {(interview.overall_status || interview.status)?.replace(/_/g, ' ')}
                     </span>
                   </div>
                   <p className="text-sm font-medium mb-0.5" style={{ color: 'var(--text-primary)' }}>{interview.job_title}</p>
@@ -275,175 +342,170 @@ const Interviews = () => {
         </div>
       )}
 
-      {/* Interviews Table */}
+      {/* Table View */}
       {viewMode === 'table' && (
-      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-        {loading ? (
-          <SkeletonTableRows rows={8} cols={8} />
-        ) : currentData.length === 0 ? (
-          <div className="p-8 text-center">
-            <Calendar className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-disabled)' }} />
-            <p style={{ color: 'var(--text-muted)' }}>
-              {activeTab === 'today'
-                ? 'No interviews scheduled for today'
-                : activeTab === 'pending'
-                  ? 'No pending feedback'
-                  : 'No interviews found'}
-            </p>
-          </div>
-        ) : (
-          <TableScroll>
-          <table className="w-full">
-            <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
-              <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Candidate</th>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Job / Company</th>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Pipeline</th>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Stage</th>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Last Round</th>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Overall Status</th>
-                <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Progress</th>
-                <th className="text-right px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentData.map(interview => (
-                <tr
-                  key={interview.id}
-                  className="transition-colors cursor-pointer"
-                  style={{ borderBottom: '1px solid var(--border-subtle)' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                  onMouseLeave={e => e.currentTarget.style.background = ''}
-                  onClick={() => navigate(`/interviews/${interview.id}`)}
-                >
-                  <td className="px-4 py-4">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
-                      >
-                        <User className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{interview.candidate_name}</p>
-                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          {interview.scheduled_date
-                            ? formatDate(interview.scheduled_date, 'dd MMM')
-                            : '—'}
-                          {interview.scheduled_time && ` · ${interview.scheduled_time}`}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4">
-                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{interview.job_title}</p>
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{interview.client_name}</p>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{interview.pipeline_name || '—'}</span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{interview.current_round_name || interview.stage_name || '—'}</span>
-                  </td>
-                  <td className="px-4 py-4">
-                    {interview.last_round_result ? (
-                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{interview.last_round_result}</span>
-                    ) : (
-                      <span className="text-xs" style={{ color: 'var(--text-disabled)' }}>—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4">
-                    <span
-                      className="px-2 py-1 rounded-full text-xs font-medium inline-block w-fit"
-                      style={getStatusStyle(interview.overall_status || interview.status)}
-                    >
-                      {(interview.overall_status || interview.status)?.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    {interview.total_rounds > 0 ? (
-                      <div>
-                        <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>
-                          Round {Math.min(interview.current_round_index + 1, interview.total_rounds)} of {interview.total_rounds}
-                        </p>
-                        <div className="flex gap-0.5">
-                          {Array.from({ length: interview.total_rounds }).map((_, i) => (
-                            <div
-                              key={i}
-                              className="h-1.5 flex-1 rounded-full"
-                              style={{
-                                background: i < interview.current_round_index || interview.overall_status === 'selected'
-                                  ? '#43E97B'
-                                  : i === interview.current_round_index && !['selected', 'failed'].includes(interview.overall_status)
-                                  ? 'var(--accent)'
-                                  : 'var(--border-strong)'
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-xs" style={{ color: 'var(--text-disabled)' }}>—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => navigate(`/interviews/${interview.id}`)}
-                        className="p-2 rounded-lg transition-colors"
-                        style={{ color: 'var(--text-muted)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                        onMouseLeave={e => e.currentTarget.style.background = ''}
-                        title="View"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      {has('interviews:update_status') && ['scheduled', 'confirmed', 'rescheduled', 'in_progress'].includes(interview.status) && (
-                        <button
-                          onClick={() => handleCancel(interview.id)}
-                          className="p-2 rounded-lg transition-colors"
-                          style={{ color: '#FF4757' }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,71,87,0.10)'}
-                          onMouseLeave={e => e.currentTarget.style.background = ''}
-                          title="Cancel"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </TableScroll>
-        )}
-
-        {/* Pagination (only for All tab) */}
-        {activeTab === 'all' && pagination.totalPages > 1 && (
-          <div className="px-4 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              Showing {interviews.length} of {pagination.total} interviews
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                disabled={pagination.page === 1}
-                className="btn-secondary text-sm disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                disabled={pagination.page === pagination.totalPages}
-                className="btn-secondary text-sm disabled:opacity-50"
-              >
-                Next
-              </button>
+        <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          {loading ? (
+            <SkeletonTableRows rows={8} cols={8} />
+          ) : currentData.length === 0 ? (
+            <div className="p-8 text-center">
+              <Calendar className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--text-disabled)' }} />
+              <p style={{ color: 'var(--text-muted)' }}>
+                {activeTab === 'today'
+                  ? 'No interviews scheduled for today'
+                  : activeTab === 'pending'
+                    ? 'No pending feedback'
+                    : 'No interviews found'}
+              </p>
             </div>
-          </div>
-        )}
-      </div>
+          ) : (
+            <TableScroll>
+              <table className="w-full">
+                <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
+                  <tr>
+                    <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Candidate</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Job / Company</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Pipeline</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Stage</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Last Round</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Overall Status</th>
+                    <th className="text-left px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Progress</th>
+                    <th className="text-right px-4 py-3 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentData.map(interview => (
+                    <tr
+                      key={interview.id}
+                      className="transition-colors cursor-pointer"
+                      style={{ borderBottom: '1px solid var(--border-subtle)' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                      onMouseLeave={e => e.currentTarget.style.background = ''}
+                      onClick={() => navigate(`/interviews/${interview.id}`)}
+                    >
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}>
+                            <User className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{interview.candidate_name}</p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                              {interview.scheduled_date ? formatDate(interview.scheduled_date, 'dd MMM') : '—'}
+                              {interview.scheduled_time && ` · ${interview.scheduled_time}`}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{interview.job_title}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{interview.client_name}</p>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{interview.pipeline_name || '—'}</span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{interview.current_round_name || interview.stage_name || '—'}</span>
+                      </td>
+                      <td className="px-4 py-4">
+                        {interview.last_round_result ? (
+                          <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{interview.last_round_result}</span>
+                        ) : (
+                          <span className="text-xs" style={{ color: 'var(--text-disabled)' }}>—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-4">
+                        <span
+                          className="px-2 py-1 rounded-full text-xs font-medium inline-block w-fit"
+                          style={getStatusStyle(interview.overall_status || interview.status)}
+                        >
+                          {(interview.overall_status || interview.status)?.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        {interview.total_rounds > 0 ? (
+                          <div>
+                            <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>
+                              Round {Math.min(interview.current_round_index + 1, interview.total_rounds)} of {interview.total_rounds}
+                            </p>
+                            <div className="flex gap-0.5">
+                              {Array.from({ length: interview.total_rounds }).map((_, i) => (
+                                <div
+                                  key={i}
+                                  className="h-1.5 flex-1 rounded-full"
+                                  style={{
+                                    background: i < interview.current_round_index || interview.overall_status === 'selected'
+                                      ? '#43E97B'
+                                      : i === interview.current_round_index && !['selected', 'failed'].includes(interview.overall_status)
+                                        ? 'var(--accent)'
+                                        : 'var(--border-strong)'
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-xs" style={{ color: 'var(--text-disabled)' }}>—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => navigate(`/interviews/${interview.id}`)}
+                            className="p-2 rounded-lg transition-colors"
+                            style={{ color: 'var(--text-muted)' }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                            onMouseLeave={e => e.currentTarget.style.background = ''}
+                            title="View"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {has('interviews:update_status') && ['scheduled', 'confirmed', 'rescheduled', 'in_progress'].includes(interview.status) && (
+                            <button
+                              onClick={() => handleCancel(interview.id)}
+                              className="p-2 rounded-lg transition-colors"
+                              style={{ color: '#FF4757' }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,71,87,0.10)'}
+                              onMouseLeave={e => e.currentTarget.style.background = ''}
+                              title="Cancel"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableScroll>
+          )}
+
+          {/* Pagination (only for list-based tabs) */}
+          {!['today', 'pending'].includes(activeTab) && pagination.totalPages > 1 && (
+            <div className="px-4 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                Showing {interviews.length} of {pagination.total} interviews
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                  disabled={pagination.page === 1}
+                  className="btn-secondary text-sm disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                  disabled={pagination.page === pagination.totalPages}
+                  className="btn-secondary text-sm disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       <ExportModal

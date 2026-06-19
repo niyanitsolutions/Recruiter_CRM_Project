@@ -285,6 +285,7 @@ class InterviewUpdate(BaseModel):
     primary_interviewer: Optional[str] = None
 
     status: Optional[str] = None
+    overall_status: Optional[str] = None  # in_progress | selected | failed | on_hold
 
     instructions: Optional[str] = None
     internal_notes: Optional[str] = None

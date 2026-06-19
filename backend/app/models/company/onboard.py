@@ -13,6 +13,7 @@ import uuid
 
 class OnboardStatus(str, Enum):
     """Onboard status workflow"""
+    SELECTED = "selected"          # Interview-selected, awaiting offer release
     OFFER_RELEASED = "offer_released"
     OFFER_ACCEPTED = "offer_accepted"
     OFFER_DECLINED = "offer_declined"
@@ -23,6 +24,7 @@ class OnboardStatus(str, Enum):
     ABSCONDED = "absconded"
     TERMINATED = "terminated"
     COMPLETED = "completed"
+    REJECTED = "rejected"          # Rejected at any stage (interview/offer/withdrawal)
 
 
 class DocumentStatus(str, Enum):
@@ -36,6 +38,7 @@ class DocumentStatus(str, Enum):
 # ============== Display Names ==============
 
 ONBOARD_STATUS_DISPLAY = {
+    OnboardStatus.SELECTED: "Selected",
     OnboardStatus.OFFER_RELEASED: "Offer Released",
     OnboardStatus.OFFER_ACCEPTED: "Offer Accepted",
     OnboardStatus.OFFER_DECLINED: "Offer Declined",
@@ -45,7 +48,8 @@ ONBOARD_STATUS_DISPLAY = {
     OnboardStatus.NO_SHOW: "No Show",
     OnboardStatus.ABSCONDED: "Absconded",
     OnboardStatus.TERMINATED: "Terminated",
-    OnboardStatus.COMPLETED: "Completed"
+    OnboardStatus.COMPLETED: "Completed",
+    OnboardStatus.REJECTED: "Rejected",
 }
 
 DOCUMENT_STATUS_DISPLAY = {
@@ -110,12 +114,13 @@ class OnboardModel(BaseModel):
     job_id: str
     client_id: str
     partner_id: Optional[str] = None
-    
-    # Offer Details
-    offer_ctc: float
-    offer_designation: str
-    offer_location: str
-    offer_released_date: date
+    interview_id: Optional[str] = None     # Interview that led to this onboard
+
+    # Offer Details (optional until offer is released from selected status)
+    offer_ctc: float = 0.0
+    offer_designation: str = ""
+    offer_location: str = ""
+    offer_released_date: Optional[date] = None
     offer_valid_until: Optional[date] = None
     offer_letter_url: Optional[str] = None
     
@@ -127,6 +132,7 @@ class OnboardModel(BaseModel):
     
     # Status
     status: OnboardStatus = OnboardStatus.OFFER_RELEASED
+    rejection_reason: Optional[str] = None  # Reason if status is rejected/declined
     
     # Day Counter
     days_at_client: int = 0
@@ -223,6 +229,21 @@ class OnboardStatusUpdate(BaseModel):
     reason: Optional[str] = None
     notes: Optional[str] = None
     actual_doj: Optional[date] = None
+    rejection_reason: Optional[str] = None  # For rejected/declined statuses
+
+
+class ReleaseOfferRequest(BaseModel):
+    """Release offer for a candidate in 'selected' status"""
+    offer_ctc: float
+    offer_designation: str
+    offer_location: str
+    offer_released_date: date
+    offer_valid_until: Optional[date] = None
+    offer_letter_url: Optional[str] = None
+    expected_doj: Optional[date] = None
+    payout_days_required: int = 45
+    documents_required: List[str] = []
+    notes: Optional[str] = None
 
 
 class DOJExtension(BaseModel):
@@ -248,10 +269,11 @@ class OnboardResponse(BaseModel):
     job_id: str
     client_id: str
     partner_id: Optional[str] = None
-    offer_ctc: float
-    offer_designation: str
-    offer_location: str
-    offer_released_date: date
+    interview_id: Optional[str] = None
+    offer_ctc: float = 0.0
+    offer_designation: str = ""
+    offer_location: str = ""
+    offer_released_date: Optional[date] = None
     offer_valid_until: Optional[date] = None
     offer_letter_url: Optional[str] = None
     expected_doj: Optional[date] = None
@@ -272,6 +294,7 @@ class OnboardResponse(BaseModel):
     payout_eligibility_date: Optional[date] = None
     notes: Optional[str] = None
     hr_notes: Optional[str] = None
+    rejection_reason: Optional[str] = None
     status_history: List[StatusHistory] = []
     candidate_name: Optional[str] = None
     candidate_email: Optional[str] = None
@@ -282,7 +305,7 @@ class OnboardResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     created_by: str
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -297,6 +320,7 @@ class OnboardListResponse(BaseModel):
 
 class OnboardDashboardStats(BaseModel):
     """Dashboard statistics for onboarding"""
+    selected_count: int = 0
     total_offers: int = 0
     offers_accepted: int = 0
     offers_declined: int = 0
@@ -306,5 +330,6 @@ class OnboardDashboardStats(BaseModel):
     payout_eligible: int = 0
     pending_documents: int = 0
     upcoming_doj: int = 0
+    rejected_count: int = 0
 # Alias for backward compatibility
 OnboardInDB = OnboardModel

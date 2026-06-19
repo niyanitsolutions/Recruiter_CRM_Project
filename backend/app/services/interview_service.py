@@ -642,7 +642,7 @@ class InterviewService:
                 update_set["result"] = InterviewResult.PASSED.value
                 app_status_update = "selected"
 
-                # Auto-create onboard record
+                # Auto-create onboard record in "selected" state — offer not released yet
                 if interview.get("application_id"):
                     try:
                         onboard_doc = {
@@ -661,15 +661,21 @@ class InterviewService:
                             "offer_ctc": 0.0,
                             "offer_designation": "",
                             "offer_location": "",
-                            "offer_released_date": date.today().isoformat(),
-                            "status": "offer_released",
+                            "offer_released_date": None,
+                            "status": "selected",
                             "days_at_client": 0,
                             "payout_days_required": 45,
                             "documents_required": [],
                             "documents": [],
                             "documents_verified": False,
                             "payout_eligible": False,
-                            "status_history": [],
+                            "status_history": [{
+                                "from_status": None,
+                                "to_status": "selected",
+                                "changed_at": now,
+                                "changed_by": submitted_by,
+                                "notes": "Candidate selected after all interview rounds passed",
+                            }],
                             "created_by": submitted_by,
                             "created_at": now,
                             "updated_at": now,
@@ -735,6 +741,7 @@ class InterviewService:
         candidate_id: Optional[str] = None,
         job_id: Optional[str] = None,
         status_filter: Optional[List[str]] = None,
+        overall_status_filter: Optional[str] = None,
         interviewer_id: Optional[str] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
@@ -761,6 +768,8 @@ class InterviewService:
             query["job_id"] = job_id
         if status_filter:
             query["status"] = {"$in": status_filter}
+        if overall_status_filter:
+            query["overall_status"] = overall_status_filter
         if interviewer_id:
             query["interviewer_ids"] = interviewer_id
         if date_from:
@@ -1074,15 +1083,23 @@ class InterviewService:
             "scheduled_date": {"$lt": today}
         })
 
+        # Counts by overall_status (for summary cards)
+        overall_pipeline = [{"$match": base_query}, {"$group": {"_id": "$overall_status", "count": {"$sum": 1}}}]
+        overall_counts_raw = await collection.aggregate(overall_pipeline).to_list(length=20)
+        by_overall = {item["_id"]: item["count"] for item in overall_counts_raw}
+
         return {
             "total": total,
             "by_status": by_status,
             "today": today_count,
             "this_week": week_count,
-            "scheduled": by_status.get("scheduled", 0),
+            "scheduled": by_overall.get("in_progress", 0),
+            "selected": by_overall.get("selected", 0),
+            "rejected": by_overall.get("failed", 0),
+            "on_hold": by_overall.get("on_hold", 0),
             "completed": by_status.get("completed", 0),
             "cancelled": by_status.get("cancelled", 0),
-            "pending_feedback": pending_feedback
+            "pending_feedback": pending_feedback,
         }
 
     # ── get_selected_candidates ──────────────────────────────────────────────

@@ -13,7 +13,7 @@ from app.models.company.onboard import (
     OnboardResponse, OnboardListResponse,
     OnboardStatus, DocumentStatus, OnboardDocument,
     DOJExtension, DocumentUpdate, StatusHistory,
-    ReminderLog, OnboardDashboardStats
+    ReminderLog, OnboardDashboardStats, ReleaseOfferRequest
 )
 
 
@@ -244,6 +244,104 @@ class OnboardService:
         
         return OnboardResponse(**result) if result else None
     
+    async def release_offer(
+        self,
+        onboard_id: str,
+        data: ReleaseOfferRequest,
+        company_id: str,
+        updated_by: str,
+    ) -> Optional[OnboardResponse]:
+        """Transition a 'selected' onboard record to 'offer_released' with full offer details."""
+        onboard = await self.collection.find_one({
+            "id": onboard_id,
+            "company_id": company_id,
+            "is_deleted": False,
+        })
+        if not onboard:
+            return None
+
+        status_history = StatusHistory(
+            from_status=onboard.get("status"),
+            to_status=OnboardStatus.OFFER_RELEASED.value,
+            changed_at=datetime.now(timezone.utc),
+            changed_by=updated_by,
+            notes="Offer released",
+        )
+
+        update_data = {
+            "status": OnboardStatus.OFFER_RELEASED.value,
+            "offer_ctc": data.offer_ctc,
+            "offer_designation": data.offer_designation,
+            "offer_location": data.offer_location,
+            "offer_released_date": data.offer_released_date.isoformat(),
+            "updated_at": datetime.now(timezone.utc),
+            "updated_by": updated_by,
+        }
+        if data.offer_valid_until:
+            update_data["offer_valid_until"] = data.offer_valid_until.isoformat()
+        if data.offer_letter_url:
+            update_data["offer_letter_url"] = data.offer_letter_url
+        if data.expected_doj:
+            update_data["expected_doj"] = data.expected_doj.isoformat()
+        if data.payout_days_required:
+            update_data["payout_days_required"] = data.payout_days_required
+        if data.documents_required:
+            update_data["documents_required"] = data.documents_required
+            update_data["documents"] = [
+                {"document_type": dt, "document_name": dt.replace("_", " ").title(), "status": "pending"}
+                for dt in data.documents_required
+            ]
+        if data.notes:
+            update_data["notes"] = data.notes
+
+        result = await self.collection.find_one_and_update(
+            {"id": onboard_id, "company_id": company_id},
+            {"$set": update_data, "$push": {"status_history": status_history.model_dump()}},
+            return_document=True,
+        )
+        return OnboardResponse(**result) if result else None
+
+    async def reject_onboard(
+        self,
+        onboard_id: str,
+        rejection_reason: str,
+        company_id: str,
+        updated_by: str,
+        notes: Optional[str] = None,
+    ) -> Optional[OnboardResponse]:
+        """Reject a candidate at any onboarding stage."""
+        onboard = await self.collection.find_one({
+            "id": onboard_id,
+            "company_id": company_id,
+            "is_deleted": False,
+        })
+        if not onboard:
+            return None
+
+        status_history = StatusHistory(
+            from_status=onboard.get("status"),
+            to_status=OnboardStatus.REJECTED.value,
+            changed_at=datetime.now(timezone.utc),
+            changed_by=updated_by,
+            reason=rejection_reason,
+            notes=notes,
+        )
+
+        result = await self.collection.find_one_and_update(
+            {"id": onboard_id, "company_id": company_id},
+            {
+                "$set": {
+                    "status": OnboardStatus.REJECTED.value,
+                    "rejection_reason": rejection_reason,
+                    "updated_at": datetime.now(timezone.utc),
+                    "updated_by": updated_by,
+                },
+                "$push": {"status_history": status_history.model_dump()},
+            },
+            return_document=True,
+        )
+        return OnboardResponse(**result) if result else None
+
     async def extend_doj(
         self,
         onboard_id: str,
@@ -528,8 +626,26 @@ class OnboardService:
             "is_deleted": False
         })
         
+        selected_count = status_counts.get(OnboardStatus.SELECTED.value, 0)
+        rejected_count = (
+            status_counts.get(OnboardStatus.REJECTED.value, 0)
+            + status_counts.get(OnboardStatus.OFFER_DECLINED.value, 0)
+            + status_counts.get(OnboardStatus.NO_SHOW.value, 0)
+        )
+        # total_offers excludes pure "selected" pre-offer records
+        offer_statuses = {
+            OnboardStatus.OFFER_RELEASED.value, OnboardStatus.OFFER_ACCEPTED.value,
+            OnboardStatus.OFFER_DECLINED.value, OnboardStatus.DOJ_CONFIRMED.value,
+            OnboardStatus.DOJ_EXTENDED.value, OnboardStatus.JOINED.value,
+            OnboardStatus.NO_SHOW.value, OnboardStatus.ABSCONDED.value,
+            OnboardStatus.TERMINATED.value, OnboardStatus.COMPLETED.value,
+            OnboardStatus.REJECTED.value,
+        }
+        total_offers = sum(v for k, v in status_counts.items() if k in offer_statuses)
+
         return OnboardDashboardStats(
-            total_offers=sum(status_counts.values()),
+            selected_count=selected_count,
+            total_offers=total_offers,
             offers_accepted=status_counts.get(OnboardStatus.OFFER_ACCEPTED.value, 0),
             offers_declined=status_counts.get(OnboardStatus.OFFER_DECLINED.value, 0),
             doj_confirmed=status_counts.get(OnboardStatus.DOJ_CONFIRMED.value, 0),
@@ -537,7 +653,8 @@ class OnboardService:
             no_shows=status_counts.get(OnboardStatus.NO_SHOW.value, 0),
             payout_eligible=payout_eligible,
             pending_documents=pending_docs,
-            upcoming_doj=upcoming_doj
+            upcoming_doj=upcoming_doj,
+            rejected_count=rejected_count,
         )
     
     # ============== Helper Methods ==============

@@ -111,6 +111,20 @@ const onboardService = {
     return response.data
   },
 
+  // Release offer for a candidate in 'selected' status
+  releaseOffer: async (id, data) => {
+    const response = await api.post(`${BASE_URL}/${id}/release-offer`, data)
+    return response.data
+  },
+
+  // Reject a candidate at any onboarding stage
+  rejectOnboard: async (id, rejectionReason, notes = null) => {
+    const response = await api.post(`${BASE_URL}/${id}/reject`, null, {
+      params: { rejection_reason: rejectionReason, notes }
+    })
+    return response.data
+  },
+
   // ============== Documents ==============
   
   // Get documents

@@ -392,6 +392,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.ONBOARDS_VIEW,
         Permission.REPORTS_VIEW,
         Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
+        Permission.TARGETS_VIEW,
         *_HRM_ESS_MINIMUM,
     ],
 
@@ -407,6 +408,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.ONBOARDS_VIEW,
         Permission.REPORTS_VIEW,
         Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
+        Permission.TARGETS_VIEW,
         *_HRM_ESS_MINIMUM,
     ],
 
@@ -421,6 +423,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.ONBOARDS_VIEW,
         Permission.REPORTS_VIEW,
         Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
+        Permission.TARGETS_VIEW,
         *_HRM_ESS_MINIMUM,
     ],
 
@@ -481,7 +484,8 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.CLIENTS_VIEW,
         Permission.PARTNERS_VIEW,
         Permission.REPORTS_VIEW, Permission.REPORTS_EXPORT,
-        Permission.TASKS_VIEW,
+        Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
+        Permission.TARGETS_VIEW,
         *_HRM_ESS_MINIMUM,
     ],
 
@@ -495,11 +499,18 @@ ROLE_DEFAULT_PERMISSIONS = {
 
     # ── HRM-only roles ────────────────────────────────────────────────────────
 
-    # MANAGER: team-level HRM (no CRM access by default)
-    SystemRole.MANAGER: _HRM_TEAM,
+    # MANAGER: team-level HRM + tasks/targets management
+    SystemRole.MANAGER: _HRM_TEAM + [
+        Permission.DASHBOARD_VIEW,
+        Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
+        Permission.TARGETS_VIEW, Permission.TARGETS_CREATE,
+        Permission.TARGETS_EDIT, Permission.TARGETS_DELETE,
+    ],
 
-    # EMPLOYEE: self-service HRM only
-    SystemRole.EMPLOYEE: _HRM_SELF,
+    # EMPLOYEE: self-service HRM + view assigned tasks
+    SystemRole.EMPLOYEE: _HRM_SELF + [
+        Permission.TASKS_VIEW,
+    ],
 }
 
 

@@ -24,7 +24,8 @@ async def list_interviews(
     application_id: Optional[str] = None,
     candidate_id: Optional[str] = None,
     job_id: Optional[str] = None,
-    status: Optional[str] = None,  # Comma-separated
+    status: Optional[str] = None,          # Comma-separated status values
+    overall_status: Optional[str] = None,  # Filter by overall_status field
     interviewer_id: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
@@ -55,12 +56,13 @@ async def list_interviews(
         candidate_id=candidate_id,
         job_id=job_id,
         status_filter=status_list,
+        overall_status_filter=overall_status,
         interviewer_id=interviewer_id,
         date_from=date_from,
         date_to=date_to,
         current_user=current_user,
     )
-    
+
     return {"success": True, **result}
 
 
