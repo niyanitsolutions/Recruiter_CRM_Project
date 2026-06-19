@@ -46,7 +46,9 @@ export default function SearchableSelect({
 
   const q = query.trim().toLowerCase()
   const matches = q.length >= minChars
-    ? options.filter(o => (o.searchText || o.label || '').toLowerCase().includes(q)).slice(0, maxResults)
+    ? (q.length === 0
+        ? options.slice(0, maxResults)
+        : options.filter(o => (o.searchText || o.label || '').toLowerCase().includes(q)).slice(0, maxResults))
     : []
 
   return (
@@ -89,6 +91,8 @@ export default function SearchableSelect({
               <p className="px-3 py-3 text-xs text-surface-400">
                 Type {minChars - q.length} more character{minChars - q.length === 1 ? '' : 's'} to search…
               </p>
+            ) : q.length === 0 && matches.length === 0 ? (
+              <p className="px-3 py-3 text-xs text-surface-400">No options available</p>
             ) : matches.length === 0 ? (
               <p className="px-3 py-3 text-xs text-surface-400">No matches found</p>
             ) : (

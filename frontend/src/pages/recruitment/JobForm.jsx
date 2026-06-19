@@ -57,6 +57,7 @@ const JobForm = () => {
     target_date: '',
     notes: '',
     status: 'draft',
+    enable_academic_filtering: false,
     min_percentage: '',
     minimum_match_score: 70,
     pipeline_id: '',
@@ -151,6 +152,7 @@ const JobForm = () => {
             return entry ? entry[0] : ''
           })(),
           ctc_max: job.eligibility?.max_ctc || '',
+          enable_academic_filtering: !!(job.min_percentage != null && job.min_percentage !== ''),
           min_percentage: job.min_percentage ?? '',
           minimum_match_score: job.minimum_match_score ?? 70,
           pipeline_id: job.pipeline_id || '',
@@ -201,7 +203,7 @@ const JobForm = () => {
     } else if (formData.location_type === 'multiple') {
       if (formData.locations.length === 0) e.city = 'Add at least one location'
     }
-    if (formData.location_type !== 'remote' && formData.location_type !== 'pan_india') {
+    if (formData.location_type === 'single' || formData.location_type === 'hybrid') {
       if (!formData.state.trim()) e.state = 'State is required'
     }
     if (!formData.country.trim()) e.country = 'Country is required'
@@ -212,7 +214,7 @@ const JobForm = () => {
     if (formData.experience_max === '' || formData.experience_max === null) e.experience_max = 'Max experience is required'
     if (!formData.notice_period_max) e.notice_period_max = 'Notice period is required'
     if (formData.ctc_max === '' || formData.ctc_max === null) e.ctc_max = 'Max CTC is required'
-    if (formData.min_percentage === '' || formData.min_percentage === null) e.min_percentage = 'Min percentage is required'
+    if (formData.enable_academic_filtering && (formData.min_percentage === '' || formData.min_percentage === null)) e.min_percentage = 'Min percentage is required'
     const mms = Number(formData.minimum_match_score)
     if (formData.minimum_match_score === '' || formData.minimum_match_score == null) e.minimum_match_score = 'Minimum match score is required'
     else if (isNaN(mms) || mms < 0 || mms > 100) e.minimum_match_score = 'Must be 0–100'
@@ -225,8 +227,8 @@ const JobForm = () => {
     return e
   }
 
-  const addSkill = (type) => {
-    const raw = type === 'mandatory' ? newMandatorySkill : newOptionalSkill
+  const addSkill = (type, rawOverride) => {
+    const raw = rawOverride ?? (type === 'mandatory' ? newMandatorySkill : newOptionalSkill)
     const skill = raw.trim().toLowerCase()
     const field = type === 'mandatory' ? 'mandatory_skills' : 'optional_skills'
 
@@ -235,12 +237,32 @@ const JobForm = () => {
         ...prev,
         [field]: [...prev[field], skill]
       }))
-      if (type === 'mandatory') {
-        setNewMandatorySkill('')
-      } else {
-        setNewOptionalSkill('')
-      }
     }
+    if (rawOverride === undefined) {
+      if (type === 'mandatory') setNewMandatorySkill('')
+      else setNewOptionalSkill('')
+    }
+  }
+
+  const handleSkillKeyDown = (e, type) => {
+    if (['Enter', ',', 'Tab'].includes(e.key) || (e.key === ' ' && (type === 'mandatory' ? newMandatorySkill : newOptionalSkill).trim())) {
+      e.preventDefault()
+      addSkill(type)
+    }
+  }
+
+  const handleSkillPaste = (e, type) => {
+    e.preventDefault()
+    const text = e.clipboardData.getData('text')
+    const parts = text.split(/[,\s\t\n]+/).map(s => s.trim().toLowerCase()).filter(Boolean)
+    const field = type === 'mandatory' ? 'mandatory_skills' : 'optional_skills'
+    setFormData(prev => {
+      const existing = new Set(prev[field])
+      const toAdd = parts.filter(s => !existing.has(s))
+      return { ...prev, [field]: [...prev[field], ...toAdd] }
+    })
+    if (type === 'mandatory') setNewMandatorySkill('')
+    else setNewOptionalSkill('')
   }
 
   const removeSkill = (type, skill) => {
@@ -317,7 +339,7 @@ const JobForm = () => {
           min_diploma_percentage: formData.min_diploma_percentage !== '' ? Number(formData.min_diploma_percentage) : null,
           min_degree_percentage: formData.min_degree_percentage !== '' ? Number(formData.min_degree_percentage) : null
         },
-        min_percentage: formData.min_percentage !== '' ? Number(formData.min_percentage) : null,
+        min_percentage: (formData.enable_academic_filtering && formData.min_percentage !== '') ? Number(formData.min_percentage) : null,
         minimum_match_score: Number(formData.minimum_match_score) || 70,
         pipeline_id: formData.pipeline_id || null,
         gender_eligibility: formData.gender_eligibility || 'all',
@@ -603,7 +625,7 @@ const JobForm = () => {
               </div>
             )}
 
-            {formData.location_type !== 'pan_india' && formData.location_type !== 'remote' && (
+            {(formData.location_type === 'single' || formData.location_type === 'hybrid') && (
               <div>
                 <label className="block text-sm font-medium text-surface-700 mb-1">
                   State <span className="text-red-500">*</span>
@@ -768,26 +790,43 @@ const JobForm = () => {
               {errors.ctc_max && <p className="text-red-500 text-xs mt-1">{errors.ctc_max}</p>}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Min. Academic Percentage (%) <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="field-min_percentage"
-                type="number"
-                name="min_percentage"
-                value={formData.min_percentage}
-                onChange={handleChange}
-                className={`input w-full ${errors.min_percentage ? 'border-red-400' : ''}`}
-                step="0.1"
-                min="0"
-                max="100"
-                placeholder="e.g. 60"
-              />
-              {errors.min_percentage
-                ? <p className="text-red-500 text-xs mt-1">{errors.min_percentage}</p>
-                : <p className="text-xs text-surface-400 mt-1">Candidates below this % will be auto-rejected</p>
-              }
+            <div className="md:col-span-2">
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  type="checkbox"
+                  id="enable_academic_filtering"
+                  name="enable_academic_filtering"
+                  checked={formData.enable_academic_filtering}
+                  onChange={handleChange}
+                  className="rounded"
+                />
+                <label htmlFor="enable_academic_filtering" className="text-sm font-medium text-surface-700 cursor-pointer select-none">
+                  Enable Academic Filtering
+                </label>
+              </div>
+              {formData.enable_academic_filtering && (
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 mb-1">
+                    Minimum Academic Percentage (%) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="field-min_percentage"
+                    type="number"
+                    name="min_percentage"
+                    value={formData.min_percentage}
+                    onChange={handleChange}
+                    className={`input w-full ${errors.min_percentage ? 'border-red-400' : ''}`}
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    placeholder="e.g. 60"
+                  />
+                  {errors.min_percentage
+                    ? <p className="text-red-500 text-xs mt-1">{errors.min_percentage}</p>
+                    : <p className="text-xs text-surface-400 mt-1">Candidates below this % will be auto-rejected. Uses degree % if present, otherwise diploma %.</p>
+                  }
+                </div>
+              )}
             </div>
 
             <div>
@@ -813,35 +852,37 @@ const JobForm = () => {
             </div>
           </div>
 
-          {/* Academic Eligibility (Task 10) — all optional, no filtering applied when blank */}
-          <div className="mb-6">
-            <h3 className="text-sm font-semibold text-surface-700 mb-1">Academic Eligibility <span className="text-surface-400 font-normal">(optional)</span></h3>
-            <p className="text-xs text-surface-400 mb-3">Leave blank for no filtering on a level.</p>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {[
-                { name: 'min_10th_percentage',     label: '10th %' },
-                { name: 'min_12th_percentage',     label: '12th %' },
-                { name: 'min_diploma_percentage',  label: 'Diploma %' },
-                { name: 'min_degree_percentage',   label: 'Degree %' },
-              ].map(({ name, label }) => (
-                <div key={name}>
-                  <label className="block text-sm font-medium text-surface-700 mb-1">{label}</label>
-                  <input
-                    type="number"
-                    name={name}
-                    value={formData[name]}
-                    onChange={handleChange}
-                    onWheel={(e) => e.target.blur()}
-                    className="input w-full"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                    placeholder="e.g. 60"
-                  />
-                </div>
-              ))}
+          {/* Academic Eligibility — per-level thresholds, only shown when academic filtering is enabled */}
+          {formData.enable_academic_filtering && (
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-surface-700 mb-1">Per-Level Thresholds <span className="text-surface-400 font-normal">(optional)</span></h3>
+              <p className="text-xs text-surface-400 mb-3">Leave blank to skip filtering at a specific level. Degree % takes priority over Diploma % for evaluation.</p>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {[
+                  { name: 'min_10th_percentage',     label: '10th %' },
+                  { name: 'min_12th_percentage',     label: '12th %' },
+                  { name: 'min_diploma_percentage',  label: 'Diploma %' },
+                  { name: 'min_degree_percentage',   label: 'Degree %' },
+                ].map(({ name, label }) => (
+                  <div key={name}>
+                    <label className="block text-sm font-medium text-surface-700 mb-1">{label}</label>
+                    <input
+                      type="number"
+                      name={name}
+                      value={formData[name]}
+                      onChange={handleChange}
+                      onWheel={(e) => e.target.blur()}
+                      className="input w-full"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      placeholder="e.g. 60"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div id="field-pipeline_id">
@@ -872,7 +913,7 @@ const JobForm = () => {
                         label: `${p.job_title || p.name}${p.client_name ? ` - ${p.client_name}` : ''}${p.is_default ? ' (Default)' : ''}`,
                       }))}
                       placeholder="Search pipeline by name or client…"
-                      minChars={3}
+                      minChars={0}
                       className="border-0"
                     />
                   </div>
@@ -970,17 +1011,11 @@ const JobForm = () => {
                 type="text"
                 value={newMandatorySkill}
                 onChange={(e) => setNewMandatorySkill(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill('mandatory'))}
+                onKeyDown={(e) => handleSkillKeyDown(e, 'mandatory')}
+                onPaste={(e) => handleSkillPaste(e, 'mandatory')}
                 className="input flex-1"
-                placeholder="Add mandatory skill..."
+                placeholder="Type skill and press Enter, Space, Comma or Tab…"
               />
-              <button
-                type="button"
-                onClick={() => addSkill('mandatory')}
-                className="btn-secondary"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
             </div>
             <div className="flex flex-wrap gap-2">
               {formData.mandatory_skills.map((skill, index) => (
@@ -1012,17 +1047,11 @@ const JobForm = () => {
                 type="text"
                 value={newOptionalSkill}
                 onChange={(e) => setNewOptionalSkill(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill('optional'))}
+                onKeyDown={(e) => handleSkillKeyDown(e, 'optional')}
+                onPaste={(e) => handleSkillPaste(e, 'optional')}
                 className="input flex-1"
-                placeholder="Add optional skill..."
+                placeholder="Type skill and press Enter, Space, Comma or Tab…"
               />
-              <button
-                type="button"
-                onClick={() => addSkill('optional')}
-                className="btn-secondary"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
             </div>
             <div className="flex flex-wrap gap-2">
               {formData.optional_skills.map((skill, index) => (

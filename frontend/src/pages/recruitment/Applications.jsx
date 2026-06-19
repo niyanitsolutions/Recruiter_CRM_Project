@@ -10,9 +10,10 @@ import ExportModal from '../../components/common/ExportModal'
 import usePermissions from '../../hooks/usePermissions'
 import ModalPortal from '../../components/common/ModalPortal'
 import { SkeletonCards } from '../../components/common/SkeletonLoader'
-import { formatDate, getInitials } from '../../utils/format'
+import { formatDate } from '../../utils/format'
 import { useLivePolling } from '../../hooks/useLivePolling'
 import TableScroll from '../../components/common/TableScroll'
+import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 import CandidateApplicationPanel from './CandidateApplicationPanel'
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -69,27 +70,7 @@ function ScoreBadge({ score }) {
   )
 }
 
-// ── Candidate avatar ──────────────────────────────────────────────────────────
-
-function CandidateAvatar({ name }) {
-  const initials = getInitials(name || '')
-  const colors = [
-    ['#6C63FF', '#9C63FF'], ['#43E97B', '#38F9D7'], ['#FB923C', '#F59E0B'],
-    ['#4FACFE', '#38F9D7'], ['#FF6B9D', '#C850C0'],
-  ]
-  const idx = (name?.charCodeAt(0) || 0) % colors.length
-  const [from, to] = colors[idx]
-  return (
-    <div style={{
-      width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-      background: `linear-gradient(135deg, ${from}, ${to})`,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 13, fontWeight: 700, color: '#fff',
-    }}>
-      {initials}
-    </div>
-  )
-}
+// CandidateAvatar is replaced by EmployeeAvatar (imported above)
 
 // ── Application summary (status count breakdown) ──────────────────────────────
 
@@ -153,7 +134,7 @@ function CandidateRow({ row, onClick }) {
       {/* Candidate */}
       <td style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <CandidateAvatar name={row.candidate_name} />
+          <EmployeeAvatar name={row.candidate_name} photoUrl={row.photo_url} size={36} />
           <div>
             <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
               {row.candidate_name}
@@ -243,14 +224,19 @@ const Applications = () => {
   const [candidatesLoading, setCandidatesLoading] = useState(true)
   const [selectedCandidateId, setSelectedCandidateId] = useState(null)
 
-  // Lock background scroll when candidate panel is open
+  // Lock background scroll when candidate panel is open (both body and html)
   useEffect(() => {
     if (selectedCandidateId) {
       document.body.style.overflow = 'hidden'
+      document.documentElement.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
     }
-    return () => { document.body.style.overflow = '' }
+    return () => {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
   }, [selectedCandidateId])
 
   // ── Applications view state ────────────────────────────────────────────────
@@ -564,7 +550,7 @@ const Applications = () => {
                       onClick={() => navigate(`/applications/${app.id}`)}
                     >
                       <div className="flex items-start gap-3 mb-3">
-                        <CandidateAvatar name={app.candidate_name} />
+                        <EmployeeAvatar name={app.candidate_name} photoUrl={app.photo_url} size={36} />
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-sm truncate" style={{ color: 'var(--text-primary)' }}>{app.candidate_name}</p>
                           <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{app.candidate_email}</p>
@@ -644,7 +630,7 @@ const Applications = () => {
                           </td>
                           <td className="px-4 py-4">
                             <div className="flex items-center gap-3">
-                              <CandidateAvatar name={app.candidate_name} />
+                              <EmployeeAvatar name={app.candidate_name} photoUrl={app.photo_url} size={36} />
                               <div>
                                 <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{app.candidate_name}</p>
                                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{app.candidate_email}</p>
@@ -764,24 +750,22 @@ const Applications = () => {
         )}
       />
 
-      {/* ── Candidate Panel + backdrop ──────────────────────────────────────── */}
-      {selectedCandidateId && (
-        <>
-          <div
-            style={{
-              position: 'fixed', inset: 0,
-              background: 'rgba(0,0,0,0.4)',
-              zIndex: 999,
-              backdropFilter: 'blur(2px)',
-            }}
-            onClick={() => setSelectedCandidateId(null)}
-          />
-          <CandidateApplicationPanel
-            candidateId={selectedCandidateId}
-            onClose={() => setSelectedCandidateId(null)}
-          />
-        </>
-      )}
+      {/* ── Candidate Panel + backdrop (portal → renders at body root) ──────── */}
+      <ModalPortal isOpen={!!selectedCandidateId}>
+        <div
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.4)',
+            zIndex: 999,
+            backdropFilter: 'blur(2px)',
+          }}
+          onClick={() => setSelectedCandidateId(null)}
+        />
+        <CandidateApplicationPanel
+          candidateId={selectedCandidateId}
+          onClose={() => setSelectedCandidateId(null)}
+        />
+      </ModalPortal>
     </div>
   )
 }

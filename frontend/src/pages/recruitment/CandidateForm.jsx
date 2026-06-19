@@ -244,23 +244,67 @@ const CandidateForm = () => {
     setWorkExperience(prev => prev.filter((_, i) => i !== index))
   }
 
-  const addSkill = () => {
-    if (newSkill.trim() && !formData.skills.includes(newSkill.trim())) {
-      setFormData(prev => ({ ...prev, skills: [...prev.skills, newSkill.trim()] }))
-      setNewSkill('')
+  const addSkill = (rawOverride) => {
+    const raw = rawOverride !== undefined ? rawOverride : newSkill
+    const skill = raw.trim()
+    if (skill && !formData.skills.map(s => s.toLowerCase()).includes(skill.toLowerCase())) {
+      setFormData(prev => ({ ...prev, skills: [...prev.skills, skill] }))
       if (errors.skills) setErrors(prev => ({ ...prev, skills: '' }))
     }
+    if (rawOverride === undefined) setNewSkill('')
   }
   const removeSkill = (skill) => setFormData(prev => ({ ...prev, skills: prev.skills.filter(s => s !== skill) }))
 
-  const addLocation = () => {
-    if (newLocation.trim() && !formData.preferred_locations.includes(newLocation.trim())) {
-      setFormData(prev => ({ ...prev, preferred_locations: [...prev.preferred_locations, newLocation.trim()] }))
-      setNewLocation('')
-      if (errors.preferred_locations) setErrors(prev => ({ ...prev, preferred_locations: '' }))
+  const handleSkillKeyDown = (e) => {
+    if (['Enter', ',', 'Tab'].includes(e.key) || (e.key === ' ' && newSkill.trim())) {
+      e.preventDefault()
+      addSkill()
     }
   }
+
+  const handleSkillPaste = (e) => {
+    e.preventDefault()
+    const text = e.clipboardData.getData('text')
+    const parts = text.split(/[,\s\t\n]+/).map(s => s.trim()).filter(Boolean)
+    setFormData(prev => {
+      const existing = new Set(prev.skills.map(s => s.toLowerCase()))
+      const toAdd = parts.filter(s => !existing.has(s.toLowerCase()))
+      return { ...prev, skills: [...prev.skills, ...toAdd] }
+    })
+    setNewSkill('')
+    if (errors.skills) setErrors(prev => ({ ...prev, skills: '' }))
+  }
+
+  const addLocation = (rawOverride) => {
+    const raw = rawOverride !== undefined ? rawOverride : newLocation
+    const loc = raw.trim()
+    if (loc && !formData.preferred_locations.includes(loc)) {
+      setFormData(prev => ({ ...prev, preferred_locations: [...prev.preferred_locations, loc] }))
+      if (errors.preferred_locations) setErrors(prev => ({ ...prev, preferred_locations: '' }))
+    }
+    if (rawOverride === undefined) setNewLocation('')
+  }
   const removeLocation = (location) => setFormData(prev => ({ ...prev, preferred_locations: prev.preferred_locations.filter(l => l !== location) }))
+
+  const handleLocationKeyDown = (e) => {
+    if (['Enter', ',', 'Tab'].includes(e.key) || (e.key === ' ' && newLocation.trim())) {
+      e.preventDefault()
+      addLocation()
+    }
+  }
+
+  const handleLocationPaste = (e) => {
+    e.preventDefault()
+    const text = e.clipboardData.getData('text')
+    const parts = text.split(/[,\t\n]+/).map(s => s.trim()).filter(Boolean)
+    setFormData(prev => {
+      const existing = new Set(prev.preferred_locations)
+      const toAdd = parts.filter(s => !existing.has(s))
+      return { ...prev, preferred_locations: [...prev.preferred_locations, ...toAdd] }
+    })
+    setNewLocation('')
+    if (errors.preferred_locations) setErrors(prev => ({ ...prev, preferred_locations: '' }))
+  }
 
   // ── Photo handlers ────────────────────────────────────────────────
   const PHOTO_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
@@ -1097,9 +1141,9 @@ const CandidateForm = () => {
           {errors.skills && <p className={`${errCls} mb-3`}>{errors.skills}</p>}
           <div className="flex gap-2 mb-4">
             <input type="text" value={newSkill} onChange={(e) => setNewSkill(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
-              className="input flex-1" placeholder="Add a skill..." />
-            <button type="button" onClick={addSkill} className="btn-secondary"><Plus className="w-4 h-4" /></button>
+              onKeyDown={handleSkillKeyDown}
+              onPaste={handleSkillPaste}
+              className="input flex-1" placeholder="Type skill and press Enter, Comma or Tab…" />
           </div>
           <div className="flex flex-wrap gap-2">
             {formData.skills.map((skill, index) => (
@@ -1205,9 +1249,9 @@ const CandidateForm = () => {
           {errors.preferred_locations && <p className={`${errCls} mb-3`}>{errors.preferred_locations}</p>}
           <div className="flex gap-2 mb-4">
             <input type="text" value={newLocation} onChange={(e) => setNewLocation(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addLocation())}
-              className="input flex-1" placeholder="Add a location..." />
-            <button type="button" onClick={addLocation} className="btn-secondary"><Plus className="w-4 h-4" /></button>
+              onKeyDown={handleLocationKeyDown}
+              onPaste={handleLocationPaste}
+              className="input flex-1" placeholder="Type location and press Enter, Comma or Tab…" />
           </div>
           <div className="flex flex-wrap gap-2 mb-4">
             {formData.preferred_locations.map((location, index) => (

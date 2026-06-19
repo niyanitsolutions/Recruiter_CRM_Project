@@ -40,8 +40,8 @@ const STATUS_COLORS = {
 
 const fmt = (n) => n != null ? n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }) : '—'
 
-// ── Payslip Document (shared by View modal + Print) ───────────────────────────
-function PayslipDocument({ ps, companyName, structure }) {
+// ── Payslip Document (shared by View modal + Print + ESS) ────────────────────
+export function PayslipDocument({ ps, companyName, structure }) {
   if (!ps) return null
 
   // Build visibility map: only is_selected + show_in_payslip components appear on payslip
@@ -68,6 +68,7 @@ function PayslipDocument({ ps, companyName, structure }) {
 
   // Deduction rows
   const dedRows = []
+  if (ps.lop_deduction > 0)                                       dedRows.push({ label: `LOP (${ps.lop_days ?? 0} days)`, amount: ps.lop_deduction })
   if (ps.pf_employee > 0 && showItem('epf_contribution'))        dedRows.push({ label: 'EPF Contribution',      amount: ps.pf_employee })
   if (ps.professional_tax > 0 && showItem('professional_tax'))   dedRows.push({ label: 'Professional Tax',      amount: ps.professional_tax })
   if (ps.tds > 0 && showItem('tds'))                             dedRows.push({ label: 'TDS',                   amount: ps.tds })
@@ -117,13 +118,13 @@ function PayslipDocument({ ps, companyName, structure }) {
       </div>
 
       {/* Attendance Row */}
-      <div style={{ display: 'flex', gap: 24, marginBottom: 14, padding: '8px 16px', background: '#f0fdf4', borderRadius: 8, fontSize: 11 }}>
+      <div style={{ display: 'flex', gap: 24, marginBottom: 14, padding: '8px 16px', background: '#f0fdf4', borderRadius: 8, fontSize: 11, flexWrap: 'wrap' }}>
         {[
-          ['Working Days', ps.working_days],
-          ['Present Days', ps.present_days],
-          ['Absent Days',  ps.absent_days],
-          ['Leave Days',   ps.leave_days],
-          ['LOP Days',     ps.lop_days],
+          ['Working Days',   ps.working_days],
+          ['Present Days',   ps.present_days],
+          ['Paid Leave',     ps.paid_leave_days ?? ps.leave_days ?? 0],
+          ['LOP Days',       ps.lop_days],
+          ['Absent Days',    ps.absent_days],
         ].map(([label, value]) => (
           <div key={label}>
             <span style={{ color: '#6b7280' }}>{label}: </span>
@@ -206,6 +207,7 @@ function EditPayslipModal({ ps, onClose, onSave }) {
     advance_deduction:  ps.advance_deduction  || 0,
     working_days:       ps.working_days       || 26,
     present_days:       ps.present_days       || 26,
+    paid_leave_days:    ps.paid_leave_days    || 0,
     lop_days:           ps.lop_days           || 0,
   })
   const [saving, setSaving] = useState(false)
@@ -214,8 +216,21 @@ function EditPayslipModal({ ps, onClose, onSave }) {
   const otherEarnSum = (ps.other_earnings || []).reduce((s, e) => s + (e.amount || 0), 0)
   const otherDedSum  = (ps.other_deductions || []).reduce((s, d) => s + (d.amount || 0), 0)
   const gross = data.basic + data.hra + data.special_allowance + data.overtime + data.bonus + otherEarnSum
-  const totalDed = data.pf_employee + data.professional_tax + data.tds + data.advance_deduction + otherDedSum
-  const net = gross - totalDed
+  // LOP deduction is auto-computed from lop_days + gross
+  const wDays = Math.max(1, data.working_days || 26)
+  const lopDeduction = Math.round(gross / wDays * (data.lop_days || 0) * 100) / 100
+  const statutory = data.pf_employee + data.professional_tax + data.tds + data.advance_deduction + otherDedSum
+  const totalDed = Math.round((statutory + lopDeduction) * 100) / 100
+  const net = Math.round((gross - totalDed) * 100) / 100
+
+  // Auto-compute lop_days when attendance inputs change
+  const setAtt = (k, v) => {
+    setData(prev => {
+      const next = { ...prev, [k]: v }
+      const lop = Math.max(0, Math.round((next.working_days - next.present_days - next.paid_leave_days) * 100) / 100)
+      return { ...next, lop_days: lop }
+    })
+  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -228,6 +243,9 @@ function EditPayslipModal({ ps, onClose, onSave }) {
 
   const n = (k) => <input type="number" min="0" className={inp}
     value={data[k]} onChange={e => setData(d => ({ ...d, [k]: Number(e.target.value) || 0 }))} />
+
+  const nAtt = (k) => <input type="number" min="0" className={inp}
+    value={data[k]} onChange={e => setAtt(k, Number(e.target.value) || 0)} />
 
   return (
     <ModalPortal isOpen>
@@ -259,16 +277,21 @@ function EditPayslipModal({ ps, onClose, onSave }) {
             </div>
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Attendance</p>
-              <div className="grid grid-cols-3 gap-3">
-                {[['working_days','Working Days'],['present_days','Present Days'],['lop_days','LOP Days']].map(([k,l]) => (
-                  <div key={k}><label className="text-xs text-gray-500 mb-1 block">{l}</label>{n(k)}</div>
+              <div className="grid grid-cols-2 gap-3">
+                {[['working_days','Working Days'],['present_days','Present Days'],['paid_leave_days','Paid Leave Days']].map(([k,l]) => (
+                  <div key={k}><label className="text-xs text-gray-500 mb-1 block">{l}</label>{nAtt(k)}</div>
                 ))}
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">LOP Days <span className="text-gray-400">(auto)</span></label>
+                  <input type="number" min="0" className={`${inp} bg-gray-50`} value={data.lop_days} readOnly />
+                </div>
               </div>
             </div>
             {/* Computed summary */}
-            <div className="flex gap-4 text-xs p-3 rounded-lg bg-gray-50">
+            <div className="grid grid-cols-2 gap-2 text-xs p-3 rounded-lg bg-gray-50">
               <span className="text-green-700 font-medium">Gross ₹{gross.toLocaleString('en-IN')}</span>
-              <span className="text-red-700 font-medium">Ded ₹{totalDed.toLocaleString('en-IN')}</span>
+              <span className="text-orange-600 font-medium">LOP Ded ₹{lopDeduction.toLocaleString('en-IN')}</span>
+              <span className="text-red-700 font-medium">Total Ded ₹{totalDed.toLocaleString('en-IN')}</span>
               <span className="font-semibold text-gray-900">Net ₹{net.toLocaleString('en-IN')}</span>
             </div>
           </div>

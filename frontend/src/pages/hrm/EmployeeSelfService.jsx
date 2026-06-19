@@ -14,6 +14,7 @@ import {
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
 import ModalPortal from '../../components/common/ModalPortal'
+import { PayslipDocument } from './Payroll'
 
 const TABS = [
   { key: 'profile',    label: 'My Profile',  icon: User },
@@ -444,42 +445,144 @@ function AttendanceTab() {
 
 // ── Payslips Tab ──────────────────────────────────────────────────────────────
 
+const MONTH_NAMES_PS = ['','January','February','March','April','May','June',
+  'July','August','September','October','November','December']
+
 function PayslipsTab() {
-  const [payslips, setPayslips] = useState([])
-  const [loading, setLoading]   = useState(true)
+  const user = useSelector(selectUser)
+  const companyName = user?.companyName || user?.company_name || ''
+
+  const [payslips,  setPayslips]  = useState([])
+  const [structure, setStructure] = useState(null)
+  const [loading,   setLoading]   = useState(true)
+  const [error,     setError]     = useState(null)
+  const [viewPs,    setViewPs]    = useState(null)
 
   useEffect(() => {
-    hrmService.listOwnPayslips({ page_size: 24 })
-      .then(r => setPayslips(r.data?.items || r.data || []))
-      .catch(() => {})
+    Promise.all([
+      hrmService.listOwnPayslips({ page_size: 24 }),
+      hrmService.getPayrollStructure(),
+    ])
+      .then(([psRes, structRes]) => {
+        setPayslips(psRes.data?.items || psRes.data || [])
+        setStructure(structRes.data)
+      })
+      .catch(err => {
+        const msg = err?.response?.data?.detail || 'Failed to load payslips'
+        setError(msg)
+      })
       .finally(() => setLoading(false))
   }, [])
 
-  const fmt = n => n?.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }) || '—'
+  const fmt = n => n != null
+    ? n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
+    : '—'
+
+  const monthLabel = (m) => {
+    const mn = Number(m)
+    if (!mn || mn < 1 || mn > 12) return '—'
+    return MONTH_NAMES_PS[mn]
+  }
+
+  const printPayslip = () => {
+    const area = document.getElementById('ess-payslip-print-area')
+    if (!area || !viewPs) return
+    const w = window.open('', '_blank', 'width=900,height=700')
+    w.document.write(`<html><head><title>Payslip</title>
+      <style>body{margin:0;padding:0}@media print{body{margin:0}}</style>
+      </head><body>${area.innerHTML}</body></html>`)
+    w.document.close()
+    w.focus()
+    setTimeout(() => { w.print(); w.close() }, 400)
+  }
 
   if (loading) return (
-    <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading…</div>
+    <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading payslips…</div>
+  )
+
+  if (error) return (
+    <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+      <Banknote className="w-8 h-8 mx-auto mb-2 opacity-30" />
+      <p className="text-sm">{error}</p>
+    </div>
   )
 
   return (
-    <div className="p-6 space-y-2">
+    <div className="p-6">
       {payslips.length === 0 ? (
-        <div className="py-8 text-center" style={{ color: 'var(--text-muted)' }}>No payslips yet</div>
-      ) : payslips.map(ps => (
-        <div
-          key={ps.id}
-          className="flex items-center justify-between py-3"
-          style={{ borderBottom: '1px solid var(--border-subtle)' }}
-        >
-          <div>
-            <p className="font-medium" style={{ color: 'var(--text-body)' }}>
-              {new Date(2000, ps.month - 1).toLocaleString('default', { month: 'long' })} {ps.year}
-            </p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Net: {fmt(ps.net_salary)}</p>
-          </div>
-          <StatusBadge status={ps.status} />
+        <div className="py-8 text-center" style={{ color: 'var(--text-muted)' }}>
+          <Banknote className="w-8 h-8 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">No payslips available yet</p>
         </div>
-      ))}
+      ) : (
+        <div className="space-y-2">
+          {payslips.map(ps => (
+            <div
+              key={ps.id}
+              className="flex items-center justify-between py-3"
+              style={{ borderBottom: '1px solid var(--border-subtle)' }}
+            >
+              <div>
+                <p className="font-medium" style={{ color: 'var(--text-body)' }}>
+                  {monthLabel(ps.month)} {ps.year ?? ''}
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                  Net: {fmt(ps.net_salary)}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusBadge status={ps.status} />
+                <button
+                  onClick={() => setViewPs(ps)}
+                  className="p-1.5 rounded"
+                  style={{ color: 'var(--text-muted)' }}
+                  title="View payslip"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => { setViewPs(ps); setTimeout(printPayslip, 300) }}
+                  className="p-1.5 rounded"
+                  style={{ color: 'var(--text-muted)' }}
+                  title="Download PDF"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Payslip View Modal */}
+      {viewPs && (
+        <ModalPortal isOpen>
+          <div className="fixed inset-0 z-[9998] bg-black/50" onClick={() => setViewPs(null)} />
+          <div className="fixed inset-0 z-[9999] flex items-start justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-xl w-full max-w-3xl my-8" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between p-4 border-b">
+                <h3 className="font-semibold text-gray-900">
+                  Payslip — {monthLabel(viewPs.month)} {viewPs.year}
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={printPayslip}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Download PDF
+                  </button>
+                  <button onClick={() => setViewPs(null)}>
+                    <X className="w-5 h-5 text-gray-400" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-4" id="ess-payslip-print-area">
+                <PayslipDocument ps={viewPs} companyName={companyName} structure={structure} />
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
     </div>
   )
 }

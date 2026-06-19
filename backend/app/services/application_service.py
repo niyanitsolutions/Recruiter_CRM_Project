@@ -680,7 +680,7 @@ class ApplicationService:
                 {"client_name": {"$regex": pat, "$options": "i"}},
             ]
 
-        pipeline = [
+        agg_pipeline = [
             {"$match": match},
             {"$sort": {"applied_at": -1}},
             {"$group": {
@@ -697,6 +697,16 @@ class ApplicationService:
                 # Collect all statuses so we can build an accurate per-status count
                 "statuses": {"$push": "$status"},
             }},
+            # Join candidates collection to pull photo_url
+            {"$lookup": {
+                "from": "candidates",
+                "localField": "_id",
+                "foreignField": "_id",
+                "as": "_cand",
+            }},
+            {"$addFields": {
+                "photo_url": {"$ifNull": [{"$arrayElemAt": ["$_cand.photo_url", 0]}, None]},
+            }},
             {"$sort": {"last_updated": -1, "latest_applied_at": -1}},
             {"$facet": {
                 "data": [
@@ -707,7 +717,7 @@ class ApplicationService:
             }},
         ]
 
-        results = await collection.aggregate(pipeline).to_list(1)
+        results = await collection.aggregate(agg_pipeline).to_list(1)
         if not results:
             return {"data": [], "pagination": {"page": page, "page_size": page_size, "total": 0, "total_pages": 0}}
 
@@ -722,6 +732,7 @@ class ApplicationService:
                 "candidate_name": row.get("candidate_name"),
                 "candidate_email": row.get("candidate_email"),
                 "candidate_mobile": row.get("candidate_mobile"),
+                "photo_url": row.get("photo_url"),
                 "total_applications": row.get("total_applications", 0),
                 "latest_job_title": row.get("latest_job_title"),
                 "latest_client_name": row.get("latest_client_name"),

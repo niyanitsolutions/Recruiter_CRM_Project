@@ -50,7 +50,20 @@ async def list_own_payslips(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:payroll:view_self"])),
 ):
-    return await PayrollService(db).list(cu["company_id"], month, year, cu["id"], None, page, page_size)
+    # hrm_employee_id is injected into the JWT at login/refresh.
+    # If missing (older token), look up the employee by linked crm_user_id.
+    employee_id = cu.get("hrm_employee_id")
+    if not employee_id:
+        emp_doc = await db["hrm_employees"].find_one(
+            {"crm_user_id": cu["id"], "is_deleted": False},
+            {"_id": 1},
+        )
+        employee_id = str(emp_doc["_id"]) if emp_doc else None
+
+    if not employee_id:
+        return {"items": [], "total": 0, "page": page, "page_size": page_size}
+
+    return await PayrollService(db).list(cu["company_id"], month, year, employee_id, None, page, page_size)
 
 
 @router.get("")

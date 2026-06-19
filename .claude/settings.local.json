@@ -140,7 +140,13 @@
       "Read(//d/d/crm-project/backend/app/core/**)",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://127.0.0.1:8001/docs)",
       "Read(//tmp/**)",
-      "Bash(node_modules/.bin/vite build *)"
+      "Bash(node_modules/.bin/vite build *)",
+      "Bash(cd /d/crm-project/backend && grep -n \"hrm_employee_id\\\\|view_self\\\\|payroll\" app/services/auth_service.py | head -30)",
+      "Read(//d/d/crm-project/backend/app/services/**)",
+      "Bash(cd /d/crm-project && grep -rn \"Something went wrong\" frontend/src/ --include=\"*.jsx\" --include=\"*.js\" | head -20)",
+      "Read(//d/d/crm-project/frontend/**)",
+      "Bash(cd /d/crm-project/backend && grep -n \"class.*Model\\\\|class.*Create\\\\|COL = \\\\|collection\\\\|is_paid\\\\|status.*approved\\\\|present_days\\\\|absent\\\\|lop\" app/models/company/attendance.py 2>/dev/null | head -40 && echo \"---LEAVE---\" && grep -n \"class.*Model\\\\|COL = \\\\|is_paid\\\\|paid_leave\\\\|status\\\\|leave_type\\\\|from_date\\\\|to_date\\\\|approved\\\\|duration\" app/models/company/leave.py 2>/dev/null | head -40 && echo \"---HOLIDAY---\" && grep -n \"class.*Model\\\\|COL = \\\\|date\\\\|is_active\\\\|department\" app/models/company/holiday.py 2>/dev/null | head -30)",
+      "Read(//d/d/crm-project/backend/app/models/company/**)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

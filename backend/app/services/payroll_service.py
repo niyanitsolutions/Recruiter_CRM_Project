@@ -1,25 +1,42 @@
 """HRM — Payroll Service"""
-from datetime import datetime, timezone
-from typing import Optional, List
+import calendar as _cal
+from datetime import datetime, date, timezone, timedelta
+from typing import Optional, List, Set
 from bson import ObjectId
 
 from app.models.company.payroll import PayrollStatus, DEFAULT_PAYROLL_COMPONENTS
 
-# Map salary_components keys to their dedicated Payslip document fields.
+# Map salary_components keys to dedicated Payslip document fields.
 # Keys listed here are handled directly; anything else goes to other_earnings / other_deductions.
 _EARNING_FIELD_MAP = {
     "basic_salary":    "basic",
     "hra":             "hra",
     "special_allowance": "special_allowance",
     "bonus":           "bonus",
-    # overtime and tds are post-generation adjustments — not in salary_components
 }
 
 _DEDUCTION_FIELD_MAP = {
     "epf_contribution":  "pf_employee",
     "professional_tax":  "professional_tax",
     "loan_deduction":    "advance_deduction",
-    # tds is a post-generation adjustment
+}
+
+# Leave types that are paid (employee is compensated during these leaves)
+_PAID_LEAVE_TYPES: Set[str] = {
+    "casual", "sick", "earned", "annual",
+    "maternity", "paternity", "comp_off", "compensatory",
+    "marriage", "bereavement",
+}
+
+# Attendance statuses that count as a present day (1.0 or 0.5)
+_PRESENT_STATUSES = {
+    "present":    1.0,
+    "late":       1.0,
+    "wfh":        1.0,
+    "hybrid":     1.0,
+    "field_work": 1.0,
+    "auto_closed": 1.0,
+    "half_day":   0.5,
 }
 
 
@@ -41,7 +58,6 @@ class PayrollStructureService:
         doc = await self.col.find_one({"company_id": company_id})
         if doc:
             return self._serialize(doc)
-        # First time — create with all defaults; basic_salary/hra/epf/pt pre-selected
         now = datetime.now(timezone.utc)
         new_doc = {
             "_id": company_id,
@@ -69,6 +85,9 @@ class PayrollStructureService:
 class PayrollService:
     COL = "hrm_payslips"
     EMP_COL = "hrm_employees"
+    ATT_COL = "hrm_attendance"
+    LEAVE_COL = "hrm_leaves"
+    HOLIDAY_COL = "hrm_holidays"
 
     def __init__(self, db):
         self.db = db
@@ -93,21 +112,99 @@ class PayrollService:
             return str(d)
 
     @staticmethod
-    def _calc_from_salary_components(salary_components: dict, deduction_keys: set, key_to_label: dict) -> dict:
-        """
-        Convert the employee's salary_components dict into the payslip fields.
+    def _to_date(value) -> Optional[date]:
+        """Coerce a datetime or date to a date object."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        return None
 
-        Standard keys map to dedicated payslip fields via _EARNING_FIELD_MAP / _DEDUCTION_FIELD_MAP.
-        All other (allowance/custom) keys go into other_earnings / other_deductions with their
-        component label and key stored for frontend visibility lookup.
-
-        Returns a dict ready to spread into the payslip document.
+    @staticmethod
+    def _calc_working_days(year: int, month: int, holiday_date_strings: Set[str]) -> int:
         """
-        # Dedicated earning fields (accumulate — supports future multi-entry)
+        Count working days in the month:
+            Calendar days - Sundays - company holidays.
+        """
+        _, days_in_month = _cal.monthrange(year, month)
+        working = 0
+        for day in range(1, days_in_month + 1):
+            d = date(year, month, day)
+            if d.weekday() == 6:       # Sunday
+                continue
+            if d.strftime("%Y-%m-%d") in holiday_date_strings:
+                continue
+            working += 1
+        return max(1, working)         # always at least 1 to avoid division by zero
+
+    @staticmethod
+    def _calc_present_days(att_records: List[dict]) -> float:
+        """Count present days from attendance documents (half_day = 0.5)."""
+        total = 0.0
+        for rec in att_records:
+            status = rec.get("status", "")
+            total += _PRESENT_STATUSES.get(status, 0.0)
+        return total
+
+    @staticmethod
+    def _calc_paid_leave_days(
+        leave_records: List[dict],
+        year: int,
+        month: int,
+        holiday_date_strings: Set[str],
+    ) -> float:
+        """
+        Count approved paid leave days that fall within the given month,
+        excluding Sundays and company holidays.
+        """
+        _, last_day = _cal.monthrange(year, month)
+        month_start = date(year, month, 1)
+        month_end = date(year, month, last_day)
+
+        total = 0.0
+        for leave in leave_records:
+            leave_type = leave.get("leave_type", "")
+            if leave_type not in _PAID_LEAVE_TYPES:
+                continue
+
+            fd = PayrollService._to_date(leave.get("from_date"))
+            td = PayrollService._to_date(leave.get("to_date"))
+            if not fd or not td:
+                continue
+
+            overlap_start = max(fd, month_start)
+            overlap_end = min(td, month_end)
+            if overlap_end < overlap_start:
+                continue
+
+            duration = leave.get("duration", "full_day")
+            multiplier = 0.5 if "half_day" in (duration or "") else 1.0
+
+            current = overlap_start
+            while current <= overlap_end:
+                if current.weekday() != 6 and current.strftime("%Y-%m-%d") not in holiday_date_strings:
+                    total += multiplier
+                current += timedelta(days=1)
+
+        return total
+
+    @staticmethod
+    def _calc_from_salary_components(
+        salary_components: dict,
+        deduction_keys: Set[str],
+        key_to_label: dict,
+    ) -> dict:
+        """
+        Convert the employee's salary_components dict into payslip fields.
+
+        Standard keys map via _EARNING_FIELD_MAP / _DEDUCTION_FIELD_MAP.
+        All others go to other_earnings / other_deductions with key stored
+        for frontend visibility lookup.
+        """
         basic = hra = special_allowance = bonus = 0.0
-        # Dedicated deduction fields
         pf_employee = professional_tax = advance_deduction = 0.0
-        # Dynamic lists
         other_earnings: List[dict] = []
         other_deductions: List[dict] = []
 
@@ -117,7 +214,6 @@ class PayrollService:
                 continue
 
             if key in deduction_keys:
-                # Map to dedicated field or other_deductions
                 field = _DEDUCTION_FIELD_MAP.get(key)
                 if field == "pf_employee":
                     pf_employee = amount
@@ -132,7 +228,6 @@ class PayrollService:
                         "amount": amount,
                     })
             else:
-                # Map to dedicated earning field or other_earnings
                 field = _EARNING_FIELD_MAP.get(key)
                 if field == "basic":
                     basic = amount
@@ -154,27 +249,109 @@ class PayrollService:
             sum(e["amount"] for e in other_earnings),
             2,
         )
-        total_deductions = round(
+        # Statutory deductions only (LOP is added separately after attendance calc)
+        statutory_deductions = round(
             pf_employee + professional_tax + advance_deduction +
             sum(d["amount"] for d in other_deductions),
             2,
         )
-        net_salary = round(gross_earnings - total_deductions, 2)
 
         return {
-            "basic":              basic,
-            "hra":                hra,
-            "special_allowance":  special_allowance,
-            "bonus":              bonus,
-            "other_earnings":     other_earnings,
-            "pf_employee":        pf_employee,
-            "professional_tax":   professional_tax,
-            "advance_deduction":  advance_deduction,
-            "other_deductions":   other_deductions,
-            "gross_earnings":     gross_earnings,
-            "total_deductions":   total_deductions,
-            "net_salary":         net_salary,
+            "basic":                basic,
+            "hra":                  hra,
+            "special_allowance":    special_allowance,
+            "bonus":                bonus,
+            "other_earnings":       other_earnings,
+            "pf_employee":          pf_employee,
+            "professional_tax":     professional_tax,
+            "advance_deduction":    advance_deduction,
+            "other_deductions":     other_deductions,
+            "gross_earnings":       gross_earnings,
+            "_statutory_deductions": statutory_deductions,
         }
+
+    @staticmethod
+    def _apply_attendance(
+        salary_dict: dict,
+        working_days: int,
+        present_days: float,
+        paid_leave_days: float,
+    ) -> dict:
+        """
+        Compute LOP deduction and final net from attendance data.
+
+        payable_days = present_days + paid_leave_days
+        lop_days     = max(0, working_days - payable_days)
+        lop_deduction = round(gross / working_days * lop_days, 2)
+        net_salary    = gross - lop_deduction - statutory_deductions
+        """
+        gross = salary_dict["gross_earnings"]
+        statutory = salary_dict.pop("_statutory_deductions", 0.0)
+
+        payable_days = present_days + paid_leave_days
+        lop_days = max(0.0, round(working_days - payable_days, 4))
+        per_day = gross / working_days if working_days > 0 else 0.0
+        lop_deduction = round(per_day * lop_days, 2)
+
+        total_deductions = round(statutory + lop_deduction, 2)
+        net_salary = round(gross - total_deductions, 2)
+        absent_days = max(0.0, lop_days - 0.0)   # absent = LOP days
+
+        return {
+            **salary_dict,
+            "working_days":    working_days,
+            "present_days":    round(present_days, 2),
+            "paid_leave_days": round(paid_leave_days, 2),
+            "absent_days":     round(absent_days, 2),
+            "leave_days":      round(paid_leave_days, 2),
+            "lop_days":        round(lop_days, 2),
+            "lop_deduction":   lop_deduction,
+            "total_deductions": total_deductions,
+            "net_salary":      net_salary,
+        }
+
+    async def _fetch_holiday_dates(self, company_id: str, year: int, month: int) -> Set[str]:
+        """Return a set of YYYY-MM-DD strings for active holidays in the given month."""
+        _, last_day = _cal.monthrange(year, month)
+        month_str = f"{year}-{month:02d}"
+        cursor = self.db[self.HOLIDAY_COL].find({
+            "company_id": company_id,
+            "is_active": True,
+            "is_deleted": {"$ne": True},
+            "date": {"$regex": f"^{month_str}"},
+        })
+        holidays = set()
+        async for h in cursor:
+            d = h.get("date", "")
+            if d:
+                holidays.add(d[:10])
+        return holidays
+
+    async def _fetch_attendance(self, company_id: str, employee_id: str, year: int, month: int) -> List[dict]:
+        """Return attendance records for the employee in the given month."""
+        _, last_day = _cal.monthrange(year, month)
+        month_start = datetime(year, month, 1, tzinfo=timezone.utc)
+        month_end = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+        cursor = self.db[self.ATT_COL].find({
+            "company_id": company_id,
+            "employee_id": employee_id,
+            "date": {"$gte": month_start, "$lte": month_end},
+        })
+        return [rec async for rec in cursor]
+
+    async def _fetch_approved_leaves(self, company_id: str, employee_id: str, year: int, month: int) -> List[dict]:
+        """Return approved leave applications overlapping the given month."""
+        _, last_day = _cal.monthrange(year, month)
+        month_start = datetime(year, month, 1, tzinfo=timezone.utc)
+        month_end = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+        cursor = self.db[self.LEAVE_COL].find({
+            "company_id": company_id,
+            "employee_id": employee_id,
+            "status": "approved",
+            "from_date": {"$lte": month_end},
+            "to_date":   {"$gte": month_start},
+        })
+        return [rec async for rec in cursor]
 
     async def generate(
         self,
@@ -193,15 +370,16 @@ class PayrollService:
             query["_id"] = {"$in": employee_ids}
         cursor = self.db[self.EMP_COL].find(query)
 
-        # Load structure to resolve labels and types for each component key
+        # Load payroll structure for label/type resolution
         structure_doc = await self.db["hrm_payroll_structure"].find_one({"company_id": company_id})
         all_components = structure_doc.get("components", []) if structure_doc else []
-
-        # Only is_selected components are "active" for this tenant
         active_components = [c for c in all_components if c.get("is_selected", True)]
-        deduction_keys = {c["key"] for c in active_components if c.get("component_type") == "deduction"}
-        # key → human label (from full pool so labels for deselected components are available too)
+        deduction_keys: Set[str] = {c["key"] for c in active_components if c.get("component_type") == "deduction"}
         key_to_label = {c["key"]: c["label"] for c in all_components}
+
+        # Fetch holidays once for the whole payroll run
+        holiday_dates = await self._fetch_holiday_dates(company_id, year, month)
+        working_days = self._calc_working_days(year, month, holiday_dates)
 
         now = datetime.now(timezone.utc)
         results = []
@@ -209,7 +387,7 @@ class PayrollService:
         async for emp in cursor:
             emp_id = str(emp["_id"])
 
-            # Skip if payslip already exists for this month/year
+            # Skip if payslip already exists for this period
             existing = await self.col.find_one({
                 "employee_id": emp_id,
                 "company_id": company_id,
@@ -220,16 +398,15 @@ class PayrollService:
                 results.append(self._serialize(existing))
                 continue
 
-            # ── Resolve salary data ────────────────────────────────────────────
+            # ── Salary components → payslip fields ────────────────────────────
             salary_components = emp.get("salary_components") or {}
 
             if salary_components:
-                # Primary path: use per-component values stored on the employee
-                salary_comps_dict = self._calc_from_salary_components(
+                salary_dict = self._calc_from_salary_components(
                     salary_components, deduction_keys, key_to_label
                 )
             else:
-                # Legacy path: employee predates salary_components — read from salary sub-doc
+                # Legacy: read from the old salary sub-document
                 sal = emp.get("salary") or {}
                 if isinstance(sal, dict):
                     basic = float(sal.get("basic", 0) or 0)
@@ -240,10 +417,8 @@ class PayrollService:
                 else:
                     basic = hra = special_allowance = pf_emp = pt = 0.0
 
-                gross_earnings   = round(basic + hra + special_allowance, 2)
-                total_deductions = round(pf_emp + pt, 2)
-
-                salary_comps_dict = {
+                gross_earnings = round(basic + hra + special_allowance, 2)
+                salary_dict = {
                     "basic":             basic,
                     "hra":               hra,
                     "special_allowance": special_allowance,
@@ -254,11 +429,27 @@ class PayrollService:
                     "advance_deduction": 0.0,
                     "other_deductions":  [],
                     "gross_earnings":    gross_earnings,
-                    "total_deductions":  total_deductions,
-                    "net_salary":        round(gross_earnings - total_deductions, 2),
+                    "_statutory_deductions": round(pf_emp + pt, 2),
                 }
 
-            # ── Build payslip document with employee detail snapshot ───────────
+            # ── Attendance + leave data ────────────────────────────────────────
+            att_records = await self._fetch_attendance(company_id, emp_id, year, month)
+            leave_records = await self._fetch_approved_leaves(company_id, emp_id, year, month)
+
+            if att_records:
+                present_days = self._calc_present_days(att_records)
+            else:
+                # No attendance records → assume full attendance (no LOP)
+                present_days = float(working_days)
+
+            paid_leave_days = self._calc_paid_leave_days(
+                leave_records, year, month, holiday_dates
+            )
+
+            # Apply attendance → compute LOP, total_deductions, net_salary
+            att_dict = self._apply_attendance(salary_dict, working_days, present_days, paid_leave_days)
+
+            # ── Build payslip document ─────────────────────────────────────────
             doc = {
                 "_id":                  str(ObjectId()),
                 "company_id":           company_id,
@@ -272,17 +463,9 @@ class PayrollService:
                 "employee_uan_number":  emp.get("uan_number", "") or "",
                 "month": month,
                 "year":  year,
-                **salary_comps_dict,
-                # Post-generation adjustable fields (start at 0)
-                "overtime":          0.0,
-                "tds":               0.0,
-                # Attendance defaults
-                "working_days":  26,
-                "present_days":  26.0,
-                "absent_days":   0.0,
-                "leave_days":    0.0,
-                "lop_days":      0.0,
-                # Meta
+                **att_dict,
+                "overtime": 0.0,
+                "tds":      0.0,
                 "status":        PayrollStatus.DRAFT,
                 "generated_by":  generated_by,
                 "created_at":    now,
@@ -313,7 +496,7 @@ class PayrollService:
         if status:
             query["status"] = status
         total = await self.col.count_documents(query)
-        skip  = (page - 1) * page_size
+        skip = (page - 1) * page_size
         cursor = self.col.find(query).sort([("year", -1), ("month", -1)]).skip(skip).limit(page_size)
         items = [self._serialize(d) async for d in cursor]
         return {"items": items, "total": total, "page": page, "page_size": page_size}
@@ -346,10 +529,9 @@ class PayrollService:
     async def update_payslip(
         self, payslip_id: str, company_id: str, data: dict
     ) -> Optional[dict]:
-        """Update payslip fields and auto-recalculate gross / net."""
+        """Update payslip fields and auto-recalculate gross / LOP / net."""
         existing = await self.get(payslip_id, company_id)
         if existing:
-            # Merge incoming changes onto existing values
             merged = {**existing}
             for k, v in data.items():
                 if v is not None:
@@ -369,12 +551,20 @@ class PayrollService:
                 _f("overtime") + _f("bonus") + _list_sum("other_earnings"),
                 2,
             )
-            total_ded = round(
+            # Recalculate LOP deduction from updated working/lop days
+            working_days = max(1, int(_f("working_days") or 26))
+            lop_days = _f("lop_days")
+            lop_deduction = round(gross / working_days * lop_days, 2) if working_days > 0 else 0.0
+
+            statutory = round(
                 _f("pf_employee") + _f("professional_tax") +
                 _f("tds") + _f("advance_deduction") + _list_sum("other_deductions"),
                 2,
             )
+            total_ded = round(statutory + lop_deduction, 2)
+
             data["gross_earnings"]   = gross
+            data["lop_deduction"]    = lop_deduction
             data["total_deductions"] = total_ded
             data["net_salary"]       = round(gross - total_ded, 2)
 

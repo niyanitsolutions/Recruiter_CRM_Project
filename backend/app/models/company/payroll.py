@@ -63,11 +63,13 @@ class Payslip(BaseModel):
     net_salary: float = 0.0
 
     # Attendance summary
-    working_days: int = 26
+    working_days: int = 26      # calendar working days (excl. weekends + holidays)
     present_days: float = 26.0
     absent_days: float = 0.0
+    paid_leave_days: float = 0.0  # approved paid leave days in the month
     leave_days: float = 0.0
-    lop_days: float = 0.0      # Loss of Pay
+    lop_days: float = 0.0         # Loss of Pay days
+    lop_deduction: float = 0.0    # salary deducted for LOP (auto-computed)
 
     status: PayrollStatus = PayrollStatus.DRAFT
     paid_on: Optional[datetime] = None
@@ -109,6 +111,7 @@ class UpdatePayslipData(BaseModel):
     other_deductions: Optional[List[Deduction]] = None
     working_days: Optional[int] = None
     present_days: Optional[float] = None
+    paid_leave_days: Optional[float] = None
     lop_days: Optional[float] = None
     absent_days: Optional[float] = None
     leave_days: Optional[float] = None

@@ -8,7 +8,8 @@ import {
 import { toast } from 'react-hot-toast'
 import applicationService from '../../services/applicationService'
 import candidateService from '../../services/candidateService'
-import { formatDate, formatDateTime, getInitials } from '../../utils/format'
+import { formatDate, formatDateTime } from '../../utils/format'
+import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -641,7 +642,7 @@ const CandidateApplicationPanel = ({ candidateId, onClose }) => {
 
   // ── Panel ──────────────────────────────────────────────────────────────────
 
-  const initials = getInitials(candidate?.full_name || candidate?.first_name || '')
+  const candidateName = candidate?.full_name || `${candidate?.first_name || ''} ${candidate?.last_name || ''}`.trim()
 
   return (
     <div style={{
@@ -660,18 +661,15 @@ const CandidateApplicationPanel = ({ candidateId, onClose }) => {
       }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {/* Avatar */}
-            <div style={{
-              width: 48, height: 48, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #6C63FF, #9C63FF)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, fontWeight: 700, color: '#fff', flexShrink: 0,
-            }}>
-              {initials}
-            </div>
+            {/* Avatar — shows photo if available, falls back to initials */}
+            <EmployeeAvatar
+              name={candidateName}
+              photoUrl={candidate?.photo_url}
+              size={48}
+            />
             <div>
               <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                {candidate?.full_name || `${candidate?.first_name || ''} ${candidate?.last_name || ''}`.trim()}
+                {candidateName}
               </h2>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>{candidate?.email}</p>
             </div>

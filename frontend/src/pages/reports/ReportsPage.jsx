@@ -12,6 +12,7 @@ import {
   BookOpen, Layers, Activity, Target, AlertCircle, UserCog,
 } from 'lucide-react';
 import reportService from '../../services/reportService';
+import usePermissions from '../../hooks/usePermissions';
 
 // ─── Category config ──────────────────────────────────────────────────────────
 
@@ -100,6 +101,17 @@ const CATEGORIES = [
 
 const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map(c => [c.value, c]));
 
+// Permissions required to see each category (user needs at least one)
+const CATEGORY_PERMISSION_MAP = {
+  recruitment: ['candidates:view', 'applications:view', 'jobs:view'],
+  client:      ['clients:view'],
+  financial:   ['accounts:view'],
+  onboarding:  ['clients:view', 'applications:view'],
+  team:        ['users:view'],
+  audit:       ['audit:view'],
+  hrm:         ['hrm:employees:view', 'hrm:dashboard:view', 'hrm:attendance:manage', 'hrm:payroll:manage'],
+};
+
 // ─── Icon resolver ─────────────────────────────────────────────────────────────
 
 const getReportIcon = (type) => {
@@ -119,12 +131,23 @@ const getReportIcon = (type) => {
 
 const ReportsPage = () => {
   const navigate = useNavigate();
+  const { has } = usePermissions();
   const [activeTab, setActiveTab] = useState('generate');
   const [reportTypes, setReportTypes] = useState([]);
   const [savedReports, setSavedReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Visible categories based on the user's permissions
+  const visibleCategories = useMemo(() => {
+    return CATEGORIES.filter(cat => {
+      if (cat.value === 'all') return true;
+      const required = CATEGORY_PERMISSION_MAP[cat.value];
+      if (!required) return true;
+      return required.some(p => has(p));
+    });
+  }, [has]);
 
   useEffect(() => {
     loadData();
@@ -267,9 +290,9 @@ const ReportsPage = () => {
       {/* ── Catalogue tab ── */}
       {activeTab === 'generate' && (
         <>
-          {/* Category pills */}
+          {/* Category pills — only categories the user can access */}
           <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map(cat => {
+            {visibleCategories.map(cat => {
               const Icon = cat.icon;
               const count = categoryCounts[cat.value] || 0;
               const isActive = selectedCategory === cat.value;

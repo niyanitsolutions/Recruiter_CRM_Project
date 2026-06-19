@@ -28,17 +28,44 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 
 # ============== Report Types ==============
 
+# Permissions required to access each report category.
+# User needs at least ONE of the listed permissions to see that category's reports.
+CATEGORY_PERMISSIONS: dict = {
+    ReportCategory.RECRUITMENT: ["candidates:view", "applications:view", "jobs:view"],
+    ReportCategory.CLIENT:      ["clients:view"],
+    ReportCategory.FINANCIAL:   ["accounts:view"],
+    ReportCategory.ONBOARDING:  ["clients:view", "applications:view"],
+    ReportCategory.TEAM:        ["users:view"],
+    ReportCategory.AUDIT:       ["audit:view"],
+    ReportCategory.HRM:         [
+        "hrm:employees:view", "hrm:dashboard:view",
+        "hrm:attendance:manage", "hrm:payroll:manage",
+    ],
+}
+
+
+def _user_can_see_category(user_permissions: list, category: ReportCategory) -> bool:
+    """Return True if the user holds at least one permission for the category."""
+    required = CATEGORY_PERMISSIONS.get(category)
+    if not required:
+        return True  # unknown category — allow by default
+    return any(p in user_permissions for p in required)
+
+
 @router.get("/types")
 async def get_report_types(
     category: Optional[ReportCategory] = None,
     current_user: dict = Depends(require_permissions(["reports:view"]))
 ):
-    """Get available report types"""
+    """Get available report types, filtered by the caller's permissions."""
+    user_permissions: list = current_user.get("permissions", [])
     report_types = []
 
     for rt in ReportType:
         rt_category = get_category_for_type(rt)
         if category and rt_category != category:
+            continue
+        if not _user_can_see_category(user_permissions, rt_category):
             continue
 
         report_types.append({
@@ -74,6 +101,9 @@ async def generate_report(
     master_db = Depends(get_master_db)
 ):
     """Generate a report"""
+    rt_category = get_category_for_type(data.report_type)
+    if not _user_can_see_category(current_user.get("permissions", []), rt_category):
+        raise HTTPException(status_code=403, detail="You do not have permission to generate this report")
     service = ReportService(db, master_db=master_db)
 
     return await service.generate_report(
@@ -98,6 +128,9 @@ async def generate_report_by_type(
     master_db = Depends(get_master_db)
 ):
     """Generate a specific report type with query parameters"""
+    rt_category = get_category_for_type(report_type)
+    if not _user_can_see_category(current_user.get("permissions", []), rt_category):
+        raise HTTPException(status_code=403, detail="You do not have permission to generate this report")
     service = ReportService(db, master_db=master_db)
 
     filters = ReportFilter(
