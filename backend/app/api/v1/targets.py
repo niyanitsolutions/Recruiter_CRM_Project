@@ -111,14 +111,20 @@ async def get_my_targets(
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db)
 ):
-    """Get current user's targets"""
+    """Get current user's targets — includes individually assigned targets AND
+    any department-scoped targets whose department matches the user's department."""
     service = TargetService(db)
-    
-    return await service.list_targets(
+
+    # Resolve caller's department from users collection (not in JWT)
+    user_doc = await db.users.find_one({"_id": current_user["id"]}, {"department": 1})
+    user_department = (user_doc or {}).get("department") if user_doc else None
+
+    return await service.list_my_targets(
         company_id=current_user["company_id"],
+        user_id=current_user["id"],
+        user_department=user_department,
         page=page,
         page_size=page_size,
-        assigned_to=current_user["id"],
         active_only=active_only
     )
 

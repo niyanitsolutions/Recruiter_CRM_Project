@@ -3,7 +3,7 @@ import {
   Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, Coffee,
   Users, Wifi, Activity, Settings, Save, Loader2, LogOut,
   CalendarDays, FileText, Shield, SlidersHorizontal,
-  Download, Search, ChevronLeft, ChevronRight, TrendingUp,
+  Download, Search, ChevronLeft, ChevronRight, TrendingUp, RotateCcw, X,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -80,6 +80,94 @@ function StatCard({ icon: Icon, label, value, iconColor }) {
       <div>
         <p className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>{value ?? '—'}</p>
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{label}</p>
+      </div>
+    </div>
+  )
+}
+
+// ── Recovery Modal ─────────────────────────────────────────────────────────────
+
+function RecoveryModal({ record, onClose, onSuccess }) {
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!reason.trim()) { toast.error('Recovery reason is required'); return }
+    setSaving(true)
+    try {
+      await hrmService.recoverAttendance(record.id, { recovery_reason: reason.trim() })
+      toast.success('Attendance recovered — employee can now continue working')
+      onSuccess()
+      onClose()
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Recovery failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const fmtTime = (dt) => {
+    if (!dt) return '—'
+    return new Date(dt.endsWith('Z') ? dt : dt + 'Z').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)', borderRadius: 16, padding: 28,
+        width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <RotateCcw style={{ width: 20, height: 20, color: 'var(--accent)' }} />
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)', margin: 0 }}>Recover Attendance</h3>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+            <X style={{ width: 18, height: 18 }} />
+          </button>
+        </div>
+
+        <div style={{ padding: '12px 14px', borderRadius: 10, marginBottom: 16,
+          background: 'var(--bg-warning)', border: '1px solid var(--border-warning)' }}>
+          <p style={{ fontSize: 13, color: 'var(--text-warning)', margin: 0, lineHeight: 1.5 }}>
+            <strong>{record.employee_name}</strong> punched in at <strong>{fmtTime(record.check_in)}</strong> and
+            accidentally punched out at <strong>{fmtTime(record.check_out)}</strong>.
+            <br />The recovery gap will be tracked as a break. Worked time before the accidental punch-out is preserved.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              Recovery Reason *
+            </label>
+            <textarea
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="e.g. Employee accidentally clicked punch out while on a call"
+              rows={3}
+              required
+              style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8,
+                padding: '10px 12px', fontSize: 14, color: 'var(--text-body)', resize: 'vertical',
+                outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <button type="button" onClick={onClose}
+              style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent',
+                color: 'var(--text-muted)', fontSize: 14, cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: 'var(--accent)',
+                color: '#fff', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
+                opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {saving ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 0.8s linear infinite' }} /> : <RotateCcw style={{ width: 14, height: 14 }} />}
+              {saving ? 'Recovering…' : 'Recover Attendance'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )
@@ -370,6 +458,7 @@ function DashboardTab() {
   const [exporting,   setExporting]   = useState(false)
   const [checking,    setChecking]    = useState(null)
   const [error,       setError]       = useState(null)
+  const [recoveryRec, setRecoveryRec] = useState(null)  // record to recover
 
   const isToday = preset === 'today'
 
@@ -499,7 +588,7 @@ function DashboardTab() {
   const records      = isToday ? liveRecords : histRecords
   const working      = isToday ? (S.currently_working ?? 0) : 0
   const onBreakCnt   = isToday ? (S.on_break ?? 0) : 0
-  const colSpan      = isToday && canManage ? 9 : 8
+  const colSpan      = canManage ? 9 : 8
   const hasFilters   = statusFilter || modeFilter || search
   const resetFilters = () => { setStatusFilter(''); setModeFilter(''); setSearch('') }
 
@@ -717,7 +806,7 @@ function DashboardTab() {
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-alt)' }}>
                 {['Employee','Date','Status','Check In','Check Out','Worked','Break','OT',
-                  ...(isToday && canManage ? ['Actions'] : [])].map(h => (
+                  ...(canManage ? ['Actions'] : [])].map(h => (
                   <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
                       style={{ color: 'var(--text-disabled)' }}>{h}</th>
                 ))}
@@ -775,33 +864,42 @@ function DashboardTab() {
                         style={{ color: rec.overtime_hours > 0 ? 'var(--text-warning)' : 'var(--text-muted)' }}>
                       {rec.overtime_hours > 0 ? formatHours(rec.overtime_hours) : '—'}
                     </td>
-                    {isToday && canManage && (
+                    {canManage && (
                       <td className="px-3 py-2">
                         <div className="flex gap-1 flex-wrap">
-                          {!rec.check_in && (
+                          {isToday && !rec.check_in && (
                             <button disabled={checking === rec.employee_id+'_in'}
                               onClick={() => handleCheckIn(rec.employee_id)}
                               className="px-2 py-1 rounded text-xs font-medium text-white"
                               style={{ background: 'var(--accent)' }}>In</button>
                           )}
-                          {rec.check_in && !rec.check_out && !onBrk && (
+                          {isToday && rec.check_in && !rec.check_out && !onBrk && (
                             <button disabled={checking === rec.employee_id+'_bs'}
                               onClick={() => handleBreakStart(rec.employee_id)}
                               className="px-2 py-1 rounded text-xs font-medium"
                               style={{ background: 'var(--bg-warning)', color: 'var(--text-warning)' }}>Brk</button>
                           )}
-                          {rec.check_in && !rec.check_out && onBrk && (
+                          {isToday && rec.check_in && !rec.check_out && onBrk && (
                             <button disabled={checking === rec.employee_id+'_be'}
                               onClick={() => handleBreakEnd(rec.employee_id)}
                               className="px-2 py-1 rounded text-xs font-medium"
                               style={{ background: 'var(--bg-success)', color: 'var(--text-success)' }}>End</button>
                           )}
-                          {rec.check_in && !rec.check_out && (
+                          {isToday && rec.check_in && !rec.check_out && (
                             <button disabled={checking === rec.employee_id+'_out'}
                               onClick={() => handleCheckOut(rec.employee_id)}
                               className="px-2 py-1 rounded text-xs font-medium"
                               style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
                               <LogOut className="w-3 h-3" />
+                            </button>
+                          )}
+                          {rec.check_in && rec.check_out && !rec.check_out?.startsWith?.('—') && (
+                            <button
+                              onClick={() => setRecoveryRec(rec)}
+                              title="Recover Attendance — reopen accidental punch-out"
+                              className="px-2 py-1 rounded text-xs font-medium flex items-center gap-1"
+                              style={{ background: 'var(--bg-info)', color: 'var(--text-info)' }}>
+                              <RotateCcw className="w-3 h-3" /> Recover
                             </button>
                           )}
                         </div>
@@ -850,6 +948,14 @@ function DashboardTab() {
         )}
       </div>
       </div>{/* end px-4 pb-4 body */}
+
+      {recoveryRec && (
+        <RecoveryModal
+          record={recoveryRec}
+          onClose={() => setRecoveryRec(null)}
+          onSuccess={() => load(page)}
+        />
+      )}
     </div>
   )
 }

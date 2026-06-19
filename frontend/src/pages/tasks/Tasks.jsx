@@ -3,7 +3,7 @@ import { useSelector } from 'react-redux'
 import {
   Plus, Trash2, Clock, User as UserIcon, CheckCircle2,
   RefreshCw, Loader2, List, Calendar, X, ChevronLeft, ChevronRight,
-  MessageSquare, Send,
+  MessageSquare, Send, Pencil, ChevronDown,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import taskService from '../../services/taskService'
@@ -39,31 +39,97 @@ function EntityTag({ label }) {
   )
 }
 
-function StatusCircle({ status, onClick, loading }) {
-  if (loading) return <Loader2 size={22} color="#7c3aed" style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
-  if (status === 'completed') {
-    return (
-      <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
-        <CheckCircle2 size={22} color="#22c55e" fill="#22c55e" />
-      </button>
-    )
-  }
-  const color = status === 'in_progress' ? '#f59e0b' : '#334155'
+// Allowed status transitions
+const STATUS_TRANSITIONS = {
+  pending:     ['in_progress', 'completed', 'cancelled'],
+  in_progress: ['completed', 'cancelled', 'pending'],
+  completed:   ['pending'],
+  cancelled:   ['pending'],
+}
+
+const STATUS_COLORS = {
+  pending:     { bg: 'rgba(100,116,139,0.15)', border: 'rgba(100,116,139,0.4)', text: '#94a3b8', dot: '#94a3b8' },
+  in_progress: { bg: 'rgba(245,158,11,0.15)',  border: 'rgba(245,158,11,0.4)',  text: '#f59e0b', dot: '#f59e0b' },
+  completed:   { bg: 'rgba(34,197,94,0.15)',   border: 'rgba(34,197,94,0.4)',   text: '#22c55e', dot: '#22c55e' },
+  cancelled:   { bg: 'rgba(239,68,68,0.12)',   border: 'rgba(239,68,68,0.35)', text: '#f87171', dot: '#f87171' },
+}
+
+function StatusBadge({ status }) {
+  const s = STATUS_COLORS[status] || STATUS_COLORS.pending
   return (
-    <button onClick={onClick} style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, border: `2px solid ${color}`, background: 'transparent', cursor: 'pointer', padding: 0 }} />
+    <span style={{ background: s.bg, border: `1px solid ${s.border}`, color: s.text,
+      borderRadius: 999, padding: '2px 10px', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+      {status?.replace('_', ' ') || 'pending'}
+    </span>
+  )
+}
+
+function StatusDropdown({ status, onStatusChange, loading, isDark }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  const options = STATUS_TRANSITIONS[status] || []
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  if (loading) return <Loader2 size={14} color="#7c3aed" style={{ animation: 'spin 0.8s linear infinite' }} />
+
+  const s = STATUS_COLORS[status] || STATUS_COLORS.pending
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }} onClick={e => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen(p => !p)}
+        style={{ display: 'flex', alignItems: 'center', gap: 5, background: s.bg, border: `1px solid ${s.border}`,
+          borderRadius: 999, padding: '3px 10px', fontSize: 11, fontWeight: 600, color: s.text,
+          cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        {status?.replace('_', ' ') || 'pending'}
+        <ChevronDown size={10} />
+      </button>
+      {open && options.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '110%', left: 0, zIndex: 100,
+          background: isDark ? 'rgba(10,14,42,0.97)' : '#ffffff',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(108,99,255,0.15)'}`,
+          borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+          overflow: 'hidden', minWidth: 150,
+        }}>
+          {options.map(opt => {
+            const o = STATUS_COLORS[opt] || STATUS_COLORS.pending
+            return (
+              <button
+                key={opt}
+                onClick={async () => { setOpen(false); await onStatusChange(opt) }}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px',
+                  background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                  color: o.text, transition: 'background 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(108,99,255,0.06)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              >
+                Move to {opt.replace('_', ' ')}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
 // ── Task Card ─────────────────────────────────────────────────────────────────
-function TaskCard({ task, onStatusChange, onDelete, onOpen, isDark }) {
+function TaskCard({ task, onStatusChange, onDelete, onOpen, onEdit, isDark }) {
   const [updating, setUpdating] = useState(false)
-  const cycle = { pending: 'in_progress', in_progress: 'completed', completed: 'pending', cancelled: 'pending' }
-  const handleCycle = async (e) => {
-    e.stopPropagation()
+
+  const handleStatusChange = async (newStatus) => {
     setUpdating(true)
-    try { await onStatusChange(task.id, cycle[task.status] || 'pending') }
+    try { await onStatusChange(task.id, newStatus) }
     finally { setUpdating(false) }
   }
+
   const dueDateStr = task.due_date
     ? new Date(task.due_date).toLocaleDateString('en-IN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')
     : null
@@ -77,16 +143,17 @@ function TaskCard({ task, onStatusChange, onDelete, onOpen, isDark }) {
     borderRadius: 14, padding: '16px', marginBottom: 12, cursor: 'pointer',
     boxShadow: '0 2px 8px rgba(108,99,255,0.06)',
   }
+  const mutedColor = isDark ? '#334155' : '#d1d5db'
 
   return (
     <div style={cardStyle} onClick={() => onOpen(task)}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <StatusCircle status={task.status} onClick={handleCycle} loading={updating} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 500, lineHeight: 1.4, color: task.status === 'completed' ? (isDark ? '#475569' : '#9ca3af') : (isDark ? '#e2e8f0' : '#1a1a2e'), textDecoration: task.status === 'completed' ? 'line-through' : 'none', marginBottom: 4 }}>
+          <div style={{ fontSize: 15, fontWeight: 500, lineHeight: 1.4, color: task.status === 'completed' ? (isDark ? '#475569' : '#9ca3af') : (isDark ? '#e2e8f0' : '#1a1a2e'), textDecoration: task.status === 'completed' ? 'line-through' : 'none', marginBottom: 8 }}>
             {task.title}
           </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            <StatusDropdown status={task.status} onStatusChange={handleStatusChange} loading={updating} isDark={isDark} />
             <PriorityBadge priority={task.priority} />
             {(task.related_entity_name || task.related_entity_type) && <EntityTag label={task.related_entity_name || task.related_entity_type} />}
             {(task.comments?.length > 0) && (
@@ -96,14 +163,26 @@ function TaskCard({ task, onStatusChange, onDelete, onOpen, isDark }) {
             )}
           </div>
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(task.id) }}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: isDark ? '#334155' : '#d1d5db', padding: 2, flexShrink: 0 }}
-          onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-          onMouseLeave={e => e.currentTarget.style.color = isDark ? '#334155' : '#d1d5db'}
-        >
-          <Trash2 size={14} />
-        </button>
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => onEdit(task)}
+            title="Edit task"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedColor, padding: 2 }}
+            onMouseEnter={e => e.currentTarget.style.color = '#7c3aed'}
+            onMouseLeave={e => e.currentTarget.style.color = mutedColor}
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={() => onDelete(task.id)}
+            title="Delete task"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedColor, padding: 2 }}
+            onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+            onMouseLeave={e => e.currentTarget.style.color = mutedColor}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
       </div>
       {(dueDateStr || task.assigned_to_name) && (
         <>
@@ -128,7 +207,7 @@ function TaskCard({ task, onStatusChange, onDelete, onOpen, isDark }) {
 }
 
 // ── Kanban Column ─────────────────────────────────────────────────────────────
-function KanbanColumn({ label, count, tasks, onStatusChange, onDelete, onOpen, isDark }) {
+function KanbanColumn({ label, count, tasks, onStatusChange, onDelete, onOpen, onEdit, isDark }) {
   const colStyle = isDark ? {
     background: 'rgba(14,20,55,0.32)', border: '1px solid rgba(255,255,255,0.11)', borderRadius: 16, padding: '20px 16px', flex: 1, minWidth: 0,
     backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', boxShadow: '0 8px 32px rgba(0,0,20,0.30), inset 0 1px 0 rgba(255,255,255,0.07)',
@@ -145,7 +224,7 @@ function KanbanColumn({ label, count, tasks, onStatusChange, onDelete, onOpen, i
       {tasks.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: '#334155' }}>No tasks</div>
       ) : tasks.map(t => (
-        <TaskCard key={t.id} task={t} onStatusChange={onStatusChange} onDelete={onDelete} onOpen={onOpen} isDark={isDark} />
+        <TaskCard key={t.id} task={t} onStatusChange={onStatusChange} onDelete={onDelete} onOpen={onOpen} onEdit={onEdit} isDark={isDark} />
       ))}
     </div>
   )
@@ -255,21 +334,19 @@ function CalendarView({ tasks, onOpen, isDark }) {
 }
 
 // ── Task Detail + Comments Modal ──────────────────────────────────────────────
-function TaskDetailModal({ task: initialTask, onClose, onStatusChange, onDelete, isDark }) {
+function TaskDetailModal({ task: initialTask, onClose, onStatusChange, onDelete, onEdit, isDark }) {
   const [task, setTask] = useState(initialTask)
   const [comment, setComment] = useState('')
   const [posting, setPosting] = useState(false)
-  const [updating, setUpdating] = useState(false)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
   const commentsEndRef = useRef(null)
 
-  const cycle = { pending: 'in_progress', in_progress: 'completed', completed: 'pending', cancelled: 'pending' }
-
-  const handleCycle = async () => {
-    setUpdating(true)
+  const handleStatusChange = async (newStatus) => {
+    setUpdatingStatus(true)
     try {
-      await onStatusChange(task.id, cycle[task.status] || 'pending')
-      setTask(t => ({ ...t, status: cycle[t.status] || 'pending' }))
-    } finally { setUpdating(false) }
+      await onStatusChange(task.id, newStatus)
+      setTask(t => ({ ...t, status: newStatus, is_overdue: newStatus === 'completed' ? false : t.is_overdue }))
+    } finally { setUpdatingStatus(false) }
   }
 
   const submitComment = async (e) => {
@@ -312,21 +389,28 @@ function TaskDetailModal({ task: initialTask, onClose, onStatusChange, onDelete,
       <div style={modalStyle}>
         {/* Header */}
         <div style={{ padding: '24px 24px 0', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <StatusCircle status={task.status} onClick={handleCycle} loading={updating} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: textColor, margin: 0, lineHeight: 1.3, textDecoration: task.status === 'completed' ? 'line-through' : 'none', opacity: task.status === 'completed' ? 0.6 : 1 }}>
               {task.title}
             </h2>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-              <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 999, background: `${statusColors[task.status]}22`, color: statusColors[task.status], border: `1px solid ${statusColors[task.status]}44`, fontWeight: 600 }}>
-                {task.status.replace('_', ' ')}
-              </span>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10, alignItems: 'center' }}>
+              <StatusDropdown status={task.status} onStatusChange={handleStatusChange} loading={updatingStatus} isDark={isDark} />
               <PriorityBadge priority={task.priority} />
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button
+              onClick={() => { onEdit(task); onClose() }}
+              title="Edit task"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedColor, padding: 4, borderRadius: 6 }}
+              onMouseEnter={e => e.currentTarget.style.color = '#7c3aed'}
+              onMouseLeave={e => e.currentTarget.style.color = mutedColor}
+            >
+              <Pencil size={15} />
+            </button>
             <button
               onClick={() => { onDelete(task.id); onClose() }}
+              title="Delete task"
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedColor, padding: 4, borderRadius: 6 }}
               onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
               onMouseLeave={e => e.currentTarget.style.color = mutedColor}
@@ -427,6 +511,100 @@ function TaskDetailModal({ task: initialTask, onClose, onStatusChange, onDelete,
   )
 }
 
+// ── Edit Task Modal ───────────────────────────────────────────────────────────
+function EditTaskModal({ task, users, onClose, onSave, isDark }) {
+  const [form, setForm] = useState({
+    title: task.title || '',
+    description: task.description || '',
+    priority: task.priority || 'medium',
+    status: task.status || 'pending',
+    due_date: task.due_date ? task.due_date.split('T')[0] : '',
+    assigned_to: task.assigned_to || '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const submit = async (e) => {
+    e.preventDefault()
+    if (!form.title.trim()) return toast.error('Title is required')
+    setSaving(true)
+    try {
+      const payload = { ...form }
+      if (!payload.due_date) delete payload.due_date
+      if (!payload.assigned_to) delete payload.assigned_to
+      if (!payload.description) delete payload.description
+      await taskService.updateTask(task.id, payload)
+      toast.success('Task updated')
+      onSave({ ...task, ...payload })
+      onClose()
+    } catch { toast.error('Failed to update task') }
+    finally { setSaving(false) }
+  }
+
+  const overlayStyle = { position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }
+  const modalStyle = isDark ? {
+    background: 'rgba(10,14,42,0.88)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+    borderRadius: 20, padding: '32px', width: '100%', maxWidth: 480, boxShadow: '0 25px 60px rgba(0,0,0,0.75)',
+  } : {
+    background: '#ffffff', border: '1px solid rgba(108,99,255,0.15)',
+    borderRadius: 20, padding: '32px', width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(108,99,255,0.15)',
+  }
+  const labelStyle = { fontSize: 12, fontWeight: 500, color: isDark ? '#94a3b8' : '#6b7280', display: 'block', marginBottom: 4 }
+
+  return (
+    <div style={overlayStyle} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={modalStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: isDark ? '#f1f5f9' : '#1a1a2e', margin: 0 }}>Edit Task</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4 }}><X size={20} /></button>
+        </div>
+        <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label style={labelStyle}>Title *</label>
+            <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Task title" className="input" required />
+          </div>
+          <div>
+            <label style={labelStyle}>Description</label>
+            <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={2} placeholder="Optional details" className="input" style={{ resize: 'vertical' }} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={labelStyle}>Priority</label>
+              <select value={form.priority} onChange={e => setForm(p => ({ ...p, priority: e.target.value }))} className="input">
+                {PRIORITIES.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Status</label>
+              <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} className="input">
+                {STATUSES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Due Date</label>
+            <input type="date" value={form.due_date} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))} className="input" />
+          </div>
+          <div>
+            <label style={labelStyle}>Assign To</label>
+            <select value={form.assigned_to} onChange={e => setForm(p => ({ ...p, assigned_to: e.target.value }))} className="input">
+              <option value="">Unassigned</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
+            <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+            <button type="submit" disabled={saving} style={{ background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', boxShadow: '0 0 20px rgba(124,58,237,0.5)', color: '#fff', border: 'none', borderRadius: 24, padding: '10px 20px', fontWeight: 600, fontSize: 14, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.7 : 1 }}>
+              {saving ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Pencil size={14} />}
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  )
+}
+
 // ── Create Modal ──────────────────────────────────────────────────────────────
 function CreateModal({ users, onClose, onCreate, isDark }) {
   const [form, setForm] = useState({ title: '', description: '', priority: 'medium', status: 'pending', due_date: '', assigned_to: '' })
@@ -519,6 +697,7 @@ export default function Tasks() {
   const [users,          setUsers]         = useState([])
   const [loading,        setLoading]       = useState(true)
   const [showCreate,     setShowCreate]    = useState(false)
+  const [editTask,       setEditTask]      = useState(null)
   const [view,           setView]          = useState('list')
   const [total,          setTotal]         = useState(0)
   const [filterStatus,   setFilterStatus]  = useState('')
@@ -558,6 +737,7 @@ export default function Tasks() {
   const handleStatusChange = async (id, status) => {
     await taskService.updateTask(id, { status })
     setTasks(prev => prev.map(t => t.id === id ? { ...t, status, is_overdue: status === 'completed' ? false : t.is_overdue } : t))
+    if (openTask?.id === id) setOpenTask(t => t ? { ...t, status } : null)
   }
 
   const handleDelete = async (id) => {
@@ -568,10 +748,15 @@ export default function Tasks() {
     setTotal(p => p - 1)
   }
 
+  const handleEditSave = (updatedTask) => {
+    setTasks(prev => prev.map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t))
+  }
+
   const grouped = {
     pending:     tasks.filter(t => t.status === 'pending'),
     in_progress: tasks.filter(t => t.status === 'in_progress'),
     completed:   tasks.filter(t => t.status === 'completed'),
+    cancelled:   tasks.filter(t => t.status === 'cancelled'),
   }
 
   const addBtnStyle = { background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', boxShadow: '0 0 20px rgba(124,58,237,0.5)', color: '#ffffff', border: 'none', borderRadius: 24, padding: '10px 20px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }
@@ -627,13 +812,24 @@ export default function Tasks() {
         <CalendarView tasks={tasks} onOpen={setOpenTask} isDark={isDark} />
       ) : (
         <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
-          <KanbanColumn label="Pending"     count={grouped.pending.length}     tasks={grouped.pending}     onStatusChange={handleStatusChange} onDelete={handleDelete} onOpen={setOpenTask} isDark={isDark} />
-          <KanbanColumn label="In Progress" count={grouped.in_progress.length} tasks={grouped.in_progress} onStatusChange={handleStatusChange} onDelete={handleDelete} onOpen={setOpenTask} isDark={isDark} />
-          <KanbanColumn label="Completed"   count={grouped.completed.length}   tasks={grouped.completed}   onStatusChange={handleStatusChange} onDelete={handleDelete} onOpen={setOpenTask} isDark={isDark} />
+          <KanbanColumn label="Pending"     count={grouped.pending.length}     tasks={grouped.pending}     onStatusChange={handleStatusChange} onDelete={handleDelete} onOpen={setOpenTask} onEdit={setEditTask} isDark={isDark} />
+          <KanbanColumn label="In Progress" count={grouped.in_progress.length} tasks={grouped.in_progress} onStatusChange={handleStatusChange} onDelete={handleDelete} onOpen={setOpenTask} onEdit={setEditTask} isDark={isDark} />
+          <KanbanColumn label="Completed"   count={grouped.completed.length}   tasks={grouped.completed}   onStatusChange={handleStatusChange} onDelete={handleDelete} onOpen={setOpenTask} onEdit={setEditTask} isDark={isDark} />
+          <KanbanColumn label="Cancelled"   count={grouped.cancelled.length}   tasks={grouped.cancelled}   onStatusChange={handleStatusChange} onDelete={handleDelete} onOpen={setOpenTask} onEdit={setEditTask} isDark={isDark} />
         </div>
       )}
 
       {showCreate && <CreateModal users={users} onClose={() => setShowCreate(false)} onCreate={handleCreate} isDark={isDark} />}
+
+      {editTask && (
+        <EditTaskModal
+          task={editTask}
+          users={users}
+          onClose={() => setEditTask(null)}
+          onSave={handleEditSave}
+          isDark={isDark}
+        />
+      )}
 
       {openTask && (
         <TaskDetailModal
@@ -641,6 +837,7 @@ export default function Tasks() {
           onClose={() => setOpenTask(null)}
           onStatusChange={handleStatusChange}
           onDelete={handleDelete}
+          onEdit={setEditTask}
           isDark={isDark}
         />
       )}

@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Target, Plus, Trophy, TrendingUp, Users, DollarSign, Calendar,
   ChevronRight, Filter, Search,
@@ -17,6 +17,7 @@ import { useLivePolling } from '../../hooks/useLivePolling';
 
 const TargetsPage = () => {
   const navigate = useNavigate();
+  const { targetId } = useParams();
   const [activeTab, setActiveTab] = useState('my-targets');
   const [targets, setTargets] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -29,10 +30,19 @@ const TargetsPage = () => {
     activeOnly: true
   });
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
 
   useEffect(() => {
     loadData();
   }, [activeTab, filters]);
+
+  // Open edit modal when navigated to /targets/edit/:targetId
+  useEffect(() => {
+    if (!targetId) return;
+    targetService.getTarget(targetId)
+      .then(t => setEditTarget(t))
+      .catch(() => navigate('/targets', { replace: true }));
+  }, [targetId]);
 
   const loadData = async (silent = false) => {
     try {
@@ -67,12 +77,11 @@ const TargetsPage = () => {
   // Live background refresh (Task 8) — silent, no visible reload
   useLivePolling(() => loadData(true), 5000);
 
-  const handleDeleteTarget = async (targetId) => {
+  const handleDeleteTarget = async (id) => {
     if (!window.confirm('Are you sure you want to delete this target?')) return;
-    
     try {
-      await targetService.deleteTarget(targetId);
-      setTargets(targets.filter(t => t.id !== targetId));
+      await targetService.deleteTarget(id);
+      setTargets(targets.filter(t => t.id !== id));
     } catch (error) {
       console.error('Error deleting target:', error);
     }
@@ -270,7 +279,7 @@ const TargetsPage = () => {
                 <TargetCard
                   key={target.id}
                   target={target}
-                  onEdit={() => navigate(`/targets/edit/${target.id}`)}
+                  onEdit={() => setEditTarget(target)}
                   onDelete={() => handleDeleteTarget(target.id)}
                   onClick={() => navigate(`/targets/${target.id}`)}
                 />
@@ -290,7 +299,145 @@ const TargetsPage = () => {
           }}
         />
       )}
+
+      {/* Edit Target Modal */}
+      {editTarget && (
+        <EditTargetModal
+          target={editTarget}
+          onClose={() => {
+            setEditTarget(null);
+            if (targetId) navigate('/targets', { replace: true });
+          }}
+          onUpdated={() => {
+            setEditTarget(null);
+            if (targetId) navigate('/targets', { replace: true });
+            loadData();
+          }}
+        />
+      )}
     </div>
+  );
+};
+
+// Edit Target Modal
+const EditTargetModal = ({ target, onClose, onUpdated }) => {
+  const [formData, setFormData] = useState({
+    name: target.name || '',
+    target_value: target.target_value || '',
+    end_date: target.end_date ? target.end_date.split('T')[0] : '',
+    department: target.department || '',
+    description: target.description || ''
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setSaving(true);
+      setError('');
+      await targetService.updateTarget(target.id, {
+        ...formData,
+        target_value: Number(formData.target_value)
+      });
+      onUpdated();
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to update target');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+      <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Edit Target</h3>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Target Name</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Target Value</label>
+            <input
+              type="number"
+              value={formData.target_value}
+              onChange={(e) => setFormData({ ...formData, target_value: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              required
+              min="1"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+            <input
+              type="date"
+              value={formData.end_date}
+              onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+            <select
+              value={formData.department}
+              onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Department</option>
+              <option value="recruitment">Recruitment</option>
+              <option value="hr">HR</option>
+              <option value="accounts">Accounts</option>
+              <option value="admin">Admin</option>
+              <option value="partner">Partner</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
   );
 };
 

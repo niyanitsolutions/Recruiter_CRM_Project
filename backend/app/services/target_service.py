@@ -54,6 +54,7 @@ class TargetService:
             "scope": data.scope.value,
             "assigned_to": data.assigned_to,
             "assigned_to_name": assigned_to_name,
+            "department": data.department,
             "period": data.period.value,
             "start_date": data.start_date.isoformat(),
             "end_date": data.end_date.isoformat(),
@@ -79,7 +80,6 @@ class TargetService:
                 assignee_doc = await self.db.users.find_one({"_id": data.assigned_to})
                 if assignee_doc and assignee_doc.get("email"):
                     from app.services.email_service import send_target_assigned_email, _fire_email
-                    # Resolve assigner name: explicit param > DB lookup > fallback
                     _by_name = creator_name or "a manager"
                     if not _by_name or _by_name == "a manager":
                         creator_doc = await self.db.users.find_one({"_id": user_id}, {"full_name": 1})
@@ -100,6 +100,34 @@ class TargetService:
             except Exception as _e:
                 import logging as _logging
                 _logging.getLogger(__name__).warning("Target email scheduling failed: %s", _e)
+
+        # In-app notifications for department-scoped targets (best-effort)
+        if data.department:
+            try:
+                from app.services.notification_service import NotificationService
+                from app.models.company.notification import NotificationCreate, NotificationType, NotificationChannel
+                dept_users_cursor = self.db.users.find(
+                    {"company_id": company_id, "department": data.department, "status": "active"},
+                    {"_id": 1},
+                )
+                notif_svc = NotificationService(self.db)
+                async for dept_user in dept_users_cursor:
+                    dept_uid = str(dept_user["_id"])
+                    if dept_uid == user_id:
+                        continue
+                    await notif_svc.create_notification(
+                        data=NotificationCreate(
+                            user_id=dept_uid,
+                            type=NotificationType.SYSTEM_ALERT,
+                            title="New Department Target",
+                            message=f"A new target '{data.name}' has been set for the {data.department} department.",
+                            channels=[NotificationChannel.IN_APP],
+                        ),
+                        company_id=company_id,
+                    )
+            except Exception as _e:
+                import logging as _logging
+                _logging.getLogger(__name__).warning("Department target notification failed: %s", _e)
 
         return await self._to_response(target)
     
@@ -168,6 +196,46 @@ class TargetService:
             page_size=page_size
         )
     
+    async def list_my_targets(
+        self,
+        company_id: str,
+        user_id: str,
+        user_department: Optional[str],
+        page: int = 1,
+        page_size: int = 20,
+        active_only: bool = True,
+    ) -> "TargetListResponse":
+        """Return targets visible to a specific user:
+        - Individually assigned targets (assigned_to == user_id)
+        - Department-scoped targets where department matches user's department
+        """
+        today = date.today().isoformat() if active_only else None
+
+        conditions: list = [
+            {"assigned_to": user_id},
+        ]
+        if user_department:
+            conditions.append({"department": user_department})
+
+        query: dict = {
+            "company_id": company_id,
+            "is_deleted": False,
+            "$or": conditions,
+        }
+        if active_only:
+            query["start_date"] = {"$lte": today}
+            query["end_date"] = {"$gte": today}
+
+        total = await self.targets.count_documents(query)
+        skip = (page - 1) * page_size
+        cursor = self.targets.find(query).sort("created_at", -1).skip(skip).limit(page_size)
+
+        items = []
+        async for target in cursor:
+            items.append(await self._to_response(target))
+
+        return TargetListResponse(items=items, total=total, page=page, page_size=page_size)
+
     async def update_target(
         self,
         target_id: str,

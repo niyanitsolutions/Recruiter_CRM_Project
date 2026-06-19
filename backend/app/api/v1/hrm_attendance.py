@@ -15,6 +15,7 @@ from app.core.dependencies import (
 )
 from app.models.company.attendance import (
     CheckInRequest, CheckOutRequest, ManualAttendanceUpdate, BreakRequest,
+    RecoverAttendanceRequest,
 )
 from app.services.attendance_service import AttendanceService, recover_missed_punch_outs
 
@@ -568,6 +569,44 @@ async def manual_update(
     _perm=Depends(require_permissions(["hrm:attendance:manage"])),
 ):
     return await AttendanceService(db).manual_update(cu["company_id"], data.model_dump(exclude_none=True))
+
+
+# ── Attendance Recovery ───────────────────────────────────────────────────
+
+@router.post("/{attendance_id}/recover")
+async def recover_attendance(
+    attendance_id: str,
+    data: RecoverAttendanceRequest,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
+):
+    """Reopen an accidentally closed attendance record.
+
+    The recovery gap (accidental punch-out → now) is stored as a break so
+    the employee's total worked hours remain accurate at final punch-out.
+    An audit trail (recovery_sessions) records who recovered and why.
+    """
+    if not data.recovery_reason or not data.recovery_reason.strip():
+        raise HTTPException(status_code=422, detail="Recovery reason is required")
+
+    recovered_by_name = cu.get("full_name") or cu.get("username") or cu["id"]
+
+    try:
+        result = await AttendanceService(db).recover_attendance(
+            attendance_id=attendance_id,
+            company_id=cu["company_id"],
+            recovered_by=cu["id"],
+            recovered_by_name=recovered_by_name,
+            recovery_reason=data.recovery_reason.strip(),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+
+    return result
 
 
 # ── Attendance Settings ───────────────────────────────────────────────────────

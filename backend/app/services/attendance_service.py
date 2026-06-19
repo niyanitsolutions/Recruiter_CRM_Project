@@ -355,7 +355,11 @@ class AttendanceService:
             breaks[-1]["duration_minutes"] = round(dur, 1)
             total_break_minutes += dur
 
-        work_hours = self._compute_work_hours(record["check_in"], now, total_break_minutes)
+        # For recovered records, add work done in prior sessions before recovery gaps
+        pre_recovery_hours = float(record.get("pre_recovery_work_hours", 0.0))
+        session_work_hours = self._compute_work_hours(record["check_in"], now, total_break_minutes)
+        work_hours = round(pre_recovery_hours + session_work_hours, 2)
+
         emp = await self._get_employee(employee_id, company_id)
         shift_end_str = (emp.get("shift_end_time") or settings["office_end"]) if emp else settings["office_end"]
         eh, em = map(int, shift_end_str.split(":"))
@@ -449,6 +453,91 @@ class AttendanceService:
         record = dict(record)
         record["breaks"] = breaks
         record["total_break_minutes"] = total_break_minutes
+        return self._serialize(record)
+
+    # ── Attendance Recovery ───────────────────────────────────────────────────
+
+    async def recover_attendance(
+        self,
+        attendance_id: str,
+        company_id: str,
+        recovered_by: str,
+        recovered_by_name: str,
+        recovery_reason: str,
+    ) -> dict:
+        """Reopen a closed attendance record so the employee can continue working.
+
+        Mechanism:
+        - The recovery gap (accidental punch-out → recovery time) is injected as a
+          BreakRecord with reason="recovery_gap" so the existing checkout formula
+          naturally deducts it from gross hours.
+        - pre_recovery_work_hours accumulates work done BEFORE each recovery so
+          the final checkout total is preserved across multiple recovery cycles.
+        """
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        record = await self.col.find_one({"_id": attendance_id, "company_id": company_id})
+        if not record:
+            return {}
+
+        check_in = record.get("check_in")
+        check_out = record.get("check_out")
+
+        if not check_in:
+            raise ValueError("Cannot recover: attendance record has no check-in")
+        if not check_out:
+            raise ValueError("Cannot recover: attendance is still open (not punched out)")
+
+        # Recovery gap: from accidental punch-out to now (recovery time)
+        gap_start = check_out
+        gap_end = now
+        gap_minutes = round((gap_end - gap_start).total_seconds() / 60, 1)
+
+        # The pre_recovery_work_hours must account for time already worked
+        # (it accumulates across multiple recovery cycles)
+        prior_pre_recovery = float(record.get("pre_recovery_work_hours", 0.0))
+        current_work_hours = float(record.get("work_hours", 0.0))
+        new_pre_recovery = prior_pre_recovery + current_work_hours
+
+        # Inject the gap as a recovery BreakRecord so checkout subtracts it
+        breaks = list(record.get("breaks", []))
+        breaks.append({
+            "start": gap_start,
+            "end": gap_end,
+            "duration_minutes": gap_minutes,
+            "reason": "recovery_gap",
+        })
+
+        # Update total_break_minutes to include the gap
+        total_break_minutes = float(record.get("total_break_minutes", 0.0)) + gap_minutes
+
+        # Append to audit trail
+        recovery_sessions = list(record.get("recovery_sessions", []))
+        recovery_sessions.append({
+            "recovered_at": now,
+            "recovered_by": recovered_by,
+            "recovered_by_name": recovered_by_name,
+            "recovery_reason": recovery_reason,
+            "original_check_out": check_out,
+            "gap_start": gap_start,
+            "gap_end": gap_end,
+        })
+
+        upd = {
+            "check_out": None,          # reopen the session
+            "work_hours": 0.0,          # will be recalculated on final checkout
+            "is_recovered": True,
+            "pre_recovery_work_hours": new_pre_recovery,
+            "recovery_sessions": recovery_sessions,
+            "breaks": breaks,
+            "total_break_minutes": total_break_minutes,
+            "auto_punched_out": False,
+            "is_half_day": False,       # reset; will be recalculated on checkout
+            "updated_at": now,
+        }
+        await self.col.update_one({"_id": record["_id"]}, {"$set": upd})
+        record = dict(record)
+        record.update(upd)
         return self._serialize(record)
 
     # ── Auto punch-out (called by scheduler / midnight loop) ─────────────────

@@ -34,6 +34,16 @@ class BreakRecord(BaseModel):
     reason: Optional[str] = None
 
 
+class RecoverySession(BaseModel):
+    recovered_at: datetime
+    recovered_by: str          # user_id of the HR/admin who triggered recovery
+    recovered_by_name: Optional[str] = None
+    recovery_reason: str
+    original_check_out: datetime     # the accidental punch-out time
+    gap_start: datetime              # = original_check_out
+    gap_end: datetime                # = recovered_at (when recovery happened)
+
+
 class GeoLocation(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -81,6 +91,11 @@ class AttendanceRecord(BaseModel):
     # Leave ref (if on_leave)
     leave_id: Optional[str] = None
 
+    # Recovery audit
+    is_recovered: bool = False
+    recovery_sessions: List[RecoverySession] = Field(default_factory=list)
+    pre_recovery_work_hours: float = 0.0   # accumulated work_hours before recovery gaps
+
     notes: Optional[str] = None
     marked_by: Optional[str] = None  # "self" | user_id of admin
 
@@ -125,3 +140,7 @@ class ManualAttendanceUpdate(BaseModel):
     check_out: Optional[datetime] = None
     notes: Optional[str] = None
     work_mode: Optional[WorkMode] = None
+
+
+class RecoverAttendanceRequest(BaseModel):
+    recovery_reason: str

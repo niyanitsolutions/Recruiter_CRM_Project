@@ -80,7 +80,7 @@ const DEPT_MODULES = {
   client_coordinator:   { full: ['clients','jobs','interviews','interview_settings','onboards'], view_only: ['candidates','reports'] },
   candidate_coordinator:{ full: ['candidates','interviews_no_schedule','interview_settings'], view_only: ['jobs','clients','onboards','reports'] },
   recruiter:            { full: ['candidates','interviews','clients','jobs','interview_settings'], view_only: ['onboards','reports'] },
-  hr:                   { full: ['users','candidates','onboards','hrm_employees','hrm_attendance','hrm_leaves','hrm_payroll','hrm_performance','hrm_announcements','hrm_requisitions','hrm_internal_jobs','hrm_internal_apps','hrm_referrals','hrm_assets','hrm_exit'], view_only: ['reports'] },
+  hr:                   { full: ['users','candidates','onboards','hrm_employees','hrm_attendance','hrm_leaves','hrm_payroll','hrm_performance','hrm_announcements','hrm_requisitions','hrm_internal_jobs','hrm_internal_apps','hrm_referrals','hrm_assets','hrm_exit','partners','tasks'], view_only: ['reports','targets','audit'] },
   accounts:             { full: ['accounts','payouts','invoices','imports','exports'], view_only: ['clients','partners','reports'] },
   partner:              { full: ['candidates'], view_only: ['jobs','interviews'] },
 }

@@ -248,6 +248,7 @@ class UpdateTargetRequest(BaseModel):
     """Request to update a target"""
     name: Optional[str] = None
     description: Optional[str] = None
+    department: Optional[str] = None
     target_value: Optional[float] = None
     end_date: Optional[date] = None
     filters: Optional[Dict[str, Any]] = None

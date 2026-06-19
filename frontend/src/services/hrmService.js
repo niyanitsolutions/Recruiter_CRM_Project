@@ -32,6 +32,7 @@ const getMonthlyAttendance = (employeeId, year, month) =>
   api.get(`${BASE}/attendance/monthly/${employeeId}`, { params: { year, month } })
 const getTeamToday = () => api.get(`${BASE}/attendance/team/today`)
 const manualAttendance = (data) => api.post(`${BASE}/attendance/manual`, data)
+const recoverAttendance = (attendanceId, data) => api.post(`${BASE}/attendance/${attendanceId}/recover`, data)
 const getAttendanceTodayStats = () => api.get(`${BASE}/attendance/stats/today`)
 const getAttendanceSettings = () => api.get(`${BASE}/attendance/settings`)
 const updateAttendanceSettings = (data) => api.put(`${BASE}/attendance/settings`, data)
@@ -220,7 +221,7 @@ const hrmService = {
   getDashboardStats, getAttendanceTrend,
   listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee, uploadEmployeePhoto,
   getTeamAttendanceHistory, getMyAttendanceHistory, getAttendanceRangeStats, exportTeamAttendanceCsv, exportMyAttendanceCsv,
-  checkIn, checkOut, startBreak, endBreak, getMyTodayAttendance, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance,
+  checkIn, checkOut, startBreak, endBreak, getMyTodayAttendance, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance, recoverAttendance,
   getAttendanceTodayStats, getAttendanceSettings, updateAttendanceSettings,
   applyLeave, listLeaves, listMyLeaves, getLeave, leaveAction, cancelLeave, getLeaveBalance, getMyLeaveBalance,
   generatePayroll, listPayslips, listOwnPayslips, getPayslip, updatePayslipStatus, updatePayslip, deletePayslip, getPayrollStructure, updatePayrollStructure,
