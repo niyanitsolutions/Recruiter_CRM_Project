@@ -106,9 +106,13 @@ class OnboardService:
     ) -> Optional[OnboardResponse]:
         """Update onboard record"""
         update_data = data.model_dump(exclude_unset=True)
+        # MongoDB cannot encode datetime.date — convert to ISO strings
+        for key, val in list(update_data.items()):
+            if isinstance(val, date) and not isinstance(val, datetime):
+                update_data[key] = val.isoformat()
         update_data["updated_at"] = datetime.now(timezone.utc)
         update_data["updated_by"] = updated_by
-        
+
         result = await self.collection.find_one_and_update(
             {"id": onboard_id, "company_id": company_id, "is_deleted": False},
             {"$set": update_data},

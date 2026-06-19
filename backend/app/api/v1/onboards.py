@@ -218,7 +218,7 @@ async def update_onboard_status(
 @router.post("/{onboard_id}/accept-offer", response_model=OnboardResponse)
 async def accept_offer(
     onboard_id: str,
-    expected_doj: date,
+    expected_doj: date = Query(..., description="Expected date of joining (YYYY-MM-DD)"),
     current_user: dict = Depends(require_permissions(["onboards:edit"])),
     db = Depends(get_company_db)
 ):
@@ -303,7 +303,7 @@ async def extend_doj(
 @router.post("/{onboard_id}/mark-joined", response_model=OnboardResponse)
 async def mark_joined(
     onboard_id: str,
-    actual_doj: date,
+    actual_doj: date = Query(..., description="Actual date of joining (YYYY-MM-DD)"),
     current_user: dict = Depends(require_permissions(["onboards:edit"])),
     db = Depends(get_company_db)
 ):
@@ -323,7 +323,7 @@ async def mark_joined(
 @router.post("/{onboard_id}/mark-no-show", response_model=OnboardResponse)
 async def mark_no_show(
     onboard_id: str,
-    reason: Optional[str] = None,
+    reason: Optional[str] = Query(None),
     current_user: dict = Depends(require_permissions(["onboards:edit"])),
     db = Depends(get_company_db)
 ):

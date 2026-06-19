@@ -103,11 +103,11 @@ const MODULE_LABELS = {
 const DEPT_MODULES = {
   owner:                { full: Object.keys(MODULE_PERMS), view_only: [] },
   admin:                { full: ['users','roles','partners','departments','designations','interview_settings','targets','tasks','imports','exports','crm_settings','audit','notifications'], view_only: ['reports','analytics'] },
-  client_coordinator:   { full: ['clients','jobs','interviews','interview_settings','onboards'], view_only: ['candidates','reports'] },
-  candidate_coordinator:{ full: ['candidates','interviews_no_schedule','interview_settings'], view_only: ['jobs','clients','onboards','reports'] },
-  recruiter:            { full: ['candidates','interviews','clients','jobs','interview_settings'], view_only: ['onboards','reports'] },
+  client_coordinator:   { full: ['clients','jobs','interviews','interview_settings','onboards','tasks'], view_only: ['candidates','reports','targets_view'] },
+  candidate_coordinator:{ full: ['candidates','interviews_no_schedule','interview_settings','tasks'], view_only: ['jobs','clients','onboards','reports','targets_view'] },
+  recruiter:            { full: ['candidates','interviews','clients','jobs','interview_settings','tasks'], view_only: ['onboards','reports','targets_view'] },
   hr:                   { full: ['hrm_dashboard','hrm_employees_hr','users_hr','partners_hr','hrm_attendance_hr','hrm_portal','hrm_resources','documents_hr','hrm_hiring_hr','tasks','notifications_view','profile'], view_only: ['targets_view','reports_view','audit_logs'] },
-  accounts:             { full: ['accounts','payouts','invoices','imports','exports'], view_only: ['clients','partners','reports'] },
+  accounts:             { full: ['accounts','payouts','invoices','imports','exports','tasks'], view_only: ['clients','partners','reports','targets_view'] },
   partner:              { full: ['candidates'], view_only: ['jobs','interviews'] },
 }
 
