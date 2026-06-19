@@ -111,26 +111,13 @@ const Invoices       = lazy(() => import('./pages/phase4').then(m => ({ default:
 const Notifications  = lazy(() => import('./pages/phase4').then(m => ({ default: m.Notifications })))
 
 // Settings sub-pages
-const TeamsPage               = lazy(() => import('./pages/settings').then(m => ({ default: m.TeamsPage })))
-const BranchesPage            = lazy(() => import('./pages/settings').then(m => ({ default: m.BranchesPage })))
-const PipelineStagePage       = lazy(() => import('./pages/settings').then(m => ({ default: m.PipelineStagePage })))
-const JobCategoriesPage       = lazy(() => import('./pages/settings').then(m => ({ default: m.JobCategoriesPage })))
-const InterviewSettingsPage   = lazy(() => import('./pages/settings').then(m => ({ default: m.InterviewSettingsPage })))
-const DocumentTemplatesPage   = lazy(() => import('./pages/settings').then(m => ({ default: m.DocumentTemplatesPage })))
-const ResumeParsingPage       = lazy(() => import('./pages/settings').then(m => ({ default: m.ResumeParsingPage })))
-const CandidateSourcesPage    = lazy(() => import('./pages/settings').then(m => ({ default: m.CandidateSourcesPage })))
-const InvoiceSettingsPage     = lazy(() => import('./pages/settings').then(m => ({ default: m.InvoiceSettingsPage })))
-const CommissionRulesPage     = lazy(() => import('./pages/settings').then(m => ({ default: m.CommissionRulesPage })))
-const LocalizationPage        = lazy(() => import('./pages/settings').then(m => ({ default: m.LocalizationPage })))
-const EmailConfigPage         = lazy(() => import('./pages/settings').then(m => ({ default: m.EmailConfigPage })))
+const TeamsPage                = lazy(() => import('./pages/settings').then(m => ({ default: m.TeamsPage })))
+const BranchesPage             = lazy(() => import('./pages/settings').then(m => ({ default: m.BranchesPage })))
+const EmailConfigPage          = lazy(() => import('./pages/settings').then(m => ({ default: m.EmailConfigPage })))
 const NotificationSettingsPage = lazy(() => import('./pages/settings').then(m => ({ default: m.NotificationSettingsPage })))
-const SecuritySettingsPage    = lazy(() => import('./pages/settings').then(m => ({ default: m.SecuritySettingsPage })))
-const DataManagementPage      = lazy(() => import('./pages/settings').then(m => ({ default: m.DataManagementPage })))
-const CustomFieldsPage        = lazy(() => import('./pages/settings').then(m => ({ default: m.CustomFieldsPage })))
-const BrandingPage            = lazy(() => import('./pages/settings').then(m => ({ default: m.BrandingPage })))
-const SLAConfigPage           = lazy(() => import('./pages/settings').then(m => ({ default: m.SLAConfigPage })))
-const LoginActivityPage       = lazy(() => import('./pages/settings').then(m => ({ default: m.LoginActivityPage })))
-const ActiveSessionsPage      = lazy(() => import('./pages/settings').then(m => ({ default: m.ActiveSessionsPage })))
+const SecuritySettingsPage     = lazy(() => import('./pages/settings').then(m => ({ default: m.SecuritySettingsPage })))
+const LoginActivityPage        = lazy(() => import('./pages/settings').then(m => ({ default: m.LoginActivityPage })))
+const ActiveSessionsPage       = lazy(() => import('./pages/settings').then(m => ({ default: m.ActiveSessionsPage })))
 
 // HRM
 const HRMDashboard       = lazy(() => import('./pages/hrm/HRMDashboard'))
@@ -1233,26 +1220,13 @@ function App() {
         <Route path="/company-settings" element={<PermissionRoute permission="crm_settings:view"><CompanySettings /></PermissionRoute>} />
 
         {/* Settings sub-pages */}
-        <Route path="/settings/teams"                element={<PermissionRoute permission="crm_settings:view"><TeamsPage /></PermissionRoute>} />
-        <Route path="/settings/branches"             element={<PermissionRoute permission="crm_settings:view"><BranchesPage /></PermissionRoute>} />
-        <Route path="/settings/pipeline-stages"      element={<PermissionRoute permission="crm_settings:view"><PipelineStagePage /></PermissionRoute>} />
-        <Route path="/settings/job-categories"       element={<PermissionRoute permission="crm_settings:view"><JobCategoriesPage /></PermissionRoute>} />
-        <Route path="/settings/interview-settings"   element={<PermissionRoute permission="crm_settings:view"><InterviewSettingsPage /></PermissionRoute>} />
-        <Route path="/settings/document-templates"   element={<PermissionRoute permission="crm_settings:view"><DocumentTemplatesPage /></PermissionRoute>} />
-        <Route path="/settings/resume-parsing"       element={<PermissionRoute permission="crm_settings:view"><ResumeParsingPage /></PermissionRoute>} />
-        <Route path="/settings/candidate-sources"    element={<PermissionRoute permission="crm_settings:view"><CandidateSourcesPage /></PermissionRoute>} />
-        <Route path="/settings/invoice-settings"     element={<PermissionRoute permission="crm_settings:view"><InvoiceSettingsPage /></PermissionRoute>} />
-        <Route path="/settings/commission-rules"     element={<PermissionRoute permission="crm_settings:view"><CommissionRulesPage /></PermissionRoute>} />
-        <Route path="/settings/localization"         element={<PermissionRoute permission="crm_settings:view"><LocalizationPage /></PermissionRoute>} />
-        <Route path="/settings/email-config"         element={<PermissionRoute permission="crm_settings:view"><EmailConfigPage /></PermissionRoute>} />
+        <Route path="/settings/teams"                 element={<PermissionRoute permission="crm_settings:view"><TeamsPage /></PermissionRoute>} />
+        <Route path="/settings/branches"              element={<PermissionRoute permission="crm_settings:view"><BranchesPage /></PermissionRoute>} />
+        <Route path="/settings/email-config"          element={<PermissionRoute permission="crm_settings:view"><EmailConfigPage /></PermissionRoute>} />
         <Route path="/settings/notification-settings" element={<PermissionRoute permission="crm_settings:view"><NotificationSettingsPage /></PermissionRoute>} />
-        <Route path="/settings/security"             element={<PermissionRoute permission="crm_settings:view"><SecuritySettingsPage /></PermissionRoute>} />
-        <Route path="/settings/data-management"      element={<PermissionRoute permission="crm_settings:view"><DataManagementPage /></PermissionRoute>} />
-        <Route path="/settings/custom-fields"        element={<PermissionRoute permission="crm_settings:view"><CustomFieldsPage /></PermissionRoute>} />
-        <Route path="/settings/branding"             element={<PermissionRoute permission="crm_settings:view"><BrandingPage /></PermissionRoute>} />
-        <Route path="/settings/sla-config"           element={<PermissionRoute permission="crm_settings:view"><SLAConfigPage /></PermissionRoute>} />
-        <Route path="/settings/login-activity"       element={<PermissionRoute permission="crm_settings:view"><LoginActivityPage /></PermissionRoute>} />
-        <Route path="/settings/active-sessions"      element={<PermissionRoute permission="crm_settings:view"><ActiveSessionsPage /></PermissionRoute>} />
+        <Route path="/settings/security"              element={<PermissionRoute permission="crm_settings:view"><SecuritySettingsPage /></PermissionRoute>} />
+        <Route path="/settings/login-activity"        element={<PermissionRoute permission="crm_settings:view"><LoginActivityPage /></PermissionRoute>} />
+        <Route path="/settings/active-sessions"       element={<PermissionRoute permission="crm_settings:view"><ActiveSessionsPage /></PermissionRoute>} />
       </Route>
 
       {/* PARTNER ONLY */}
