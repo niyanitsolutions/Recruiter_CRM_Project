@@ -63,8 +63,9 @@ const applicationService = {
   },
 
   // Get dashboard stats
-  getDashboardStats: async () => {
-    const response = await api.get('/applications/dashboard-stats')
+  getDashboardStats: async (days = 0) => {
+    const params = days > 0 ? { days } : {}
+    const response = await api.get('/applications/dashboard-stats', { params })
     return response.data
   },
 

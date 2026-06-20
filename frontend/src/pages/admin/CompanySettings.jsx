@@ -188,9 +188,9 @@ const CompanySettings = () => {
         geo_fence_locations: d.geo_fence_locations || [],
         user_geo_fence:      d.user_geo_fence      || [],
       })
-      // Load localization separately from its own endpoint for freshness
+      // Load localization from unified tenant-settings endpoint
       try {
-        const locRes = await api.get('/company-settings/localization')
+        const locRes = await api.get('/tenant-settings/localization')
         const locData = locRes.data?.data || {}
         setLocForm({
           date_format: locData.date_format || DEFAULT_LOCALIZATION.date_format,

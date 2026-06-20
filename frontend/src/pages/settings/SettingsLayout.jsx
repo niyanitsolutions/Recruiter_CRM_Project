@@ -110,17 +110,19 @@ export const CancelBtn = ({ onClick }) => {
   )
 }
 
-export const Toggle = ({ checked, onChange, label, description }) => (
-  <div className="flex items-center justify-between py-3">
+export const Toggle = ({ checked, onChange, label, description, disabled = false }) => (
+  <div className={`flex items-center justify-between py-3 ${disabled ? 'opacity-50' : ''}`}>
     <div>
       <p className="text-sm font-medium text-white">{label}</p>
       {description && <p className="text-xs text-surface-400 mt-0.5">{description}</p>}
     </div>
     <button
       type="button"
-      onClick={() => onChange(!checked)}
+      onClick={() => !disabled && onChange(!checked)}
+      disabled={disabled}
       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none
-                  ${checked ? 'bg-accent-600' : 'bg-surface-300'}`}
+                  ${checked ? 'bg-accent-600' : 'bg-surface-300'}
+                  ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
     >
       <span
         className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform

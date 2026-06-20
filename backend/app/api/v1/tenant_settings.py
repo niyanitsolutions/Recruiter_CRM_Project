@@ -735,6 +735,7 @@ class LocalizationRequest(BaseModel):
     currency: str = "INR"
     currency_symbol: str = "₹"
     date_format: str = "DD/MM/YYYY"
+    time_format: str = "12h"
     timezone: str = "Asia/Kolkata"
     number_format: str = "en-IN"
     fiscal_year_start: str = "April"
@@ -838,6 +839,7 @@ async def save_notification_matrix(
 # ── Security Settings ─────────────────────────────────────────────────────────
 
 class SecuritySettingsRequest(BaseModel):
+    enable_custom_security: bool = False
     min_password_length: int = 8
     require_uppercase: bool = True
     require_lowercase: bool = True

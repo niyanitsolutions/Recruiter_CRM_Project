@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Globe2 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import tenantSettingsService from '../../services/tenantSettingsService'
+import { useDispatch, useSelector } from 'react-redux'
+import {
+  fetchLocalization, saveLocalization as saveLocalizationThunk, selectLocalization,
+} from '../../store/localizationSlice'
 import {
   Breadcrumb, PageHeader, SectionCard, Field, SelectField, ActionBar, SkeletonLoader,
 } from './SettingsLayout'
@@ -28,6 +31,8 @@ const DATE_FORMATS = [
   { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY (31/01/2025)' },
   { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY (01/31/2025)' },
   { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD (2025-01-31)' },
+  { value: 'DD-MM-YYYY', label: 'DD-MM-YYYY (31-01-2025)' },
+  { value: 'MM-DD-YYYY', label: 'MM-DD-YYYY (01-31-2025)' },
   { value: 'DD-MMM-YYYY', label: 'DD-MMM-YYYY (31-Jan-2025)' },
   { value: 'MMM DD, YYYY', label: 'MMM DD, YYYY (Jan 31, 2025)' },
 ]
@@ -45,10 +50,13 @@ const FISCAL_MONTHS = [
 
 const DEFAULT = {
   currency: 'INR', currency_symbol: '₹', date_format: 'DD/MM/YYYY',
-  timezone: 'Asia/Kolkata', number_format: 'en-IN', fiscal_year_start: 'April', language: 'en',
+  time_format: '12h', timezone: 'Asia/Kolkata', number_format: 'en-IN',
+  fiscal_year_start: 'April', language: 'en',
 }
 
 const LocalizationPage = () => {
+  const dispatch = useDispatch()
+  const storedSettings = useSelector(selectLocalization)
   const [data, setData]       = useState(DEFAULT)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving]   = useState(false)
@@ -56,24 +64,32 @@ const LocalizationPage = () => {
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await tenantSettingsService.getLocalization()
-      if (res.data && Object.keys(res.data).length > 0) setData({ ...DEFAULT, ...res.data })
+      const result = await dispatch(fetchLocalization())
+      if (fetchLocalization.fulfilled.match(result)) {
+        setData({ ...DEFAULT, ...result.payload })
+      } else {
+        // Fall back to what's already in the Redux store
+        setData({ ...DEFAULT, ...storedSettings })
+      }
     } catch {
+      setData({ ...DEFAULT, ...storedSettings })
       toast.error('Failed to load localization settings')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dispatch]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
 
   const save = async () => {
     try {
       setSaving(true)
-      await tenantSettingsService.saveLocalization(data)
-      toast.success('Localization settings saved')
-    } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to save')
+      const result = await dispatch(saveLocalizationThunk(data))
+      if (saveLocalizationThunk.fulfilled.match(result)) {
+        toast.success('Localization settings saved')
+      } else {
+        toast.error(result.payload || 'Failed to save localization settings')
+      }
     } finally {
       setSaving(false)
     }
@@ -118,6 +134,12 @@ const LocalizationPage = () => {
               {DATE_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
             </SelectField>
           </Field>
+          <Field label="Time Format">
+            <SelectField value={data.time_format} onChange={e => set('time_format', e.target.value)}>
+              <option value="12h">12-Hour (e.g. 2:30 PM)</option>
+              <option value="24h">24-Hour (e.g. 14:30)</option>
+            </SelectField>
+          </Field>
           <Field label="Number Format">
             <SelectField value={data.number_format} onChange={e => set('number_format', e.target.value)}>
               {NUMBER_FORMATS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
@@ -142,6 +164,10 @@ const LocalizationPage = () => {
             <SelectField value={data.language} onChange={e => set('language', e.target.value)}>
               <option value="en">English</option>
               <option value="hi">Hindi</option>
+              <option value="te">Telugu</option>
+              <option value="ta">Tamil</option>
+              <option value="kn">Kannada</option>
+              <option value="ml">Malayalam</option>
               <option value="ar">Arabic</option>
             </SelectField>
           </Field>

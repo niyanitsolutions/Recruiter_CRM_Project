@@ -301,11 +301,11 @@ const AdminDashboard = () => {
       const [mainRes, recruitRes, ivStatsRes, todayIvRes, jobRes, candRes, hrmRes, seatRes, annRes, syncRes, syncPreviewRes] =
         await Promise.allSettled([
           adminDashboardService.getDashboardData(period.days),
-          applicationService.getDashboardStats(),
-          interviewService.getDashboardStats(),
+          applicationService.getDashboardStats(period.days),
+          interviewService.getDashboardStats(period.days),
           interviewService.getTodayInterviews(),
-          jobService.getDashboardStats(),
-          candidateService.getDashboardStats(),
+          jobService.getDashboardStats(period.days),
+          candidateService.getDashboardStats(period.days),
           hrmService.getDashboardStats(),
           subscriptionService.getTenantSeatStatus(),
           hrmService.getAnnouncements({ limit: 3 }),
@@ -442,15 +442,20 @@ const AdminDashboard = () => {
 
   const { user_stats, activity_stats, recent_activity } = dashboardData || {}
 
-  // ── KPI computations ─────────────────────────────────────────────────────────
-  const totalCandidates = candStats?.total ?? dashboardData?.quick_stats?.candidates
-  const activeJobs      = jobStats?.open   ?? dashboardData?.quick_stats?.jobs
+  // ── KPI computations — prefer period-filtered quick_stats when period != all-time ─
+  const _periodFiltered = period.days > 0
+  const totalCandidates = _periodFiltered
+    ? (dashboardData?.quick_stats?.candidates ?? candStats?.total)
+    : (candStats?.total ?? dashboardData?.quick_stats?.candidates)
+  const activeJobs = _periodFiltered
+    ? (dashboardData?.quick_stats?.jobs ?? jobStats?.open)
+    : (jobStats?.open ?? dashboardData?.quick_stats?.jobs)
   const appsInProgress  = recruitStats?.total != null
     ? Math.max(0, (recruitStats.total || 0) - (recruitStats.joined || 0) - (recruitStats.rejected || 0))
     : null
-  const interviewsToday = ivStats?.today ?? ivStats?.today_count
-    ?? (Array.isArray(todayIvs) ? todayIvs.length : null)
-    ?? dashboardData?.quick_stats?.interviews
+  const interviewsToday = _periodFiltered
+    ? (dashboardData?.quick_stats?.interviews ?? ivStats?.today ?? ivStats?.today_count ?? (Array.isArray(todayIvs) ? todayIvs.length : null))
+    : (ivStats?.today ?? ivStats?.today_count ?? (Array.isArray(todayIvs) ? todayIvs.length : null) ?? dashboardData?.quick_stats?.interviews)
 
   const offersPending   = recruitStats?.offered
   const placementsMonth = recruitStats?.joined

@@ -76,8 +76,9 @@ const interviewService = {
   },
 
   // Get dashboard stats
-  getDashboardStats: async () => {
-    const response = await api.get('/interviews/dashboard-stats')
+  getDashboardStats: async (days = 0) => {
+    const params = days > 0 ? { days } : {}
+    const response = await api.get('/interviews/dashboard-stats', { params })
     return response.data
   },
 

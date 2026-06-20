@@ -88,12 +88,17 @@ async def get_jobs_dropdown(
 
 @router.get("/dashboard-stats")
 async def get_job_stats(
+    days: Optional[int] = Query(None, ge=0, description="Filter to last N days; 0 or omit = all time"),
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
     _: bool = Depends(require_permissions(["jobs:view"]))
 ):
     """Get job statistics for dashboard"""
-    stats = await JobService.get_dashboard_stats(db, current_user)
+    from datetime import datetime, timedelta, timezone as _tz
+    start_date = None
+    if days and days > 0:
+        start_date = datetime.now(_tz.utc) - timedelta(days=days)
+    stats = await JobService.get_dashboard_stats(db, current_user, start_date=start_date)
     return {"success": True, "data": stats}
 
 

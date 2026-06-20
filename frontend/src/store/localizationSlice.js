@@ -6,14 +6,21 @@ const DEFAULT = {
   time_format: '12h',
   timezone: 'Asia/Kolkata',
   language: 'en',
+  currency: 'INR',
+  currency_symbol: '₹',
+  number_format: 'en-IN',
+  fiscal_year_start: 'April',
 }
 
 export const fetchLocalization = createAsyncThunk(
   'localization/fetch',
   async (_, { rejectWithValue }) => {
     try {
-      const res = await api.get('/company-settings/localization')
-      return res.data?.data || DEFAULT
+      const res = await api.get('/tenant-settings/localization')
+      const data = res.data?.data || {}
+      // Strip MongoDB metadata fields, keep only localization payload
+      const { _id, id, company_id, key, created_at, updated_at, created_by, updated_by, ...settings } = data
+      return Object.keys(settings).length > 0 ? settings : DEFAULT
     } catch {
       return rejectWithValue(DEFAULT)
     }
@@ -24,8 +31,10 @@ export const saveLocalization = createAsyncThunk(
   'localization/save',
   async (payload, { rejectWithValue }) => {
     try {
-      const res = await api.put('/company-settings/localization', payload)
-      return res.data?.data || payload
+      const res = await api.put('/tenant-settings/localization', payload)
+      const data = res.data?.data || payload
+      const { _id, id, company_id, key, created_at, updated_at, created_by, updated_by, ...settings } = data
+      return settings
     } catch (err) {
       return rejectWithValue(err?.response?.data?.detail || 'Failed to save localization')
     }
@@ -51,7 +60,7 @@ const localizationSlice = createSlice({
         state.status = 'idle'
       })
       .addCase(saveLocalization.fulfilled, (state, action) => {
-        state.settings = { ...state.settings, ...action.payload }
+        state.settings = { ...DEFAULT, ...state.settings, ...action.payload }
       })
       .addCase(saveLocalization.rejected, (state, action) => {
         state.error = action.payload
@@ -61,4 +70,5 @@ const localizationSlice = createSlice({
 
 export const { setLocalization } = localizationSlice.actions
 export const selectLocalization = (state) => state.localization.settings
+export const selectLocalizationStatus = (state) => state.localization.status
 export default localizationSlice.reducer

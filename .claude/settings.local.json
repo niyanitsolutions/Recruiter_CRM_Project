@@ -150,7 +150,9 @@
       "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\" -Directory | ForEach-Object { \"$\\($_.Name\\)\"; Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue | ForEach-Object { \"  $\\($_.Name\\)\" } } | head -80)",
       "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\" -Directory | ForEach-Object { \"$\\($_.Name\\)\"; Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue | ForEach-Object { \"  $\\($_.Name\\)\" } } | head -80)",
       "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\" -Directory | ForEach-Object { \"$\\($_.Name\\)\"; Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue | ForEach-Object { \"  $\\($_.Name\\)\" } } | Select-Object -First 100)",
-      "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\" -Directory | ForEach-Object { \"$\\($_.Name\\)\"; Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue | ForEach-Object { \"  $\\($_.Name\\)\" } } | Select-Object -First 100)"
+      "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\" -Directory | ForEach-Object { \"$\\($_.Name\\)\"; Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue | ForEach-Object { \"  $\\($_.Name\\)\" } } | Select-Object -First 100)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

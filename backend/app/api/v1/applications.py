@@ -54,12 +54,17 @@ async def list_applications(
 
 @router.get("/dashboard-stats")
 async def get_application_stats(
+    days: Optional[int] = Query(None, ge=0, description="Filter to last N days; 0 or omit = all time"),
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
     _: bool = Depends(require_permissions(["candidates:view"]))
 ):
     """Get application statistics"""
-    stats = await ApplicationService.get_dashboard_stats(db, current_user)
+    from datetime import datetime, timedelta, timezone
+    start_date = None
+    if days and days > 0:
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
+    stats = await ApplicationService.get_dashboard_stats(db, current_user, start_date=start_date)
     return {"success": True, "data": stats}
 
 

@@ -8,6 +8,7 @@ import {
   selectIsInitializing, selectProfileCompleted, selectForcePasswordChange,
   initAuth, setProfileCompleted, clearForcePasswordChange, refreshToken, logoutUser,
 } from './store/authSlice'
+import { fetchLocalization } from './store/localizationSlice'
 import { useAutoLogout } from './hooks/useAutoLogout'
 import { MY_PORTAL_ALLOWED_ROLES } from './config/portalConfig'
 import { useSessionWebSocket } from './hooks/useSessionWebSocket'
@@ -938,9 +939,13 @@ const ProfileCompleteModal = () => {
  * useRef guard prevents double-dispatch in React StrictMode (dev).
  */
 const AuthInitializer = ({ children }) => {
-  const dispatch       = useDispatch()
-  const isInitializing = useSelector(selectIsInitializing)
-  const didInit        = useRef(false)
+  const dispatch        = useDispatch()
+  const isInitializing  = useSelector(selectIsInitializing)
+  const isAuthenticated = useSelector(selectIsAuthenticated)
+  const isSuperAdmin    = useSelector(selectIsSuperAdmin)
+  const isSeller        = useSelector(selectIsSeller)
+  const didInit         = useRef(false)
+  const didLocale       = useRef(false)
 
   useEffect(() => {
     if (isInitializing && !didInit.current) {
@@ -948,6 +953,17 @@ const AuthInitializer = ({ children }) => {
       dispatch(initAuth())
     }
   }, [dispatch]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load tenant localization once auth is confirmed for company users
+  useEffect(() => {
+    if (isAuthenticated && !isSuperAdmin && !isSeller && !didLocale.current) {
+      didLocale.current = true
+      dispatch(fetchLocalization())
+    }
+    if (!isAuthenticated) {
+      didLocale.current = false
+    }
+  }, [isAuthenticated, isSuperAdmin, isSeller, dispatch])
 
   if (isInitializing) {
     return (
