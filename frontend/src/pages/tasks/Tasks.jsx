@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSelector } from 'react-redux'
 import {
   Plus, Trash2, Clock, User as UserIcon, CheckCircle2,
@@ -10,6 +10,7 @@ import taskService from '../../services/taskService'
 import userService from '../../services/userService'
 import { selectUser } from '../../store/authSlice'
 import { useLivePolling } from '../../hooks/useLivePolling'
+import { useCRMEvents } from '../../context/CRMSocketContext'
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent']
 const STATUSES   = ['pending', 'in_progress', 'completed', 'cancelled']
@@ -532,11 +533,14 @@ function EditTaskModal({ task, users, onClose, onSave, isDark }) {
       if (!payload.due_date) delete payload.due_date
       if (!payload.assigned_to) delete payload.assigned_to
       if (!payload.description) delete payload.description
-      await taskService.updateTask(task.id, payload)
+      const res = await taskService.updateTask(task.id, payload)
       toast.success('Task updated')
-      onSave({ ...task, ...payload })
+      onSave(res.data || { ...task, ...payload })
       onClose()
-    } catch { toast.error('Failed to update task') }
+    } catch (err) {
+      const msg = err?.response?.data?.detail
+      toast.error(typeof msg === 'string' ? msg : 'Failed to update task')
+    }
     finally { setSaving(false) }
   }
 
@@ -728,16 +732,27 @@ export default function Tasks() {
 
   useEffect(() => { load() }, [filterStatus, filterPriority, myOnly])
 
-  // Live background refresh (Task 8) — silent, no visible reload
+  // Live background refresh — silent, no visible reload (5 s while socket is down)
   useLivePolling(() => load(true), 5000)
+
+  // Real-time task events via WebSocket; silent reload on any task change in this company
+  const silentLoad = useCallback(() => load(true), [filterStatus, filterPriority, myOnly]) // eslint-disable-line react-hooks/exhaustive-deps
+  useCRMEvents('task.created', silentLoad, null, [silentLoad])
+  useCRMEvents('task.updated', silentLoad, null, [silentLoad])
+  useCRMEvents('task.deleted', silentLoad, null, [silentLoad])
+
   useEffect(() => { userService.getUsers({ page_size: 100 }).then(r => setUsers(r.data || [])).catch(() => {}) }, [])
 
   const handleCreate = async (data) => { await taskService.createTask(data); toast.success('Task created'); load() }
 
   const handleStatusChange = async (id, status) => {
-    await taskService.updateTask(id, { status })
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, status, is_overdue: status === 'completed' ? false : t.is_overdue } : t))
-    if (openTask?.id === id) setOpenTask(t => t ? { ...t, status } : null)
+    try {
+      await taskService.updateTask(id, { status })
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, status, is_overdue: status === 'completed' ? false : t.is_overdue } : t))
+      if (openTask?.id === id) setOpenTask(t => t ? { ...t, status } : null)
+    } catch {
+      toast.error('Failed to update status')
+    }
   }
 
   const handleDelete = async (id) => {

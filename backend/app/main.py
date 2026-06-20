@@ -82,6 +82,9 @@ from app.api.v1 import email_test
 from app.api.v1 import sessions as sessions_router
 from app.api.v1.sessions import session_cleanup_loop
 
+# ============== CRM Real-Time WebSocket ==============
+from app.api.v1 import crm_ws
+
 
 # ─── Default super admin auto-seed ────────────────────────────────────────────
 async def _seed_default_superadmin() -> None:
@@ -336,6 +339,9 @@ app.include_router(email_test.router, prefix=API_V1_PREFIX, tags=["Email"])
 
 # ============== SESSION MANAGEMENT + WEBSOCKET ==============
 app.include_router(sessions_router.router, prefix=API_V1_PREFIX, tags=["Sessions"])
+
+# ============== CRM REAL-TIME WEBSOCKET ==============
+app.include_router(crm_ws.router, prefix=API_V1_PREFIX, tags=["CRM WebSocket"])
 
 # ============== PHASE 6 ROUTERS ==============
 app.include_router(integrations.router, prefix=API_V1_PREFIX, tags=["Integrations"])

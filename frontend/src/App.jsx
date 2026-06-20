@@ -20,6 +20,7 @@ import SessionExpiryModal    from './components/auth/SessionExpiryModal'
 import SessionWarningModal   from './components/auth/SessionWarningModal'
 import SessionLockOverlay    from './components/auth/SessionLockOverlay'
 import LoginRequestModal     from './components/auth/LoginRequestModal'
+import { CRMSocketProvider } from './context/CRMSocketContext'
 
 // Layouts — kept eager so the app shell (sidebar + topbar) renders immediately
 import { Layout, AuthLayout } from './components/layout'
@@ -1149,6 +1150,7 @@ function App() {
   return (
     <LocationAwareErrorBoundary>
     <AuthInitializer>
+    <CRMSocketProvider>
     <SessionManager />
     <ForcePasswordModal />
     <ProfileCompleteModal />
@@ -1473,6 +1475,7 @@ function App() {
       } />
     </Routes>
     </Suspense>
+    </CRMSocketProvider>
     </AuthInitializer>
     </LocationAwareErrorBoundary>
   )

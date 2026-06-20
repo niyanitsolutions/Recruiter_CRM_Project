@@ -74,6 +74,17 @@ class TaskService:
         await db[TaskService.COLLECTION].insert_one(doc)
         logger.info("Task created | task=%s | by=%s", doc["_id"], created_by)
 
+        if company_id:
+            try:
+                from app.core.crm_events import emit_company_event
+                import asyncio
+                asyncio.ensure_future(emit_company_event(
+                    company_id, "task.created",
+                    {"id": doc["_id"], "title": doc["title"], "assigned_to": doc.get("assigned_to"), "created_by": created_by},
+                ))
+            except Exception:
+                pass
+
         # Send TASK_ASSIGNED email (best-effort)
         # Skip only when no assignee or assignee is the same person who created the task
         _assignee_email = assignee.get("email") if assignee else None
@@ -158,15 +169,18 @@ class TaskService:
         db: AsyncIOMotorDatabase,
         task_id: str,
         data: TaskUpdate,
-        updated_by: str
+        updated_by: str,
+        *,
+        is_admin: bool = False,
+        company_id: str = "",
     ) -> TaskResponse:
         """
         Update task fields.
-        Access: creator (created_by) or assignee (assigned_to) only.
+        Access: creator/assignee, or admin/owner users (is_admin=True).
         """
         doc = await TaskService._get_task_doc(db, task_id)
 
-        if not TaskService._is_involved(doc, updated_by):
+        if not is_admin and not TaskService._is_involved(doc, updated_by):
             logger.warning(
                 "Unauthorized task update | task=%s | user=%s | creator=%s | assignee=%s",
                 task_id, updated_by, doc.get("created_by"), doc.get("assigned_to")
@@ -186,6 +200,14 @@ class TaskService:
             if updates["status"] == TaskStatus.COMPLETED.value:
                 updates["completed_at"] = datetime.now(timezone.utc)
 
+        # BSON fix: Motor/PyMongo cannot serialize datetime.date — convert to datetime
+        if "due_date" in updates:
+            d = updates["due_date"]
+            if d is None:
+                pass  # leave as None; $set to None clears the field
+            elif isinstance(d, date) and not isinstance(d, datetime):
+                updates["due_date"] = datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+
         if "assigned_to" in updates and updates["assigned_to"]:
             assignee = await db["users"].find_one({"_id": updates["assigned_to"]})
             updates["assigned_to_name"] = assignee.get("full_name") if assignee else None
@@ -195,13 +217,27 @@ class TaskService:
 
         # Re-fetch and return updated doc (internal fetch, no permission re-check needed)
         updated_doc = await TaskService._get_task_doc(db, task_id)
+
+        if company_id:
+            try:
+                from app.core.crm_events import emit_company_event
+                import asyncio
+                asyncio.ensure_future(emit_company_event(
+                    company_id, "task.updated",
+                    {"id": task_id, "status": updated_doc.get("status"), "assigned_to": updated_doc.get("assigned_to")},
+                ))
+            except Exception:
+                pass
+
         return TaskService._to_response(updated_doc)
 
     @staticmethod
     async def delete_task(
         db: AsyncIOMotorDatabase,
         task_id: str,
-        requesting_user_id: str
+        requesting_user_id: str,
+        *,
+        company_id: str = "",
     ) -> bool:
         """
         Soft-delete a task.
@@ -227,6 +263,17 @@ class TaskService:
             raise HTTPException(status_code=404, detail="Task not found")
 
         logger.info("Task deleted | task=%s | by=%s", task_id, requesting_user_id)
+
+        if company_id:
+            try:
+                from app.core.crm_events import emit_company_event
+                import asyncio
+                asyncio.ensure_future(emit_company_event(
+                    company_id, "task.deleted", {"id": task_id},
+                ))
+            except Exception:
+                pass
+
         return True
 
     # ── Response builder ──────────────────────────────────────────────────────

@@ -356,6 +356,11 @@ class CompanySettings(BaseModel):
     working_hours_end: str = Field(default="18:00")
     timezone: str = Field(default="Asia/Kolkata")
 
+    # ===== Localization =====
+    date_format: str = Field(default="DD-MM-YYYY")
+    time_format: str = Field(default="12h")
+    language: str = Field(default="en")
+
     # ===== Integration Settings =====
     email_provider: Optional[str] = None
     sms_provider: Optional[str] = None
@@ -381,6 +386,11 @@ class CompanySettingsUpdate(BaseModel):
     zip_code: Optional[str] = None
     primary_color: Optional[str] = None
     timezone: Optional[str] = None
+
+    # Localization
+    date_format: Optional[str] = None
+    time_format: Optional[str] = None
+    language: Optional[str] = None
 
     # Admin Contact
     admin_name: Optional[str] = None

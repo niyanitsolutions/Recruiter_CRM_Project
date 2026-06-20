@@ -305,3 +305,63 @@ async def test_smtp_config(
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     return {"success": True, "message": msg}
+
+
+# ── Localization Settings ─────────────────────────────────────────────────────
+
+_VALID_DATE_FORMATS = {"DD-MM-YYYY", "MM-DD-YYYY", "YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD"}
+_VALID_TIME_FORMATS = {"12h", "24h"}
+_VALID_LANGUAGES = {"en", "hi", "ta", "te", "kn", "ml", "mr", "gu", "bn"}
+
+
+class LocalizationUpdateRequest(BaseModel):
+    date_format: Optional[str] = None
+    time_format: Optional[str] = None
+    timezone: Optional[str] = None
+    language: Optional[str] = None
+
+
+@router.get("/localization")
+async def get_localization(
+    current_user: dict = Depends(require_permissions(["crm_settings:view"])),
+    db=Depends(get_company_db),
+):
+    """Return tenant localization settings (date/time format, timezone, language)."""
+    settings = await SettingsService.get_company_settings(db)
+    return {
+        "success": True,
+        "data": {
+            "date_format": settings.date_format,
+            "time_format": settings.time_format,
+            "timezone": settings.timezone,
+            "language": settings.language,
+        },
+    }
+
+
+@router.put("/localization")
+async def update_localization(
+    data: LocalizationUpdateRequest,
+    current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
+    db=Depends(get_company_db),
+):
+    """Update tenant localization settings. All fields are optional."""
+    if data.date_format and data.date_format not in _VALID_DATE_FORMATS:
+        raise HTTPException(status_code=400, detail=f"Invalid date_format. Allowed: {sorted(_VALID_DATE_FORMATS)}")
+    if data.time_format and data.time_format not in _VALID_TIME_FORMATS:
+        raise HTTPException(status_code=400, detail="time_format must be '12h' or '24h'")
+    if data.language and data.language not in _VALID_LANGUAGES:
+        raise HTTPException(status_code=400, detail=f"Unsupported language code. Allowed: {sorted(_VALID_LANGUAGES)}")
+
+    update = CompanySettingsUpdate(**data.model_dump(exclude_none=True))
+    updated = await SettingsService.update_company_settings(db, update, current_user["id"])
+    return {
+        "success": True,
+        "message": "Localization settings updated",
+        "data": {
+            "date_format": updated.date_format,
+            "time_format": updated.time_format,
+            "timezone": updated.timezone,
+            "language": updated.language,
+        },
+    }

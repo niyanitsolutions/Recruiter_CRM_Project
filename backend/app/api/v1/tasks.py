@@ -80,7 +80,12 @@ async def update_task(
     Update a task.
     Access: task creator or assigned user only.
     """
-    task = await TaskService.update_task(db, task_id, data, current_user["id"])
+    _is_admin = current_user.get("is_owner", False) or current_user.get("role") == "admin"
+    task = await TaskService.update_task(
+        db, task_id, data, current_user["id"],
+        is_admin=_is_admin,
+        company_id=current_user.get("company_id", ""),
+    )
     return {"success": True, "data": task}
 
 
@@ -94,7 +99,7 @@ async def delete_task(
     Delete a task (soft delete).
     Access: task CREATOR only. Assigned users cannot delete.
     """
-    await TaskService.delete_task(db, task_id, current_user["id"])
+    await TaskService.delete_task(db, task_id, current_user["id"], company_id=current_user.get("company_id", ""))
     return {"success": True, "message": "Task deleted"}
 
 

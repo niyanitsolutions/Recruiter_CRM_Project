@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSelector } from 'react-redux'
+import { useSelector, useDispatch } from 'react-redux'
 import {
-  Building2, User, CreditCard, Shield,
+  Building2, User, CreditCard, Shield, Globe,
   Save, Loader2, Plus, Trash2, MapPin, AlertCircle, RefreshCw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../services/api'
 import { selectUser } from '../../store/authSlice'
+import { fetchLocalization, saveLocalization as saveLocalizationThunk, selectLocalization } from '../../store/localizationSlice'
 import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 
 // ── Timezone list (abbreviated) ────────────────────────────────────────────
@@ -100,10 +101,32 @@ const Toggle = ({ checked, onChange, label, description }) => (
 // ── TAB DEFINITIONS ────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'profile',      label: 'Company Profile', icon: Building2 },
-  { id: 'contact',      label: 'Admin Contact',   icon: User },
-  { id: 'subscription', label: 'Subscription',    icon: CreditCard },
-  { id: 'security',     label: 'Security',        icon: Shield },
+  { id: 'profile',       label: 'Company Profile', icon: Building2 },
+  { id: 'contact',       label: 'Admin Contact',   icon: User },
+  { id: 'subscription',  label: 'Subscription',    icon: CreditCard },
+  { id: 'security',      label: 'Security',        icon: Shield },
+  { id: 'localization',  label: 'Localization',    icon: Globe },
+]
+
+const DATE_FORMAT_OPTIONS = [
+  { value: 'DD-MM-YYYY', label: 'DD-MM-YYYY  (e.g. 20-06-2026)' },
+  { value: 'MM-DD-YYYY', label: 'MM-DD-YYYY  (e.g. 06-20-2026)' },
+  { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD  (e.g. 2026-06-20)' },
+  { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY  (e.g. 20/06/2026)' },
+  { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY  (e.g. 06/20/2026)' },
+  { value: 'YYYY/MM/DD', label: 'YYYY/MM/DD  (e.g. 2026/06/20)' },
+]
+
+const LANGUAGE_OPTIONS = [
+  { value: 'en', label: 'English' },
+  { value: 'hi', label: 'Hindi' },
+  { value: 'ta', label: 'Tamil' },
+  { value: 'te', label: 'Telugu' },
+  { value: 'kn', label: 'Kannada' },
+  { value: 'ml', label: 'Malayalam' },
+  { value: 'mr', label: 'Marathi' },
+  { value: 'gu', label: 'Gujarati' },
+  { value: 'bn', label: 'Bengali' },
 ]
 
 // ── DEFAULT EMPTY STATES ───────────────────────────────────────────────────
@@ -114,12 +137,15 @@ const DEFAULT_PROFILE = {
 }
 const DEFAULT_CONTACT = { admin_name: '', admin_email: '', admin_phone: '', support_email: '' }
 const DEFAULT_GEO = { geo_fence_enabled: false, geo_fence_locations: [], user_geo_fence: [] }
+const DEFAULT_LOCALIZATION = { date_format: 'DD-MM-YYYY', time_format: '12h', timezone: 'Asia/Kolkata', language: 'en' }
 
 // ── MAIN COMPONENT ─────────────────────────────────────────────────────────
 
 const CompanySettings = () => {
   const navigate = useNavigate()
+  const dispatch = useDispatch()
   const user     = useSelector(selectUser)
+  const localizationFromStore = useSelector(selectLocalization)
 
   const [activeTab, setActiveTab] = useState('profile')
   const [loading, setLoading]     = useState(true)
@@ -129,6 +155,7 @@ const CompanySettings = () => {
   const [profile,  setProfile]  = useState(DEFAULT_PROFILE)
   const [contact,  setContact]  = useState(DEFAULT_CONTACT)
   const [geo,      setGeo]      = useState(DEFAULT_GEO)
+  const [locForm,  setLocForm]  = useState(DEFAULT_LOCALIZATION)
   const [subscription, setSubscription] = useState(null)
   const [subLoading,   setSubLoading]   = useState(false)
 
@@ -161,6 +188,17 @@ const CompanySettings = () => {
         geo_fence_locations: d.geo_fence_locations || [],
         user_geo_fence:      d.user_geo_fence      || [],
       })
+      // Load localization separately from its own endpoint for freshness
+      try {
+        const locRes = await api.get('/company-settings/localization')
+        const locData = locRes.data?.data || {}
+        setLocForm({
+          date_format: locData.date_format || DEFAULT_LOCALIZATION.date_format,
+          time_format: locData.time_format || DEFAULT_LOCALIZATION.time_format,
+          timezone:    locData.timezone    || DEFAULT_LOCALIZATION.timezone,
+          language:    locData.language    || DEFAULT_LOCALIZATION.language,
+        })
+      } catch { /* keep defaults */ }
     } catch {
       toast.error('Failed to load settings')
     } finally {
@@ -214,6 +252,18 @@ const CompanySettings = () => {
       toast.success('Security settings saved')
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to save security settings')
+    } finally { setSaving(false) }
+  }
+
+  const saveLocalizationSettings = async () => {
+    try {
+      setSaving(true)
+      const result = await dispatch(saveLocalizationThunk(locForm))
+      if (saveLocalizationThunk.fulfilled.match(result)) {
+        toast.success('Localization settings saved')
+      } else {
+        toast.error(result.payload || 'Failed to save localization settings')
+      }
     } finally { setSaving(false) }
   }
 
@@ -631,6 +681,63 @@ const CompanySettings = () => {
         </SectionCard>
       )}
 
+
+      {/* ── 5. LOCALIZATION ───────────────────────────────────────────────── */}
+      {activeTab === 'localization' && (
+        <SectionCard title="Localization Settings" icon={Globe}>
+          <div className="space-y-6">
+            <p className="text-sm text-surface-500">
+              Configure how dates, times, and text are displayed for all users in your organisation.
+              These settings are per-tenant and do not affect other companies.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <Field label="Date Format" hint={`Preview: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}`}>
+                <Select
+                  value={locForm.date_format}
+                  onChange={e => setLocForm(f => ({ ...f, date_format: e.target.value }))}
+                >
+                  {DATE_FORMAT_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </Select>
+              </Field>
+
+              <Field label="Time Format">
+                <Select
+                  value={locForm.time_format}
+                  onChange={e => setLocForm(f => ({ ...f, time_format: e.target.value }))}
+                >
+                  <option value="12h">12-hour (e.g. 3:30 PM)</option>
+                  <option value="24h">24-hour (e.g. 15:30)</option>
+                </Select>
+              </Field>
+
+              <Field label="Timezone" hint="Used for scheduling, reports, and attendance">
+                <Select
+                  value={locForm.timezone}
+                  onChange={e => setLocForm(f => ({ ...f, timezone: e.target.value }))}
+                >
+                  {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                </Select>
+              </Field>
+
+              <Field label="Language" hint="UI language (additional translations coming soon)">
+                <Select
+                  value={locForm.language}
+                  onChange={e => setLocForm(f => ({ ...f, language: e.target.value }))}
+                >
+                  {LANGUAGE_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+            <div className="flex justify-end pt-2">
+              <SaveBtn saving={saving} onClick={saveLocalizationSettings} label="Save Localization" />
+            </div>
+          </div>
+        </SectionCard>
+      )}
 
       <UpgradeSeatsModal
         isOpen={showUpgradeModal}
