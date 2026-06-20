@@ -4,6 +4,7 @@ import {
   Users, Wifi, Activity, Settings, Save, Loader2, LogOut,
   CalendarDays, FileText, Shield, SlidersHorizontal,
   Download, Search, ChevronLeft, ChevronRight, TrendingUp, RotateCcw, X,
+  Plus, Trash2, Edit2, Home, UserCheck,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -968,9 +969,539 @@ const TABS = [
   { key: 'holidays',     label: 'Holiday Management',  icon: CalendarDays,      perm: 'hrm:attendance:team' },
   { key: 'leave_policy', label: 'Leave Policies',      icon: FileText,          perm: 'hrm:attendance:team' },
   { key: 'shifts',       label: 'Shift Management',    icon: Clock,             perm: 'hrm:attendance:team' },
+  { key: 'work_mode',    label: 'Work Mode Requests',  icon: Home,              perm: 'hrm:attendance:team' },
+  { key: 'exceptions',   label: 'Exceptions',          icon: UserCheck,         perm: 'hrm:attendance:manage' },
   { key: 'geo_fence',    label: 'Geo Fence',           icon: Shield,            perm: 'hrm:attendance:manage' },
   { key: 'settings',     label: 'Attendance Rules',    icon: SlidersHorizontal, perm: 'hrm:attendance:manage' },
 ]
+
+// ── Work Mode Requests Tab (HR view) ──────────────────────────────────────────
+
+const WMR_MODE_LABEL = { wfh: 'Work From Home', hybrid: 'Hybrid', field: 'Field Work' }
+const WMR_STATUS_COLOR = {
+  pending:   { bg: 'rgba(251,191,36,0.15)',  color: '#F59E0B' },
+  approved:  { bg: 'rgba(52,211,153,0.15)',  color: '#10B981' },
+  rejected:  { bg: 'rgba(248,113,113,0.15)', color: '#EF4444' },
+  cancelled: { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' },
+  expired:   { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' },
+}
+
+function WorkModeTab() {
+  const [list, setList] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('pending')
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pages, setPages] = useState(1)
+  const [actionId, setActionId] = useState(null)
+  const [rejectModal, setRejectModal] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+
+  const load = useCallback(async (pg = 1) => {
+    setLoading(true)
+    try {
+      const r = await hrmService.listWorkModeRequests({ status: statusFilter || undefined, page: pg, page_size: 20 })
+      const d = r.data
+      setList(d.items || [])
+      setTotal(d.total || 0)
+      setPages(d.pages || 1)
+      setPage(pg)
+    } catch { toast.error('Failed to load work mode requests') }
+    setLoading(false)
+  }, [statusFilter])
+
+  useEffect(() => { load(1) }, [load])
+
+  const handleApprove = async (id) => {
+    setActionId(id)
+    try {
+      await hrmService.approveWorkModeRequest(id)
+      toast.success('Request approved')
+      load(page)
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to approve')
+    }
+    setActionId(null)
+  }
+
+  const handleReject = async () => {
+    if (!rejectModal) return
+    setActionId(rejectModal)
+    try {
+      await hrmService.rejectWorkModeRequest(rejectModal, { reason: rejectReason })
+      toast.success('Request rejected')
+      setRejectModal(null); setRejectReason('')
+      load(page)
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to reject')
+    }
+    setActionId(null)
+  }
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <h2 className="text-lg font-semibold flex-1" style={{ color: 'var(--text-heading)' }}>Work Mode Requests</h2>
+        {['', 'pending', 'approved', 'rejected', 'cancelled', 'expired'].map(s => (
+          <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{
+              background: statusFilter === s ? 'var(--accent)' : 'var(--bg-card)',
+              color: statusFilter === s ? '#fff' : 'var(--text-muted)',
+              border: `1px solid ${statusFilter === s ? 'var(--accent)' : 'var(--border-card)'}`,
+            }}>
+            {s === '' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="py-12 flex justify-center" style={{ color: 'var(--text-muted)' }}>
+          <Loader2 className="w-6 h-6 animate-spin" />
+        </div>
+      ) : list.length === 0 ? (
+        <div className="py-12 flex flex-col items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+          <Home className="w-10 h-10 opacity-30" />
+          <p className="text-sm">No work mode requests{statusFilter ? ` with status "${statusFilter}"` : ''}</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border overflow-hidden"
+             style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-alt)' }}>
+                {['Employee','Mode','Period','Reason','Status','Actions'].map(h => (
+                  <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
+                      style={{ color: 'var(--text-disabled)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((req, i) => {
+                const sc = WMR_STATUS_COLOR[req.status] || { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' }
+                return (
+                  <tr key={req.id}
+                      style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-row-alt)', borderBottom: '1px solid var(--border-subtle)' }}>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <div className="text-sm font-medium" style={{ color: 'var(--text-heading)' }}>
+                        {req.employee_name || req.employee_id}
+                      </div>
+                      {req.employee_code && (
+                        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{req.employee_code}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-sm" style={{ color: 'var(--text-body)' }}>
+                      {WMR_MODE_LABEL[req.work_mode] || req.work_mode}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {req.from_date} – {req.to_date}
+                    </td>
+                    <td className="px-3 py-2 text-xs max-w-48 truncate" style={{ color: 'var(--text-muted)' }}
+                        title={req.reason}>{req.reason}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium capitalize"
+                            style={{ background: sc.bg, color: sc.color }}>{req.status}</span>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {req.status === 'pending' && (
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => handleApprove(req.id)}
+                            disabled={actionId === req.id}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium"
+                            style={{ background: 'var(--bg-success)', color: 'var(--text-success)',
+                              opacity: actionId === req.id ? 0.5 : 1 }}>
+                            {actionId === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
+                            Approve
+                          </button>
+                          <button onClick={() => { setRejectModal(req.id); setRejectReason('') }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium"
+                            style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
+                            <XCircle className="w-3 h-3" /> Reject
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+
+          {pages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2 border-t"
+                 style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                Page {page} of {pages} · {total} requests
+              </span>
+              <div className="flex gap-1">
+                <button onClick={() => load(page - 1)} disabled={page <= 1}
+                  className="p-1.5 rounded" style={{ opacity: page <= 1 ? 0.4 : 1 }}>
+                  <ChevronLeft className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                </button>
+                <button onClick={() => load(page + 1)} disabled={page >= pages}
+                  className="p-1.5 rounded" style={{ opacity: page >= pages ? 0.4 : 1 }}>
+                  <ChevronRight className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+             style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => setRejectModal(null)}>
+          <div className="rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4"
+               style={{ background: 'var(--bg-modal)', border: '1px solid var(--border-card)' }}
+               onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-semibold" style={{ color: 'var(--text-heading)' }}>Reject Request</h3>
+            <label className="block space-y-1">
+              <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Reason (optional)</span>
+              <textarea className="input w-full text-sm" rows={3} value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                placeholder="Explain why you are rejecting this request…" />
+            </label>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setRejectModal(null)}
+                className="flex-1 py-2 rounded-xl text-sm border"
+                style={{ color: 'var(--text-muted)', borderColor: 'var(--border)' }}>
+                Cancel
+              </button>
+              <button onClick={handleReject} disabled={actionId === rejectModal}
+                className="flex-1 py-2 rounded-xl text-sm font-medium text-white disabled:opacity-60"
+                style={{ background: 'var(--color-danger, #EF4444)' }}>
+                {actionId === rejectModal ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Attendance Exceptions Tab (HR/Owner) ──────────────────────────────────────
+
+function ExceptionsTab() {
+  const [list, setList]         = useState([])
+  const [loading, setLoading]   = useState(false)
+  const [employees, setEmployees] = useState([])
+  const [showModal, setShowModal] = useState(false)
+  const [editItem, setEditItem] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
+  const [page, setPage]         = useState(1)
+  const [pages, setPages]       = useState(1)
+  const [total, setTotal]       = useState(0)
+
+  const loadList = useCallback(async (pg = 1) => {
+    setLoading(true)
+    try {
+      const r = await hrmService.listAttendanceExceptions({ page: pg, page_size: 20 })
+      const d = r.data
+      setList(d.items || [])
+      setTotal(d.total || 0)
+      setPages(d.pages || 1)
+      setPage(pg)
+    } catch { toast.error('Failed to load exceptions') }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { loadList(1) }, [loadList])
+
+  useEffect(() => {
+    hrmService.listEmployees({ page_size: 200 })
+      .then(r => setEmployees(r.data?.items || []))
+      .catch(() => {})
+  }, [])
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this exception?')) return
+    setDeletingId(id)
+    try {
+      await hrmService.deleteAttendanceException(id)
+      toast.success('Exception deleted')
+      loadList(page)
+    } catch { toast.error('Failed to delete') }
+    setDeletingId(null)
+  }
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--text-heading)' }}>Attendance Exceptions</h2>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            Grant temporary access windows — bypass geo fence or IP restriction for specific employees
+          </p>
+        </div>
+        <button onClick={() => { setEditItem(null); setShowModal(true) }}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-white"
+          style={{ background: 'var(--accent)' }}>
+          <Plus className="w-4 h-4" /> New Exception
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="py-12 flex justify-center" style={{ color: 'var(--text-muted)' }}>
+          <Loader2 className="w-6 h-6 animate-spin" />
+        </div>
+      ) : list.length === 0 ? (
+        <div className="py-12 flex flex-col items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+          <UserCheck className="w-10 h-10 opacity-30" />
+          <p className="text-sm">No attendance exceptions configured</p>
+          <p className="text-xs opacity-60">Click "New Exception" to grant a temporary access window</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border overflow-hidden"
+             style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-alt)' }}>
+                  {['Employee','Reason','From','To','Allow Login','Bypass Geo','Bypass IP','Actions'].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
+                        style={{ color: 'var(--text-disabled)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((ex, i) => {
+                  const now = new Date()
+                  const from = new Date(ex.from_datetime)
+                  const to   = new Date(ex.to_datetime)
+                  const isActive = now >= from && now <= to
+                  const isExpired = now > to
+                  return (
+                    <tr key={ex.id}
+                        style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-row-alt)', borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="text-sm font-medium" style={{ color: 'var(--text-heading)' }}>
+                          {ex.employee_name || ex.employee_id}
+                        </div>
+                        {isActive && (
+                          <span className="text-xs font-medium" style={{ color: 'var(--text-success)' }}>● Active</span>
+                        )}
+                        {isExpired && (
+                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Expired</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-xs max-w-48 truncate" style={{ color: 'var(--text-muted)' }}
+                          title={ex.reason}>{ex.reason}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>
+                        {new Date(ex.from_datetime).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>
+                        {new Date(ex.to_datetime).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {ex.allow_login
+                          ? <CheckCircle className="w-4 h-4 mx-auto" style={{ color: 'var(--text-success)' }} />
+                          : <XCircle className="w-4 h-4 mx-auto" style={{ color: 'var(--text-danger)' }} />}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {ex.bypass_geo_fence
+                          ? <CheckCircle className="w-4 h-4 mx-auto" style={{ color: 'var(--text-success)' }} />
+                          : <XCircle className="w-4 h-4 mx-auto" style={{ color: 'var(--text-muted)' }} />}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        {ex.bypass_ip_restriction
+                          ? <CheckCircle className="w-4 h-4 mx-auto" style={{ color: 'var(--text-success)' }} />
+                          : <XCircle className="w-4 h-4 mx-auto" style={{ color: 'var(--text-muted)' }} />}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => { setEditItem(ex); setShowModal(true) }}
+                            className="p-1.5 rounded-lg transition-colors"
+                            style={{ background: 'var(--bg-info)', color: 'var(--text-info)' }}
+                            title="Edit">
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(ex.id)} disabled={deletingId === ex.id}
+                            className="p-1.5 rounded-lg transition-colors"
+                            style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)',
+                              opacity: deletingId === ex.id ? 0.5 : 1 }}
+                            title="Delete">
+                            {deletingId === ex.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Trash2 className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {pages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2 border-t"
+                 style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                Page {page} of {pages} · {total} records
+              </span>
+              <div className="flex gap-1">
+                <button onClick={() => loadList(page - 1)} disabled={page <= 1}
+                  className="p-1.5 rounded" style={{ opacity: page <= 1 ? 0.4 : 1 }}>
+                  <ChevronLeft className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                </button>
+                <button onClick={() => loadList(page + 1)} disabled={page >= pages}
+                  className="p-1.5 rounded" style={{ opacity: page >= pages ? 0.4 : 1 }}>
+                  <ChevronRight className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showModal && (
+        <ExceptionModal
+          item={editItem}
+          employees={employees}
+          onClose={() => { setShowModal(false); setEditItem(null) }}
+          onSuccess={() => { loadList(page); setShowModal(false); setEditItem(null) }}
+        />
+      )}
+    </div>
+  )
+}
+
+function ExceptionModal({ item, employees, onClose, onSuccess }) {
+  const isEdit = !!item
+  const [form, setForm] = useState({
+    employee_id:          item?.employee_id          ?? '',
+    reason:               item?.reason               ?? '',
+    from_datetime:        item?.from_datetime        ? item.from_datetime.slice(0, 16) : '',
+    to_datetime:          item?.to_datetime          ? item.to_datetime.slice(0, 16) : '',
+    allow_login:          item?.allow_login          ?? true,
+    bypass_geo_fence:     item?.bypass_geo_fence     ?? false,
+    bypass_ip_restriction: item?.bypass_ip_restriction ?? false,
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
+
+  const handleSubmit = async () => {
+    if (!form.employee_id) { setErr('Please select an employee'); return }
+    if (!form.reason.trim()) { setErr('Reason is required'); return }
+    if (!form.from_datetime || !form.to_datetime) { setErr('Both dates are required'); return }
+    if (new Date(form.to_datetime) <= new Date(form.from_datetime)) {
+      setErr('End time must be after start time'); return
+    }
+    setErr(''); setSaving(true)
+    try {
+      const payload = {
+        ...form,
+        from_datetime: new Date(form.from_datetime).toISOString(),
+        to_datetime:   new Date(form.to_datetime).toISOString(),
+      }
+      if (isEdit) {
+        await hrmService.updateAttendanceException(item.id, payload)
+        toast.success('Exception updated')
+      } else {
+        await hrmService.createAttendanceException(payload)
+        toast.success('Exception created')
+      }
+      onSuccess()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'Failed to save exception')
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+         style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+      <div className="rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4"
+           style={{ background: 'var(--bg-modal)', border: '1px solid var(--border-card)' }}
+           onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold" style={{ color: 'var(--text-heading)' }}>
+            {isEdit ? 'Edit Exception' : 'New Attendance Exception'}
+          </h3>
+          <button onClick={onClose} className="p-1 rounded" style={{ color: 'var(--text-muted)' }}>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {err && (
+          <div className="px-3 py-2 rounded-lg text-sm"
+               style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>{err}</div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <label className="col-span-2 space-y-1">
+            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Employee *</span>
+            <select className="input w-full text-sm" value={form.employee_id}
+              onChange={e => set('employee_id', e.target.value)} disabled={isEdit}>
+              <option value="">Select employee…</option>
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.full_name} {emp.employee_code ? `(${emp.employee_code})` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="col-span-2 space-y-1">
+            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Reason *</span>
+            <input type="text" className="input w-full text-sm" value={form.reason}
+              onChange={e => set('reason', e.target.value)}
+              placeholder="e.g. Client visit, power outage, travelling…" />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>From *</span>
+            <input type="datetime-local" className="input w-full text-sm" value={form.from_datetime}
+              onChange={e => set('from_datetime', e.target.value)} />
+          </label>
+
+          <label className="space-y-1">
+            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>To *</span>
+            <input type="datetime-local" className="input w-full text-sm" value={form.to_datetime}
+              onChange={e => set('to_datetime', e.target.value)} />
+          </label>
+
+          <label className="col-span-2 flex items-center gap-3 cursor-pointer pt-1">
+            <input type="checkbox" className="w-4 h-4 rounded" checked={form.allow_login}
+              onChange={e => set('allow_login', e.target.checked)} />
+            <span className="text-sm" style={{ color: 'var(--text-body)' }}>
+              Allow login during this window
+            </span>
+          </label>
+
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" className="w-4 h-4 rounded" checked={form.bypass_geo_fence}
+              onChange={e => set('bypass_geo_fence', e.target.checked)} />
+            <span className="text-sm" style={{ color: 'var(--text-body)' }}>Bypass Geo Fence</span>
+          </label>
+
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" className="w-4 h-4 rounded" checked={form.bypass_ip_restriction}
+              onChange={e => set('bypass_ip_restriction', e.target.checked)} />
+            <span className="text-sm" style={{ color: 'var(--text-body)' }}>Bypass IP Restriction</span>
+          </label>
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          <button onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm border"
+            style={{ color: 'var(--text-muted)', borderColor: 'var(--border)' }}>
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={saving}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
+            style={{ background: 'var(--accent)' }}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : isEdit ? 'Update' : 'Create'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function GeoFenceTab() {
   const [cfg, setCfg] = useState(null)
@@ -1119,6 +1650,8 @@ export default function Attendance() {
         {activeTab === 'holidays'     && <HolidayManagement />}
         {activeTab === 'leave_policy' && <LeavePolicyManagement />}
         {activeTab === 'shifts'       && <ShiftManagement />}
+        {activeTab === 'work_mode'    && <WorkModeTab />}
+        {activeTab === 'exceptions'   && <ExceptionsTab />}
         {activeTab === 'geo_fence'    && <GeoFenceTab />}
         {activeTab === 'settings'     && <SettingsTab />}
       </div>

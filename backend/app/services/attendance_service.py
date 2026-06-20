@@ -150,6 +150,33 @@ class AttendanceService:
         net = gross - (total_break_minutes / 60)
         return round(max(0.0, net), 2)
 
+    # ── Work Mode / Exception helpers ──────────────────────────────────────────
+
+    async def _get_active_work_mode_request(
+        self, employee_id: str, company_id: str, today_str: str
+    ) -> Optional[dict]:
+        """Return the approved WMR active for today, or None."""
+        return await self.db["hrm_work_mode_requests"].find_one({
+            "company_id": company_id,
+            "employee_id": employee_id,
+            "status": "approved",
+            "from_date": {"$lte": today_str},
+            "to_date": {"$gte": today_str},
+        })
+
+    async def _get_active_exception(
+        self, employee_id: str, company_id: str, at_time: datetime
+    ) -> Optional[dict]:
+        """Return the active attendance exception at at_time (naive UTC), or None."""
+        return await self.db["hrm_attendance_exceptions"].find_one({
+            "company_id": company_id,
+            "employee_id": employee_id,
+            "is_deleted": False,
+            "allow_login": True,
+            "from_datetime": {"$lte": at_time},
+            "to_datetime": {"$gte": at_time},
+        })
+
     # ── Check In ──────────────────────────────────────────────────────────────
 
     async def check_in(
@@ -164,9 +191,11 @@ class AttendanceService:
         longitude: Optional[float] = None,
         geo_city: Optional[str] = None,
         geo_country: Optional[str] = None,
+        is_self: bool = True,
     ) -> dict:
         today = _today_dt()  # naive datetime at midnight — PyMongo 4.x requires datetime, not date
         now = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC — Motor returns naive datetimes
+        today_str = date.today().isoformat()
 
         existing = await self.col.find_one({"employee_id": employee_id, "date": today, "company_id": company_id})
         if existing and existing.get("check_in"):
@@ -175,32 +204,86 @@ class AttendanceService:
 
         settings = await self._get_settings()
 
-        # ── IP restriction: only enforced for office mode ────────────────────
-        if work_mode == "office" and settings["ip_restriction"] and settings["approved_ips"]:
-            if not self._is_ip_allowed(client_ip or "", settings["approved_ips"]):
-                raise ValueError(
-                    f"Check-in blocked: your IP ({client_ip}) is not in the list of approved office IPs."
-                )
+        # ── For self check-in: auto-determine work mode ───────────────────────
+        # For admin check-in (is_self=False): use provided work_mode as-is with
+        # the legacy geo/IP checks to preserve existing admin behaviour.
+        if is_self:
+            active_exc = await self._get_active_exception(employee_id, company_id, now)
+            bypass_geo = bool(active_exc and active_exc.get("bypass_geo_fence"))
+            bypass_ip  = bool(active_exc and active_exc.get("bypass_ip_restriction"))
 
-        # ── Geo-fence enforcement: office mode only ───────────────────────────
-        if (work_mode == "office"
-                and settings["geo_fence_enabled"]
-                and settings["geo_fence_lat"] is not None
-                and settings["geo_fence_lon"] is not None):
-            if latitude is None or longitude is None:
-                raise ValueError(
-                    "Location required for office check-in. Please enable location access."
-                )
-            distance = self._haversine_meters(
-                latitude, longitude,
-                settings["geo_fence_lat"], settings["geo_fence_lon"],
-            )
-            radius = settings["geo_fence_radius"]
-            if distance > radius:
-                raise ValueError(
-                    f"Check-in blocked: you are {int(distance)}m from office "
-                    f"(allowed radius: {radius}m). Please be in the office to check in."
-                )
+            active_wmr = await self._get_active_work_mode_request(employee_id, company_id, today_str)
+            approved_mode = active_wmr.get("work_mode") if active_wmr else None  # "wfh"|"hybrid"|"field"
+
+            if settings["geo_fence_enabled"] and not bypass_geo:
+                if (settings["geo_fence_lat"] is not None
+                        and settings["geo_fence_lon"] is not None
+                        and latitude is not None
+                        and longitude is not None):
+                    distance = self._haversine_meters(
+                        latitude, longitude,
+                        settings["geo_fence_lat"], settings["geo_fence_lon"],
+                    )
+                    if distance <= settings["geo_fence_radius"]:
+                        work_mode = "office"
+                    else:
+                        if approved_mode:
+                            work_mode = approved_mode
+                        elif active_exc:
+                            work_mode = "office"  # exception allows login from outside
+                        else:
+                            raise ValueError(
+                                "Your organization requires office location login. "
+                                "Please contact HR if you require remote access approval."
+                            )
+                else:
+                    # Geo fence enabled but no coordinates available
+                    if approved_mode:
+                        work_mode = approved_mode
+                    elif active_exc:
+                        work_mode = "office"
+                    else:
+                        raise ValueError(
+                            "Your organization uses geo-fenced attendance. "
+                            "Please enable location access or contact HR for remote access approval."
+                        )
+            else:
+                # Geo fence off or bypassed by exception
+                if approved_mode:
+                    work_mode = approved_mode
+                # else keep "office" default
+
+            # ── IP restriction for self check-in ──────────────────────────────
+            if settings["ip_restriction"] and settings["approved_ips"] and not bypass_ip:
+                if work_mode == "office":
+                    if not self._is_ip_allowed(client_ip or "", settings["approved_ips"]):
+                        raise ValueError(
+                            f"Check-in blocked: your IP ({client_ip}) is not in the list of approved office IPs."
+                        )
+
+        else:
+            # ── Legacy checks for admin/HR check-in ───────────────────────────
+            if work_mode == "office" and settings["ip_restriction"] and settings["approved_ips"]:
+                if not self._is_ip_allowed(client_ip or "", settings["approved_ips"]):
+                    raise ValueError(
+                        f"Check-in blocked: your IP ({client_ip}) is not in the list of approved office IPs."
+                    )
+
+            if (work_mode == "office"
+                    and settings["geo_fence_enabled"]
+                    and settings["geo_fence_lat"] is not None
+                    and settings["geo_fence_lon"] is not None):
+                if latitude is not None and longitude is not None:
+                    distance = self._haversine_meters(
+                        latitude, longitude,
+                        settings["geo_fence_lat"], settings["geo_fence_lon"],
+                    )
+                    radius = settings["geo_fence_radius"]
+                    if distance > radius:
+                        raise ValueError(
+                            f"Check-in blocked: you are {int(distance)}m from office "
+                            f"(allowed radius: {radius}m). Please be in the office to check in."
+                        )
 
         emp = await self._get_employee(employee_id, company_id)
         dept = emp.get("department") if emp else None
@@ -643,10 +726,13 @@ class AttendanceService:
           2. Is today a weekend?
           3. Does the employee have approved leave covering today?
           4. Does the employee already have an attendance record today?
+          5. Is there an active work mode approval for today?
+          6. Is geo-fence enabled? (include settings for frontend location check)
         """
         today_date = date.today()
         today_str = today_date.isoformat()
         today_dt = _today_dt()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         is_weekend = today_date.weekday() >= 5  # Saturday=5, Sunday=6
 
@@ -681,12 +767,46 @@ class AttendanceService:
                     "duration": leave_doc.get("duration", "full_day"),
                 }
 
+        # Active work mode request for today
+        active_wmr_doc = await self._get_active_work_mode_request(employee_id, company_id, today_str)
+        active_work_mode = None
+        if active_wmr_doc:
+            active_work_mode = {
+                "id": str(active_wmr_doc.get("_id", "")),
+                "work_mode": active_wmr_doc.get("work_mode"),
+                "from_date": active_wmr_doc.get("from_date"),
+                "to_date": active_wmr_doc.get("to_date"),
+                "status": active_wmr_doc.get("status"),
+            }
+
+        # Active exception
+        active_exc = await self._get_active_exception(employee_id, company_id, now)
+        active_exception = None
+        if active_exc:
+            active_exception = {
+                "id": str(active_exc.get("_id", "")),
+                "bypass_geo_fence": active_exc.get("bypass_geo_fence", False),
+                "bypass_ip_restriction": active_exc.get("bypass_ip_restriction", False),
+                "to_datetime": active_exc.get("to_datetime").strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+                    if isinstance(active_exc.get("to_datetime"), datetime) else None,
+            }
+
+        # Geo fence / IP settings (for frontend location check)
+        settings = await self._get_settings()
+
         return {
             "is_weekend": is_weekend,
             "is_holiday": bool(holiday_name),
             "holiday_name": holiday_name or None,
             "is_on_leave": bool(leave),
             "leave": leave,
+            "active_work_mode": active_work_mode,
+            "active_exception": active_exception,
+            "geo_fence_enabled": settings["geo_fence_enabled"],
+            "geo_fence_radius": settings["geo_fence_radius"],
+            "office_lat": settings["geo_fence_lat"],
+            "office_lon": settings["geo_fence_lon"],
+            "ip_restriction_enabled": settings["ip_restriction"],
         }
 
     # ── Leave-attendance backfill ─────────────────────────────────────────────

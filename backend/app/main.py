@@ -63,6 +63,7 @@ from app.api.v1 import (
     hrm_holidays, hrm_leave_policies, hrm_shifts,
     hrm_doc_upload_tokens,
     hrm_employee_onboarding,
+    hrm_work_mode, hrm_exceptions,
 )
 
 # ============== Document Center ==============
@@ -363,6 +364,8 @@ app.include_router(hrm_holidays.router,           prefix=API_V1_PREFIX, tags=["H
 app.include_router(hrm_leave_policies.router,    prefix=API_V1_PREFIX, tags=["HRM - Leave Policies"])
 app.include_router(hrm_shifts.router,            prefix=API_V1_PREFIX, tags=["HRM - Shifts"])
 app.include_router(hrm_doc_upload_tokens.router,          prefix=API_V1_PREFIX, tags=["HRM - Doc Upload Tokens"])
+app.include_router(hrm_work_mode.router,         prefix=API_V1_PREFIX, tags=["HRM - Work Mode Requests"])
+app.include_router(hrm_exceptions.router,        prefix=API_V1_PREFIX, tags=["HRM - Attendance Exceptions"])
 app.include_router(document_center.router,       prefix=API_V1_PREFIX, tags=["Document Center"])
 
 

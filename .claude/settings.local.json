@@ -146,7 +146,11 @@
       "Bash(cd /d/crm-project && grep -rn \"Something went wrong\" frontend/src/ --include=\"*.jsx\" --include=\"*.js\" | head -20)",
       "Read(//d/d/crm-project/frontend/**)",
       "Bash(cd /d/crm-project/backend && grep -n \"class.*Model\\\\|class.*Create\\\\|COL = \\\\|collection\\\\|is_paid\\\\|status.*approved\\\\|present_days\\\\|absent\\\\|lop\" app/models/company/attendance.py 2>/dev/null | head -40 && echo \"---LEAVE---\" && grep -n \"class.*Model\\\\|COL = \\\\|is_paid\\\\|paid_leave\\\\|status\\\\|leave_type\\\\|from_date\\\\|to_date\\\\|approved\\\\|duration\" app/models/company/leave.py 2>/dev/null | head -40 && echo \"---HOLIDAY---\" && grep -n \"class.*Model\\\\|COL = \\\\|date\\\\|is_active\\\\|department\" app/models/company/holiday.py 2>/dev/null | head -30)",
-      "Read(//d/d/crm-project/backend/app/models/company/**)"
+      "Read(//d/d/crm-project/backend/app/models/company/**)",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\" -Directory | ForEach-Object { \"$\\($_.Name\\)\"; Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue | ForEach-Object { \"  $\\($_.Name\\)\" } } | head -80)",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\" -Directory | ForEach-Object { \"$\\($_.Name\\)\"; Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue | ForEach-Object { \"  $\\($_.Name\\)\" } } | head -80)",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\" -Directory | ForEach-Object { \"$\\($_.Name\\)\"; Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue | ForEach-Object { \"  $\\($_.Name\\)\" } } | Select-Object -First 100)",
+      "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\" -Directory | ForEach-Object { \"$\\($_.Name\\)\"; Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue | ForEach-Object { \"  $\\($_.Name\\)\" } } | Select-Object -First 100)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

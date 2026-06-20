@@ -3,13 +3,14 @@
  * Employee ID is resolved dynamically via /me/today (server-side), NOT from JWT.
  * This ensures the portal works even when the JWT was issued before employee linking.
  */
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
 import {
   User, Clock, Calendar, Banknote, Plus, UserX, X,
   Loader2, FolderOpen, Package, FileText, Download, Eye,
-  ChevronLeft, ChevronRight, History,
+  ChevronLeft, ChevronRight, History, MapPin, Wifi, Home,
+  Briefcase, CheckCircle, XCircle, AlertCircle, LogIn, LogOut,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
@@ -182,7 +183,324 @@ function calcAttPreset(key) {
   }
 }
 
+// Haversine distance in metres (mirrors backend calculation for client-side preview)
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6_371_000
+  const toRad = x => (x * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+
+const WMR_MODE_LABEL = { wfh: 'Work From Home', hybrid: 'Hybrid', field: 'Field Work' }
+const WMR_STATUS_COLOR = {
+  pending:   { bg: 'rgba(245,158,11,0.15)',  color: '#F59E0B' },
+  approved:  { bg: 'rgba(67,233,123,0.15)',  color: '#43E97B' },
+  rejected:  { bg: 'rgba(255,71,87,0.15)',   color: '#FF4757' },
+  cancelled: { bg: 'rgba(139,143,168,0.15)', color: '#8B8FA8' },
+  expired:   { bg: 'rgba(139,143,168,0.15)', color: '#8B8FA8' },
+}
+
+// ── Work Mode Request Modal ────────────────────────────────────────────────────
+
+function WorkModeRequestModal({ onClose, onSuccess }) {
+  const today = fmtDate(new Date())
+  const [form, setForm] = useState({ work_mode: 'wfh', from_date: today, to_date: today, reason: '' })
+  const [saving, setSaving] = useState(false)
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.from_date) { toast.error('From date is required'); return }
+    if (!form.to_date)   { toast.error('To date is required'); return }
+    if (!form.reason.trim()) { toast.error('Reason is required'); return }
+    if (form.from_date > form.to_date) { toast.error('From date must be on or before To date'); return }
+    setSaving(true)
+    try {
+      await hrmService.submitWorkModeRequest(form)
+      toast.success('Work mode request submitted for approval')
+      onSuccess()
+      onClose()
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to submit request')
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)', borderRadius: 16,
+        padding: 28, width: '100%', maxWidth: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Home style={{ width: 20, height: 20, color: 'var(--accent)' }} />
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)', margin: 0 }}>Apply Work Mode</h3>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+            <X style={{ width: 18, height: 18 }} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              Work Mode *
+            </label>
+            <select value={form.work_mode} onChange={e => set('work_mode', e.target.value)} required
+              style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8,
+                padding: '9px 12px', fontSize: 14, color: 'var(--text-body)', outline: 'none' }}>
+              <option value="wfh">Work From Home (WFH)</option>
+              <option value="hybrid">Hybrid</option>
+              <option value="field">Field Work</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                From Date *
+              </label>
+              <input type="date" value={form.from_date} min={today}
+                onChange={e => set('from_date', e.target.value)} required
+                style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8,
+                  padding: '9px 12px', fontSize: 14, color: 'var(--text-body)', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                To Date *
+              </label>
+              <input type="date" value={form.to_date} min={form.from_date || today}
+                onChange={e => set('to_date', e.target.value)} required
+                style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8,
+                  padding: '9px 12px', fontSize: 14, color: 'var(--text-body)', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+              Reason *
+            </label>
+            <textarea value={form.reason} onChange={e => set('reason', e.target.value)}
+              placeholder="e.g. Working from home due to personal reasons"
+              rows={3} required
+              style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8,
+                padding: '10px 12px', fontSize: 14, color: 'var(--text-body)', resize: 'vertical',
+                outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
+            <button type="button" onClick={onClose}
+              style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent',
+                color: 'var(--text-muted)', fontSize: 14, cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: 'var(--accent)',
+                color: '#fff', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
+                opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {saving ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 0.8s linear infinite' }} /> : <Plus style={{ width: 14, height: 14 }} />}
+              {saving ? 'Submitting…' : 'Submit Request'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Punch-In Panel ─────────────────────────────────────────────────────────────
+
+function PunchInPanel({ todayCtx, onPunchIn, onPunchOut, activeSession, elapsed, punching }) {
+  const [locationStatus, setLocationStatus] = useState('unknown') // 'checking'|'in_office'|'approved'|'blocked'|'geo_off'|'unknown'
+  const [locationLabel, setLocationLabel]   = useState('')
+  const [userCoords, setUserCoords]         = useState(null)
+  const locationCheckedRef = useRef(false)
+
+  useEffect(() => {
+    if (locationCheckedRef.current) return
+    locationCheckedRef.current = true
+
+    const geoEnabled = todayCtx?.geo_fence_enabled
+    const activeWM   = todayCtx?.active_work_mode
+    const activeExc  = todayCtx?.active_exception
+
+    if (!geoEnabled) {
+      // Geo fence off — determine mode from WMR only
+      if (activeWM) {
+        const label = WMR_MODE_LABEL[activeWM.work_mode] || activeWM.work_mode
+        setLocationStatus('approved')
+        setLocationLabel(`${label} Approved`)
+      } else {
+        setLocationStatus('geo_off')
+        setLocationLabel('Office')
+      }
+      return
+    }
+
+    // Geo fence enabled — request browser location
+    if (!navigator.geolocation) {
+      if (activeWM) {
+        setLocationStatus('approved')
+        setLocationLabel(`${WMR_MODE_LABEL[activeWM.work_mode] || activeWM.work_mode} Approved`)
+      } else if (activeExc) {
+        setLocationStatus('approved')
+        setLocationLabel('Exception Active')
+      } else {
+        setLocationStatus('blocked')
+        setLocationLabel('Location unavailable — contact HR')
+      }
+      return
+    }
+
+    setLocationStatus('checking')
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords
+        setUserCoords({ latitude, longitude })
+        const officeLat = todayCtx?.office_lat
+        const officeLon = todayCtx?.office_lon
+        const radius    = todayCtx?.geo_fence_radius || 100
+
+        if (officeLat != null && officeLon != null) {
+          const dist = haversineMeters(latitude, longitude, officeLat, officeLon)
+          if (dist <= radius) {
+            setLocationStatus('in_office')
+            setLocationLabel('Office')
+            return
+          }
+        }
+
+        // Outside office
+        if (activeExc) {
+          setLocationStatus('approved')
+          setLocationLabel('Exception Active')
+        } else if (activeWM) {
+          const label = WMR_MODE_LABEL[activeWM.work_mode] || activeWM.work_mode
+          setLocationStatus('approved')
+          setLocationLabel(`${label} Approved`)
+        } else {
+          setLocationStatus('blocked')
+          setLocationLabel('Outside Office — Contact HR')
+        }
+      },
+      () => {
+        // Location denied
+        if (activeWM) {
+          setLocationStatus('approved')
+          setLocationLabel(`${WMR_MODE_LABEL[activeWM.work_mode] || activeWM.work_mode} Approved`)
+        } else if (activeExc) {
+          setLocationStatus('approved')
+          setLocationLabel('Exception Active')
+        } else if (todayCtx?.geo_fence_enabled) {
+          setLocationStatus('blocked')
+          setLocationLabel('Enable location or contact HR')
+        } else {
+          setLocationStatus('geo_off')
+          setLocationLabel('Office')
+        }
+      },
+      { timeout: 8000 }
+    )
+  }, [todayCtx])
+
+  const statusColor = {
+    checking:  { bg: 'rgba(79,172,254,0.12)', color: '#4FACFE', border: 'rgba(79,172,254,0.3)' },
+    in_office: { bg: 'rgba(67,233,123,0.12)', color: '#43E97B', border: 'rgba(67,233,123,0.3)' },
+    geo_off:   { bg: 'rgba(67,233,123,0.12)', color: '#43E97B', border: 'rgba(67,233,123,0.3)' },
+    approved:  { bg: 'rgba(99,102,241,0.12)', color: '#818CF8', border: 'rgba(99,102,241,0.3)' },
+    blocked:   { bg: 'rgba(255,71,87,0.12)',  color: '#FF4757', border: 'rgba(255,71,87,0.3)' },
+    unknown:   { bg: 'rgba(139,143,168,0.1)', color: '#8B8FA8', border: 'rgba(139,143,168,0.2)' },
+  }[locationStatus] || {}
+
+  const fmtSecs = s => {
+    const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const sec = s % 60
+    return h > 0 ? `${h}h ${String(m).padStart(2,'0')}m` : `${m}m ${String(sec).padStart(2,'0')}s`
+  }
+
+  const isCheckedIn    = !!activeSession?.check_in && !activeSession?.check_out
+  const isBlocked      = locationStatus === 'blocked'
+
+  return (
+    <div className="rounded-xl border p-4 space-y-3"
+         style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+
+      {/* Location status badge */}
+      <div className="flex items-center gap-3 px-3 py-2 rounded-lg"
+           style={{ background: statusColor.bg, border: `1px solid ${statusColor.border}` }}>
+        {locationStatus === 'checking'
+          ? <Loader2 style={{ width: 14, height: 14, color: statusColor.color }} className="animate-spin flex-shrink-0" />
+          : locationStatus === 'blocked'
+          ? <AlertCircle style={{ width: 14, height: 14, color: statusColor.color, flexShrink: 0 }} />
+          : locationStatus === 'approved'
+          ? <Home style={{ width: 14, height: 14, color: statusColor.color, flexShrink: 0 }} />
+          : <MapPin style={{ width: 14, height: 14, color: statusColor.color, flexShrink: 0 }} />
+        }
+        <div>
+          <p className="text-xs font-semibold" style={{ color: statusColor.color }}>
+            Location Status
+          </p>
+          <p className="text-sm font-medium" style={{ color: statusColor.color }}>
+            {locationStatus === 'checking' ? 'Detecting location…' : locationLabel || 'Unknown'}
+          </p>
+        </div>
+      </div>
+
+      {/* Active session banner */}
+      {isCheckedIn && elapsed > 0 && (
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+             style={{ background: 'rgba(67,233,123,0.08)', border: '1px solid rgba(67,233,123,0.2)' }}>
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
+          <span className="text-sm font-medium" style={{ color: '#43E97B' }}>
+            Active — {fmtSecs(elapsed)}
+          </span>
+          <span className="text-xs ml-auto" style={{ color: 'var(--text-muted)' }}>
+            In since {new Date(activeSession.check_in.endsWith('Z') ? activeSession.check_in : activeSession.check_in + 'Z')
+              .toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+      )}
+
+      {/* Blocked message */}
+      {isBlocked && !isCheckedIn && (
+        <div className="px-3 py-2 rounded-lg text-xs" style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
+          Your organization requires office location login. Please contact HR if you require remote access approval.
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <div className="flex gap-2">
+        {!isCheckedIn ? (
+          <button
+            onClick={() => onPunchIn(userCoords)}
+            disabled={punching || isBlocked || locationStatus === 'checking'}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white"
+            style={{ background: 'var(--accent)', opacity: (punching || isBlocked || locationStatus === 'checking') ? 0.5 : 1,
+              cursor: (punching || isBlocked || locationStatus === 'checking') ? 'not-allowed' : 'pointer' }}>
+            {punching ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
+            {punching ? 'Punching In…' : 'Punch In'}
+          </button>
+        ) : (
+          <button
+            onClick={onPunchOut}
+            disabled={punching}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold"
+            style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)',
+              opacity: punching ? 0.5 : 1, cursor: punching ? 'not-allowed' : 'pointer' }}>
+            {punching ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
+            {punching ? 'Punching Out…' : 'Punch Out'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function AttendanceTab() {
+  // ── History state ───────────────────────────────────────────────────────────
   const [preset, setPreset]         = useState('this_month')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd]   = useState('')
@@ -194,35 +512,57 @@ function AttendanceTab() {
   const [error, setError]           = useState('')
   const [exporting, setExporting]   = useState(false)
 
-  // Live timer for active session
+  // ── Today / punch state ─────────────────────────────────────────────────────
+  const [todayCtx, setTodayCtx]     = useState(null)
   const [activeSession, setActiveSession] = useState(null)
-  const [elapsed, setElapsed]             = useState(0)
+  const [elapsed, setElapsed]       = useState(0)
+  const [punching, setPunching]     = useState(false)
 
-  // Load today's active session
-  useEffect(() => {
-    hrmService.getMyTodayAttendance()
-      .then(r => {
-        const data = r.data
-        if (data?.check_in && !data?.check_out) {
-          setActiveSession(data)
-        }
-      })
-      .catch(() => {})
+  // ── Work Mode Request state ─────────────────────────────────────────────────
+  const [showWMRModal, setShowWMRModal] = useState(false)
+  const [wmrList, setWmrList]       = useState([])
+  const [wmrLoading, setWmrLoading] = useState(false)
+  const [cancellingId, setCancellingId] = useState(null)
+
+  // ── Load today context + session ────────────────────────────────────────────
+  const loadToday = useCallback(async () => {
+    try {
+      const r = await hrmService.getMyTodayAttendance()
+      const data = r.data
+      setTodayCtx(data)
+      if (data?.check_in && !data?.check_out) setActiveSession(data)
+      else setActiveSession(null)
+    } catch {}
   }, [])
 
-  // Tick every second when active session exists
+  useEffect(() => { loadToday() }, [loadToday])
+
+  // ── Tick timer ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!activeSession?.check_in) return
+    if (!activeSession?.check_in) { setElapsed(0); return }
     const tick = () => {
-      const checkedIn = new Date(activeSession.check_in.endsWith('Z') ? activeSession.check_in : activeSession.check_in + 'Z')
+      const ci = new Date(activeSession.check_in.endsWith('Z') ? activeSession.check_in : activeSession.check_in + 'Z')
       const breakSecs = (activeSession.total_break_minutes || 0) * 60
-      setElapsed(Math.floor((Date.now() - checkedIn.getTime()) / 1000) - breakSecs)
+      setElapsed(Math.floor((Date.now() - ci.getTime()) / 1000) - breakSecs)
     }
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
   }, [activeSession])
 
+  // ── Load WMR list ───────────────────────────────────────────────────────────
+  const loadWMR = useCallback(async () => {
+    setWmrLoading(true)
+    try {
+      const r = await hrmService.listMyWorkModeRequests({ page_size: 20 })
+      setWmrList(r.data?.items || [])
+    } catch {}
+    setWmrLoading(false)
+  }, [])
+
+  useEffect(() => { loadWMR() }, [loadWMR])
+
+  // ── History load ────────────────────────────────────────────────────────────
   const range = preset === 'custom'
     ? (customStart && customEnd ? { start: customStart, end: customEnd } : null)
     : (() => { const r = calcAttPreset(preset); return r ? { start: fmtDate(r.start), end: fmtDate(r.end) } : null })()
@@ -248,6 +588,52 @@ function AttendanceTab() {
 
   useEffect(() => { if (range) load(1) }, [load])
 
+  // ── Punch In / Out ──────────────────────────────────────────────────────────
+  const handlePunchIn = async (coords) => {
+    setPunching(true)
+    try {
+      await hrmService.checkIn({
+        latitude: coords?.latitude ?? null,
+        longitude: coords?.longitude ?? null,
+      })
+      toast.success('Punched in successfully')
+      await loadToday()
+      load(1)
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Punch in failed')
+    }
+    setPunching(false)
+  }
+
+  const handlePunchOut = async () => {
+    setPunching(true)
+    try {
+      await hrmService.checkOut({})
+      toast.success('Punched out successfully')
+      setActiveSession(null)
+      await loadToday()
+      load(1)
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Punch out failed')
+    }
+    setPunching(false)
+  }
+
+  // ── Cancel WMR ─────────────────────────────────────────────────────────────
+  const handleCancelWMR = async (id) => {
+    setCancellingId(id)
+    try {
+      await hrmService.cancelWorkModeRequest(id)
+      toast.success('Request cancelled')
+      await loadWMR()
+      await loadToday()
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to cancel request')
+    }
+    setCancellingId(null)
+  }
+
+  // ── Export ──────────────────────────────────────────────────────────────────
   const handleExport = async () => {
     if (!range) return
     setExporting(true)
@@ -261,183 +647,268 @@ function AttendanceTab() {
     setExporting(false)
   }
 
-  const fmtSecs = s => {
-    const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); const sec = s % 60
-    return h > 0 ? `${h}h ${String(m).padStart(2,'0')}m` : `${m}m ${String(sec).padStart(2,'0')}s`
-  }
-
   const summary = records.reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc }, {})
+  const isWeekendOrHoliday = todayCtx?.is_weekend || todayCtx?.is_holiday
+  const isOnLeave = todayCtx?.is_on_leave
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-6 space-y-5">
 
-      {/* Live session banner */}
-      {activeSession && elapsed > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl"
-             style={{ background: 'rgba(67,233,123,0.12)', border: '1px solid rgba(67,233,123,0.25)' }}>
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
-          <span className="text-sm font-medium" style={{ color: '#43E97B' }}>
-            Active session — {fmtSecs(elapsed)}
-          </span>
-          <span className="text-xs ml-auto" style={{ color: 'var(--text-muted)' }}>
-            Checked in at {new Date(activeSession.check_in.endsWith('Z') ? activeSession.check_in : activeSession.check_in + 'Z')
-              .toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-          </span>
+      {/* ── Punch-In Panel (hidden on weekend/holiday/leave if already punched) ── */}
+      {!isWeekendOrHoliday && !isOnLeave && (
+        <PunchInPanel
+          todayCtx={todayCtx}
+          activeSession={activeSession}
+          elapsed={elapsed}
+          punching={punching}
+          onPunchIn={handlePunchIn}
+          onPunchOut={handlePunchOut}
+        />
+      )}
+
+      {/* Weekend/holiday/leave notice */}
+      {(isWeekendOrHoliday || isOnLeave) && (
+        <div className="px-4 py-3 rounded-xl text-sm"
+             style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)', color: 'var(--text-muted)' }}>
+          {todayCtx?.is_holiday ? `🎉 Today is a holiday: ${todayCtx.holiday_name}`
+           : todayCtx?.is_weekend ? '📅 Today is a weekend'
+           : '🌴 You have approved leave today'}
         </div>
       )}
 
-      {/* Filter bar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <select className="input text-sm h-9" value={preset}
-          onChange={e => { setPreset(e.target.value); setPage(1) }} style={{ minWidth: 140 }}>
-          {ATT_PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-        </select>
-        {preset === 'custom' && (
-          <>
-            <input type="date" className="input text-sm h-9" value={customStart}
-              onChange={e => { setCustomStart(e.target.value); setPage(1) }} />
-            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>to</span>
-            <input type="date" className="input text-sm h-9" value={customEnd}
-              onChange={e => { setCustomEnd(e.target.value); setPage(1) }} />
-          </>
+      {/* ── Work Mode Requests ──────────────────────────────────────────────── */}
+      <div className="rounded-xl border overflow-hidden"
+           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+        <div className="flex items-center justify-between px-4 py-3 border-b"
+             style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
+          <div className="flex items-center gap-2">
+            <Home className="w-4 h-4" style={{ color: 'var(--accent)' }} />
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>Work Mode Requests</span>
+          </div>
+          <button
+            onClick={() => setShowWMRModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
+            style={{ background: 'var(--accent)' }}>
+            <Plus className="w-3.5 h-3.5" /> Apply Work Mode
+          </button>
+        </div>
+
+        {wmrLoading ? (
+          <div className="py-6 flex justify-center" style={{ color: 'var(--text-muted)' }}>
+            <Loader2 className="w-5 h-5 animate-spin" />
+          </div>
+        ) : wmrList.length === 0 ? (
+          <div className="py-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+            No work mode requests. Click <strong>Apply Work Mode</strong> to submit one.
+          </div>
+        ) : (
+          <div>
+            {wmrList.map(req => {
+              const sc = WMR_STATUS_COLOR[req.status] || { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' }
+              const canCancel = req.status === 'pending' || req.status === 'approved'
+              return (
+                <div key={req.id} className="flex items-center gap-3 px-4 py-3 border-b"
+                     style={{ borderColor: 'var(--border-subtle)' }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium" style={{ color: 'var(--text-heading)' }}>
+                        {WMR_MODE_LABEL[req.work_mode] || req.work_mode}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium capitalize"
+                            style={{ background: sc.bg, color: sc.color }}>
+                        {req.status}
+                      </span>
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      {req.from_date} – {req.to_date} · {req.reason}
+                    </p>
+                    {req.rejected_reason && (
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-danger)' }}>
+                        Rejected: {req.rejected_reason}
+                      </p>
+                    )}
+                  </div>
+                  {canCancel && (
+                    <button
+                      onClick={() => handleCancelWMR(req.id)}
+                      disabled={cancellingId === req.id}
+                      className="text-xs px-2.5 py-1 rounded-lg"
+                      style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)',
+                        opacity: cancellingId === req.id ? 0.5 : 1, cursor: cancellingId === req.id ? 'not-allowed' : 'pointer' }}>
+                      {cancellingId === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Cancel'}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         )}
-        <div className="flex-1" />
-        <button onClick={handleExport} disabled={exporting || !range}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
-          style={{ background: 'var(--bg-success)', color: 'var(--text-success)', opacity: (exporting || !range) ? 0.5 : 1 }}>
-          {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-          CSV
-        </button>
       </div>
 
-      {/* Summary badges */}
-      {Object.keys(summary).length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {Object.entries(summary).map(([st, cnt]) => {
-            const cfg = STATUS_COLORS[st] || { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' }
-            return (
-              <span key={st} className="px-2.5 py-0.5 rounded-full text-xs font-medium"
-                    style={{ background: cfg.bg, color: cfg.color }}>
-                {st.replace(/_/g,' ')} · {cnt}
-              </span>
-            )
-          })}
-          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium ml-1"
-                style={{ background: 'var(--bg-alt)', color: 'var(--text-muted)' }}>
-            Total {total}
-          </span>
+      {/* ── Attendance History ──────────────────────────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>Attendance History</h3>
         </div>
-      )}
 
-      {/* Error */}
-      {error && (
-        <div className="px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
-          {error}
-        </div>
-      )}
-
-      {/* Table */}
-      {loading ? (
-        <div className="py-10 flex items-center justify-center gap-2" style={{ color: 'var(--text-muted)' }}>
-          <Loader2 className="w-5 h-5 animate-spin" /> Loading…
-        </div>
-      ) : records.length === 0 ? (
-        <div className="py-10 flex flex-col items-center gap-2" style={{ color: 'var(--text-muted)' }}>
-          <History className="w-10 h-10 opacity-30" />
-          <p className="text-sm">No attendance records for this period</p>
-          {preset === 'custom' && (!customStart || !customEnd) && (
-            <p className="text-xs opacity-60">Select a start and end date above</p>
+        {/* Filter bar */}
+        <div className="flex items-center gap-2 flex-wrap mb-3">
+          <select className="input text-sm h-9" value={preset}
+            onChange={e => { setPreset(e.target.value); setPage(1) }} style={{ minWidth: 140 }}>
+            {ATT_PRESETS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+          </select>
+          {preset === 'custom' && (
+            <>
+              <input type="date" className="input text-sm h-9" value={customStart}
+                onChange={e => { setCustomStart(e.target.value); setPage(1) }} />
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>to</span>
+              <input type="date" className="input text-sm h-9" value={customEnd}
+                onChange={e => { setCustomEnd(e.target.value); setPage(1) }} />
+            </>
           )}
+          <div className="flex-1" />
+          <button onClick={handleExport} disabled={exporting || !range}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
+            style={{ background: 'var(--bg-success)', color: 'var(--text-success)', opacity: (exporting || !range) ? 0.5 : 1 }}>
+            {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            CSV
+          </button>
         </div>
-      ) : (
-        <div className="rounded-xl border overflow-hidden"
-             style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-alt)' }}>
-                  {['Date','Status','Check In','Check Out','Worked','Break','OT','Late'].map(h => (
-                    <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
-                        style={{ color: 'var(--text-disabled)' }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {records.map((rec, i) => {
-                  const cfg = STATUS_COLORS[rec.status] || { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' }
-                  const checkIn  = rec.check_in  ? new Date(rec.check_in.endsWith('Z')  ? rec.check_in  : rec.check_in  + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
-                  const checkOut = rec.check_out ? new Date(rec.check_out.endsWith('Z') ? rec.check_out : rec.check_out + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
-                  const dateStr  = rec.date ? new Date(rec.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short' }) : '—'
-                  return (
-                    <tr key={rec.id || i}
-                        style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-row-alt)', borderBottom: '1px solid var(--border-subtle)' }}>
-                      <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{dateStr}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium capitalize"
-                              style={{ background: cfg.bg, color: cfg.color }}>
-                          {rec.status?.replace(/_/g, ' ')}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{checkIn}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{checkOut}</td>
-                      <td className="px-3 py-2 whitespace-nowrap text-xs font-medium" style={{ color: 'var(--text-heading)' }}>
-                        {rec.work_hours ? fmtHours(rec.work_hours) : '—'}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-muted)' }}>
-                        {rec.total_break_minutes ? fmtHours(rec.total_break_minutes / 60) : '—'}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-xs"
-                          style={{ color: rec.overtime_hours > 0 ? 'var(--text-warning)' : 'var(--text-muted)' }}>
-                        {rec.overtime_hours > 0 ? fmtHours(rec.overtime_hours) : '—'}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-xs"
-                          style={{ color: rec.is_late ? 'var(--text-warning)' : 'var(--text-muted)' }}>
-                        {rec.is_late && rec.late_by_minutes > 0 ? `+${rec.late_by_minutes}m` : '—'}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+
+        {/* Summary badges */}
+        {Object.keys(summary).length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {Object.entries(summary).map(([st, cnt]) => {
+              const cfg = STATUS_COLORS[st] || { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' }
+              return (
+                <span key={st} className="px-2.5 py-0.5 rounded-full text-xs font-medium"
+                      style={{ background: cfg.bg, color: cfg.color }}>
+                  {st.replace(/_/g,' ')} · {cnt}
+                </span>
+              )
+            })}
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium ml-1"
+                  style={{ background: 'var(--bg-alt)', color: 'var(--text-muted)' }}>
+              Total {total}
+            </span>
           </div>
+        )}
 
-          {/* Pagination */}
-          {pages > 1 && (
-            <div className="flex items-center justify-between px-4 py-2 border-t"
-                 style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
-              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                Page {page} of {pages} · {total} records
-              </span>
-              <div className="flex gap-1">
-                <button onClick={() => load(page - 1)} disabled={page <= 1}
-                  className="p-1.5 rounded" style={{ opacity: page <= 1 ? 0.4 : 1 }}>
-                  <ChevronLeft className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
-                </button>
-                {Array.from({ length: Math.min(pages, 5) }, (_, i) => {
-                  let pg = i + 1
-                  if (pages > 5) {
-                    if (page <= 3)        pg = i + 1
-                    else if (page >= pages - 2) pg = pages - 4 + i
-                    else                  pg = page - 2 + i
-                  }
-                  return (
-                    <button key={pg} onClick={() => load(pg)}
-                      className="w-7 h-7 rounded text-xs font-medium"
-                      style={{ background: pg === page ? 'var(--bg-info)' : 'transparent', color: pg === page ? 'var(--text-info)' : 'var(--text-muted)' }}>
-                      {pg}
-                    </button>
-                  )
-                })}
-                <button onClick={() => load(page + 1)} disabled={page >= pages}
-                  className="p-1.5 rounded" style={{ opacity: page >= pages ? 0.4 : 1 }}>
-                  <ChevronRight className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
-                </button>
-              </div>
+        {error && (
+          <div className="px-3 py-2 rounded-lg text-sm mb-3" style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="py-10 flex items-center justify-center gap-2" style={{ color: 'var(--text-muted)' }}>
+            <Loader2 className="w-5 h-5 animate-spin" /> Loading…
+          </div>
+        ) : records.length === 0 ? (
+          <div className="py-10 flex flex-col items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+            <History className="w-10 h-10 opacity-30" />
+            <p className="text-sm">No attendance records for this period</p>
+            {preset === 'custom' && (!customStart || !customEnd) && (
+              <p className="text-xs opacity-60">Select a start and end date above</p>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-xl border overflow-hidden"
+               style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-alt)' }}>
+                    {['Date','Status','Check In','Check Out','Worked','Break','OT','Late'].map(h => (
+                      <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
+                          style={{ color: 'var(--text-disabled)' }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((rec, i) => {
+                    const cfg = STATUS_COLORS[rec.status] || { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' }
+                    const checkIn  = rec.check_in  ? new Date(rec.check_in.endsWith('Z')  ? rec.check_in  : rec.check_in  + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
+                    const checkOut = rec.check_out ? new Date(rec.check_out.endsWith('Z') ? rec.check_out : rec.check_out + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
+                    const dateStr  = rec.date ? new Date(rec.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short' }) : '—'
+                    return (
+                      <tr key={rec.id || i}
+                          style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-row-alt)', borderBottom: '1px solid var(--border-subtle)' }}>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{dateStr}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium capitalize"
+                                style={{ background: cfg.bg, color: cfg.color }}>
+                            {rec.status?.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{checkIn}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{checkOut}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs font-medium" style={{ color: 'var(--text-heading)' }}>
+                          {rec.work_hours ? fmtHours(rec.work_hours) : '—'}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-muted)' }}>
+                          {rec.total_break_minutes ? fmtHours(rec.total_break_minutes / 60) : '—'}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs"
+                            style={{ color: rec.overtime_hours > 0 ? 'var(--text-warning)' : 'var(--text-muted)' }}>
+                          {rec.overtime_hours > 0 ? fmtHours(rec.overtime_hours) : '—'}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-xs"
+                            style={{ color: rec.is_late ? 'var(--text-warning)' : 'var(--text-muted)' }}>
+                          {rec.is_late && rec.late_by_minutes > 0 ? `+${rec.late_by_minutes}m` : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+
+            {pages > 1 && (
+              <div className="flex items-center justify-between px-4 py-2 border-t"
+                   style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Page {page} of {pages} · {total} records
+                </span>
+                <div className="flex gap-1">
+                  <button onClick={() => load(page - 1)} disabled={page <= 1}
+                    className="p-1.5 rounded" style={{ opacity: page <= 1 ? 0.4 : 1 }}>
+                    <ChevronLeft className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                  </button>
+                  {Array.from({ length: Math.min(pages, 5) }, (_, i) => {
+                    let pg = i + 1
+                    if (pages > 5) {
+                      if (page <= 3) pg = i + 1
+                      else if (page >= pages - 2) pg = pages - 4 + i
+                      else pg = page - 2 + i
+                    }
+                    return (
+                      <button key={pg} onClick={() => load(pg)}
+                        className="w-7 h-7 rounded text-xs font-medium"
+                        style={{ background: pg === page ? 'var(--bg-info)' : 'transparent', color: pg === page ? 'var(--text-info)' : 'var(--text-muted)' }}>
+                        {pg}
+                      </button>
+                    )
+                  })}
+                  <button onClick={() => load(page + 1)} disabled={page >= pages}
+                    className="p-1.5 rounded" style={{ opacity: page >= pages ? 0.4 : 1 }}>
+                    <ChevronRight className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Work Mode Request Modal */}
+      {showWMRModal && (
+        <WorkModeRequestModal
+          onClose={() => setShowWMRModal(false)}
+          onSuccess={() => { loadWMR(); loadToday() }}
+        />
       )}
     </div>
   )

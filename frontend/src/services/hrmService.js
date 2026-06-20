@@ -172,6 +172,22 @@ const updateExitStatus = (id, data) => api.post(`${BASE}/exit/${id}/status`, dat
 const toggleChecklistItem = (id, index) => api.post(`${BASE}/exit/${id}/checklist/${index}`)
 const cancelExitRequest = (id) => api.delete(`${BASE}/exit/${id}`)
 
+// ── Work Mode Requests ─────────────────────────────────────────────────────
+const submitWorkModeRequest    = (data) => api.post(`${BASE}/work-mode/requests`, data)
+const listMyWorkModeRequests   = (params) => api.get(`${BASE}/work-mode/requests/me`, { params })
+const cancelWorkModeRequest    = (id) => api.post(`${BASE}/work-mode/requests/${id}/cancel`)
+const getMyActiveWorkMode      = () => api.get(`${BASE}/work-mode/me/active`)
+const listWorkModeRequests     = (params) => api.get(`${BASE}/work-mode/requests`, { params })
+const approveWorkModeRequest   = (id) => api.post(`${BASE}/work-mode/requests/${id}/approve`)
+const rejectWorkModeRequest    = (id, data) => api.post(`${BASE}/work-mode/requests/${id}/reject`, data)
+
+// ── Attendance Exceptions ──────────────────────────────────────────────────
+const createAttendanceException  = (data) => api.post(`${BASE}/attendance/exceptions`, data)
+const listAttendanceExceptions   = (params) => api.get(`${BASE}/attendance/exceptions`, { params })
+const updateAttendanceException  = (id, data) => api.put(`${BASE}/attendance/exceptions/${id}`, data)
+const deleteAttendanceException  = (id) => api.delete(`${BASE}/attendance/exceptions/${id}`)
+const checkActiveException       = (employeeId) => api.get(`${BASE}/attendance/exceptions/check/${employeeId}`)
+
 // ── Sync ───────────────────────────────────────────────────────────────────
 const getSyncStatus = () => api.get(`${BASE}/sync/status`)
 const getSyncUnlinkedPreview = (limit = 5) => api.get(`${BASE}/sync/unlinked-preview`, { params: { limit } })
@@ -223,6 +239,10 @@ const hrmService = {
   getTeamAttendanceHistory, getMyAttendanceHistory, getAttendanceRangeStats, exportTeamAttendanceCsv, exportMyAttendanceCsv,
   checkIn, checkOut, startBreak, endBreak, getMyTodayAttendance, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance, recoverAttendance,
   getAttendanceTodayStats, getAttendanceSettings, updateAttendanceSettings,
+  submitWorkModeRequest, listMyWorkModeRequests, cancelWorkModeRequest, getMyActiveWorkMode,
+  listWorkModeRequests, approveWorkModeRequest, rejectWorkModeRequest,
+  createAttendanceException, listAttendanceExceptions, updateAttendanceException,
+  deleteAttendanceException, checkActiveException,
   applyLeave, listLeaves, listMyLeaves, getLeave, leaveAction, cancelLeave, getLeaveBalance, getMyLeaveBalance,
   generatePayroll, listPayslips, listOwnPayslips, getPayslip, updatePayslipStatus, updatePayslip, deletePayslip, getPayrollStructure, updatePayrollStructure,
   createReview, listReviews, getReview, submitSelfReview, submitManagerReview, deleteReview,

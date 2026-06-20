@@ -229,6 +229,9 @@ async def check_in(
     cu: dict = Depends(require_non_partner),
     db=Depends(get_company_db),
 ):
+    # is_self = True when no employee_id provided (self punch-in)
+    # is_self = False when HR/admin marks for a specific employee
+    is_self = not bool(data.employee_id)
     emp_id = await _resolve_emp_id(cu, data.employee_id, db, auto_create=True)
     forwarded = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
     client_ip = data.client_ip or forwarded or (request.client.host if request.client else None)
@@ -244,6 +247,7 @@ async def check_in(
             longitude=data.longitude,
             geo_city=data.geo_city,
             geo_country=data.geo_country,
+            is_self=is_self,
         )
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
