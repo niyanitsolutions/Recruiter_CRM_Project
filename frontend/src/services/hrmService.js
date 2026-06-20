@@ -225,6 +225,26 @@ const deleteShift = (id) => api.delete(`${BASE}/shifts/${id}`)
 const seedDefaultShifts = () => api.post(`${BASE}/shifts/seed-defaults`)
 const assignShift = (data) => api.post(`${BASE}/shifts/assign`, data)
 
+// ── Shift Assignments (Phase 5) ────────────────────────────────────────────────
+const createShiftAssignment      = (data) => api.post(`${BASE}/shifts/assignments`, data)
+const listShiftAssignments       = (params) => api.get(`${BASE}/shifts/assignments`, { params })
+const listMyShiftAssignments     = (params) => api.get(`${BASE}/shifts/assignments/me`, { params })
+const updateShiftAssignment      = (id, data) => api.put(`${BASE}/shifts/assignments/${id}`, data)
+const deleteShiftAssignment      = (id) => api.delete(`${BASE}/shifts/assignments/${id}`)
+const getActiveShiftAssignment   = (employeeId, params) => api.get(`${BASE}/shifts/assignments/active/${employeeId}`, { params })
+
+// ── Shift Change Requests (Phase 7) ───────────────────────────────────────────
+const submitShiftChangeRequest   = (data) => api.post(`${BASE}/shifts/change-requests`, data)
+const listMyShiftChangeRequests  = (params) => api.get(`${BASE}/shifts/change-requests/me`, { params })
+const cancelShiftChangeRequest   = (id) => api.post(`${BASE}/shifts/change-requests/${id}/cancel`)
+const listShiftChangeRequests    = (params) => api.get(`${BASE}/shifts/change-requests`, { params })
+const approveShiftChangeRequest  = (id) => api.post(`${BASE}/shifts/change-requests/${id}/approve`)
+const rejectShiftChangeRequest   = (id, data) => api.post(`${BASE}/shifts/change-requests/${id}/reject`, data)
+
+// ── Comp Off Credits (Phase 4) ────────────────────────────────────────────────
+const getMyCompOff               = () => api.get(`${BASE}/attendance/comp-off/me`)
+const getEmployeeCompOff         = (employeeId) => api.get(`${BASE}/attendance/comp-off/${employeeId}`)
+
 // ── Employee Onboarding Links ──────────────────────────────────────────────────
 const generateOnboardingLink = (data) => api.post(`${BASE}/employees/generate-onboarding-link`, data)
 
@@ -268,6 +288,11 @@ const hrmService = {
   checkHoliday, exportHolidaysCsv, copyHolidaysToNextYear, importHolidaysCsv,
   listLeavePolicies, createLeavePolicy, getLeavePolicy, updateLeavePolicy, deleteLeavePolicy, seedDefaultLeavePolicies,
   listShifts, createShift, updateShift, deleteShift, seedDefaultShifts, assignShift,
+  createShiftAssignment, listShiftAssignments, listMyShiftAssignments,
+  updateShiftAssignment, deleteShiftAssignment, getActiveShiftAssignment,
+  submitShiftChangeRequest, listMyShiftChangeRequests, cancelShiftChangeRequest,
+  listShiftChangeRequests, approveShiftChangeRequest, rejectShiftChangeRequest,
+  getMyCompOff, getEmployeeCompOff,
   generateOnboardingLink, exportEmployees,
 }
 

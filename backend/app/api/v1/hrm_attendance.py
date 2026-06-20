@@ -42,6 +42,8 @@ class AttendanceSettingsUpdate(BaseModel):
     geo_fence_longitude:    Optional[float] = None
     ip_restriction_enabled: bool  = False
     approved_ips:           List[str] = Field(default_factory=list)
+    # Working days: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+    working_days:           List[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
 
 
 class OfficeIPSettings(BaseModel):
@@ -232,6 +234,7 @@ async def check_in(
     # is_self = True when no employee_id provided (self punch-in)
     # is_self = False when HR/admin marks for a specific employee
     is_self = not bool(data.employee_id)
+    is_owner = bool(cu.get("is_owner", False))
     emp_id = await _resolve_emp_id(cu, data.employee_id, db, auto_create=True)
     forwarded = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
     client_ip = data.client_ip or forwarded or (request.client.host if request.client else None)
@@ -248,6 +251,7 @@ async def check_in(
             geo_city=data.geo_city,
             geo_country=data.geo_country,
             is_self=is_self,
+            is_owner=is_owner,
         )
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
@@ -639,6 +643,7 @@ async def get_attendance_settings(
         "geo_fence_longitude":    doc.get("attendance_geo_fence_longitude"),
         "ip_restriction_enabled": bool(doc.get("attendance_ip_restriction_enabled", False)),
         "approved_ips":           doc.get("approved_office_ips", []),
+        "working_days":           doc.get("attendance_working_days", [0, 1, 2, 3, 4]),
     }
 
 
@@ -667,6 +672,7 @@ async def update_attendance_settings(
             "attendance_geo_fence_longitude":    data.geo_fence_longitude,
             "attendance_ip_restriction_enabled": data.ip_restriction_enabled,
             "approved_office_ips":               data.approved_ips,
+            "attendance_working_days":           data.working_days,
             "updated_at": datetime.now(timezone.utc),
             "updated_by": cu["id"],
         }},
@@ -708,3 +714,57 @@ async def update_office_ips(
         upsert=True,
     )
     return {"enabled": data.enabled, "approved_ips": data.approved_ips}
+
+
+# ── Comp Off Credits (Phase 4) ────────────────────────────────────────────────
+
+@router.get("/comp-off/me")
+async def get_my_comp_off(
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+):
+    """Return available comp off credits for the calling employee."""
+    emp_id = await _resolve_emp_id_optional(cu, db)
+    if not emp_id:
+        return {"credits": [], "total_available": 0.0}
+    cursor = db["hrm_comp_off_credits"].find({
+        "company_id":  cu["company_id"],
+        "employee_id": emp_id,
+        "is_deleted":  False,
+        "status":      "available",
+    }).sort("created_at", -1)
+    credits = []
+    total = 0.0
+    async for doc in cursor:
+        doc["id"] = str(doc.pop("_id", ""))
+        for f in ("created_at", "updated_at"):
+            if isinstance(doc.get(f), datetime):
+                doc[f] = doc[f].strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+        credits.append(doc)
+        total += float(doc.get("credits", 1.0))
+    return {"credits": credits, "total_available": round(total, 2)}
+
+
+@router.get("/comp-off/{employee_id}")
+async def get_employee_comp_off(
+    employee_id: str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_any_permission([["hrm:attendance:team"], ["hrm:attendance:manage"]])),
+):
+    cursor = db["hrm_comp_off_credits"].find({
+        "company_id":  cu["company_id"],
+        "employee_id": employee_id,
+        "is_deleted":  False,
+    }).sort("created_at", -1)
+    credits = []
+    total = 0.0
+    async for doc in cursor:
+        doc["id"] = str(doc.pop("_id", ""))
+        for f in ("created_at", "updated_at"):
+            if isinstance(doc.get(f), datetime):
+                doc[f] = doc[f].strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+        credits.append(doc)
+        if doc.get("status") == "available":
+            total += float(doc.get("credits", 1.0))
+    return {"credits": credits, "total_available": round(total, 2)}

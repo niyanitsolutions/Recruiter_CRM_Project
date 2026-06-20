@@ -64,7 +64,16 @@ class AttendanceService:
             "geo_fence_radius":     int(doc.get("attendance_geo_fence_radius_meters", 100)),
             "geo_fence_lat":        doc.get("attendance_geo_fence_latitude"),
             "geo_fence_lon":        doc.get("attendance_geo_fence_longitude"),
+            # Working days: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+            # Default Mon-Fri. Stored as JSON array in company_settings.
+            "working_days":         doc.get("attendance_working_days", [0, 1, 2, 3, 4]),
         }
+
+    def _get_effective_working_days(self, settings: dict, emp: Optional[dict]) -> list:
+        """Return working day indices (0=Mon..6=Sun), preferring employee override over company config."""
+        if emp and emp.get("working_days") is not None:
+            return emp["working_days"]
+        return settings.get("working_days", [0, 1, 2, 3, 4])
 
     async def _check_today_holiday(self, company_id: str, department: Optional[str] = None) -> Optional[str]:
         """Return holiday name if today is a company holiday, else None."""
@@ -177,6 +186,122 @@ class AttendanceService:
             "to_datetime": {"$gte": at_time},
         })
 
+    # ── Active shift lookup (Phase 5) ─────────────────────────────────────────
+
+    async def _get_active_shift(self, employee_id: str, company_id: str, today_str: str, settings: dict, emp: Optional[dict]) -> dict:
+        """Return the shift that's effective today, in priority order:
+        1. hrm_shift_assignments (time-bounded)
+        2. employee.shift_id (legacy simple assignment)
+        3. company default shift
+        4. settings office hours fallback
+        """
+        # 1. Time-bounded assignment
+        assignment = await self.db["hrm_shift_assignments"].find_one(
+            {
+                "company_id":    company_id,
+                "employee_id":   employee_id,
+                "is_deleted":    False,
+                "effective_from": {"$lte": today_str},
+                "$or": [
+                    {"effective_to": None},
+                    {"effective_to": {"$gte": today_str}},
+                ],
+            },
+            sort=[("effective_from", -1)],
+        )
+        if assignment:
+            return {
+                "start":      assignment.get("shift_start") or settings["office_start"],
+                "end":        assignment.get("shift_end")   or settings["office_end"],
+                "grace":      assignment.get("grace_minutes", settings["grace_minutes"]),
+                "is_overnight": assignment.get("is_overnight", False),
+                "shift_id":   assignment.get("shift_id"),
+                "shift_name": assignment.get("shift_name", ""),
+            }
+
+        # 2. Legacy employee.shift_id
+        shift_id = emp.get("shift_id") if emp else None
+        if shift_id:
+            shift = await self.db["hrm_shifts"].find_one({"_id": shift_id, "company_id": company_id, "is_deleted": False})
+            if shift:
+                return {
+                    "start":      shift.get("start_time", settings["office_start"]),
+                    "end":        shift.get("end_time",   settings["office_end"]),
+                    "grace":      shift.get("grace_minutes", settings["grace_minutes"]),
+                    "is_overnight": shift.get("is_overnight", False),
+                    "shift_id":   shift_id,
+                    "shift_name": shift.get("name", ""),
+                }
+
+        # 3. Employee-level direct time fields (very old data)
+        if emp and (emp.get("shift_start_time") or emp.get("shift_end_time")):
+            return {
+                "start":      emp.get("shift_start_time") or settings["office_start"],
+                "end":        emp.get("shift_end_time")   or settings["office_end"],
+                "grace":      settings["grace_minutes"],
+                "is_overnight": False,
+                "shift_id":   None,
+                "shift_name": "",
+            }
+
+        # 4. Company default shift
+        default_shift = await self.db["hrm_shifts"].find_one(
+            {"company_id": company_id, "is_default": True, "is_deleted": False}
+        )
+        if default_shift:
+            return {
+                "start":      default_shift.get("start_time", settings["office_start"]),
+                "end":        default_shift.get("end_time",   settings["office_end"]),
+                "grace":      default_shift.get("grace_minutes", settings["grace_minutes"]),
+                "is_overnight": default_shift.get("is_overnight", False),
+                "shift_id":   str(default_shift.get("_id", "")),
+                "shift_name": default_shift.get("name", ""),
+            }
+
+        # 5. Fallback to settings
+        return {
+            "start":      settings["office_start"],
+            "end":        settings["office_end"],
+            "grace":      settings["grace_minutes"],
+            "is_overnight": False,
+            "shift_id":   None,
+            "shift_name": "",
+        }
+
+    # ── Comp Off Credit (Phase 4) ──────────────────────────────────────────────
+
+    async def _auto_create_comp_off(
+        self,
+        employee_id: str,
+        company_id: str,
+        work_date: str,
+        reason: str,
+        credits: float = 1.0,
+    ) -> None:
+        """Create a comp off credit when employee works on a holiday or weekend."""
+        from bson import ObjectId
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        existing = await self.db["hrm_comp_off_credits"].find_one({
+            "company_id": company_id,
+            "employee_id": employee_id,
+            "work_date": work_date,
+            "is_deleted": False,
+        })
+        if existing:
+            return  # already credited for this day
+        await self.db["hrm_comp_off_credits"].insert_one({
+            "_id": str(ObjectId()),
+            "company_id":  company_id,
+            "employee_id": employee_id,
+            "work_date":   work_date,
+            "reason":      reason,
+            "credits":     credits,
+            "status":      "available",   # available | used | expired
+            "is_deleted":  False,
+            "created_at":  now,
+            "updated_at":  now,
+        })
+
     # ── Check In ──────────────────────────────────────────────────────────────
 
     async def check_in(
@@ -192,6 +317,7 @@ class AttendanceService:
         geo_city: Optional[str] = None,
         geo_country: Optional[str] = None,
         is_self: bool = True,
+        is_owner: bool = False,     # Phase 12: owner bypasses geo/IP
     ) -> dict:
         today = _today_dt()  # naive datetime at midnight — PyMongo 4.x requires datetime, not date
         now = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC — Motor returns naive datetimes
@@ -203,18 +329,36 @@ class AttendanceService:
             return self._serialize(dict(existing))
 
         settings = await self._get_settings()
+        emp = await self._get_employee(employee_id, company_id)
+        dept = emp.get("department") if emp else None
 
-        # ── For self check-in: auto-determine work mode ───────────────────────
-        # For admin check-in (is_self=False): use provided work_mode as-is with
-        # the legacy geo/IP checks to preserve existing admin behaviour.
+        # Phase 14 — Validation order:
+        # 1-2. User/tenant active: handled by JWT middleware (already enforced before this call)
+        # 3. Attendance Exception
+        # 4. Approved Work Mode
+        # 5. Shift Assignment
+        # 6. Employee / Company working days
+        # 7. Company Holiday
+        # 8. Weekend
+        # 9. Geo Fence
+        # 10. IP Restriction
+        # 11. Punch-In Window (shift timing + grace)
+
+        # Phase 12: Owner always bypasses geo/IP (prevent lockout)
+        if is_owner:
+            is_self = False  # treat like admin — no auto geo-determination
+
         if is_self:
+            # 3. Exception check
             active_exc = await self._get_active_exception(employee_id, company_id, now)
             bypass_geo = bool(active_exc and active_exc.get("bypass_geo_fence"))
             bypass_ip  = bool(active_exc and active_exc.get("bypass_ip_restriction"))
 
+            # 4. Approved work mode
             active_wmr = await self._get_active_work_mode_request(employee_id, company_id, today_str)
-            approved_mode = active_wmr.get("work_mode") if active_wmr else None  # "wfh"|"hybrid"|"field"
+            approved_mode = active_wmr.get("work_mode") if active_wmr else None
 
+            # 9. Geo fence
             if settings["geo_fence_enabled"] and not bypass_geo:
                 if (settings["geo_fence_lat"] is not None
                         and settings["geo_fence_lon"] is not None
@@ -230,14 +374,13 @@ class AttendanceService:
                         if approved_mode:
                             work_mode = approved_mode
                         elif active_exc:
-                            work_mode = "office"  # exception allows login from outside
+                            work_mode = "office"
                         else:
                             raise ValueError(
                                 "Your organization requires office location login. "
                                 "Please contact HR if you require remote access approval."
                             )
                 else:
-                    # Geo fence enabled but no coordinates available
                     if approved_mode:
                         work_mode = approved_mode
                     elif active_exc:
@@ -248,12 +391,10 @@ class AttendanceService:
                             "Please enable location access or contact HR for remote access approval."
                         )
             else:
-                # Geo fence off or bypassed by exception
                 if approved_mode:
                     work_mode = approved_mode
-                # else keep "office" default
 
-            # ── IP restriction for self check-in ──────────────────────────────
+            # 10. IP restriction
             if settings["ip_restriction"] and settings["approved_ips"] and not bypass_ip:
                 if work_mode == "office":
                     if not self._is_ip_allowed(client_ip or "", settings["approved_ips"]):
@@ -261,14 +402,13 @@ class AttendanceService:
                             f"Check-in blocked: your IP ({client_ip}) is not in the list of approved office IPs."
                         )
 
-        else:
-            # ── Legacy checks for admin/HR check-in ───────────────────────────
+        elif not is_owner:
+            # Admin/HR check-in (no is_self, not owner): legacy geo/IP checks
             if work_mode == "office" and settings["ip_restriction"] and settings["approved_ips"]:
                 if not self._is_ip_allowed(client_ip or "", settings["approved_ips"]):
                     raise ValueError(
                         f"Check-in blocked: your IP ({client_ip}) is not in the list of approved office IPs."
                     )
-
             if (work_mode == "office"
                     and settings["geo_fence_enabled"]
                     and settings["geo_fence_lat"] is not None
@@ -278,22 +418,26 @@ class AttendanceService:
                         latitude, longitude,
                         settings["geo_fence_lat"], settings["geo_fence_lon"],
                     )
-                    radius = settings["geo_fence_radius"]
-                    if distance > radius:
+                    if distance > settings["geo_fence_radius"]:
                         raise ValueError(
                             f"Check-in blocked: you are {int(distance)}m from office "
-                            f"(allowed radius: {radius}m). Please be in the office to check in."
+                            f"(allowed radius: {settings['geo_fence_radius']}m)."
                         )
+        # is_owner==True falls through without any geo/IP checks
 
-        emp = await self._get_employee(employee_id, company_id)
-        dept = emp.get("department") if emp else None
+        # 5. Active shift
+        shift = await self._get_active_shift(employee_id, company_id, today_str, settings, emp)
+        shift_start = shift["start"]
+        grace = shift["grace"]
 
-        # ── Holiday check ─────────────────────────────────────────────────────
+        # 7. Holiday check
         holiday_name = await self._check_today_holiday(company_id, dept)
 
-        # Employee's personal shift overrides company default
-        shift_start = (emp.get("shift_start_time") or settings["office_start"]) if emp else settings["office_start"]
-        grace = settings["grace_minutes"]
+        # 8. Weekend check (configurable, Phase 2)
+        working_days = self._get_effective_working_days(settings, emp)
+        is_today_weekend = date.today().weekday() not in working_days
+
+        # 11. Late calculation
         sh, sm = map(int, shift_start.split(":"))
         shift_dt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
         late_threshold = shift_dt + timedelta(minutes=grace)
@@ -301,8 +445,6 @@ class AttendanceService:
         late_by = max(0, int((now - late_threshold).total_seconds() / 60)) if is_late else 0
 
         # ── Status determination ─────────────────────────────────────────────
-        # Work mode takes priority for status; is_late is stored independently
-        # so wfh/hybrid/field employees can also be marked late.
         if holiday_name:
             initial_status = AttendanceStatus.HOLIDAY
         elif work_mode == "wfh":
@@ -328,10 +470,13 @@ class AttendanceService:
             "is_late": is_late,
             "late_by_minutes": late_by,
             "is_holiday_worked": bool(holiday_name),
+            "is_weekend_worked": bool(is_today_weekend),   # Phase 4: track for comp off
             "holiday_name": holiday_name,
             "work_mode": work_mode,
             "check_in_ip": client_ip,
             "check_in_geo": geo,
+            "shift_id": shift.get("shift_id"),
+            "shift_name": shift.get("shift_name"),
             "auto_punched_out": False,
             "notes": notes,
             "marked_by": marked_by,
@@ -444,9 +589,23 @@ class AttendanceService:
         work_hours = round(pre_recovery_hours + session_work_hours, 2)
 
         emp = await self._get_employee(employee_id, company_id)
-        shift_end_str = (emp.get("shift_end_time") or settings["office_end"]) if emp else settings["office_end"]
+        today_str_checkout = record.get("date")
+        if isinstance(today_str_checkout, datetime):
+            today_str_checkout = today_str_checkout.strftime("%Y-%m-%d")
+        elif isinstance(today_str_checkout, date):
+            today_str_checkout = today_str_checkout.isoformat()
+        # Get shift for this record's date
+        shift = await self._get_active_shift(
+            employee_id, company_id,
+            today_str_checkout or date.today().isoformat(),
+            settings, emp,
+        )
+        shift_end_str = shift["end"]
         eh, em = map(int, shift_end_str.split(":"))
         shift_end_dt = now.replace(hour=eh, minute=em, second=0, microsecond=0)
+        # Night shift: if shift ends next day, adjust
+        if shift.get("is_overnight") and shift_end_dt < now.replace(hour=12, minute=0, second=0, microsecond=0):
+            shift_end_dt += timedelta(days=1)
         overtime = max(0.0, round((now - shift_end_dt).total_seconds() / 3600, 2)) if now > shift_end_dt else 0.0
         is_half_day = work_hours < settings["half_day_hours"]
 
@@ -481,6 +640,27 @@ class AttendanceService:
         await self.col.update_one({"_id": record["_id"]}, {"$set": upd})
         record = dict(record)
         record.update(upd)
+
+        # Phase 4: Auto comp off credit on holiday/weekend work
+        # Only credit if the employee actually worked (not auto-closed due to absence)
+        if not auto and work_hours > 0 and today_str_checkout:
+            if record.get("is_holiday_worked"):
+                try:
+                    holiday_label = record.get("holiday_name") or "Holiday"
+                    await self._auto_create_comp_off(
+                        employee_id, company_id, today_str_checkout,
+                        reason=f"Worked on {holiday_label}", credits=1.0,
+                    )
+                except Exception:
+                    pass
+            elif record.get("is_weekend_worked"):
+                try:
+                    await self._auto_create_comp_off(
+                        employee_id, company_id, today_str_checkout,
+                        reason="Worked on weekend", credits=1.0,
+                    )
+                except Exception:
+                    pass
 
         # Fire punch-out notification (non-blocking)
         if not auto:
@@ -663,7 +843,9 @@ class AttendanceService:
         async for rec in cursor:
             rec_date = rec["date"]
             emp = await self._get_employee(rec["employee_id"], company_id)
-            shift_end_str = (emp.get("shift_end_time") or settings["office_end"]) if emp else settings["office_end"]
+            rec_date_str = rec_date.strftime("%Y-%m-%d") if isinstance(rec_date, (datetime, date)) else str(rec_date)[:10]
+            shift = await self._get_active_shift(rec["employee_id"], company_id, rec_date_str, settings, emp)
+            shift_end_str = shift.get("end") or settings["office_end"]
             try:
                 eh, em = map(int, shift_end_str.split(":"))
             except (ValueError, AttributeError):
@@ -734,10 +916,11 @@ class AttendanceService:
         today_dt = _today_dt()
         now = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        is_weekend = today_date.weekday() >= 5  # Saturday=5, Sunday=6
-
         emp = await self._get_employee(employee_id, company_id)
         dept = emp.get("department") if emp else None
+        settings = await self._get_settings()
+        working_days = self._get_effective_working_days(settings, emp)
+        is_weekend = today_date.weekday() not in working_days
         holiday_name = await self._check_today_holiday(company_id, dept)
 
         attendance = await self.col.find_one({
@@ -791,8 +974,8 @@ class AttendanceService:
                     if isinstance(active_exc.get("to_datetime"), datetime) else None,
             }
 
-        # Geo fence / IP settings (for frontend location check)
-        settings = await self._get_settings()
+        # Phase 6: Active shift for today (start/end/grace for punch window)
+        shift = await self._get_active_shift(employee_id, company_id, today_str, settings, emp)
 
         return {
             "is_weekend": is_weekend,
@@ -807,6 +990,14 @@ class AttendanceService:
             "office_lat": settings["geo_fence_lat"],
             "office_lon": settings["geo_fence_lon"],
             "ip_restriction_enabled": settings["ip_restriction"],
+            "working_days": working_days,
+            # Phase 6: shift window info for frontend punch-in gate
+            "shift_start":      shift["start"],
+            "shift_end":        shift["end"],
+            "shift_grace":      shift["grace"],
+            "shift_is_overnight": shift.get("is_overnight", False),
+            "shift_id":         shift.get("shift_id"),
+            "shift_name":       shift.get("shift_name", ""),
         }
 
     # ── Leave-attendance backfill ─────────────────────────────────────────────

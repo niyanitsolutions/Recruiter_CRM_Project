@@ -10,7 +10,7 @@ import {
   User, Clock, Calendar, Banknote, Plus, UserX, X,
   Loader2, FolderOpen, Package, FileText, Download, Eye,
   ChevronLeft, ChevronRight, History, MapPin, Wifi, Home,
-  Briefcase, CheckCircle, XCircle, AlertCircle, LogIn, LogOut,
+  Briefcase, CheckCircle, XCircle, AlertCircle, LogIn, LogOut, RotateCcw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
@@ -421,12 +421,71 @@ function PunchInPanel({ todayCtx, onPunchIn, onPunchOut, activeSession, elapsed,
     return h > 0 ? `${h}h ${String(m).padStart(2,'0')}m` : `${m}m ${String(sec).padStart(2,'0')}s`
   }
 
-  const isCheckedIn    = !!activeSession?.check_in && !activeSession?.check_out
-  const isBlocked      = locationStatus === 'blocked'
+  const isCheckedIn = !!activeSession?.check_in && !activeSession?.check_out
+  const isBlocked   = locationStatus === 'blocked'
+
+  // Phase 6: Shift window gate
+  const shiftStart = todayCtx?.shift_start
+  const shiftEnd   = todayCtx?.shift_end
+  const shiftGrace = todayCtx?.shift_grace ?? 15
+  const shiftName  = todayCtx?.shift_name
+
+  const shiftWindowStatus = (() => {
+    if (!shiftStart || isCheckedIn) return 'open'   // already checked in — no gate
+    const now = new Date()
+    const [sh, sm] = shiftStart.split(':').map(Number)
+    const shiftDt = new Date(now); shiftDt.setHours(sh, sm, 0, 0)
+    const openFrom = new Date(shiftDt.getTime() - 30 * 60000)  // 30 min early entry allowed
+    const closedAt = shiftEnd ? (() => {
+      const [eh, em] = shiftEnd.split(':').map(Number)
+      const endDt = new Date(now); endDt.setHours(eh, em, 0, 0)
+      // For overnight shifts or when end < start, add a day
+      if (endDt <= shiftDt) endDt.setDate(endDt.getDate() + 1)
+      return new Date(endDt.getTime() + 2 * 3600000)   // close 2h after shift end
+    })() : null
+
+    if (now < openFrom) return 'before'
+    if (closedAt && now > closedAt) return 'after'
+    return 'open'
+  })()
+
+  const fmt12 = (t) => {
+    if (!t) return ''
+    const [h, m] = t.split(':').map(Number)
+    const period = h >= 12 ? 'PM' : 'AM'
+    const h12 = h % 12 || 12
+    return `${h12}:${String(m).padStart(2, '0')} ${period}`
+  }
+
+  const isPunchInDisabled = punching || isBlocked || locationStatus === 'checking' || shiftWindowStatus === 'before'
 
   return (
     <div className="rounded-xl border p-4 space-y-3"
          style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+
+      {/* Phase 6: Shift window info */}
+      {shiftStart && (
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+             style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+          <Clock style={{ width: 13, height: 13, color: '#818CF8', flexShrink: 0 }} />
+          <span className="text-xs" style={{ color: '#818CF8' }}>
+            {shiftName ? `${shiftName}: ` : 'Shift: '}
+            <strong>{fmt12(shiftStart)}{shiftEnd ? ` – ${fmt12(shiftEnd)}` : ''}</strong>
+            {shiftGrace > 0 ? ` · ${shiftGrace}m grace` : ''}
+          </span>
+        </div>
+      )}
+
+      {/* Before shift banner (Phase 6) */}
+      {shiftWindowStatus === 'before' && !isCheckedIn && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+             style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.25)' }}>
+          <AlertCircle style={{ width: 14, height: 14, color: '#F59E0B', flexShrink: 0 }} />
+          <span className="text-xs" style={{ color: '#F59E0B' }}>
+            Your shift starts at <strong>{fmt12(shiftStart)}</strong>. Punch-in will open 30 minutes before.
+          </span>
+        </div>
+      )}
 
       {/* Location status badge */}
       <div className="flex items-center gap-3 px-3 py-2 rounded-lg"
@@ -476,12 +535,12 @@ function PunchInPanel({ todayCtx, onPunchIn, onPunchOut, activeSession, elapsed,
         {!isCheckedIn ? (
           <button
             onClick={() => onPunchIn(userCoords)}
-            disabled={punching || isBlocked || locationStatus === 'checking'}
+            disabled={isPunchInDisabled}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white"
-            style={{ background: 'var(--accent)', opacity: (punching || isBlocked || locationStatus === 'checking') ? 0.5 : 1,
-              cursor: (punching || isBlocked || locationStatus === 'checking') ? 'not-allowed' : 'pointer' }}>
+            style={{ background: 'var(--accent)', opacity: isPunchInDisabled ? 0.5 : 1,
+              cursor: isPunchInDisabled ? 'not-allowed' : 'pointer' }}>
             {punching ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
-            {punching ? 'Punching In…' : 'Punch In'}
+            {punching ? 'Punching In…' : shiftWindowStatus === 'before' ? `Shift at ${fmt12(shiftStart)}` : 'Punch In'}
           </button>
         ) : (
           <button
@@ -494,6 +553,110 @@ function PunchInPanel({ todayCtx, onPunchIn, onPunchOut, activeSession, elapsed,
             {punching ? 'Punching Out…' : 'Punch Out'}
           </button>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── Shift Change Request Modal (employee view) ────────────────────────────────
+
+function ShiftChangeRequestModal({ todayCtx, onClose, onSuccess }) {
+  const [shifts, setShifts] = useState([])
+  const [form, setForm]     = useState({
+    requested_shift_id: '',
+    effective_from: new Date().toISOString().split('T')[0],
+    effective_to: '',
+    reason: '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h)
+  }, [onClose])
+
+  useEffect(() => {
+    hrmService.listShifts().then(r => setShifts(r.data || [])).catch(() => {})
+  }, [])
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
+
+  const handleSubmit = async () => {
+    if (!form.requested_shift_id) { setErr('Please select a shift'); return }
+    if (!form.effective_from) { setErr('Effective from date is required'); return }
+    if (!form.reason.trim()) { setErr('Please provide a reason'); return }
+    if (form.effective_to && form.effective_to < form.effective_from) { setErr('End date must be after start date'); return }
+    setErr(''); setSaving(true)
+    try {
+      const payload = { ...form }
+      if (!payload.effective_to) delete payload.effective_to
+      await hrmService.submitShiftChangeRequest(payload)
+      toast.success('Shift change request submitted')
+      onSuccess()
+      onClose()
+    } catch (e) { setErr(e?.response?.data?.detail || 'Failed to submit') }
+    setSaving(false)
+  }
+
+  const currentShift = todayCtx?.shift_name
+    ? `${todayCtx.shift_name} (${todayCtx.shift_start}–${todayCtx.shift_end})`
+    : todayCtx?.shift_start ? `${todayCtx.shift_start}–${todayCtx.shift_end}` : 'Default shift'
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center',
+      padding:16, background:'rgba(0,0,0,0.6)', backdropFilter:'blur(4px)', WebkitBackdropFilter:'blur(4px)' }}
+      onClick={onClose}>
+      <div style={{ background:'var(--bg-modal, var(--bg-card))', border:'1px solid var(--border-card)',
+        borderRadius:20, boxShadow:'0 24px 80px rgba(0,0,0,0.5)', width:'100%', maxWidth:440,
+        maxHeight:'90vh', overflowY:'auto', padding:24 }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
+          <h3 style={{ fontSize:16, fontWeight:700, color:'var(--text-heading)', margin:0 }}>Request Shift Change</h3>
+          <button onClick={onClose} style={{ padding:6, borderRadius:8, border:'none', background:'var(--bg-alt)', cursor:'pointer', color:'var(--text-muted)', lineHeight:0 }}>
+            <XCircle style={{ width:16, height:16 }} />
+          </button>
+        </div>
+        <div style={{ padding:'8px 12px', borderRadius:8, marginBottom:16, fontSize:12, background:'var(--bg-alt)', color:'var(--text-muted)' }}>
+          Current shift: <strong style={{ color:'var(--text-body)' }}>{currentShift}</strong>
+        </div>
+        {err && <div style={{ padding:'8px 12px', borderRadius:8, marginBottom:16, fontSize:13, background:'var(--bg-danger)', color:'var(--text-danger)' }}>{err}</div>}
+        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+          <label style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            <span style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.4px' }}>Requested Shift *</span>
+            <select className="input" style={{ width:'100%', fontSize:14 }} value={form.requested_shift_id} onChange={e => set('requested_shift_id', e.target.value)}>
+              <option value="">Select shift…</option>
+              {shifts.map(s => <option key={s.id} value={s.id}>{s.name} ({s.start_time}–{s.end_time})</option>)}
+            </select>
+          </label>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <label style={{ display:'flex', flexDirection:'column', gap:6 }}>
+              <span style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.4px' }}>Effective From *</span>
+              <input type="date" className="input" style={{ width:'100%', fontSize:14 }} value={form.effective_from} onChange={e => set('effective_from', e.target.value)} />
+            </label>
+            <label style={{ display:'flex', flexDirection:'column', gap:6 }}>
+              <span style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.4px' }}>End Date (blank = permanent)</span>
+              <input type="date" className="input" style={{ width:'100%', fontSize:14 }} value={form.effective_to} onChange={e => set('effective_to', e.target.value)} />
+            </label>
+          </div>
+          <label style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            <span style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.4px' }}>Reason *</span>
+            <textarea className="input w-full text-sm" rows={3} value={form.reason} onChange={e => set('reason', e.target.value)} placeholder="Briefly explain why you need a different shift…" />
+          </label>
+        </div>
+        <div style={{ display:'flex', gap:10, marginTop:20 }}>
+          <button onClick={onClose} style={{ flex:1, padding:'10px 0', borderRadius:12, border:'1px solid var(--border)', background:'transparent', color:'var(--text-muted)', fontSize:14, cursor:'pointer' }}>Cancel</button>
+          <button onClick={handleSubmit} disabled={saving} style={{ flex:1, padding:'10px 0', borderRadius:12, border:'none', background:'var(--accent)', color:'#fff', fontSize:14, fontWeight:600, cursor:saving?'not-allowed':'pointer', opacity:saving?0.7:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+            {saving && <Loader2 style={{ width:16, height:16, animation:'spin 0.8s linear infinite' }} />}
+            {saving ? 'Submitting…' : 'Submit Request'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -523,6 +686,12 @@ function AttendanceTab() {
   const [wmrList, setWmrList]       = useState([])
   const [wmrLoading, setWmrLoading] = useState(false)
   const [cancellingId, setCancellingId] = useState(null)
+
+  // ── Shift Change Request state ───────────────────────────────────────────────
+  const [showSCRModal, setShowSCRModal] = useState(false)
+  const [scrList, setScrList]       = useState([])
+  const [scrLoading, setScrLoading] = useState(false)
+  const [cancellingScr, setCancellingScr] = useState(null)
 
   // ── Load today context + session ────────────────────────────────────────────
   const loadToday = useCallback(async () => {
@@ -561,6 +730,18 @@ function AttendanceTab() {
   }, [])
 
   useEffect(() => { loadWMR() }, [loadWMR])
+
+  // ── Load SCR list ───────────────────────────────────────────────────────────
+  const loadSCR = useCallback(async () => {
+    setScrLoading(true)
+    try {
+      const r = await hrmService.listMyShiftChangeRequests({ page_size: 10 })
+      setScrList(r.data?.items || [])
+    } catch {}
+    setScrLoading(false)
+  }, [])
+
+  useEffect(() => { loadSCR() }, [loadSCR])
 
   // ── History load ────────────────────────────────────────────────────────────
   const range = preset === 'custom'
@@ -903,11 +1084,76 @@ function AttendanceTab() {
         )}
       </div>
 
+      {/* ── Shift Change Requests ──────────────────────────────────────────── */}
+      <div className="rounded-xl border overflow-hidden"
+           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+        <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+          <div className="flex items-center gap-2">
+            <RotateCcw className="w-4 h-4" style={{ color: 'var(--accent)' }} />
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>Shift Change Requests</span>
+          </div>
+          <button onClick={() => setShowSCRModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
+            style={{ background: 'var(--accent)' }}>
+            <Plus className="w-3.5 h-3.5" /> Request
+          </button>
+        </div>
+        {scrLoading ? (
+          <div className="py-6 flex justify-center"><Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--text-muted)' }} /></div>
+        ) : scrList.length === 0 ? (
+          <div className="py-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>No shift change requests yet</div>
+        ) : (
+          <div>
+            {scrList.map(req => {
+              const sc = { pending: { bg:'rgba(251,191,36,0.12)', color:'#F59E0B' }, approved: { bg:'rgba(52,211,153,0.12)', color:'#10B981' }, rejected: { bg:'rgba(248,113,113,0.12)', color:'#EF4444' }, cancelled: { bg:'rgba(139,143,168,0.1)', color:'#8B8FA8' } }[req.status] || { bg:'rgba(139,143,168,0.1)', color:'#8B8FA8' }
+              return (
+                <div key={req.id} className="flex items-center gap-3 px-4 py-3 border-b last:border-b-0"
+                     style={{ borderColor: 'var(--border-subtle)' }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium" style={{ color: 'var(--text-heading)' }}>
+                      {req.requested_shift_name}
+                      {req.current_shift_name ? <span className="text-xs font-normal ml-1.5" style={{ color: 'var(--text-muted)' }}>(from {req.current_shift_name})</span> : null}
+                    </div>
+                    <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      {req.effective_from}{req.effective_to ? ` – ${req.effective_to}` : ' onwards'} · {req.reason}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium capitalize" style={{ background: sc.bg, color: sc.color }}>{req.status}</span>
+                    {req.status === 'pending' && (
+                      <button onClick={async () => {
+                        if (!window.confirm('Cancel this shift change request?')) return
+                        setCancellingScr(req.id)
+                        try { await hrmService.cancelShiftChangeRequest(req.id); toast.success('Request cancelled'); loadSCR() }
+                        catch (e) { toast.error(e?.response?.data?.detail || 'Failed') }
+                        setCancellingScr(null)
+                      }} disabled={cancellingScr === req.id}
+                        className="p-1.5 rounded-lg text-xs" style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)', opacity: cancellingScr===req.id?0.5:1 }}>
+                        {cancellingScr === req.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Work Mode Request Modal */}
       {showWMRModal && (
         <WorkModeRequestModal
           onClose={() => setShowWMRModal(false)}
           onSuccess={() => { loadWMR(); loadToday() }}
+        />
+      )}
+
+      {/* Shift Change Request Modal */}
+      {showSCRModal && (
+        <ShiftChangeRequestModal
+          todayCtx={todayCtx}
+          onClose={() => setShowSCRModal(false)}
+          onSuccess={() => { loadSCR() }}
         />
       )}
     </div>

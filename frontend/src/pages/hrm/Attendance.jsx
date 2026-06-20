@@ -317,6 +317,41 @@ function SettingsTab() {
         )}
       </div>
 
+      {/* Working Days */}
+      <div className="rounded-xl border p-5 space-y-4"
+           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+        <div>
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Company Working Days</h3>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+            Days NOT checked are treated as weekends. Individual employees can have different schedules.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((day, idx) => {
+            const checked = (cfg.working_days || [0,1,2,3,4]).includes(idx)
+            return (
+              <button key={idx} type="button"
+                onClick={() => {
+                  const cur = cfg.working_days || [0,1,2,3,4]
+                  set('working_days', checked ? cur.filter(d => d !== idx) : [...cur, idx].sort())
+                }}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                style={{
+                  background: checked ? 'var(--accent)' : 'var(--bg-alt)',
+                  color: checked ? '#fff' : 'var(--text-muted)',
+                  border: `1px solid ${checked ? 'var(--accent)' : 'var(--border)'}`,
+                }}>
+                {day}
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          Weekend: {['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+            .filter((_, i) => !(cfg.working_days || [0,1,2,3,4]).includes(i)).join(', ') || 'None'}
+        </p>
+      </div>
+
       <button onClick={save} disabled={saving}
         className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
         style={{ background: 'var(--accent)' }}>
@@ -965,15 +1000,420 @@ function DashboardTab() {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: 'dashboard',    label: 'Dashboard',           icon: Activity },
-  { key: 'holidays',     label: 'Holiday Management',  icon: CalendarDays,      perm: 'hrm:attendance:team' },
-  { key: 'leave_policy', label: 'Leave Policies',      icon: FileText,          perm: 'hrm:attendance:team' },
-  { key: 'shifts',       label: 'Shift Management',    icon: Clock,             perm: 'hrm:attendance:team' },
-  { key: 'work_mode',    label: 'Work Mode Requests',  icon: Home,              perm: 'hrm:attendance:team' },
-  { key: 'exceptions',   label: 'Exceptions',          icon: UserCheck,         perm: 'hrm:attendance:manage' },
-  { key: 'geo_fence',    label: 'Geo Fence',           icon: Shield,            perm: 'hrm:attendance:manage' },
-  { key: 'settings',     label: 'Attendance Rules',    icon: SlidersHorizontal, perm: 'hrm:attendance:manage' },
+  { key: 'dashboard',         label: 'Dashboard',           icon: Activity },
+  { key: 'holidays',          label: 'Holidays',            icon: CalendarDays,      perm: 'hrm:attendance:team' },
+  { key: 'leave_policy',      label: 'Leave Policies',      icon: FileText,          perm: 'hrm:attendance:team' },
+  { key: 'shifts',            label: 'Shifts',              icon: Clock,             perm: 'hrm:attendance:team' },
+  { key: 'shift_assignments', label: 'Shift Assignments',   icon: Users,             perm: 'hrm:attendance:team' },
+  { key: 'shift_changes',     label: 'Shift Changes',       icon: RotateCcw,         perm: 'hrm:attendance:team' },
+  { key: 'work_mode',         label: 'Work Mode',           icon: Home,              perm: 'hrm:attendance:team' },
+  { key: 'exceptions',        label: 'Exceptions',          icon: UserCheck,         perm: 'hrm:attendance:manage' },
+  { key: 'geo_fence',         label: 'Geo Fence',           icon: Shield,            perm: 'hrm:attendance:manage' },
+  { key: 'settings',          label: 'Attendance Rules',    icon: SlidersHorizontal, perm: 'hrm:attendance:manage' },
 ]
+
+// ── Shift Assignments Tab ─────────────────────────────────────────────────────
+
+function ShiftAssignmentsTab() {
+  const [list, setList]         = useState([])
+  const [shifts, setShifts]     = useState([])
+  const [employees, setEmployees] = useState([])
+  const [loading, setLoading]   = useState(false)
+  const [showModal, setShowModal] = useState(false)
+  const [editItem, setEditItem] = useState(null)
+  const [page, setPage]         = useState(1)
+  const [pages, setPages]       = useState(1)
+  const [total, setTotal]       = useState(0)
+  const [deletingId, setDeletingId] = useState(null)
+
+  const loadList = useCallback(async (pg = 1) => {
+    setLoading(true)
+    try {
+      const r = await hrmService.listShiftAssignments({ page: pg, page_size: 20 })
+      const d = r.data; setList(d.items || []); setTotal(d.total || 0); setPages(d.pages || 1); setPage(pg)
+    } catch { toast.error('Failed to load shift assignments') }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { loadList(1) }, [loadList])
+
+  useEffect(() => {
+    Promise.all([
+      hrmService.listShifts().catch(() => ({ data: [] })),
+      hrmService.listEmployees({ page_size: 200 }).catch(() => ({ data: { items: [] } })),
+    ]).then(([sr, er]) => {
+      setShifts(sr.data || [])
+      setEmployees(er.data?.items || [])
+    })
+  }, [])
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Remove this shift assignment?')) return
+    setDeletingId(id)
+    try { await hrmService.deleteShiftAssignment(id); toast.success('Assignment removed'); loadList(page) }
+    catch { toast.error('Failed to remove') }
+    setDeletingId(null)
+  }
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--text-heading)' }}>Shift Assignments</h2>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
+            Assign shifts with effective date ranges. Temporary assignments auto-revert when expired.
+          </p>
+        </div>
+        <button onClick={() => { setEditItem(null); setShowModal(true) }}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium text-white"
+          style={{ background: 'var(--accent)' }}>
+          <Plus className="w-4 h-4" /> New Assignment
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--text-muted)' }} /></div>
+      ) : list.length === 0 ? (
+        <div className="py-12 flex flex-col items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+          <Clock className="w-10 h-10 opacity-30" /><p className="text-sm">No shift assignments yet</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-alt)' }}>
+                  {['Employee','Shift','From','To','Type','Actions'].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap" style={{ color: 'var(--text-disabled)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((a, i) => {
+                  const now = new Date()
+                  const from = new Date(a.effective_from + 'T00:00:00')
+                  const to   = a.effective_to ? new Date(a.effective_to + 'T23:59:59') : null
+                  const isActive = now >= from && (!to || now <= to)
+                  return (
+                    <tr key={a.id} style={{ background: i%2===0?'transparent':'var(--bg-row-alt)', borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="text-sm font-medium" style={{ color: 'var(--text-heading)' }}>{a.employee_name || a.employee_id}</div>
+                        {isActive && <span className="text-xs font-medium" style={{ color: 'var(--text-success)' }}>● Active</span>}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="text-sm" style={{ color: 'var(--text-body)' }}>{a.shift_name}</div>
+                        <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{a.shift_start} – {a.shift_end}</div>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{a.effective_from}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>{a.effective_to || '∞ Permanent'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium"
+                          style={{ background: a.is_temporary ? 'rgba(251,191,36,0.15)' : 'rgba(52,211,153,0.15)',
+                            color: a.is_temporary ? '#F59E0B' : '#10B981' }}>
+                          {a.is_temporary ? 'Temporary' : 'Permanent'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => { setEditItem(a); setShowModal(true) }}
+                            className="p-1.5 rounded-lg" style={{ background: 'var(--bg-info)', color: 'var(--text-info)' }}>
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(a.id)} disabled={deletingId === a.id}
+                            className="p-1.5 rounded-lg" style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)', opacity: deletingId===a.id?0.5:1 }}>
+                            {deletingId===a.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          {pages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2 border-t" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Page {page} of {pages} · {total} records</span>
+              <div className="flex gap-1">
+                <button onClick={() => loadList(page-1)} disabled={page<=1} className="p-1.5 rounded" style={{ opacity: page<=1?0.4:1 }}>
+                  <ChevronLeft className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                </button>
+                <button onClick={() => loadList(page+1)} disabled={page>=pages} className="p-1.5 rounded" style={{ opacity: page>=pages?0.4:1 }}>
+                  <ChevronRight className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {showModal && (
+        <ShiftAssignmentModal
+          item={editItem} shifts={shifts} employees={employees}
+          onClose={() => { setShowModal(false); setEditItem(null) }}
+          onSuccess={() => { loadList(page); setShowModal(false); setEditItem(null) }}
+        />
+      )}
+    </div>
+  )
+}
+
+function ShiftAssignmentModal({ item, shifts, employees, onClose, onSuccess }) {
+  const isEdit = !!item
+  const today = new Date().toISOString().split('T')[0]
+  const [form, setForm] = useState({
+    employee_id:   item?.employee_id   ?? '',
+    shift_id:      item?.shift_id      ?? '',
+    effective_from: item?.effective_from ?? today,
+    effective_to:  item?.effective_to  ?? '',
+    is_temporary:  item?.is_temporary  ?? false,
+    reason:        item?.reason        ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  useEffect(() => {
+    const h = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h)
+  }, [onClose])
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
+
+  const handleSubmit = async () => {
+    if (!isEdit && !form.employee_id) { setErr('Select an employee'); return }
+    if (!form.shift_id) { setErr('Select a shift'); return }
+    if (!form.effective_from) { setErr('Effective from date is required'); return }
+    if (form.effective_to && form.effective_to < form.effective_from) { setErr('End date must be after start date'); return }
+    setErr(''); setSaving(true)
+    try {
+      const payload = { ...form, is_temporary: form.is_temporary || !!form.effective_to }
+      if (!payload.effective_to) delete payload.effective_to
+      if (!payload.reason) delete payload.reason
+      if (isEdit) {
+        await hrmService.updateShiftAssignment(item.id, payload)
+        toast.success('Assignment updated')
+      } else {
+        await hrmService.createShiftAssignment(payload)
+        toast.success('Shift assigned successfully')
+      }
+      onSuccess()
+    } catch (e) { setErr(e?.response?.data?.detail || 'Failed to save') }
+    setSaving(false)
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center',
+      padding:16, background:'rgba(0,0,0,0.6)', backdropFilter:'blur(4px)', WebkitBackdropFilter:'blur(4px)' }}
+      onClick={onClose}>
+      <div style={{ background:'var(--bg-modal, var(--bg-card))', border:'1px solid var(--border-card)',
+        borderRadius:20, boxShadow:'0 24px 80px rgba(0,0,0,0.5)', width:'100%', maxWidth:480,
+        maxHeight:'90vh', overflowY:'auto', padding:24 }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
+          <h3 style={{ fontSize:16, fontWeight:700, color:'var(--text-heading)', margin:0 }}>
+            {isEdit ? 'Edit Shift Assignment' : 'Assign Shift'}
+          </h3>
+          <button onClick={onClose} style={{ padding:6, borderRadius:8, border:'none', background:'var(--bg-alt)', cursor:'pointer', color:'var(--text-muted)', lineHeight:0 }}>
+            <X style={{ width:16, height:16 }} />
+          </button>
+        </div>
+        {err && <div style={{ padding:'8px 12px', borderRadius:8, marginBottom:16, fontSize:13, background:'var(--bg-danger)', color:'var(--text-danger)' }}>{err}</div>}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+          <label style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', gap:6 }}>
+            <span style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.4px' }}>Employee *</span>
+            <select className="input" style={{ width:'100%', fontSize:14 }} value={form.employee_id}
+              onChange={e => set('employee_id', e.target.value)} disabled={isEdit}>
+              <option value="">Select employee…</option>
+              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.full_name} {emp.employee_code ? `(${emp.employee_code})` : ''}</option>)}
+            </select>
+          </label>
+          <label style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', gap:6 }}>
+            <span style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.4px' }}>Shift *</span>
+            <select className="input" style={{ width:'100%', fontSize:14 }} value={form.shift_id} onChange={e => set('shift_id', e.target.value)}>
+              <option value="">Select shift…</option>
+              {shifts.map(s => <option key={s.id} value={s.id}>{s.name} ({s.start_time}–{s.end_time})</option>)}
+            </select>
+          </label>
+          <label style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            <span style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.4px' }}>Effective From *</span>
+            <input type="date" className="input" style={{ width:'100%', fontSize:14 }} value={form.effective_from} onChange={e => set('effective_from', e.target.value)} />
+          </label>
+          <label style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            <span style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.4px' }}>Effective To (leave blank = permanent)</span>
+            <input type="date" className="input" style={{ width:'100%', fontSize:14 }} value={form.effective_to} onChange={e => set('effective_to', e.target.value)} />
+          </label>
+          <label style={{ gridColumn:'1/-1', display:'flex', flexDirection:'column', gap:6 }}>
+            <span style={{ fontSize:11, fontWeight:600, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.4px' }}>Reason</span>
+            <input type="text" className="input" style={{ width:'100%', fontSize:14 }} value={form.reason}
+              onChange={e => set('reason', e.target.value)} placeholder="e.g. Client project, rotation…" />
+          </label>
+          <label style={{ gridColumn:'1/-1', display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}>
+            <input type="checkbox" style={{ width:16, height:16, accentColor:'var(--accent)' }}
+              checked={form.is_temporary} onChange={e => set('is_temporary', e.target.checked)} />
+            <span style={{ fontSize:14, color:'var(--text-body)' }}>Temporary assignment (reverts after end date)</span>
+          </label>
+        </div>
+        <div style={{ display:'flex', gap:10, marginTop:20 }}>
+          <button onClick={onClose} style={{ flex:1, padding:'10px 0', borderRadius:12, border:'1px solid var(--border)', background:'transparent', color:'var(--text-muted)', fontSize:14, cursor:'pointer' }}>Cancel</button>
+          <button onClick={handleSubmit} disabled={saving} style={{ flex:1, padding:'10px 0', borderRadius:12, border:'none', background:'var(--accent)', color:'#fff', fontSize:14, fontWeight:600, cursor:saving?'not-allowed':'pointer', opacity:saving?0.7:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+            {saving && <Loader2 style={{ width:16, height:16, animation:'spin 0.8s linear infinite' }} />}
+            {saving ? 'Saving…' : isEdit ? 'Update' : 'Assign'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Shift Change Requests Tab (HR view) ───────────────────────────────────────
+
+function ShiftChangesTab() {
+  const [list, setList]       = useState([])
+  const [loading, setLoading] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('pending')
+  const [page, setPage]       = useState(1)
+  const [pages, setPages]     = useState(1)
+  const [total, setTotal]     = useState(0)
+  const [actionId, setActionId] = useState(null)
+  const [rejectModal, setRejectModal] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+
+  const load = useCallback(async (pg = 1) => {
+    setLoading(true)
+    try {
+      const r = await hrmService.listShiftChangeRequests({ status: statusFilter || undefined, page: pg, page_size: 20 })
+      const d = r.data; setList(d.items || []); setTotal(d.total || 0); setPages(d.pages || 1); setPage(pg)
+    } catch { toast.error('Failed to load shift change requests') }
+    setLoading(false)
+  }, [statusFilter])
+
+  useEffect(() => { load(1) }, [load])
+
+  const handleApprove = async (id) => {
+    setActionId(id)
+    try { await hrmService.approveShiftChangeRequest(id); toast.success('Request approved'); load(page) }
+    catch (e) { toast.error(e?.response?.data?.detail || 'Failed') }
+    setActionId(null)
+  }
+
+  const handleReject = async () => {
+    if (!rejectModal) return
+    setActionId(rejectModal)
+    try {
+      await hrmService.rejectShiftChangeRequest(rejectModal, { review_reason: rejectReason })
+      toast.success('Request rejected'); setRejectModal(null); setRejectReason(''); load(page)
+    } catch (e) { toast.error(e?.response?.data?.detail || 'Failed') }
+    setActionId(null)
+  }
+
+  const STATUS_STYLE = {
+    pending:   { bg:'rgba(251,191,36,0.15)',  color:'#F59E0B' },
+    approved:  { bg:'rgba(52,211,153,0.15)',  color:'#10B981' },
+    rejected:  { bg:'rgba(248,113,113,0.15)', color:'#EF4444' },
+    cancelled: { bg:'rgba(139,143,168,0.12)', color:'#8B8FA8' },
+  }
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <h2 className="text-lg font-semibold flex-1" style={{ color: 'var(--text-heading)' }}>Shift Change Requests</h2>
+        {['', 'pending', 'approved', 'rejected', 'cancelled'].map(s => (
+          <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{ background: statusFilter===s?'var(--accent)':'var(--bg-card)', color: statusFilter===s?'#fff':'var(--text-muted)', border:`1px solid ${statusFilter===s?'var(--accent)':'var(--border-card)'}` }}>
+            {s===''?'All':s.charAt(0).toUpperCase()+s.slice(1)}
+          </button>
+        ))}
+      </div>
+      {loading ? (
+        <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--text-muted)' }} /></div>
+      ) : list.length === 0 ? (
+        <div className="py-12 flex flex-col items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+          <RotateCcw className="w-10 h-10 opacity-30" /><p className="text-sm">No shift change requests</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr style={{ borderBottom:'1px solid var(--border-subtle)', background:'var(--bg-alt)' }}>
+                {['Employee','Current Shift','Requested Shift','Period','Reason','Status','Actions'].map(h => (
+                  <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap" style={{ color: 'var(--text-disabled)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((req, i) => {
+                const sc = STATUS_STYLE[req.status] || { bg:'rgba(139,143,168,0.12)', color:'#8B8FA8' }
+                return (
+                  <tr key={req.id} style={{ background:i%2===0?'transparent':'var(--bg-row-alt)', borderBottom:'1px solid var(--border-subtle)' }}>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <div className="text-sm font-medium" style={{ color:'var(--text-heading)' }}>{req.employee_name || req.employee_id}</div>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color:'var(--text-muted)' }}>{req.current_shift_name || '—'}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-sm" style={{ color:'var(--text-body)' }}>{req.requested_shift_name}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color:'var(--text-muted)' }}>{req.effective_from}{req.effective_to ? ` – ${req.effective_to}` : ' onwards'}</td>
+                    <td className="px-3 py-2 text-xs max-w-40 truncate" style={{ color:'var(--text-muted)' }} title={req.reason}>{req.reason}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium capitalize" style={{ background:sc.bg, color:sc.color }}>{req.status}</span>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {req.status === 'pending' && (
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => handleApprove(req.id)} disabled={actionId===req.id}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium"
+                            style={{ background:'var(--bg-success)', color:'var(--text-success)', opacity:actionId===req.id?0.5:1 }}>
+                            {actionId===req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />} Approve
+                          </button>
+                          <button onClick={() => { setRejectModal(req.id); setRejectReason('') }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium"
+                            style={{ background:'var(--bg-danger)', color:'var(--text-danger)' }}>
+                            <XCircle className="w-3 h-3" /> Reject
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {pages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2 border-t" style={{ borderColor:'var(--border-subtle)', background:'var(--bg-alt)' }}>
+              <span className="text-xs" style={{ color:'var(--text-muted)' }}>Page {page} of {pages} · {total} requests</span>
+              <div className="flex gap-1">
+                <button onClick={() => load(page-1)} disabled={page<=1} className="p-1.5 rounded" style={{ opacity:page<=1?0.4:1 }}><ChevronLeft className="w-4 h-4" style={{ color:'var(--text-muted)' }} /></button>
+                <button onClick={() => load(page+1)} disabled={page>=pages} className="p-1.5 rounded" style={{ opacity:page>=pages?0.4:1 }}><ChevronRight className="w-4 h-4" style={{ color:'var(--text-muted)' }} /></button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {rejectModal && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:16, background:'rgba(0,0,0,0.6)', backdropFilter:'blur(4px)' }} onClick={() => setRejectModal(null)}>
+          <div style={{ background:'var(--bg-modal, var(--bg-card))', border:'1px solid var(--border-card)', borderRadius:20, boxShadow:'0 24px 80px rgba(0,0,0,0.5)', width:'100%', maxWidth:380, padding:24 }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize:16, fontWeight:700, color:'var(--text-heading)', marginBottom:16 }}>Reject Request</h3>
+            <label style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
+              <span style={{ fontSize:12, color:'var(--text-muted)' }}>Reason (optional)</span>
+              <textarea className="input w-full text-sm" rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Explain why…" />
+            </label>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={() => setRejectModal(null)} style={{ flex:1, padding:'10px 0', borderRadius:12, border:'1px solid var(--border)', background:'transparent', color:'var(--text-muted)', fontSize:14, cursor:'pointer' }}>Cancel</button>
+              <button onClick={handleReject} disabled={actionId===rejectModal} style={{ flex:1, padding:'10px 0', borderRadius:12, border:'none', background:'#EF4444', color:'#fff', fontSize:14, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                {actionId===rejectModal && <Loader2 style={{ width:16, height:16, animation:'spin 0.8s linear infinite' }} />} Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── Work Mode Requests Tab (HR view) ──────────────────────────────────────────
 
@@ -1371,16 +1811,30 @@ function ExceptionsTab() {
 function ExceptionModal({ item, employees, onClose, onSuccess }) {
   const isEdit = !!item
   const [form, setForm] = useState({
-    employee_id:          item?.employee_id          ?? '',
-    reason:               item?.reason               ?? '',
-    from_datetime:        item?.from_datetime        ? item.from_datetime.slice(0, 16) : '',
-    to_datetime:          item?.to_datetime          ? item.to_datetime.slice(0, 16) : '',
-    allow_login:          item?.allow_login          ?? true,
-    bypass_geo_fence:     item?.bypass_geo_fence     ?? false,
+    employee_id:           item?.employee_id           ?? '',
+    reason:                item?.reason                ?? '',
+    from_datetime:         item?.from_datetime         ? item.from_datetime.slice(0, 16) : '',
+    to_datetime:           item?.to_datetime           ? item.to_datetime.slice(0, 16)   : '',
+    allow_login:           item?.allow_login           ?? true,
+    bypass_geo_fence:      item?.bypass_geo_fence      ?? false,
     bypass_ip_restriction: item?.bypass_ip_restriction ?? false,
   })
   const [saving, setSaving] = useState(false)
   const [err, setErr]       = useState('')
+
+  // Lock body scroll while modal is open
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  // ESC key closes modal
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
 
@@ -1413,29 +1867,50 @@ function ExceptionModal({ item, employees, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-         style={{ background: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
-      <div className="rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4"
-           style={{ background: 'var(--bg-modal)', border: '1px solid var(--border-card)' }}
-           onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold" style={{ color: 'var(--text-heading)' }}>
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16,
+        background: 'rgba(0,0,0,0.6)',
+        backdropFilter: 'blur(4px)',
+        WebkitBackdropFilter: 'blur(4px)',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: 'var(--bg-modal, var(--bg-card))',
+          border: '1px solid var(--border-card)',
+          borderRadius: 20,
+          boxShadow: '0 24px 80px rgba(0,0,0,0.5)',
+          width: '100%',
+          maxWidth: 520,
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          padding: 24,
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)', margin: 0 }}>
             {isEdit ? 'Edit Exception' : 'New Attendance Exception'}
           </h3>
-          <button onClick={onClose} className="p-1 rounded" style={{ color: 'var(--text-muted)' }}>
-            <X className="w-4 h-4" />
+          <button onClick={onClose}
+            style={{ padding: 6, borderRadius: 8, border: 'none', background: 'var(--bg-alt)', cursor: 'pointer', color: 'var(--text-muted)', lineHeight: 0 }}>
+            <X style={{ width: 16, height: 16 }} />
           </button>
         </div>
 
         {err && (
-          <div className="px-3 py-2 rounded-lg text-sm"
-               style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>{err}</div>
+          <div style={{ padding: '8px 12px', borderRadius: 8, marginBottom: 16, fontSize: 13,
+            background: 'var(--bg-danger)', color: 'var(--text-danger)' }}>{err}</div>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
-          <label className="col-span-2 space-y-1">
-            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Employee *</span>
-            <select className="input w-full text-sm" value={form.employee_id}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <label style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Employee *</span>
+            <select className="input" style={{ width: '100%', fontSize: 14 }} value={form.employee_id}
               onChange={e => set('employee_id', e.target.value)} disabled={isEdit}>
               <option value="">Select employee…</option>
               {employees.map(emp => (
@@ -1446,56 +1921,57 @@ function ExceptionModal({ item, employees, onClose, onSuccess }) {
             </select>
           </label>
 
-          <label className="col-span-2 space-y-1">
-            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Reason *</span>
-            <input type="text" className="input w-full text-sm" value={form.reason}
+          <label style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Reason *</span>
+            <input type="text" className="input" style={{ width: '100%', fontSize: 14 }} value={form.reason}
               onChange={e => set('reason', e.target.value)}
               placeholder="e.g. Client visit, power outage, travelling…" />
           </label>
 
-          <label className="space-y-1">
-            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>From *</span>
-            <input type="datetime-local" className="input w-full text-sm" value={form.from_datetime}
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>From *</span>
+            <input type="datetime-local" className="input" style={{ width: '100%', fontSize: 14 }} value={form.from_datetime}
               onChange={e => set('from_datetime', e.target.value)} />
           </label>
 
-          <label className="space-y-1">
-            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>To *</span>
-            <input type="datetime-local" className="input w-full text-sm" value={form.to_datetime}
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>To *</span>
+            <input type="datetime-local" className="input" style={{ width: '100%', fontSize: 14 }} value={form.to_datetime}
               onChange={e => set('to_datetime', e.target.value)} />
           </label>
 
-          <label className="col-span-2 flex items-center gap-3 cursor-pointer pt-1">
-            <input type="checkbox" className="w-4 h-4 rounded" checked={form.allow_login}
+          <label style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', paddingTop: 4 }}>
+            <input type="checkbox" style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} checked={form.allow_login}
               onChange={e => set('allow_login', e.target.checked)} />
-            <span className="text-sm" style={{ color: 'var(--text-body)' }}>
-              Allow login during this window
-            </span>
+            <span style={{ fontSize: 14, color: 'var(--text-body)' }}>Allow login during this window</span>
           </label>
 
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" className="w-4 h-4 rounded" checked={form.bypass_geo_fence}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <input type="checkbox" style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} checked={form.bypass_geo_fence}
               onChange={e => set('bypass_geo_fence', e.target.checked)} />
-            <span className="text-sm" style={{ color: 'var(--text-body)' }}>Bypass Geo Fence</span>
+            <span style={{ fontSize: 14, color: 'var(--text-body)' }}>Bypass Geo Fence</span>
           </label>
 
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" className="w-4 h-4 rounded" checked={form.bypass_ip_restriction}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <input type="checkbox" style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} checked={form.bypass_ip_restriction}
               onChange={e => set('bypass_ip_restriction', e.target.checked)} />
-            <span className="text-sm" style={{ color: 'var(--text-body)' }}>Bypass IP Restriction</span>
+            <span style={{ fontSize: 14, color: 'var(--text-body)' }}>Bypass IP Restriction</span>
           </label>
         </div>
 
-        <div className="flex gap-2 pt-2">
+        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl text-sm border"
-            style={{ color: 'var(--text-muted)', borderColor: 'var(--border)' }}>
+            style={{ flex: 1, padding: '10px 0', borderRadius: 12, border: '1px solid var(--border)',
+              background: 'transparent', color: 'var(--text-muted)', fontSize: 14, cursor: 'pointer' }}>
             Cancel
           </button>
           <button onClick={handleSubmit} disabled={saving}
-            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: 'var(--accent)' }}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : isEdit ? 'Update' : 'Create'}
+            style={{ flex: 1, padding: '10px 0', borderRadius: 12, border: 'none',
+              background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 600,
+              cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {saving ? <Loader2 style={{ width: 16, height: 16, animation: 'spin 0.8s linear infinite' }} /> : null}
+            {saving ? 'Saving…' : isEdit ? 'Update' : 'Create'}
           </button>
         </div>
       </div>
@@ -1646,14 +2122,16 @@ export default function Attendance() {
       </div>
 
       <div className="flex-1 overflow-auto">
-        {activeTab === 'dashboard'    && <DashboardTab />}
-        {activeTab === 'holidays'     && <HolidayManagement />}
-        {activeTab === 'leave_policy' && <LeavePolicyManagement />}
-        {activeTab === 'shifts'       && <ShiftManagement />}
-        {activeTab === 'work_mode'    && <WorkModeTab />}
-        {activeTab === 'exceptions'   && <ExceptionsTab />}
-        {activeTab === 'geo_fence'    && <GeoFenceTab />}
-        {activeTab === 'settings'     && <SettingsTab />}
+        {activeTab === 'dashboard'         && <DashboardTab />}
+        {activeTab === 'holidays'          && <HolidayManagement />}
+        {activeTab === 'leave_policy'      && <LeavePolicyManagement />}
+        {activeTab === 'shifts'            && <ShiftManagement />}
+        {activeTab === 'shift_assignments' && <ShiftAssignmentsTab />}
+        {activeTab === 'shift_changes'     && <ShiftChangesTab />}
+        {activeTab === 'work_mode'         && <WorkModeTab />}
+        {activeTab === 'exceptions'        && <ExceptionsTab />}
+        {activeTab === 'geo_fence'         && <GeoFenceTab />}
+        {activeTab === 'settings'          && <SettingsTab />}
       </div>
     </div>
   )
