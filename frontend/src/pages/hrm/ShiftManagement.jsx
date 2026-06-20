@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import {
-  Plus, Edit2, Trash2, RefreshCw, Clock, Loader2, Users, Star,
+  Plus, Edit2, Trash2, RefreshCw, Clock, Loader2, Star,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
@@ -109,52 +109,13 @@ function ShiftForm({ initial, onSave, onCancel, saving }) {
   )
 }
 
-function AssignModal({ shifts, onAssign, onCancel, assigning }) {
-  const [employeeId, setEmployeeId] = useState('')
-  const [shiftId, setShiftId] = useState('')
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl p-6 space-y-4"
-           style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-        <h2 className="text-lg font-bold" style={{ color: 'var(--text-heading)' }}>Assign Shift to Employee</h2>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Employee ID</label>
-            <input className="input w-full" value={employeeId}
-                   onChange={e => setEmployeeId(e.target.value)} placeholder="Enter employee ID" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Shift</label>
-            <select className="input w-full" value={shiftId} onChange={e => setShiftId(e.target.value)}>
-              <option value="">Select shift...</option>
-              {shifts.map(s => <option key={s.id} value={s.id}>{s.name} ({s.start_time} – {s.end_time})</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <button onClick={onCancel} className="btn-secondary">Cancel</button>
-          <button onClick={() => onAssign({ employee_id: employeeId, shift_id: shiftId })}
-                  disabled={assigning || !employeeId || !shiftId}
-                  className="btn-primary flex items-center gap-2">
-            {assigning && <Loader2 className="w-4 h-4 animate-spin" />}
-            Assign
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default function ShiftManagement() {
   const { has } = usePermissions()
   const canManage = has('hrm:attendance:manage')
   const [shifts, setShifts] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
-  const [assignModal, setAssignModal] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [assigning, setAssigning] = useState(false)
   const [seeding, setSeeding] = useState(false)
 
   const load = async () => {
@@ -196,18 +157,6 @@ export default function ShiftManagement() {
     }
   }
 
-  const handleAssign = async (data) => {
-    setAssigning(true)
-    try {
-      await hrmService.assignShift(data)
-      toast.success('Shift assigned successfully')
-      setAssignModal(false)
-    } catch (e) {
-      toast.error(e.response?.data?.detail || 'Assignment failed')
-    }
-    setAssigning(false)
-  }
-
   const handleSeedDefaults = async () => {
     setSeeding(true)
     try {
@@ -231,10 +180,6 @@ export default function ShiftManagement() {
                     className="btn-secondary flex items-center gap-2 text-sm">
               {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               Seed Defaults
-            </button>
-            <button onClick={() => setAssignModal(true)}
-                    className="btn-secondary flex items-center gap-2 text-sm">
-              <Users className="w-4 h-4" /> Assign to Employee
             </button>
             <button onClick={() => setModal({})} className="btn-primary flex items-center gap-2 text-sm">
               <Plus className="w-4 h-4" /> Create Shift
@@ -345,14 +290,6 @@ export default function ShiftManagement() {
           onSave={handleSave}
           onCancel={() => setModal(null)}
           saving={saving}
-        />
-      )}
-      {assignModal && (
-        <AssignModal
-          shifts={shifts.filter(s => s.is_active)}
-          onAssign={handleAssign}
-          onCancel={() => setAssignModal(false)}
-          assigning={assigning}
         />
       )}
     </div>

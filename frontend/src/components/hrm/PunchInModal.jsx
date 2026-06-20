@@ -1,30 +1,54 @@
 /**
  * PunchInModal — shown once per day when the user hasn't punched in yet.
- * Captures work_mode + optional geo-location, then fires checkIn.
- * Does NOT pass employee_id — the backend resolves it from JWT/DB/email.
+ *
+ * Work mode is determined automatically from the employee's active approved
+ * work-mode request. The user cannot select or change it manually.
+ *
+ * Falls back to "office" when no approved request exists for today.
+ *
+ * Geo-location is still captured and sent to the backend for geo-fence
+ * validation (the backend enforces geo-fence rules server-side).
  */
 import React, { useState, useEffect } from 'react'
-import { Clock, MapPin, Loader2, Wifi, Home, Building2, X } from 'lucide-react'
+import {
+  Clock, MapPin, Loader2, Wifi, Home, Building2, X, Briefcase,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
 import ModalPortal from '../common/ModalPortal'
 
-const WORK_MODES = [
-  { key: 'office', label: 'In Office',    icon: Building2, color: 'text-blue-600 bg-blue-50 border-blue-200' },
-  { key: 'wfh',    label: 'Work From Home', icon: Home,      color: 'text-green-600 bg-green-50 border-green-200' },
-  { key: 'hybrid', label: 'Hybrid',       icon: Wifi,      color: 'text-purple-600 bg-purple-50 border-purple-200' },
-  { key: 'field',  label: 'Field Work',   icon: MapPin,    color: 'text-orange-600 bg-orange-50 border-orange-200' },
-]
+const MODE_META = {
+  office: { label: 'In Office',       icon: Building2, colorClass: 'text-blue-600'   },
+  wfh:    { label: 'Work From Home',  icon: Home,      colorClass: 'text-green-600'  },
+  hybrid: { label: 'Hybrid',          icon: Wifi,      colorClass: 'text-purple-600' },
+  field:  { label: 'Field Work',      icon: Briefcase, colorClass: 'text-orange-600' },
+}
 
 export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn }) {
-  const [workMode,    setWorkMode]    = useState('office')
-  const [geo,         setGeo]         = useState(null)
-  const [geoLoading,  setGeoLoading]  = useState(false)
-  const [loading,     setLoading]     = useState(false)
+  const [determinedMode, setDeterminedMode] = useState('office')
+  const [modeLoading,    setModeLoading]    = useState(false)
+  const [geo,            setGeo]            = useState(null)
+  const [geoLoading,     setGeoLoading]     = useState(false)
+  const [loading,        setLoading]        = useState(false)
 
   useEffect(() => {
     if (!isOpen) return
-    // Auto-request geo on open
+
+    // Fetch the system-determined work mode for today
+    setModeLoading(true)
+    hrmService.getMyActiveWorkMode()
+      .then(res => {
+        const active = res?.data?.active
+        if (active && active.work_mode) {
+          setDeterminedMode(active.work_mode)
+        } else {
+          setDeterminedMode('office')
+        }
+      })
+      .catch(() => setDeterminedMode('office'))
+      .finally(() => setModeLoading(false))
+
+    // Auto-request geo for backend geo-fence validation
     if (navigator.geolocation) {
       setGeoLoading(true)
       navigator.geolocation.getCurrentPosition(
@@ -33,7 +57,7 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn }
           setGeoLoading(false)
         },
         () => setGeoLoading(false),
-        { timeout: 8000, enableHighAccuracy: false }
+        { timeout: 8000, enableHighAccuracy: false },
       )
     }
   }, [isOpen])
@@ -41,15 +65,12 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn }
   const handlePunchIn = async () => {
     setLoading(true)
     try {
-      // employee_id intentionally omitted — backend resolves via JWT → DB → email match
       const res = await hrmService.checkIn({
-        work_mode: workMode,
+        work_mode: determinedMode,
         latitude:  geo?.latitude  ?? null,
         longitude: geo?.longitude ?? null,
       })
       toast.success('Punched in! Have a productive day.')
-      // Pass the API response directly so the banner can update its state
-      // immediately without an extra round-trip (fixes timer race condition).
       onPunchedIn(res?.data ?? null)
       onClose()
     } catch (err) {
@@ -59,11 +80,15 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn }
     setLoading(false)
   }
 
+  const modeMeta = MODE_META[determinedMode] || MODE_META.office
+  const ModeIcon = modeMeta.icon
+
   return (
     <ModalPortal isOpen={isOpen}>
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
         <div className="rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden"
           style={{ background: 'var(--bg-card)' }}>
+
           {/* Header */}
           <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-5 text-white relative">
             <button onClick={onClose} className="absolute top-3 right-3 text-white/70 hover:text-white">
@@ -83,26 +108,33 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn }
             <p className="text-sm text-white/90 mt-3">Please punch in to start your workday.</p>
           </div>
 
-          {/* Work Mode */}
+          {/* Work Mode (system-determined, read-only) */}
           <div className="p-5 space-y-4">
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>
-              Where are you working from today?
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {WORK_MODES.map(m => (
-                <button
-                  key={m.key}
-                  onClick={() => setWorkMode(m.key)}
-                  className="flex items-center gap-2 p-3 rounded-xl border-2 text-sm font-medium transition-all"
-                  style={workMode === m.key
-                    ? { borderColor: 'var(--accent)', background: 'var(--bg-info)', color: 'var(--text-link)' }
-                    : { borderColor: 'var(--border)', background: 'var(--bg-hover)', color: 'var(--text-secondary)' }
-                  }
-                >
-                  <m.icon className="w-4 h-4" />
-                  {m.label}
-                </button>
-              ))}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-2"
+                 style={{ color: 'var(--text-muted)' }}>
+                Today's Work Mode
+              </p>
+              {modeLoading ? (
+                <div className="flex items-center gap-2 px-4 py-3 rounded-xl border"
+                     style={{ background: 'var(--bg-hover)', borderColor: 'var(--border)' }}>
+                  <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--text-muted)' }} />
+                  <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Determining…</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 px-4 py-3 rounded-xl border-2"
+                     style={{ borderColor: 'var(--accent)', background: 'var(--bg-info)' }}>
+                  <ModeIcon className={`w-5 h-5 ${modeMeta.colorClass}`} />
+                  <span className="text-sm font-semibold" style={{ color: 'var(--text-link)' }}>
+                    {modeMeta.label}
+                  </span>
+                </div>
+              )}
+              <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>
+                {determinedMode === 'office'
+                  ? 'Default — no remote approval active for today'
+                  : 'Based on your approved work mode request'}
+              </p>
             </div>
 
             {/* Geo status */}
@@ -123,7 +155,7 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn }
 
             <button
               onClick={handlePunchIn}
-              disabled={loading}
+              disabled={loading || modeLoading}
               className="w-full py-3 text-base font-semibold flex items-center justify-center gap-2 rounded-xl text-white transition-opacity disabled:opacity-60"
               style={{ background: 'var(--accent)' }}
             >

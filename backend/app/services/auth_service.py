@@ -133,7 +133,7 @@ class AuthService:
     """
 
     @staticmethod
-    async def login(identifier: str, password: str, request=None, company_code: Optional[str] = None, force_login: bool = False, device_fingerprint: str = "") -> Tuple[Optional[dict], str]:
+    async def login(identifier: str, password: str, request=None, company_code: Optional[str] = None, force_login: bool = False, device_fingerprint: str = "", latitude: Optional[float] = None, longitude: Optional[float] = None) -> Tuple[Optional[dict], str]:
         """
         Authenticate user and return tokens.
 
@@ -188,6 +188,13 @@ class AuthService:
             if not tenant or not user:
                 return None, "Invalid credentials"
 
+            # Lockout check (before password attempt)
+            _lo_err = AuthService._get_lockout_error(
+                tenant.get("owner", {}) if user.get("is_owner") else user
+            )
+            if _lo_err:
+                return None, _lo_err
+
             ph = (
                 tenant.get("owner", {}).get("password_hash", "")
                 if user.get("is_owner")
@@ -202,7 +209,7 @@ class AuthService:
                 logger.warning("Login failed (wrong password) | company=%s | identifier=%s", company_code, identifier)
                 return None, "Invalid credentials"
 
-            return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint)
+            return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint, latitude=latitude, longitude=longitude)
 
         # GLOBAL PATH (no company_code)
         # ── Fast path: global_users index (O(1), no per-tenant scanning) ─────
@@ -221,11 +228,19 @@ class AuthService:
             if not global_user.get("is_active", True):
                 return None, "Your account has been deactivated. Please contact support."
 
+            _lo_err = AuthService._get_lockout_error(global_user)
+            if _lo_err:
+                return None, _lo_err
+
             if not verify_password(password, global_user.get("password_hash", "")):
-                await master_db.global_users.update_one(
-                    {"_id": global_user["_id"]},
-                    {"$inc": {"failed_login_attempts": 1}},
-                )
+                # ── FIX 4: apply lockout after threshold (global-users path) ──
+                _gu_new_count = (global_user.get("failed_login_attempts", 0) or 0) + 1
+                _gu_upd: dict = {"$inc": {"failed_login_attempts": 1}}
+                if _gu_new_count >= AuthService._LOCKOUT_THRESHOLD:
+                    _gu_upd["$set"] = {
+                        "lockout_until": datetime.now(timezone.utc) + timedelta(minutes=AuthService._LOCKOUT_MINUTES)
+                    }
+                await master_db.global_users.update_one({"_id": global_user["_id"]}, _gu_upd)
                 logger.warning("Login failed (wrong password, global path) | identifier=%s", identifier)
                 return None, "Invalid credentials"
 
@@ -264,10 +279,10 @@ class AuthService:
                 if not valid_matches:
                     return None, last_error or "No valid company access found. Please check your subscription."
 
-                # Reset failed-attempt counter on successful auth
+                # Reset failed-attempt counter and clear any lockout on successful auth
                 await master_db.global_users.update_one(
                     {"_id": global_user["_id"]},
-                    {"$set": {"failed_login_attempts": 0, "last_login": datetime.now(timezone.utc)}},
+                    {"$set": {"failed_login_attempts": 0, "lockout_until": None, "last_login": datetime.now(timezone.utc)}},
                 )
 
                 if len(valid_matches) > 1:
@@ -289,7 +304,7 @@ class AuthService:
                     }, ""
 
                 tenant, user = valid_matches[0]
-                return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint)
+                return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint, latitude=latitude, longitude=longitude)
 
         # ── Legacy fallback: O(N) scan for users not yet in global_users ─────
         # Covers tenants registered before the global_users migration was run.
@@ -326,6 +341,11 @@ class AuthService:
             user["role"]     = "admin"
             user["is_owner"] = True
 
+            # Lockout check (before password attempt)
+            _lo_err = AuthService._get_lockout_error(owner_tenant.get("owner", {}))
+            if _lo_err:
+                return None, _lo_err
+
             ph = owner_tenant.get("owner", {}).get("password_hash", "")
             if not verify_password(password, ph):
                 await AuthService._increment_failed_attempts(
@@ -334,7 +354,7 @@ class AuthService:
                 logger.warning("Login failed (wrong password) owner | identifier=%s", identifier)
                 return None, "Invalid credentials"
 
-            return await AuthService._complete_company_login(owner_tenant, user, ip_address, device_info, force_login=force_login)
+            return await AuthService._complete_company_login(owner_tenant, user, ip_address, device_info, force_login=force_login, latitude=latitude, longitude=longitude)
 
         # Step 2 — scan all company DBs (O(N) — only reached for unmigrated tenants)
         all_matches = await tenant_resolver.find_all_company_user_matches(identifier)
@@ -345,17 +365,28 @@ class AuthService:
 
         # Verify password for each match — collect every tenant where it succeeds
         valid_matches = []
+        _last_lockout_err = ""
         for t, u in all_matches:
+            _le = AuthService._get_lockout_error(u)
+            if _le:
+                _last_lockout_err = _le
+                continue  # skip locked accounts; try other companies
             if verify_password(password, u.get("password_hash", "")):
                 is_valid, _ = await tenant_resolver.validate_tenant_access(t)
                 if is_valid:
                     valid_matches.append((t, u))
 
         if not valid_matches:
+            if _last_lockout_err and not any(
+                not AuthService._get_lockout_error(u) for _, u in all_matches
+            ):
+                # ALL matches are locked — return lockout error
+                return None, _last_lockout_err
             first_t, first_u = all_matches[0]
-            await AuthService._increment_failed_attempts(
-                first_t["company_id"], str(first_u.get("_id", "")), False
-            )
+            if not AuthService._get_lockout_error(first_u):
+                await AuthService._increment_failed_attempts(
+                    first_t["company_id"], str(first_u.get("_id", "")), False
+                )
             logger.warning("Login failed (wrong password) | identifier=%s", identifier)
             return None, "Invalid credentials"
 
@@ -378,7 +409,7 @@ class AuthService:
             }, ""
 
         tenant, user = valid_matches[0]
-        return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint)
+        return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint, latitude=latitude, longitude=longitude)
 
     @staticmethod
     async def login_with_tenant(
@@ -388,6 +419,8 @@ class AuthService:
         request=None,
         force_login: bool = False,
         device_fingerprint: str = "",
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
     ) -> Tuple[Optional[dict], str]:
         """
         Scoped login after the user has selected a tenant from the picker.
@@ -399,6 +432,7 @@ class AuthService:
         return await AuthService.login(
             identifier, password, request=request, company_code=company_id,
             force_login=force_login, device_fingerprint=device_fingerprint,
+            latitude=latitude, longitude=longitude,
         )
 
     @staticmethod
@@ -421,6 +455,8 @@ class AuthService:
         device_info: str = "",
         force_login: bool = False,
         device_fingerprint: str = "",
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
     ) -> Tuple[Optional[dict], str]:
         """
         Shared finalization for every company-user login path.
@@ -600,6 +636,27 @@ class AuthService:
                     {"$set": {"crm_user_id": user_id}},
                 )
 
+        # ── Step 14A: Attendance Login Access Validation ─────────────────────
+        # Runs AFTER HRM auto-link (hrm_employee_id fully resolved) and
+        # BEFORE session/JWT creation.  Owner and non-HRM users always pass.
+        # Non-blocking: any unexpected exception is logged and login continues.
+        try:
+            from app.services.attendance_login_validator import validate_login_access as _val_login
+            # Use resolved hrm_employee_id (may have been auto-linked just above)
+            _user_for_14a = {**user, "hrm_employee_id": hrm_employee_id} if hrm_employee_id else user
+            _allowed, _deny = await _val_login(
+                user=_user_for_14a,
+                company_id=company_id,
+                company_db=company_db,
+                ip_address=ip_address,
+                latitude=latitude,
+                longitude=longitude,
+            )
+            if not _allowed:
+                return None, _deny
+        except Exception as _14a_ex:
+            logger.warning("[14A] Attendance login validator error (non-blocking): %s", _14a_ex)
+
         # ── Session + tokens ──────────────────────────────────────────────────
         await AuthService._revoke_sessions(user_id)
 
@@ -718,7 +775,20 @@ class AuthService:
         if not super_admin:
             return None, ""
 
+        # ── FIX 1: Lockout check before password attempt ──────────────────────
+        _lo_err = AuthService._get_lockout_error(super_admin)
+        if _lo_err:
+            return None, _lo_err
+
         if not verify_password(password, super_admin.get("password_hash", "")):
+            # Increment failed attempts and apply lockout after threshold
+            _sa_new_count = (super_admin.get("failed_login_attempts", 0) or 0) + 1
+            _sa_upd: dict = {"$inc": {"failed_login_attempts": 1}}
+            if _sa_new_count >= AuthService._LOCKOUT_THRESHOLD:
+                _sa_upd["$set"] = {
+                    "lockout_until": datetime.now(timezone.utc) + timedelta(minutes=AuthService._LOCKOUT_MINUTES)
+                }
+            await master_db.super_admins.update_one({"_id": super_admin["_id"]}, _sa_upd)
             return None, ""
 
         user_id = str(super_admin.get("_id"))
@@ -749,7 +819,8 @@ class AuthService:
             {
                 "$set": {
                     "last_login": datetime.now(timezone.utc),
-                    "failed_login_attempts": 0
+                    "failed_login_attempts": 0,
+                    "lockout_until": None,
                 }
             }
         )
@@ -785,7 +856,20 @@ class AuthService:
         })
         if not seller:
             return None, ""
+
+        # ── FIX 2: Lockout check before password attempt ──────────────────────
+        _sl_lo_err = AuthService._get_lockout_error(seller)
+        if _sl_lo_err:
+            return None, _sl_lo_err
+
         if not verify_password(password, seller.get("password_hash", "")):
+            _sl_new_count = (seller.get("failed_login_attempts", 0) or 0) + 1
+            _sl_upd: dict = {"$inc": {"failed_login_attempts": 1}}
+            if _sl_new_count >= AuthService._LOCKOUT_THRESHOLD:
+                _sl_upd["$set"] = {
+                    "lockout_until": datetime.now(timezone.utc) + timedelta(minutes=AuthService._LOCKOUT_MINUTES)
+                }
+            await master_db.sellers.update_one({"_id": seller["_id"]}, _sl_upd)
             return None, ""
 
         seller_id = str(seller["_id"])
@@ -827,7 +911,7 @@ class AuthService:
 
         await master_db.sellers.update_one(
             {"_id": seller["_id"]},
-            {"$set": {"last_login": datetime.now(timezone.utc)}}
+            {"$set": {"last_login": datetime.now(timezone.utc), "failed_login_attempts": 0, "lockout_until": None}}
         )
 
         return {
@@ -856,25 +940,70 @@ class AuthService:
             "is_trial": seller.get("is_trial", True),
         }, ""
 
+    _LOCKOUT_THRESHOLD = 5
+    _LOCKOUT_MINUTES   = 15
+
+    @staticmethod
+    def _get_lockout_error(doc: dict) -> str:
+        """
+        Return a non-empty error string if doc has an active lockout window.
+        doc may be a user dict (from company_db.users) or tenant.owner sub-dict.
+        Returns "" if the user is not locked or the lockout has expired.
+        """
+        lockout_until = doc.get("lockout_until")
+        if not lockout_until:
+            return ""
+        now = datetime.now(timezone.utc)
+        if lockout_until.tzinfo is None:
+            lockout_until = lockout_until.replace(tzinfo=timezone.utc)
+        if lockout_until <= now:
+            return ""  # lockout window has passed
+        remaining = max(1, int((lockout_until - now).total_seconds() / 60) + 1)
+        return (
+            f"Account temporarily locked due to multiple failed login attempts. "
+            f"Try again in {remaining} minute(s)."
+        )
+
     @staticmethod
     async def _increment_failed_attempts(company_id: str, user_id: str, is_owner: bool):
-        """Increment failed login attempts"""
+        """Increment failed login attempts and apply a temporary lockout after threshold."""
+        now = datetime.now(timezone.utc)
+        lockout_until = now + timedelta(minutes=AuthService._LOCKOUT_MINUTES)
+
         if is_owner:
             master_db = get_master_db()
             await master_db.tenants.update_one(
                 {"company_id": company_id},
-                {"$inc": {"owner.failed_login_attempts": 1}}
+                {"$inc": {"owner.failed_login_attempts": 1}},
             )
+            doc = await master_db.tenants.find_one(
+                {"company_id": company_id},
+                {"owner.failed_login_attempts": 1},
+            )
+            if doc and doc.get("owner", {}).get("failed_login_attempts", 0) >= AuthService._LOCKOUT_THRESHOLD:
+                await master_db.tenants.update_one(
+                    {"company_id": company_id},
+                    {"$set": {"owner.lockout_until": lockout_until}},
+                )
         else:
             company_db = get_company_db(company_id)
             await company_db.users.update_one(
                 {"_id": user_id},
-                {"$inc": {"failed_login_attempts": 1}}
+                {"$inc": {"failed_login_attempts": 1}},
             )
+            doc = await company_db.users.find_one(
+                {"_id": user_id},
+                {"failed_login_attempts": 1},
+            )
+            if doc and doc.get("failed_login_attempts", 0) >= AuthService._LOCKOUT_THRESHOLD:
+                await company_db.users.update_one(
+                    {"_id": user_id},
+                    {"$set": {"lockout_until": lockout_until}},
+                )
 
     @staticmethod
     async def _update_last_login(company_id: str, user_id: str, is_owner: bool):
-        """Update last login timestamp"""
+        """Update last login timestamp and clear any active lockout."""
         now = datetime.now(timezone.utc)
 
         if is_owner:
@@ -884,7 +1013,8 @@ class AuthService:
                 {
                     "$set": {
                         "owner.last_login": now,
-                        "owner.failed_login_attempts": 0
+                        "owner.failed_login_attempts": 0,
+                        "owner.lockout_until": None,
                     }
                 }
             )
@@ -895,7 +1025,8 @@ class AuthService:
                 {
                     "$set": {
                         "last_login": now,
-                        "failed_login_attempts": 0
+                        "failed_login_attempts": 0,
+                        "lockout_until": None,
                     }
                 }
             )
@@ -1064,16 +1195,42 @@ class AuthService:
         jti        = refresh_token_payload.get("jti")
 
         # Verify the session is still active (single-session enforcement)
+        _new_rtid: Optional[str] = None
         if jti:
             _master_db = get_master_db()
             now = datetime.now(timezone.utc)
             session = await _master_db.sessions.find_one({"_id": jti, "is_active": True})
-            if not session or session.get("expires_at", now) < now:
+            if not session:
                 return None, "Session expired. Please log in again."
-            # Extend session expiry on each refresh (rolling window)
+            # ── FIX 5: normalise naive datetimes from Motor before comparison ──
+            _sess_exp = session.get("expires_at")
+            if _sess_exp is not None and _sess_exp.tzinfo is None:
+                _sess_exp = _sess_exp.replace(tzinfo=timezone.utc)
+            if _sess_exp is not None and _sess_exp < now:
+                return None, "Session expired. Please log in again."
+
+            # ── Refresh token rotation ─────────────────────────────────────────
+            # incoming_rtid is present only after the first rotation cycle.
+            # Old tokens without rtid are accepted once (backward compatible),
+            # then rotation is enforced on every subsequent refresh.
+            incoming_rtid = refresh_token_payload.get("rtid")
+            stored_rtid   = session.get("refresh_token_id")
+            if incoming_rtid and stored_rtid and incoming_rtid != stored_rtid:
+                # Replay attack: a previously used refresh token was re-submitted.
+                logger.warning(
+                    "[REFRESH] Token reuse detected | user=%s jti=%.8s", user_id, jti
+                )
+                return None, "Refresh token reuse detected. Please log in again."
+
+            # Issue a new rotation ID and extend the rolling expiry window
+            _new_rtid = str(uuid.uuid4())
             await _master_db.sessions.update_one(
                 {"_id": jti},
-                {"$set": {"expires_at": now + timedelta(hours=24)}}
+                {"$set": {
+                    "expires_at":       now + timedelta(hours=24),
+                    "refresh_token_id": _new_rtid,
+                    "last_activity_at": now,
+                }},
             )
 
         if not company_id and refresh_token_payload.get("is_seller"):
@@ -1104,6 +1261,8 @@ class AuthService:
                 "username": seller.get("username", ""),
                 "full_name": seller.get("seller_name", ""),
             }
+            if jti:
+                token_data["jti"] = jti  # preserve for session revocation
 
         elif not company_id:
             # SuperAdmin refresh
@@ -1124,8 +1283,11 @@ class AuthService:
                 "is_super_admin": True,
                 "is_owner": False,
                 "username": super_admin.get("username", ""),
-                "full_name": super_admin.get("full_name", "")
+                "full_name": super_admin.get("full_name", ""),
             }
+            # ── FIX 3: preserve jti so session revocation works for SuperAdmin ─
+            if jti:
+                token_data["jti"] = jti
         else:
             # Company user refresh
             master_db = get_master_db()
@@ -1153,6 +1315,10 @@ class AuthService:
                     user["role"] = "admin"
                 else:
                     return None, "User not found"
+
+            # ── FIX 6: deactivated users must not be able to refresh tokens ────
+            if not user.get("is_owner") and not user.get("is_active", True):
+                return None, "Your account has been deactivated. Please contact support."
 
             if AuthService._is_token_revoked(token_iat, user.get("logout_at")):
                 return None, "Session expired. Please log in again."
@@ -1227,6 +1393,8 @@ class AuthService:
             refresh_payload["is_seller"] = True
         if jti:
             refresh_payload["jti"] = jti  # preserve same session
+        if _new_rtid:
+            refresh_payload["rtid"] = _new_rtid  # rotation ID: reuse of old token rejected
         new_refresh_token = create_refresh_token(refresh_payload)
 
         return {

@@ -37,6 +37,10 @@ class LoginRequest(BaseModel):
         None,
         description="Stable browser fingerprint used to detect same-device re-authentication"
     )
+    # Optional: client location for Step 14A geo fence check at login time.
+    # When omitted the geo fence position check is skipped (backward compatible).
+    latitude:  Optional[float] = Field(None, description="Client latitude for geo fence check")
+    longitude: Optional[float] = Field(None, description="Client longitude for geo fence check")
 
 
 class SuperAdminLoginRequest(BaseModel):
@@ -159,6 +163,8 @@ class TenantLoginRequest(BaseModel):
     company_id: str = Field(..., description="The company_id the user selected")
     force_login: bool = Field(False, description="If True, revoke any existing session")
     device_fingerprint: Optional[str] = None
+    latitude:  Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class TenantSelectionResponse(BaseModel):

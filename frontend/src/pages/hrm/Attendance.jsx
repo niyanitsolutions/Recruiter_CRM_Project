@@ -1000,16 +1000,14 @@ function DashboardTab() {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: 'dashboard',         label: 'Dashboard',           icon: Activity },
-  { key: 'holidays',          label: 'Holidays',            icon: CalendarDays,      perm: 'hrm:attendance:team' },
-  { key: 'leave_policy',      label: 'Leave Policies',      icon: FileText,          perm: 'hrm:attendance:team' },
-  { key: 'shifts',            label: 'Shifts',              icon: Clock,             perm: 'hrm:attendance:team' },
-  { key: 'shift_assignments', label: 'Shift Assignments',   icon: Users,             perm: 'hrm:attendance:team' },
-  { key: 'shift_changes',     label: 'Shift Changes',       icon: RotateCcw,         perm: 'hrm:attendance:team' },
-  { key: 'work_mode',         label: 'Work Mode',           icon: Home,              perm: 'hrm:attendance:team' },
-  { key: 'exceptions',        label: 'Exceptions',          icon: UserCheck,         perm: 'hrm:attendance:manage' },
-  { key: 'geo_fence',         label: 'Geo Fence',           icon: Shield,            perm: 'hrm:attendance:manage' },
-  { key: 'settings',          label: 'Attendance Rules',    icon: SlidersHorizontal, perm: 'hrm:attendance:manage' },
+  { key: 'dashboard',    label: 'Dashboard',        icon: Activity },
+  { key: 'holidays',     label: 'Holidays',         icon: CalendarDays,      perm: 'hrm:attendance:team' },
+  { key: 'leave_policy', label: 'Leave Policies',   icon: FileText,          perm: 'hrm:attendance:team' },
+  { key: 'shifts',       label: 'Shifts',           icon: Clock,             perm: 'hrm:attendance:team' },
+  { key: 'work_mode',    label: 'Work Modes',       icon: Home,              perm: 'hrm:attendance:team' },
+  { key: 'exceptions',   label: 'Exceptions',       icon: UserCheck,         perm: 'hrm:attendance:manage' },
+  { key: 'geo_fence',    label: 'Geo Fence',        icon: Shield,            perm: 'hrm:attendance:manage' },
+  { key: 'settings',     label: 'Attendance Rules', icon: SlidersHorizontal, perm: 'hrm:attendance:manage' },
 ]
 
 // ── Shift Assignments Tab ─────────────────────────────────────────────────────
@@ -2084,6 +2082,51 @@ function GeoFenceTab() {
   )
 }
 
+// ── Shifts Page (3 inner sub-tabs: Shifts / Shift Assignments / Shift Changes) ──
+
+const SHIFT_SUBTABS = [
+  { key: 'shifts',       label: 'Shifts',            icon: Clock },
+  { key: 'assignments',  label: 'Shift Assignments',  icon: Users },
+  { key: 'changes',      label: 'Shift Changes',      icon: RotateCcw },
+]
+
+function ShiftsPage() {
+  const [sub, setSub] = useState('shifts')
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Sub-tab bar */}
+      <div className="px-6 pt-4 pb-0" style={{ background: 'var(--bg-page)' }}>
+        <div className="flex gap-1 border-b overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
+          {SHIFT_SUBTABS.map(t => {
+            const Icon = t.icon
+            return (
+              <button key={t.key} onClick={() => setSub(t.key)}
+                className="px-4 py-2.5 text-sm font-medium transition-colors relative flex items-center gap-1.5 whitespace-nowrap"
+                style={{
+                  color:      sub === t.key ? 'var(--text-link)' : 'var(--text-muted)',
+                  background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0,
+                }}>
+                <Icon className="w-3.5 h-3.5" />
+                {t.label}
+                {sub === t.key && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t"
+                        style={{ background: 'var(--text-link)' }} />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div className="flex-1 overflow-auto">
+        {sub === 'shifts'      && <ShiftManagement />}
+        {sub === 'assignments' && <ShiftAssignmentsTab />}
+        {sub === 'changes'     && <ShiftChangesTab />}
+      </div>
+    </div>
+  )
+}
+
 export default function Attendance() {
   const { has } = usePermissions()
   const visibleTabs = TABS.filter(t => !t.perm || has(t.perm))
@@ -2122,16 +2165,14 @@ export default function Attendance() {
       </div>
 
       <div className="flex-1 overflow-auto">
-        {activeTab === 'dashboard'         && <DashboardTab />}
-        {activeTab === 'holidays'          && <HolidayManagement />}
-        {activeTab === 'leave_policy'      && <LeavePolicyManagement />}
-        {activeTab === 'shifts'            && <ShiftManagement />}
-        {activeTab === 'shift_assignments' && <ShiftAssignmentsTab />}
-        {activeTab === 'shift_changes'     && <ShiftChangesTab />}
-        {activeTab === 'work_mode'         && <WorkModeTab />}
-        {activeTab === 'exceptions'        && <ExceptionsTab />}
-        {activeTab === 'geo_fence'         && <GeoFenceTab />}
-        {activeTab === 'settings'          && <SettingsTab />}
+        {activeTab === 'dashboard'    && <DashboardTab />}
+        {activeTab === 'holidays'     && <HolidayManagement />}
+        {activeTab === 'leave_policy' && <LeavePolicyManagement />}
+        {activeTab === 'shifts'       && <ShiftsPage />}
+        {activeTab === 'work_mode'    && <WorkModeTab />}
+        {activeTab === 'exceptions'   && <ExceptionsTab />}
+        {activeTab === 'geo_fence'    && <GeoFenceTab />}
+        {activeTab === 'settings'     && <SettingsTab />}
       </div>
     </div>
   )
