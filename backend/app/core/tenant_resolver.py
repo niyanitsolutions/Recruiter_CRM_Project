@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import logging
 import re
 
-from app.core.database import get_master_db, get_company_db
+from app.core.database import get_master_db, get_company_db, DatabaseManager
 from app.models.master.tenant import TenantStatus
 
 logger = logging.getLogger(__name__)
@@ -232,7 +232,7 @@ class TenantResolver:
                 return tenant, None, error
 
             company_id = tenant.get("company_id")
-            company_db = get_company_db(company_id)
+            company_db = await DatabaseManager.resolve_and_get_company_db(company_id)
 
             # Check if the identifier matches the owner first
             owner_basic = tenant.get("owner", {})
@@ -296,7 +296,7 @@ class TenantResolver:
 
             user = None
             if company_id:
-                company_db = get_company_db(company_id)
+                company_db = await DatabaseManager.resolve_and_get_company_db(company_id)
                 owner_id   = str(owner_basic.get("_id", ""))
                 if owner_id:
                     user = await company_db.users.find_one(
@@ -317,7 +317,7 @@ class TenantResolver:
 
         async for tenant in tenants_cursor:
             company_id = tenant.get("company_id")
-            company_db = get_company_db(company_id)
+            company_db = await DatabaseManager.resolve_and_get_company_db(company_id)
 
             user = await company_db.users.find_one({
                 "is_deleted": False,
@@ -363,7 +363,7 @@ class TenantResolver:
             company_id = tenant.get("company_id")
             if not company_id:
                 continue
-            company_db = get_company_db(company_id)
+            company_db = await DatabaseManager.resolve_and_get_company_db(company_id)
             user = await company_db.users.find_one({
                 "is_deleted": False,
                 "$or": [

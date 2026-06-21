@@ -131,7 +131,7 @@ class DatabaseManager:
         Create and initialize a new company database
         Called during company registration
         """
-        db = cls.get_company_db(company_id)
+        db = await cls.resolve_and_get_company_db(company_id)
         
         # Create required collections with indexes
         collections_config = {

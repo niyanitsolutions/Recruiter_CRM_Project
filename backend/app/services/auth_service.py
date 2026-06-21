@@ -265,7 +265,7 @@ class AuthService:
                             error = "SUBSCRIPTION_EXPIRED_OWNER" + error[len("SUBSCRIPTION_EXPIRED"):]
                         last_error = error
                         continue
-                    company_db = get_company_db(cid)
+                    company_db = await DatabaseManager.resolve_and_get_company_db(cid)
                     company_user = await company_db.users.find_one(
                         {"_id": mapping["local_user_id"], "is_deleted": False}
                     )
@@ -332,7 +332,7 @@ class AuthService:
             # Prefer full owner record from company_db (has override_permissions, etc.)
             user = None
             if company_id:
-                company_db = get_company_db(company_id)
+                company_db = await DatabaseManager.resolve_and_get_company_db(company_id)
                 owner_id   = str(owner_basic.get("_id", ""))
                 if owner_id:
                     user = await company_db.users.find_one({"_id": owner_id, "is_deleted": False})
