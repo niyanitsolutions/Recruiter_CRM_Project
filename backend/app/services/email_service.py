@@ -91,7 +91,9 @@ def decrypt_password(encrypted: str) -> str:
 def _do_send(cfg: dict, to_email: str, subject: str,
              html_body: str, text_body: str = "") -> None:
     """
-    Synchronous SMTP send via SMTP_SSL (implicit SSL, port 465).
+    Synchronous SMTP send — auto-selects SSL mode based on port:
+      port 465 → SMTP_SSL (implicit SSL / SMTPS)
+      port 587 → SMTP + STARTTLS (explicit TLS)
     Raises on any failure — callers decide how to handle.
     NOTE: SMTP password is NEVER included in log output.
     """
@@ -107,14 +109,27 @@ def _do_send(cfg: dict, to_email: str, subject: str,
         msg.attach(MIMEText(text_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    timeout = cfg.get("timeout", settings.SMTP_TIMEOUT)
+    host    = cfg["host"]
+    port    = int(cfg.get("port", settings.SMTP_PORT))
+    timeout = int(cfg.get("timeout", settings.SMTP_TIMEOUT))
+    use_ssl = (port == 465)
+    mode    = "SMTP_SSL" if use_ssl else "STARTTLS"
     message_id = msg["Message-ID"]
 
     logger.info(
-        "[SMTP] STEP 1: Connecting to %s:%s via SMTP_SSL (timeout=%ss) | Message-ID=%s",
-        cfg["host"], cfg["port"], timeout, message_id,
+        "[SMTP] STEP 1: Connecting to %s:%s mode=%s timeout=%ss | to=%s | Message-ID=%s",
+        host, port, mode, timeout, to_email, message_id,
     )
-    with smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=timeout) as server:
+    if use_ssl:
+        server_ctx = smtplib.SMTP_SSL(host, port, timeout=timeout)
+    else:
+        server_ctx = smtplib.SMTP(host, port, timeout=timeout)
+
+    with server_ctx as server:
+        if not use_ssl:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
         logger.info("[SMTP] STEP 2: Connected — logging in as %s", cfg["username"])
         server.login(cfg["username"], cfg["password"])
         logger.info("[SMTP] STEP 3: Authenticated — sending to=%s subject=%s", to_email, subject)
@@ -395,30 +410,39 @@ def validate_smtp_on_startup() -> None:
 
 def test_smtp_connection(cfg: dict) -> tuple[bool, str]:
     """
-    Synchronous live SMTP test (no email sent).
+    Synchronous live SMTP connection test (no email sent).
+    Auto-selects SSL mode by port: 465 → SMTP_SSL, other → SMTP+STARTTLS.
     Returns (success, message). Call via asyncio.to_thread from async context.
     NOTE: password is never included in the returned message.
     """
-    host = cfg.get("host", settings.SMTP_HOST)
-    port = int(cfg.get("port", settings.SMTP_PORT))
+    host     = cfg.get("host", settings.SMTP_HOST)
+    port     = int(cfg.get("port", settings.SMTP_PORT))
     username = cfg.get("username", settings.SMTP_USERNAME)
     password = cfg.get("password", settings.SMTP_PASSWORD)
-    timeout = int(cfg.get("timeout", settings.SMTP_TIMEOUT))
+    timeout  = int(cfg.get("timeout", settings.SMTP_TIMEOUT))
+    use_ssl  = (port == 465)
+    mode     = "SMTP_SSL" if use_ssl else "STARTTLS"
 
     if not username or not password:
         return False, "SMTP credentials not provided"
 
     try:
-        with smtplib.SMTP(host, port, timeout=timeout) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
+        if use_ssl:
+            server_ctx = smtplib.SMTP_SSL(host, port, timeout=timeout)
+        else:
+            server_ctx = smtplib.SMTP(host, port, timeout=timeout)
+
+        with server_ctx as server:
+            if not use_ssl:
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
             server.login(username, password)
-        return True, f"SMTP connection to {host}:{port} successful"
+        return True, f"SMTP connection to {host}:{port} ({mode}) successful"
     except smtplib.SMTPAuthenticationError:
         return (
             False,
-            f"Authentication failed for {username} on {host}:{port}. "
+            f"Authentication failed for {username} on {host}:{port} ({mode}). "
             "If using Gmail, use an App Password (Google Account → Security → App Passwords).",
         )
     except smtplib.SMTPConnectError as exc:
