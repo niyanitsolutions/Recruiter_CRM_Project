@@ -45,7 +45,8 @@ class PipelineService:
     async def create_pipeline(
         db: AsyncIOMotorDatabase,
         pipeline_data: PipelineCreate,
-        created_by: str
+        created_by: str,
+        company_id: str = "",
     ) -> PipelineResponse:
         """Create a new pipeline"""
         collection = db[PipelineService.COLLECTION]
@@ -56,12 +57,12 @@ class PipelineService:
             for i, s in enumerate(pipeline_data.stages)
         ]
 
-        # If setting as default, unset previous default
+        # If setting as default, unset previous default — scoped to this company
         if pipeline_data.is_default:
-            await collection.update_many(
-                {"is_default": True, "is_deleted": False},
-                {"$set": {"is_default": False}}
-            )
+            default_filter: Dict[str, Any] = {"is_default": True, "is_deleted": False}
+            if company_id:
+                default_filter["company_id"] = company_id
+            await collection.update_many(default_filter, {"$set": {"is_default": False}})
 
         pipeline_dict = {
             "_id": str(ObjectId()),
@@ -72,6 +73,7 @@ class PipelineService:
             "client_name": pipeline_data.client_name,
             "stages": stages,
             "is_default": pipeline_data.is_default,
+            "company_id": company_id,
             "created_by": created_by,
             "created_at": datetime.now(timezone.utc),
             "is_deleted": False,
@@ -105,6 +107,7 @@ class PipelineService:
         page: int = 1,
         page_size: int = 20,
         job_id: Optional[str] = None,
+        company_id: str = "",
     ) -> Dict[str, Any]:
         """List pipelines with optional filters"""
         collection = db[PipelineService.COLLECTION]
@@ -161,7 +164,8 @@ class PipelineService:
         db: AsyncIOMotorDatabase,
         pipeline_id: str,
         update_data: PipelineUpdate,
-        updated_by: str
+        updated_by: str,
+        company_id: str = "",
     ) -> PipelineResponse:
         """Update a pipeline"""
         collection = db[PipelineService.COLLECTION]
@@ -184,10 +188,13 @@ class PipelineService:
             update_dict["client_name"] = update_data.client_name
         if update_data.is_default is not None:
             if update_data.is_default:
-                await collection.update_many(
-                    {"is_default": True, "is_deleted": False, "_id": {"$ne": pipeline_id}},
-                    {"$set": {"is_default": False}}
-                )
+                # Unset previous default — scoped to this company
+                default_filter: Dict[str, Any] = {
+                    "is_default": True, "is_deleted": False, "_id": {"$ne": pipeline_id}
+                }
+                if company_id:
+                    default_filter["company_id"] = company_id
+                await collection.update_many(default_filter, {"$set": {"is_default": False}})
             update_dict["is_default"] = update_data.is_default
         if update_data.stages is not None:
             update_dict["stages"] = [

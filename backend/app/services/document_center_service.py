@@ -533,7 +533,7 @@ async def _fetch_employee_fields(db: AsyncIOMotorDatabase, employee_id: str) -> 
     fields: Dict[str, str] = {}
     if not employee_id:
         return fields
-    emp = await db.employees.find_one({"_id": employee_id, "is_deleted": {"$ne": True}})
+    emp = await db.employees.find_one({"_id": employee_id, "is_deleted": False})
     if not emp:
         return fields
     now = datetime.now(timezone.utc)
@@ -562,13 +562,13 @@ class DocumentCenterService:
     # ── Category CRUD ──────────────────────────────────────────────────────────
 
     async def list_categories(self, db: AsyncIOMotorDatabase) -> List[Dict]:
-        cursor = db.doc_categories.find({"is_deleted": {"$ne": True}}).sort("sort_order", 1)
+        cursor = db.doc_categories.find({"is_deleted": False}).sort("sort_order", 1)
         cats = await cursor.to_list(length=500)
         # Enrich with template counts
         for cat in cats:
             cat["template_count"] = await db.doc_templates.count_documents({
                 "category_id": cat["_id"],
-                "is_deleted": {"$ne": True},
+                "is_deleted": False,
             })
         return cats
 
@@ -619,7 +619,7 @@ class DocumentCenterService:
         skip: int = 0,
         limit: int = 50,
     ) -> Tuple[List[Dict], int]:
-        query: Dict[str, Any] = {"is_deleted": {"$ne": True}}
+        query: Dict[str, Any] = {"is_deleted": False}
         if category_id:
             query["category_id"] = category_id
         if status:
@@ -660,7 +660,7 @@ class DocumentCenterService:
         return docs, total
 
     async def get_template(self, db: AsyncIOMotorDatabase, template_id: str) -> Optional[Dict]:
-        doc = await db.doc_templates.find_one({"_id": template_id, "is_deleted": {"$ne": True}})
+        doc = await db.doc_templates.find_one({"_id": template_id, "is_deleted": False})
         if doc:
             cat = await db.doc_categories.find_one({"_id": doc.get("category_id")}) if doc.get("category_id") else None
             doc["category_color"] = cat["color"] if cat else None
@@ -699,7 +699,7 @@ class DocumentCenterService:
     async def update_template(
         self, db: AsyncIOMotorDatabase, template_id: str, data: DocTemplateUpdate, user_id: str, user_name: str
     ) -> Tuple[bool, str]:
-        existing = await db.doc_templates.find_one({"_id": template_id, "is_deleted": {"$ne": True}})
+        existing = await db.doc_templates.find_one({"_id": template_id, "is_deleted": False})
         if not existing:
             return False, "Template not found"
 
@@ -737,7 +737,7 @@ class DocumentCenterService:
     async def duplicate_template(
         self, db: AsyncIOMotorDatabase, template_id: str, user_id: str, user_name: str
     ) -> Tuple[bool, str, Optional[Dict]]:
-        existing = await db.doc_templates.find_one({"_id": template_id, "is_deleted": {"$ne": True}})
+        existing = await db.doc_templates.find_one({"_id": template_id, "is_deleted": False})
         if not existing:
             return False, "Template not found", None
         content_obj = TemplateContent(**existing.get("content", {}))
@@ -847,7 +847,7 @@ class DocumentCenterService:
         user_id: str,
         user_name: str,
     ) -> Tuple[bool, str, Optional[Dict]]:
-        tmpl = await db.doc_templates.find_one({"_id": req.template_id, "is_deleted": {"$ne": True}})
+        tmpl = await db.doc_templates.find_one({"_id": req.template_id, "is_deleted": False})
         if not tmpl:
             return False, "Template not found", None
 
@@ -958,7 +958,7 @@ class DocumentCenterService:
         skip: int = 0,
         limit: int = 50,
     ) -> Tuple[List[Dict], int]:
-        query: Dict[str, Any] = {"is_deleted": {"$ne": True}}
+        query: Dict[str, Any] = {"is_deleted": False}
         if template_id:  query["template_id"]  = template_id
         if employee_id:  query["employee_id"]   = employee_id
         if status:       query["status"]        = status
@@ -1164,7 +1164,7 @@ class DocumentCenterService:
     # ── Archive ────────────────────────────────────────────────────────────────
 
     async def list_archived(self, db: AsyncIOMotorDatabase, skip: int = 0, limit: int = 50) -> Tuple[List[Dict], int]:
-        query = {"is_archived": True, "is_deleted": {"$ne": True}}
+        query = {"is_archived": True, "is_deleted": False}
         total  = await db.doc_templates.count_documents(query)
         cursor = db.doc_templates.find(query, {"content.body_html": 0}).sort("updated_at", -1).skip(skip).limit(limit)
         docs   = await cursor.to_list(length=limit)

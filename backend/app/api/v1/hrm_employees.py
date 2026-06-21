@@ -1,8 +1,6 @@
 """HRM — Employee API Routes"""
 import os
 import sys
-import uuid
-import pathlib
 from typing import Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
@@ -10,8 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions, require_any_permission
 from app.models.company.employee import EmployeeCreate, EmployeeUpdate
 from app.services.employee_service import EmployeeService
-
-_BACKEND_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 
 router = APIRouter(prefix="/hrm/employees", tags=["HRM - Employees"])
 
@@ -125,13 +121,8 @@ async def upload_employee_photo(
         )
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    upload_dir = _BACKEND_ROOT / "uploads" / "hrm_docs"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{uuid.uuid4()}{ext}"
-    fpath = upload_dir / fname
-    fpath.write_bytes(contents)
-
-    photo_url = f"/api/v1/uploads/hrm_docs/{fname}"
+    from app.utils.s3 import upload_file as s3_upload
+    photo_url = await s3_upload(contents, file.filename or f"photo{ext}", folder="profiles", candidate_id=employee_id)
 
     await db.hrm_employees.update_one(
         {"_id": employee_id},
@@ -141,7 +132,7 @@ async def upload_employee_photo(
     # Sync photo to the linked CRM user so the Users list also shows the avatar
     if emp.get("crm_user_id"):
         await db.users.update_one(
-            {"_id": emp["crm_user_id"], "is_deleted": {"$ne": True}},
+            {"_id": emp["crm_user_id"], "is_deleted": False},
             {"$set": {"avatar_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
         )
 

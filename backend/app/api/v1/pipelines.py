@@ -22,7 +22,8 @@ async def list_pipelines(
     _: bool = Depends(require_any_permission([["interview_settings:view"], ["jobs:view"]])),
 ):
     """List all pipelines"""
-    return await PipelineService.list_pipelines(db, page=page, page_size=page_size, job_id=job_id)
+    company_id = current_user.get("company_id", "")
+    return await PipelineService.list_pipelines(db, page=page, page_size=page_size, job_id=job_id, company_id=company_id)
 
 
 @router.post("/")
@@ -33,7 +34,8 @@ async def create_pipeline(
     _: bool = Depends(require_any_permission([["interview_settings:create"], ["jobs:create"]])),
 ):
     """Create a new pipeline"""
-    return await PipelineService.create_pipeline(db, pipeline_data, created_by=current_user["id"])
+    company_id = current_user.get("company_id", "")
+    return await PipelineService.create_pipeline(db, pipeline_data, created_by=current_user["id"], company_id=company_id)
 
 
 @router.get("/job/{job_id}")
@@ -82,7 +84,8 @@ async def update_pipeline(
     _: bool = Depends(require_any_permission([["interview_settings:edit"], ["jobs:edit"]])),
 ):
     """Update a pipeline"""
-    return await PipelineService.update_pipeline(db, pipeline_id, update_data, updated_by=current_user["id"])
+    company_id = current_user.get("company_id", "")
+    return await PipelineService.update_pipeline(db, pipeline_id, update_data, updated_by=current_user["id"], company_id=company_id)
 
 
 @router.delete("/{pipeline_id}")

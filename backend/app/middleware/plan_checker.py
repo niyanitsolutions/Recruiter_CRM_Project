@@ -41,7 +41,9 @@ class PlanChecker:
         if plan_expiry:
             if isinstance(plan_expiry, str):
                 plan_expiry = datetime.fromisoformat(plan_expiry.replace('Z', '+00:00'))
-            
+            # Motor returns naive datetimes — normalise to UTC-aware before comparison
+            if plan_expiry.tzinfo is None:
+                plan_expiry = plan_expiry.replace(tzinfo=timezone.utc)
             if plan_expiry < datetime.now(timezone.utc):
                 return False, "Your subscription has expired. Please renew to continue."
         

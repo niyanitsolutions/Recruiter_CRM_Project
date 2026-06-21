@@ -70,6 +70,12 @@ class ShiftAssignmentService:
         emp = await self.db[self.EMP_COL].find_one({"_id": employee_id, "company_id": company_id})
         emp_name = emp.get("full_name", "") if emp else ""
 
+        # Resolve grace_minutes: shift override → tenant setting → system default (15)
+        _settings_doc = await self.db["company_settings"].find_one({}) or {}
+        _tenant_grace = int(_settings_doc.get("attendance_grace_minutes", 15))
+        _grace = shift.get("grace_minutes")
+        resolved_grace = int(_grace) if _grace is not None else _tenant_grace
+
         doc_id = str(ObjectId())
         doc = {
             "_id": doc_id,
@@ -81,7 +87,7 @@ class ShiftAssignmentService:
             "shift_start":   shift.get("start_time"),
             "shift_end":     shift.get("end_time"),
             "is_overnight":  shift.get("is_overnight", False),
-            "grace_minutes": shift.get("grace_minutes", 15),
+            "grace_minutes": resolved_grace,
             "effective_from": effective_from,
             "effective_to":   effective_to,
             "is_temporary":   is_temporary,
@@ -127,7 +133,11 @@ class ShiftAssignmentService:
             update["shift_start"]   = shift.get("start_time")
             update["shift_end"]     = shift.get("end_time")
             update["is_overnight"]  = shift.get("is_overnight", False)
-            update["grace_minutes"] = shift.get("grace_minutes", 15)
+            # Resolve grace_minutes: shift override → tenant setting → system default (15)
+            _settings_doc = await self.db["company_settings"].find_one({}) or {}
+            _tenant_grace = int(_settings_doc.get("attendance_grace_minutes", 15))
+            _grace = shift.get("grace_minutes")
+            update["grace_minutes"] = int(_grace) if _grace is not None else _tenant_grace
         await self.col.update_one({"_id": assignment_id}, {"$set": update})
         existing.update(update)
         return self._serialize(existing)

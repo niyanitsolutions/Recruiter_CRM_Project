@@ -211,7 +211,7 @@ async def export_candidates(
     db=Depends(get_company_db),
 ):
     """Export candidates as CSV or PDF (tenant-isolated)."""
-    query: dict = {"is_deleted": {"$ne": True}}
+    query: dict = {"is_deleted": False}
     await _apply_visibility(query, current_user, db, "candidates")
     dq = _date_query(from_date, to_date)
     if dq:
@@ -259,7 +259,7 @@ async def export_jobs(
     db=Depends(get_company_db),
 ):
     """Export jobs as CSV or PDF (tenant-isolated)."""
-    query: dict = {"is_deleted": {"$ne": True}}
+    query: dict = {"is_deleted": False}
     await _apply_visibility(query, current_user, db, "jobs")
     dq = _date_query(from_date, to_date)
     if dq:
@@ -314,7 +314,7 @@ async def export_clients(
     db=Depends(get_company_db),
 ):
     """Export clients as CSV or PDF (tenant-isolated)."""
-    query: dict = {"is_deleted": {"$ne": True}}
+    query: dict = {"is_deleted": False}
     await _apply_visibility(query, current_user, db, "clients")
     dq = _date_query(from_date, to_date)
     if dq:
@@ -362,7 +362,7 @@ async def export_applications(
     db=Depends(get_company_db),
 ):
     """Export applications as CSV or PDF (tenant-isolated)."""
-    query: dict = {"is_deleted": {"$ne": True}}
+    query: dict = {"is_deleted": False}
     await _apply_visibility(query, current_user, db, "applications")
     dq = _date_query(from_date, to_date)
     if dq:
@@ -404,7 +404,7 @@ async def export_interviews(
     db=Depends(get_company_db),
 ):
     """Export interviews as CSV or PDF (tenant-isolated)."""
-    query: dict = {"is_deleted": {"$ne": True}}
+    query: dict = {"is_deleted": False}
     await _apply_visibility(query, current_user, db, "interviews")
     dq = _date_query(from_date, to_date)
     if dq:
@@ -450,7 +450,7 @@ async def export_users(
     db=Depends(get_company_db),
 ):
     """Export users as CSV or PDF (tenant-isolated)."""
-    query: dict = {"is_deleted": {"$ne": True}}
+    query: dict = {"is_deleted": False}
     dq = _date_query(from_date, to_date)
     if dq:
         query["created_at"] = dq
@@ -505,7 +505,7 @@ async def export_tenants(
     master_db=Depends(get_master_database),
 ):
     """Export all tenants as CSV or PDF (super admin only)."""
-    query: dict = {"is_deleted": {"$ne": True}}
+    query: dict = {"is_deleted": False}
     dq = _date_query(from_date, to_date)
     if dq:
         query["created_at"] = dq
@@ -559,7 +559,7 @@ async def export_resellers(
     master_db=Depends(get_master_database),
 ):
     """Export all resellers/sellers as CSV or PDF (super admin only)."""
-    query: dict = {"is_deleted": {"$ne": True}}
+    query: dict = {"is_deleted": False}
     dq = _date_query(from_date, to_date)
     if dq:
         query["created_at"] = dq

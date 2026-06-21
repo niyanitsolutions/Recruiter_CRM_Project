@@ -156,6 +156,7 @@ async def get_current_user(
     # Reached only when the active_session_token check passed (tokens matched),
     # so this path handles: (a) naturally expired sessions, (b) sessions revoked
     # by the user's own explicit logout on the same device.
+    # Response format matches dependencies.py so both auth paths behave identically.
     if jti:
         master_db = get_master_db()
         now = datetime.now(timezone.utc)
@@ -163,7 +164,10 @@ async def get_current_user(
         if not session:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Session has expired or been terminated. Please log in again.",
+                detail={
+                    "sessionExpired": True,
+                    "message": "Your session has expired or been terminated. Please log in again.",
+                },
                 headers={"WWW-Authenticate": "Bearer"},
             )
         session_expires = session.get("expires_at", now)
@@ -173,7 +177,10 @@ async def get_current_user(
         if session_expires < now:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Session has expired or been terminated. Please log in again.",
+                detail={
+                    "sessionExpired": True,
+                    "message": "Your session has expired or been terminated. Please log in again.",
+                },
                 headers={"WWW-Authenticate": "Bearer"},
             )
 

@@ -10,17 +10,18 @@ from app.models.company.attendance import AttendanceStatus, WorkMode
 
 
 # Fallback defaults — used when company_settings has no attendance config.
-_DEFAULT_GRACE_MINUTES      = 15
-_DEFAULT_HALF_DAY_HOURS     = 4.5
-_DEFAULT_FULL_DAY_HOURS     = 8.0
-_DEFAULT_OFFICE_START       = "09:00"
-_DEFAULT_OFFICE_END         = "18:00"
-_DEFAULT_MAX_BREAK_MINUTES  = 90
-_DEFAULT_MAX_BREAKS         = 5
+_DEFAULT_GRACE_MINUTES           = 15
+_DEFAULT_HALF_DAY_HOURS          = 4.5
+_DEFAULT_FULL_DAY_HOURS          = 8.0
+_DEFAULT_OFFICE_START            = "09:00"
+_DEFAULT_OFFICE_END              = "18:00"
+_DEFAULT_MAX_BREAK_MINUTES       = 90
+_DEFAULT_MAX_BREAKS              = 5
+_DEFAULT_OVERTIME_THRESHOLD_HOURS = 9.0
 
-# Keep old name as alias so any external callers aren't broken
+# Keep old names as aliases so any external callers aren't broken
 HALF_DAY_THRESHOLD_HOURS = _DEFAULT_HALF_DAY_HOURS
-OVERTIME_THRESHOLD_HOURS = 9.0
+OVERTIME_THRESHOLD_HOURS = _DEFAULT_OVERTIME_THRESHOLD_HOURS
 MIDNIGHT_AUTO_CHECKOUT_HOUR = 0
 
 
@@ -67,6 +68,10 @@ class AttendanceService:
             # Working days: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
             # Default Mon-Fri. Stored as JSON array in company_settings.
             "working_days":         doc.get("attendance_working_days", [0, 1, 2, 3, 4]),
+            # Tenant timezone (IANA name, e.g. "Asia/Kolkata", "America/New_York")
+            "timezone":             doc.get("timezone", "UTC"),
+            # Overtime: work hours beyond this threshold count as overtime
+            "overtime_threshold_hours": float(doc.get("attendance_overtime_threshold_hours", _DEFAULT_OVERTIME_THRESHOLD_HOURS)),
         }
 
     def _get_effective_working_days(self, settings: dict, emp: Optional[dict]) -> list:
@@ -377,7 +382,7 @@ class AttendanceService:
                             work_mode = "office"
                         else:
                             raise ValueError(
-                                "Your organization requires office location login. "
+                                "You are not in the office location required by your organization. "
                                 "Please contact HR if you require remote access approval."
                             )
                 else:
@@ -420,8 +425,9 @@ class AttendanceService:
                     )
                     if distance > settings["geo_fence_radius"]:
                         raise ValueError(
-                            f"Check-in blocked: you are {int(distance)}m from office "
-                            f"(allowed radius: {settings['geo_fence_radius']}m)."
+                            f"You are not in the office location required by your organization "
+                            f"(distance: {int(distance)}m, allowed radius: {settings['geo_fence_radius']}m). "
+                            "Please contact HR if you require remote access approval."
                         )
         # is_owner==True falls through without any geo/IP checks
 
@@ -517,8 +523,14 @@ class AttendanceService:
         if crm_user_id:
             try:
                 from app.services.notification_service import NotificationService
-                _IST = timedelta(hours=5, minutes=30)
-                check_in_str = (now + _IST).strftime("%I:%M %p")
+                from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+                _tz_name = settings.get("timezone", "UTC")
+                try:
+                    _tz = ZoneInfo(_tz_name)
+                    _now_aware = datetime.now(timezone.utc)
+                    check_in_str = _now_aware.astimezone(_tz).strftime("%I:%M %p")
+                except (ZoneInfoNotFoundError, Exception):
+                    check_in_str = datetime.now(timezone.utc).strftime("%I:%M %p")
                 await NotificationService(self.db).notify_punch_in(
                     company_id=company_id,
                     user_id=crm_user_id,
@@ -849,7 +861,10 @@ class AttendanceService:
             try:
                 eh, em = map(int, shift_end_str.split(":"))
             except (ValueError, AttributeError):
-                eh, em = 18, 0
+                try:
+                    eh, em = map(int, settings["office_end"].split(":"))
+                except (ValueError, AttributeError):
+                    eh, em = 18, 0  # absolute last resort
 
             if isinstance(rec_date, datetime):
                 checkout_time = rec_date.replace(hour=eh, minute=em, second=0, microsecond=0)

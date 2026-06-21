@@ -149,7 +149,7 @@ async def global_search(db: AsyncIOMotorDatabase, current_user: dict, query: str
 
     # ── Employees (HRM) ────────────────────────────────────────────────────
     if has("hrm:employees:view"):
-        base = {"is_deleted": {"$ne": True}}
+        base = {"is_deleted": False}
         base["$or"] = [{"full_name": pattern}, {"employee_code": pattern}, {"email": pattern}]
         await add("employee", "full_name", db.employees, base, "full_name", ["employee_code", "email"],
                    lambda d: {"id": d["_id"], "label": d.get("full_name"), "sub": d.get("employee_code") or "",
@@ -190,7 +190,7 @@ async def global_search(db: AsyncIOMotorDatabase, current_user: dict, query: str
 
     # ── Documents (generated HR documents) ─────────────────────────────────
     if has("docs:view", "hrm:employees:view"):
-        base = {"is_deleted": {"$ne": True}, "$or": [
+        base = {"is_deleted": False, "$or": [
             {"document_name": pattern}, {"template_name": pattern}, {"employee_name": pattern},
         ]}
         await add("document", "document_name", db.doc_generated, base, "document_name", ["template_name", "employee_name"],

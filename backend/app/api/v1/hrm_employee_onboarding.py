@@ -4,7 +4,6 @@ import os
 import io
 import csv
 import uuid
-import pathlib
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -16,8 +15,6 @@ from pydantic import BaseModel
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
 
 logger = logging.getLogger(__name__)
-
-_BACKEND_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 
 # Authenticated router (HR/Admin actions)
 router = APIRouter(prefix="/hrm/employees", tags=["HRM - Employee Onboarding"])
@@ -455,11 +452,8 @@ async def upload_onboarding_photo(token: str, file: UploadFile = File(...)):
     if len(contents) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Photo must be under 5 MB.")
 
-    upload_dir = _BACKEND_ROOT / "uploads" / "hrm_docs"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{uuid.uuid4()}{ext}"
-    (upload_dir / fname).write_bytes(contents)
-    photo_url = f"/api/v1/uploads/hrm_docs/{fname}"
+    from app.utils.s3 import upload_file as s3_upload
+    photo_url = await s3_upload(contents, file.filename or f"photo{ext}", folder="profiles", candidate_id=employee_id)
 
     await company_db.hrm_employees.update_one(
         {"_id": employee_id},
@@ -501,11 +495,8 @@ async def upload_onboarding_document(
     if len(contents) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Document must be under 10 MB.")
 
-    upload_dir = _BACKEND_ROOT / "uploads" / "hrm_docs"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{uuid.uuid4()}{ext}"
-    (upload_dir / fname).write_bytes(contents)
-    file_url = f"/api/v1/uploads/hrm_docs/{fname}"
+    from app.utils.s3 import upload_file as s3_upload
+    file_url = await s3_upload(contents, file.filename or f"doc{ext}", folder="hrm_docs")
 
     doc_labels = {
         "aadhaar":           "Aadhaar Card",

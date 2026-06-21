@@ -32,16 +32,32 @@ class LeaveService:
                 doc[f] = doc[f].isoformat()
         return doc
 
+    # ── Settings loader ───────────────────────────────────────────────────────
+
+    async def _get_working_days(self, company_id: str) -> list:
+        """Return tenant working-day indices (0=Mon…6=Sun) from company_settings.
+        Falls back to Mon-Fri [0,1,2,3,4] if not configured."""
+        doc = await self.db["company_settings"].find_one({}) or {}
+        wd = doc.get("attendance_working_days")
+        if wd and isinstance(wd, list):
+            return wd
+        return [0, 1, 2, 3, 4]
+
     # ── Working-day calculation ───────────────────────────────────────────────
 
     async def _count_working_days(
         self, from_date: date, to_date: date, company_id: str,
-        department: Optional[str] = None, duration: Optional[str] = None
+        department: Optional[str] = None, duration: Optional[str] = None,
+        working_days: Optional[list] = None,
     ) -> float:
-        """Count actual working days: excludes weekends and company holidays."""
+        """Count actual working days: excludes tenant non-working days and company holidays."""
         if duration in (LeaveDuration.HALF_DAY_MORNING, LeaveDuration.HALF_DAY_AFTERNOON,
                          "half_day_morning", "half_day_afternoon"):
             return 0.5
+
+        # Use tenant-configured working days; fall back to Mon-Fri for backward compat
+        if working_days is None:
+            working_days = await self._get_working_days(company_id)
 
         # Fetch company holidays in range
         holiday_dates: set = set()
@@ -60,7 +76,7 @@ class LeaveService:
         total = 0.0
         current = from_date
         while current <= to_date:
-            if current.weekday() < 5:  # Monday=0 … Friday=4
+            if current.weekday() in working_days:
                 if current.isoformat() not in holiday_dates:
                     total += 1.0
             current += timedelta(days=1)
@@ -481,6 +497,7 @@ class LeaveService:
 
         employee_id   = leave.get("employee_id", "")
         leave_id      = str(leave.get("id") or leave.get("_id") or "")
+        working_days  = await self._get_working_days(company_id)
         employee_name = leave.get("employee_name", "")
         leave_type    = leave.get("leave_type", "")
 
@@ -509,8 +526,8 @@ class LeaveService:
         current = from_date
 
         while current <= to_date:
-            # Skip weekends and holidays — leave days are only working days
-            if current.weekday() >= 5 or current.isoformat() in holiday_dates:
+            # Skip non-working days (tenant-configured) and holidays
+            if current.weekday() not in working_days or current.isoformat() in holiday_dates:
                 current += timedelta(days=1)
                 continue
 

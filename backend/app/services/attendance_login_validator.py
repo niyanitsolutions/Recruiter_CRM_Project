@@ -160,8 +160,8 @@ async def validate_login_access(
                 dist = _haversine_meters(latitude, longitude, office_lat, office_lon)
                 if dist > radius_m:
                     deny_reason = (
-                        "You are not authorized to access the system from your current location. "
-                        "Please contact HR or your administrator."
+                        "You are not in the office location required by your organization. "
+                        "Please contact HR if you require remote access approval."
                     )
             # If lat/lon not provided by client → geo check skipped (backward compatible)
 

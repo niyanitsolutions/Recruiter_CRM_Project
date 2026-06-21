@@ -426,14 +426,24 @@ async def reset_password(request: ResetPasswordRequest):
         "is_deleted": False,
     })
     if tenant:
+        new_hash = hash_password(new_password)
         await master_db.tenants.update_one(
             {"_id": tenant["_id"]},
             {"$set": {
-                "owner.password_hash": hash_password(new_password),
+                "owner.password_hash": new_hash,
                 "owner.reset_token": None,
                 "owner.reset_token_expiry": None,
             }}
         )
+        # Sync to company_db.users so both auth paths (login + refresh) see the same hash
+        from app.core.database import get_company_db as _get_company_db
+        _owner_id = tenant.get("owner", {}).get("id") or tenant.get("owner", {}).get("_id")
+        if tenant.get("company_id") and _owner_id:
+            _cdb = _get_company_db(tenant["company_id"])
+            await _cdb.users.update_one(
+                {"_id": _owner_id},
+                {"$set": {"password_hash": new_hash, "reset_token": None, "reset_token_expiry": None, "updated_at": now}},
+            )
         return {"message": "Password reset successfully. Please log in.", "success": True}
 
     # Check company users
@@ -799,11 +809,17 @@ async def get_login_summary(
 
     company_db = _get_company_db(auth.company_id)
     now = datetime.now(timezone.utc)
-    # IST offset for day boundaries
-    ist_offset = timedelta(hours=5, minutes=30)
-    ist_now = now + ist_offset
-    today_start_ist = ist_now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_start_utc = today_start_ist - ist_offset
+    # Resolve tenant timezone for day-boundary calculations
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    _settings_doc = await company_db["company_settings"].find_one({}) or {}
+    _tz_name = _settings_doc.get("timezone", "UTC")
+    try:
+        _tz = ZoneInfo(_tz_name)
+    except (ZoneInfoNotFoundError, Exception):
+        _tz = timezone.utc
+    local_now = now.astimezone(_tz)
+    today_start_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = today_start_local.astimezone(timezone.utc).replace(tzinfo=None)
     week_start_utc  = today_start_utc - timedelta(days=6)
     month_start_utc = today_start_utc - timedelta(days=29)
 
@@ -880,10 +896,17 @@ async def get_login_analytics(
     master_db  = _get_master_db()
     now = datetime.now(timezone.utc)
 
-    ist_offset = timedelta(hours=5, minutes=30)
-    ist_now = now + ist_offset
-    today_start_ist = ist_now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_start_utc = today_start_ist - ist_offset
+    # Resolve tenant timezone for day-boundary calculations
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    _settings_doc = await company_db["company_settings"].find_one({}) or {}
+    _tz_name = _settings_doc.get("timezone", "UTC")
+    try:
+        _tz = ZoneInfo(_tz_name)
+    except (ZoneInfoNotFoundError, Exception):
+        _tz = timezone.utc
+    local_now = now.astimezone(_tz)
+    today_start_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = today_start_local.astimezone(timezone.utc).replace(tzinfo=None)
     range_start_utc = today_start_utc - timedelta(days=days - 1)
 
     base_match = {"login_time": {"$gte": range_start_utc}}

@@ -1316,8 +1316,13 @@ class AuthService:
                 else:
                     return None, "User not found"
 
-            # ── FIX 6: deactivated users must not be able to refresh tokens ────
-            if not user.get("is_owner") and not user.get("is_active", True):
+            # ── Deactivated/suspended users must not be able to refresh tokens ──
+            # Checks both the status field (set by admin deactivation / suspension)
+            # and the legacy is_active boolean (older documents) so both paths block.
+            if not user.get("is_owner") and (
+                not user.get("is_active", True)
+                or user.get("status") in ("inactive", "suspended")
+            ):
                 return None, "Your account has been deactivated. Please contact support."
 
             if AuthService._is_token_revoked(token_iat, user.get("logout_at")):

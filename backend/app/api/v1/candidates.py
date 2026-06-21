@@ -490,7 +490,7 @@ async def upload_candidate_photo(
     _: bool = Depends(require_permissions(["candidates:edit"]))
 ):
     """Upload or replace a candidate's profile photo (JPG, JPEG, PNG, WEBP — max 5 MB)"""
-    import os, sys, pathlib
+    import os
 
     ALLOWED = {".jpg", ".jpeg", ".png", ".webp"}
     ext = os.path.splitext(file.filename or "")[1].lower()
@@ -502,19 +502,15 @@ async def upload_candidate_photo(
         raise HTTPException(status_code=400, detail="Profile photo must be smaller than 5 MB")
 
     candidate = await db.candidates.find_one(
-        {"_id": candidate_id, "is_deleted": {"$ne": True}},
+        {"_id": candidate_id, "is_deleted": False},
         {"_id": 1},
     )
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    _backend_root = pathlib.Path(__file__).resolve().parent.parent.parent.parent
-    upload_dir = _backend_root / "uploads" / "candidate_photos"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{uuid.uuid4()}{ext}"
-    (upload_dir / fname).write_bytes(contents)
+    from app.utils.s3 import upload_file as s3_upload
+    photo_url = await s3_upload(contents, file.filename or f"photo{ext}", folder="profiles", candidate_id=candidate_id)
 
-    photo_url = f"/api/v1/uploads/candidate_photos/{fname}"
     await db.candidates.update_one(
         {"_id": candidate_id},
         {"$set": {"photo_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
@@ -531,7 +527,7 @@ async def delete_candidate_photo(
 ):
     """Remove a candidate's profile photo"""
     candidate = await db.candidates.find_one(
-        {"_id": candidate_id, "is_deleted": {"$ne": True}},
+        {"_id": candidate_id, "is_deleted": False},
         {"_id": 1},
     )
     if not candidate:
@@ -1434,8 +1430,7 @@ async def public_upload_candidate_photo(token: str, candidate_id: str, file: Upl
     Upload a profile photo for a candidate created via a form link.
     Validates that the token was used and the candidate_id matches.
     """
-    import os, pathlib
-
+    import os
     from app.core.database import get_master_db as _master, get_company_db as _cdb
 
     master_db = _master()
@@ -1466,13 +1461,9 @@ async def public_upload_candidate_photo(token: str, candidate_id: str, file: Upl
     if len(content) > MAX_SIZE:
         raise HTTPException(status_code=400, detail="Profile photo must be smaller than 5 MB.")
 
-    _backend_root = pathlib.Path(__file__).resolve().parent.parent.parent.parent
-    upload_dir = _backend_root / "uploads" / "candidate_photos"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{uuid.uuid4()}{ext}"
-    (upload_dir / fname).write_bytes(content)
+    from app.utils.s3 import upload_file as s3_upload
+    photo_url = await s3_upload(content, file.filename or f"photo{ext}", folder="profiles", candidate_id=candidate_id)
 
-    photo_url = f"/api/v1/uploads/candidate_photos/{fname}"
     await company_db.candidates.update_one(
         {"_id": candidate_id},
         {"$set": {"photo_url": photo_url}},
