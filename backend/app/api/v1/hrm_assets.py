@@ -264,8 +264,7 @@ async def get_asset_by_public_token(public_token: str):
     """
     from app.core.database import DatabaseManager, get_master_db as _get_master
     master = _get_master()
-    # Use company_id (short key) — not _id (UUID) — because company DBs are
-    # named company_{company_id}_db and get_company_db resolves via company_id.
+    # Use company_id (short key) — not _id (UUID) — because get_company_db resolves via company_id.
     company_ids = await master.tenants.distinct("company_id", {"is_deleted": {"$ne": True}})
     for cid in company_ids:
         if not cid:

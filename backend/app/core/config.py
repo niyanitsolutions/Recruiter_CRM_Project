@@ -132,5 +132,11 @@ _validate_production_secrets(settings)
 
 
 def get_company_db_name(company_id: str) -> str:
-    """Generate company database name from company ID"""
-    return f"company_{company_id}_db"
+    """
+    Generate company database name from company ID.
+
+    Format: c_{uuid_without_hyphens}  →  34 chars max
+    Stays within MongoDB Atlas's 38-byte database name limit.
+    (Old format 'company_{uuid}_db' was 47 chars — too long for Atlas.)
+    """
+    return f"c_{company_id.replace('-', '')}"

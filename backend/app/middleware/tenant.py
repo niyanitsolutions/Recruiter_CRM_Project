@@ -21,7 +21,7 @@ async def get_tenant_db(
     
     CRITICAL: This enforces tenant isolation
     
-    - For company users: Returns company_<id>_db
+    - For company users: Returns c_{company_id_no_hyphens} database
     - For SuperAdmin: Raises error (SuperAdmin should use master_db)
     
     Usage:

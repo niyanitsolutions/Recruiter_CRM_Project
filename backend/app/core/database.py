@@ -20,7 +20,7 @@ class DatabaseManager:
     Architecture:
     - ONE MongoDB cluster
     - ONE master_db (SuperAdmin: Tenants, Plans, Payments)
-    - ONE database per company (company_<id>_db)
+    - ONE database per company (c_{company_id_no_hyphens})
     - Complete tenant isolation
     """
     
@@ -240,7 +240,7 @@ class DatabaseManager:
                         sparse=index_config.get("sparse", False),
                     )
         
-        logger.info("✅ Company database created: company_%s_db", company_id)
+        logger.info("✅ Company database created: c_%s", company_id.replace("-", ""))
         return db
 
     @classmethod

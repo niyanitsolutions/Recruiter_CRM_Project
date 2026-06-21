@@ -264,7 +264,7 @@ async def register(request: CompleteRegistration):
     
     Creates:
     1. Tenant record in master_db
-    2. Company database (company_<id>_db)
+    2. Company database (c_{company_id_no_hyphens})
     3. Owner user account
     
     For paid plans, returns Razorpay order details
@@ -307,11 +307,11 @@ async def register(request: CompleteRegistration):
 
 @router.post("/refresh", response_model=TokenResponse)
 @limiter.limit("20/minute")
-async def refresh_token(http_request: Request, request: RefreshTokenRequest):
+async def refresh_token(request: Request, body: RefreshTokenRequest):
     """
     Refresh access token using refresh token
     """
-    payload = verify_refresh_token(request.refresh_token)
+    payload = verify_refresh_token(body.refresh_token)
     
     if not payload:
         raise HTTPException(
@@ -352,7 +352,7 @@ async def logout(auth: AuthContext = Depends(get_current_user)):
 
 @router.post("/forgot-password", response_model=MessageResponse)
 @limiter.limit("5/minute")
-async def forgot_password(http_request: Request, request: ForgotPasswordRequest, background_tasks: BackgroundTasks):
+async def forgot_password(request: Request, body: ForgotPasswordRequest, background_tasks: BackgroundTasks):
     """
     Initiate password reset process.
 
@@ -360,7 +360,7 @@ async def forgot_password(http_request: Request, request: ForgotPasswordRequest,
     background so SMTP latency never delays the HTTP response.
     Account existence is never revealed (anti-enumeration).
     """
-    background_tasks.add_task(auth_service.initiate_password_reset, request.email)
+    background_tasks.add_task(auth_service.initiate_password_reset, body.email)
     return {
         "message": "If an account exists with this email, reset instructions have been sent",
         "success": True,
