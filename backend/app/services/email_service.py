@@ -91,32 +91,42 @@ def decrypt_password(encrypted: str) -> str:
 def _do_send(cfg: dict, to_email: str, subject: str,
              html_body: str, text_body: str = "") -> None:
     """
-    Synchronous SMTP send via STARTTLS.
+    Synchronous SMTP send via SMTP_SSL (implicit SSL, port 465).
     Raises on any failure — callers decide how to handle.
     NOTE: SMTP password is NEVER included in log output.
     """
+    import email.utils as _eu
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"{cfg['from_name']} <{cfg['from_email']}>"
     msg["To"] = to_email
+    msg["Message-ID"] = _eu.make_msgid(domain=cfg["from_email"].split("@")[-1])
+    msg["Date"] = _eu.formatdate(localtime=True)
 
     if text_body:
         msg.attach(MIMEText(text_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     timeout = cfg.get("timeout", settings.SMTP_TIMEOUT)
+    message_id = msg["Message-ID"]
 
-    logger.info("[SMTP] STEP 1: Connecting to %s:%s via SSL (timeout=%ss)", cfg["host"], cfg["port"], timeout)
+    logger.info(
+        "[SMTP] STEP 1: Connecting to %s:%s via SMTP_SSL (timeout=%ss) | Message-ID=%s",
+        cfg["host"], cfg["port"], timeout, message_id,
+    )
     with smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=timeout) as server:
-        logger.info("[SMTP] STEP 3: Logging in as %s", cfg["username"])
+        logger.info("[SMTP] STEP 2: Connected — logging in as %s", cfg["username"])
         server.login(cfg["username"], cfg["password"])
-        logger.info("[SMTP] STEP 4: Sending to %s | subject=%s", to_email, subject)
+        logger.info("[SMTP] STEP 3: Authenticated — sending to=%s subject=%s", to_email, subject)
         result = server.sendmail(cfg["from_email"], to_email, msg.as_string())
         # sendmail returns a dict of {recipient: (code, msg)} for FAILED recipients.
         # An empty dict {} means all recipients were accepted.
         if result:
             raise Exception(f"SMTP rejected recipient(s): {result}")
-        logger.info("[SMTP] STEP 5: Delivered successfully | to=%s | smtp_result=%s", to_email, result)
+        logger.info(
+            "[SMTP] STEP 4: DELIVERED — to=%s Message-ID=%s smtp_result=%s",
+            to_email, message_id, result,
+        )
 
 
 # ── Email log ─────────────────────────────────────────────────────────────────
@@ -494,7 +504,13 @@ async def send_password_reset_email(
     full_name: str,
     reset_token: str,
 ) -> bool:
+    logger.info(
+        "[RESET-EMAIL] send_password_reset_email called — to=%s full_name=%s "
+        "FRONTEND_URL=%s token_prefix=%s...",
+        to_email, repr(full_name), settings.FRONTEND_URL, reset_token[:8],
+    )
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
+    logger.info("[RESET-EMAIL] reset_url=%s", reset_url)
     subject = f"Reset your {_BRAND} password"
     html = _wrap(f"""
       <h2 style="color:#4F46E5;margin-top:0">Password Reset</h2>
@@ -520,9 +536,12 @@ async def send_password_reset_email(
         f"Hi {full_name},\n\nReset your {_BRAND} password:\n{reset_url}\n\n"
         "Expires in 1 hour."
     )
-    return await send_email(
+    logger.info("[RESET-EMAIL] calling send_email — to=%s subject=%s", to_email, subject)
+    result = await send_email(
         to_email, subject, html, text, "password_reset", force_system=True
     )
+    logger.info("[RESET-EMAIL] send_email returned: result=%s for to=%s", result, to_email)
+    return result
 
 
 async def send_subscription_reminder_email(

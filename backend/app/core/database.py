@@ -8,7 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from typing import Any, ClassVar
 import logging
 
-from app.core.config import settings, get_company_db_name
+from app.core.config import settings, get_company_db_name, get_company_db_name_legacy
 
 logger = logging.getLogger(__name__)
 
@@ -57,26 +57,72 @@ class DatabaseManager:
             raise RuntimeError("Database not connected. Call connect() first.")
         return cls.client[settings.MASTER_DB_NAME]
     
+    # Cache: company_id → resolved db_name (avoids repeated list_database_names calls)
+    _db_name_cache: ClassVar[dict] = {}
+
+    @classmethod
+    async def resolve_company_db_name(cls, company_id: str) -> str:
+        """
+        Return the actual database name for a company, trying new format first
+        then falling back to the legacy format if needed.
+
+        Caches the result so the listing call only happens once per company per
+        process lifetime.  Safe to call at high frequency.
+        """
+        if company_id in cls._db_name_cache:
+            return cls._db_name_cache[company_id]
+
+        new_name = get_company_db_name(company_id)
+        legacy_name = get_company_db_name_legacy(company_id)
+
+        if new_name == legacy_name:
+            cls._db_name_cache[company_id] = new_name
+            return new_name
+
+        existing = await cls.client.list_database_names()
+        if new_name in existing:
+            resolved = new_name
+        elif legacy_name in existing:
+            logger.warning(
+                "[DB] company_id=%s is still using legacy DB name '%s'. "
+                "Run  python -m migrations.rename_company_dbs  to migrate to Atlas-safe name '%s'.",
+                company_id, legacy_name, new_name,
+            )
+            resolved = legacy_name
+        else:
+            # Neither exists yet — new tenant, use the new format
+            resolved = new_name
+
+        cls._db_name_cache[company_id] = resolved
+        return resolved
+
     @classmethod
     def get_company_db(cls, company_id: str) -> AsyncIOMotorDatabase:
         """
-        Get company-specific database connection
-        
-        CRITICAL: This enforces tenant isolation
-        Each company has its own database with:
-        - users
-        - candidates
-        - jobs
-        - interviews
-        - onboards
-        - partners
-        - invoices
-        - audit_logs
-        - notifications
+        Get company-specific database connection (sync, uses cached name).
+
+        CRITICAL: This enforces tenant isolation.
+        On first access for a given company_id the name is NOT resolved
+        asynchronously here — use resolve_and_get_company_db() in async contexts
+        where you need the legacy-fallback guarantee (e.g. forgot-password scan).
+        For normal request handling the name is pre-resolved during tenant setup.
         """
         if cls.client is None:
             raise RuntimeError("Database not connected. Call connect() first.")
-        db_name = get_company_db_name(company_id)
+        # Use cached name if available, otherwise assume new format
+        db_name = cls._db_name_cache.get(company_id) or get_company_db_name(company_id)
+        return cls.client[db_name]
+
+    @classmethod
+    async def resolve_and_get_company_db(cls, company_id: str) -> AsyncIOMotorDatabase:
+        """
+        Async version that resolves the correct DB name (new or legacy) before
+        returning the connection.  Use this anywhere that scans ALL tenants and
+        must work on installations with pre-migration legacy-named databases.
+        """
+        if cls.client is None:
+            raise RuntimeError("Database not connected. Call connect() first.")
+        db_name = await cls.resolve_company_db_name(company_id)
         return cls.client[db_name]
     
     @classmethod

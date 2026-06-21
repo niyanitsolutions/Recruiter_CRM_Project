@@ -9,7 +9,7 @@ import asyncio
 import logging
 import uuid
 
-from app.core.database import get_master_db, get_company_db
+from app.core.database import get_master_db, get_company_db, DatabaseManager
 from app.core.security import (
     verify_password,
     create_access_token,
@@ -1523,6 +1523,8 @@ class AuthService:
         • Account not found              → (True,  generic "if an account exists …")
           (generic message prevents email enumeration)
         """
+        logger.info("[RESET] initiate_password_reset called for email=%s", email)
+
         master_db = get_master_db()
         _EMAIL_UNAVAILABLE = (
             "Email service unavailable. Please try again later or contact support."
@@ -1533,11 +1535,15 @@ class AuthService:
         from app.services.email_service import send_password_reset_email as _send_reset
 
         # ── Super admin ───────────────────────────────────────────────────────
+        logger.info("[RESET] checking super_admins collection for email=%s", email)
         super_admin = await master_db.super_admins.find_one(
-            {"email": email, "is_deleted": False}
+            {"email": email, "is_deleted": {"$ne": True}}
         )
+        logger.info("[RESET] super_admin lookup result: found=%s", super_admin is not None)
         if super_admin:
+            logger.info("[RESET] user type=super_admin id=%s", super_admin.get("_id"))
             reset_token = generate_reset_token()
+            logger.info("[RESET] token generated for super_admin email=%s token_prefix=%s...", email, reset_token[:8])
             await master_db.super_admins.update_one(
                 {"_id": super_admin["_id"]},
                 {"$set": {
@@ -1545,23 +1551,34 @@ class AuthService:
                     "reset_token_expiry": datetime.now(timezone.utc) + timedelta(hours=1),
                 }}
             )
+            logger.info("[RESET] token saved to DB for super_admin email=%s", email)
+            logger.info("[RESET] calling send_password_reset_email for email=%s", email)
             sent = await _send_reset(
                 to_email=email,
                 full_name=super_admin.get("full_name", "Admin"),
                 reset_token=reset_token,
             )
+            logger.info("[RESET] send_password_reset_email returned: sent=%s for email=%s", sent, email)
             if not sent:
                 logger.error(
-                    "Password reset email FAILED for super_admin %s. "
-                    "Token saved in DB — user can request again.", email
+                    "[RESET] email FAILED for super_admin %s — token saved in DB", email
                 )
                 return False, _EMAIL_UNAVAILABLE
+            logger.info("[RESET] SUCCESS — reset email sent to super_admin %s", email)
             return True, _EMAIL_OK
 
         # ── Tenant owner ──────────────────────────────────────────────────────
+        logger.info("[RESET] checking master_db.tenants.owner.email for email=%s", email)
         tenant = await master_db.tenants.find_one({"owner.email": email})
+        logger.info("[RESET] tenant owner lookup result: found=%s", tenant is not None)
         if tenant:
+            logger.info(
+                "[RESET] user type=tenant_owner company_id=%s tenant_id=%s",
+                tenant.get("company_id"), tenant.get("_id"),
+            )
+            owner = tenant.get("owner", {})
             reset_token = generate_reset_token()
+            logger.info("[RESET] token generated for tenant owner email=%s token_prefix=%s...", email, reset_token[:8])
             await master_db.tenants.update_one(
                 {"_id": tenant["_id"]},
                 {"$set": {
@@ -1569,27 +1586,43 @@ class AuthService:
                     "owner.reset_token_expiry": datetime.now(timezone.utc) + timedelta(hours=1),
                 }}
             )
-            owner = tenant.get("owner", {})
+            logger.info("[RESET] token saved to DB for tenant owner email=%s", email)
+            logger.info("[RESET] calling send_password_reset_email for email=%s full_name=%s", email, owner.get("full_name", ""))
             sent = await _send_reset(
                 to_email=email,
                 full_name=owner.get("full_name", ""),
                 reset_token=reset_token,
             )
+            logger.info("[RESET] send_password_reset_email returned: sent=%s for email=%s", sent, email)
             if not sent:
                 logger.error(
-                    "Password reset email FAILED for tenant owner %s. "
-                    "Token saved in DB — user can request again.", email
+                    "[RESET] email FAILED for tenant owner %s — token saved in DB", email
                 )
                 return False, _EMAIL_UNAVAILABLE
+            logger.info("[RESET] SUCCESS — reset email sent to tenant owner %s", email)
             return True, _EMAIL_OK
 
         # ── Company users (global scan) ───────────────────────────────────────
+        logger.info("[RESET] not found as super_admin or tenant owner — scanning company DBs for email=%s", email)
+        tenant_count = await master_db.tenants.count_documents({"status": TenantStatus.ACTIVE})
+        logger.info("[RESET] active tenants to scan: %d", tenant_count)
+
         tenants_cursor = master_db.tenants.find({"status": TenantStatus.ACTIVE})
+        scanned = 0
         async for tenant in tenants_cursor:
-            company_db = get_company_db(tenant["company_id"])
-            user = await company_db.users.find_one({"email": email, "is_deleted": False})
+            company_id = tenant.get("company_id", "")
+            db_name = await DatabaseManager.resolve_company_db_name(company_id)
+            logger.info("[RESET] scanning tenant company_id=%s resolved_db_name=%s", company_id, db_name)
+            company_db = DatabaseManager.client[db_name]
+            user = await company_db.users.find_one({"email": email, "is_deleted": {"$ne": True}})
+            scanned += 1
             if user:
+                logger.info(
+                    "[RESET] user found in company_id=%s db_name=%s user_id=%s",
+                    company_id, db_name, user.get("_id"),
+                )
                 reset_token = generate_reset_token()
+                logger.info("[RESET] token generated for company user email=%s token_prefix=%s...", email, reset_token[:8])
                 await company_db.users.update_one(
                     {"_id": user["_id"]},
                     {"$set": {
@@ -1597,21 +1630,29 @@ class AuthService:
                         "reset_token_expiry": datetime.now(timezone.utc) + timedelta(hours=1),
                     }}
                 )
+                logger.info("[RESET] token saved to DB for company user email=%s company_id=%s", email, company_id)
+                logger.info("[RESET] calling send_password_reset_email for email=%s full_name=%s", email, user.get("full_name", ""))
                 sent = await _send_reset(
                     to_email=email,
                     full_name=user.get("full_name", ""),
                     reset_token=reset_token,
                 )
+                logger.info("[RESET] send_password_reset_email returned: sent=%s for email=%s", sent, email)
                 if not sent:
                     logger.error(
-                        "Password reset email FAILED for user %s in company %s. "
-                        "Token saved in DB — user can request again.",
-                        email, tenant["company_id"]
+                        "[RESET] email FAILED for company user %s in company %s — token saved in DB",
+                        email, company_id,
                     )
                     return False, _EMAIL_UNAVAILABLE
+                logger.info("[RESET] SUCCESS — reset email sent to company user %s", email)
                 return True, _EMAIL_OK
 
         # Account not found — return generic message (anti-enumeration)
+        logger.warning(
+            "[RESET] email=%s NOT FOUND in any lookup (super_admin, tenant owner, or %d company DBs). "
+            "No email sent. Returning generic message.",
+            email, scanned,
+        )
         return True, _NOT_FOUND
 
 

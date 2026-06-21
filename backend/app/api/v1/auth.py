@@ -350,6 +350,24 @@ async def logout(auth: AuthContext = Depends(get_current_user)):
     return {"message": "Logged out successfully", "success": True}
 
 
+async def _bg_password_reset(email: str) -> None:
+    """
+    Wrapper so background-task exceptions appear in the app logger, not just
+    uvicorn stderr.  Without this, any exception inside initiate_password_reset
+    is silently swallowed from the application-log perspective.
+    """
+    try:
+        logger.info("[FORGOT-PWD] background task STARTED for email=%s", email)
+        result = await auth_service.initiate_password_reset(email)
+        logger.info("[FORGOT-PWD] background task FINISHED for email=%s result=%s", email, result)
+    except Exception:
+        logger.exception(
+            "[FORGOT-PWD] UNHANDLED EXCEPTION in background task for email=%s — "
+            "this would have been silently swallowed by Starlette without this wrapper",
+            email,
+        )
+
+
 @router.post("/forgot-password", response_model=MessageResponse)
 @limiter.limit("5/minute")
 async def forgot_password(request: Request, body: ForgotPasswordRequest, background_tasks: BackgroundTasks):
@@ -360,7 +378,9 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest, backgro
     background so SMTP latency never delays the HTTP response.
     Account existence is never revealed (anti-enumeration).
     """
-    background_tasks.add_task(auth_service.initiate_password_reset, body.email)
+    logger.info("[FORGOT-PWD] endpoint hit — email=%s", body.email)
+    background_tasks.add_task(_bg_password_reset, body.email)
+    logger.info("[FORGOT-PWD] background task queued for email=%s", body.email)
     return {
         "message": "If an account exists with this email, reset instructions have been sent",
         "success": True,
