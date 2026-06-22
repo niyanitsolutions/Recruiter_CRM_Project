@@ -187,6 +187,26 @@ async def lifespan(app: FastAPI):
             print(f" Indexes ensured for {len(_company_ids)} tenant DB(s)")
     except Exception as _idx_err:
         logger.warning("Index migration skipped: %s", _idx_err)
+    # Sync system role permissions to current ROLE_DEFAULT_PERMISSIONS for all tenants.
+    # This propagates any code-side permission changes to existing company DBs on restart.
+    try:
+        from app.services.role_service import RoleService
+        from app.core.database import DatabaseManager as _DM, get_master_db as _gmdb
+        _role_master = _gmdb()
+        _role_tenants = await _role_master.tenants.find(
+            {"is_deleted": {"$ne": True}}, {"company_id": 1}
+        ).to_list(None)
+        _role_cids = [t["company_id"] for t in _role_tenants if t.get("company_id")]
+        if _role_cids:
+            for _cid in _role_cids:
+                try:
+                    _cdb = _DM.get_company_db(_cid)
+                    await RoleService(_cdb).initialize_system_roles()
+                except Exception as _re:
+                    logger.warning("Role sync skipped for %s: %s", _cid, _re)
+            print(f" System roles synced for {len(_role_cids)} tenant DB(s)")
+    except Exception as _role_err:
+        logger.warning("Role sync startup step skipped: %s", _role_err)
     # Start subscription reminder background task (runs every 24 hours)
     reminder_task = asyncio.create_task(reminder_background_loop())
     print(" Subscription reminder scheduler started")

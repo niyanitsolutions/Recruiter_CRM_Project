@@ -10,7 +10,8 @@ const ForgotPassword = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const location = useLocation()
-  const prefillEmail = location.state?.email || ''
+  const _stateVal = location.state?.email || ''
+  const prefillEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(_stateVal) ? _stateVal : ''
 
   const {
     register,

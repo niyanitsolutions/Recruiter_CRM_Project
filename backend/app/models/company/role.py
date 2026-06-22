@@ -443,10 +443,17 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.PARTNERS_VIEW,
         Permission.PARTNERS_CREATE,
         Permission.PARTNERS_EDIT,
-        # Attendance management
+        # Attendance management (VIEW/CREATE/EDIT for records + SELF/TEAM/MANAGE for sidebar + full control)
         Permission.HRM_ATTENDANCE_VIEW,
         Permission.HRM_ATTENDANCE_CREATE,
         Permission.HRM_ATTENDANCE_EDIT,
+        Permission.HRM_ATTENDANCE_SELF,
+        Permission.HRM_ATTENDANCE_TEAM,
+        Permission.HRM_ATTENDANCE_MANAGE,
+        # Leave management (HR manages all leave requests)
+        Permission.HRM_LEAVE_APPLY,
+        Permission.HRM_LEAVE_TEAM_APPROVE,
+        Permission.HRM_LEAVE_MANAGE,
         # Employee self-service portal
         Permission.HRM_PORTAL_VIEW,
         Permission.HRM_PORTAL_EDIT_SELF,
@@ -454,7 +461,10 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.HRM_RESOURCES_VIEW,
         Permission.HRM_RESOURCES_CREATE,
         Permission.HRM_RESOURCES_EDIT,
-        # Document Center
+        # Document Center (docs:* namespace — enables sidebar visibility)
+        Permission.DOCS_VIEW,
+        Permission.DOCS_CREATE,
+        # Legacy document namespace (kept for backward compatibility)
         Permission.DOCUMENTS_VIEW,
         Permission.DOCUMENTS_CREATE,
         Permission.DOCUMENTS_EDIT,
