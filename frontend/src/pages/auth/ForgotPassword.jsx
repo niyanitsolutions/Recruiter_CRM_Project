@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { Mail, ArrowLeft, CheckCircle } from 'lucide-react'
@@ -9,12 +9,14 @@ import authService from '../../services/authService'
 const ForgotPassword = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const location = useLocation()
+  const prefillEmail = location.state?.email || ''
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm()
+  } = useForm({ defaultValues: { email: prefillEmail } })
 
   const onSubmit = async (data) => {
     setIsLoading(true)

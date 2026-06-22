@@ -52,11 +52,12 @@ const MODULE_PERMS = {
   hrm_employees:           ['hrm:employees:view', 'hrm:employees:manage'],
   hrm_employees_hr:        ['hrm:employees:view', 'hrm:employees:create', 'hrm:employees:edit'],
   hrm_attendance:          ['hrm:attendance:self', 'hrm:attendance:team', 'hrm:attendance:manage'],
-  hrm_attendance_hr:       ['hrm:attendance:view', 'hrm:attendance:create', 'hrm:attendance:edit'],
+  hrm_attendance_hr:       ['hrm:attendance:view', 'hrm:attendance:create', 'hrm:attendance:edit', 'hrm:attendance:manage'],
   hrm_portal:              ['hrm:portal:view', 'hrm:portal:edit_self'],
   hrm_resources:           ['hrm:resources:view', 'hrm:resources:create', 'hrm:resources:edit'],
   documents_hr:            ['documents:view', 'documents:create', 'documents:edit'],
   hrm_leaves:              ['hrm:leave:apply', 'hrm:leave:team_approve', 'hrm:leave:manage'],
+  hrm_doc_center:          ['docs:view', 'docs:create'],
   hrm_payroll:             ['hrm:payroll:view_self', 'hrm:payroll:manage'],
   hrm_performance:         ['hrm:performance:self', 'hrm:performance:team', 'hrm:performance:manage'],
   hrm_announcements:       ['hrm:announcements:view', 'hrm:announcements:manage'],
@@ -91,6 +92,7 @@ const MODULE_LABELS = {
   hrm_portal: 'Employee Portal', hrm_resources: 'Employee Resources',
   documents_hr: 'Documents',
   hrm_leaves: 'Leaves',
+  hrm_doc_center: 'Document Center',
   hrm_payroll: 'Payroll', hrm_performance: 'Performance',
   hrm_announcements: 'Announcements', hrm_announcements_view: 'Announcements',
   // Internal hiring
@@ -106,7 +108,7 @@ const DEPT_MODULES = {
   client_coordinator:   { full: ['clients','jobs','interviews','interview_settings','onboards','tasks'], view_only: ['candidates','reports','targets_view'] },
   candidate_coordinator:{ full: ['candidates','interviews_no_schedule','interview_settings','tasks'], view_only: ['jobs','clients','onboards','reports','targets_view'] },
   recruiter:            { full: ['candidates','interviews','clients','jobs','interview_settings','tasks'], view_only: ['onboards','reports','targets_view'] },
-  hr:                   { full: ['hrm_dashboard','hrm_employees_hr','users_hr','partners_hr','hrm_attendance_hr','hrm_portal','hrm_resources','documents_hr','hrm_hiring_hr','tasks','notifications_view','profile'], view_only: ['targets_view','reports_view','audit_logs'] },
+  hr:                   { full: ['hrm_dashboard','hrm_employees_hr','users_hr','partners_hr','hrm_attendance_hr','hrm_leaves','hrm_portal','hrm_resources','documents_hr','hrm_doc_center','hrm_hiring_hr','tasks','notifications_view','profile'], view_only: ['targets_view','reports_view','audit_logs'] },
   accounts:             { full: ['accounts','payouts','invoices','imports','exports','tasks'], view_only: ['clients','partners','reports','targets_view'] },
   partner:              { full: ['candidates'], view_only: ['jobs','interviews'] },
 }
@@ -647,6 +649,9 @@ const [errors,       setErrors]       = useState({})
         submitData.restricted_modules   = restrictOn ? restrictMods : []
       }
 
+      // Store before API call so the catch block can reference it for duplicate handling
+      pendingSubmitData.current = submitData
+
       // ── API call ──────────────────────────────────────────────────────
       if (isEdit) {
         const response = await userService.updateUser(id, submitData)
@@ -697,7 +702,6 @@ const [errors,       setErrors]       = useState({})
 
       // 409 — duplicate user: show the override modal (keep existing flow)
       if (status === 409 && detail?.duplicate) {
-        pendingSubmitData.current = submitData
         setDuplicateModal({ show: true, fields: detail.fields || {}, overrideChecked: false, overrideTouched: false })
         return
       }

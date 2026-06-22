@@ -405,7 +405,7 @@ const Login = () => {
   const savedPassword = getSavedPassword()
   const [rememberMe, setRememberMeState] = useState(!!savedEmail || getRememberMe())
 
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const { register, handleSubmit, formState: { errors }, getValues } = useForm({
     defaultValues: { identifier: savedEmail, password: savedPassword },
   })
 
@@ -772,14 +772,15 @@ const Login = () => {
             />
             <span style={{ color: 'rgba(255,255,255,0.48)', fontSize: '13px' }}>Remember me</span>
           </label>
-          <Link
-            to="/forgot-password"
-            style={{ color: '#818cf8', fontSize: '13px', fontWeight: '500', textDecoration: 'none', transition: 'color 0.15s' }}
+          <a
+            href="/forgot-password"
+            onClick={(e) => { e.preventDefault(); navigate('/forgot-password', { state: { email: getValues('identifier') } }) }}
+            style={{ color: '#818cf8', fontSize: '13px', fontWeight: '500', textDecoration: 'none', transition: 'color 0.15s', cursor: 'pointer' }}
             onMouseOver={e => e.target.style.color = '#a5b4fc'}
             onMouseOut={e  => e.target.style.color = '#818cf8'}
           >
             Forgot password?
-          </Link>
+          </a>
         </div>
 
         {/* Sign In */}
