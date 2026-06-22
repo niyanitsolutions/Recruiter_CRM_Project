@@ -389,83 +389,102 @@ class TenantService:
 
         Returns: (result_dict | None, error_message)
         """
-        master_db = get_master_db()
+        logger.info("[TRIAL-SETUP LOG-1] Request received | email=%s username=%s company=%s", email, username, company_name)
+        try:
+            master_db = get_master_db()
+            logger.info("[TRIAL-SETUP LOG-2] DB handle acquired")
 
-        # ── 1. Uniqueness checks (tenants + pending_registrations) ───────────
-        is_unique, error = await TenantService.check_unique_fields(
-            company_name=company_name,
-            email=email,
-            mobile=contact_number,
-            username=username,
-        )
-        if not is_unique:
-            logger.warning("Trial initiation uniqueness failure | reason=%s", error)
-            return None, error
-
-        # ── 2. Generate token + expiry ────────────────────────────────────────
-        now = datetime.now(timezone.utc)
-        verification_token = secrets.token_hex(32)
-        verification_expiry = now + timedelta(hours=24)
-
-        # ── 3. Hash password ──────────────────────────────────────────────────
-        hashed_pw = hash_password(password)
-        resolved_website = None if no_website else (website or None)
-
-        # ── 4. Persist pending record ─────────────────────────────────────────
-        reg_id = str(uuid.uuid4())
-        pending_doc = {
-            "_id": reg_id,
-            "company_name": company_name,
-            "company_contact": company_contact or "",
-            "website": resolved_website,
-            "no_website": no_website,
-            "person_name": person_name,
-            "username": username.lower(),
-            "email": email.lower(),
-            "contact_number": contact_number,
-            "password_hash": hashed_pw,
-            "designation": designation,
-            "module": module,
-            "crm_enabled": crm_enabled,
-            "hrm_enabled": hrm_enabled,
-            "verification_token": verification_token,
-            "verification_expiry": verification_expiry,
-            "status": "pending_verification",
-            "created_at": now,
-            "verified_at": None,
-        }
-        await master_db.pending_registrations.insert_one(pending_doc)
-
-        # ── 5. Resolve trial_days for email copy ──────────────────────────────
-        trial_plan = await master_db.plans.find_one({"is_trial_plan": True, "is_active": {"$ne": False}})
-        trial_days = trial_plan.get("trial_days", 14) if trial_plan else 14
-
-        # ── 6. Send verification email ────────────────────────────────────────
-        email_sent = await send_trial_verification_email(
-            to_email=email,
-            full_name=person_name,
-            company_name=company_name,
-            token=verification_token,
-            trial_days=trial_days,
-        )
-
-        if not email_sent:
-            await master_db.pending_registrations.delete_one({"_id": reg_id})
-            logger.error(
-                "Trial verification email failed — pending record rolled back | email=%s", email
+            # ── 1. Uniqueness checks (tenants + pending_registrations) ───────────
+            is_unique, error = await TenantService.check_unique_fields(
+                company_name=company_name,
+                email=email,
+                mobile=contact_number,
+                username=username,
             )
-            return None, "Failed to send verification email. Please check your email address and try again."
+            logger.info("[TRIAL-SETUP LOG-3] Uniqueness check done | is_unique=%s error=%s", is_unique, error)
+            if not is_unique:
+                logger.warning("Trial initiation uniqueness failure | reason=%s", error)
+                return None, error
 
-        logger.info(
-            "Trial registration pending | email=%s | token_prefix=%s", email, verification_token[:8]
-        )
+            # ── 2. Generate token + expiry ────────────────────────────────────────
+            now = datetime.now(timezone.utc)
+            verification_token = secrets.token_hex(32)
+            verification_expiry = now + timedelta(hours=24)
+            logger.info("[TRIAL-SETUP LOG-4] Token generated | prefix=%s expiry=%s", verification_token[:8], verification_expiry)
 
-        return {
-            "success": True,
-            "message": "Verification email sent. Please check your inbox to activate your free trial.",
-            "email_sent": True,
-            "email": email,
-        }, ""
+            # ── 3. Hash password ──────────────────────────────────────────────────
+            hashed_pw = hash_password(password)
+            resolved_website = None if no_website else (website or None)
+            logger.info("[TRIAL-SETUP LOG-5] Password hashed | no_website=%s", no_website)
+
+            # ── 4. Persist pending record ─────────────────────────────────────────
+            reg_id = str(uuid.uuid4())
+            pending_doc = {
+                "_id": reg_id,
+                "company_name": company_name,
+                "company_contact": company_contact or "",
+                "website": resolved_website,
+                "no_website": no_website,
+                "person_name": person_name,
+                "username": username.lower(),
+                "email": email.lower(),
+                "contact_number": contact_number,
+                "password_hash": hashed_pw,
+                "designation": designation,
+                "module": module,
+                "crm_enabled": crm_enabled,
+                "hrm_enabled": hrm_enabled,
+                "verification_token": verification_token,
+                "verification_expiry": verification_expiry,
+                "status": "pending_verification",
+                "created_at": now,
+                "verified_at": None,
+            }
+            logger.info("[TRIAL-SETUP LOG-6] Inserting pending_registrations doc | reg_id=%s", reg_id)
+            await master_db.pending_registrations.insert_one(pending_doc)
+            logger.info("[TRIAL-SETUP LOG-7] pending_registrations insert OK")
+
+            # ── 5. Resolve trial_days for email copy ──────────────────────────────
+            trial_plan = await master_db.plans.find_one({"is_trial_plan": True, "is_active": {"$ne": False}})
+            trial_days = trial_plan.get("trial_days", 14) if trial_plan else 14
+            logger.info("[TRIAL-SETUP LOG-8] trial_days resolved | trial_days=%s plan_found=%s", trial_days, bool(trial_plan))
+
+            # ── 6. Send verification email ────────────────────────────────────────
+            logger.info("[TRIAL-SETUP LOG-9] Calling send_trial_verification_email | to=%s", email)
+            email_sent = await send_trial_verification_email(
+                to_email=email,
+                full_name=person_name,
+                company_name=company_name,
+                token=verification_token,
+                trial_days=trial_days,
+            )
+            logger.info("[TRIAL-SETUP LOG-10] send_trial_verification_email returned | email_sent=%s", email_sent)
+
+            if not email_sent:
+                await master_db.pending_registrations.delete_one({"_id": reg_id})
+                logger.error(
+                    "Trial verification email failed — pending record rolled back | email=%s", email
+                )
+                return None, "Failed to send verification email. Please check your email address and try again."
+
+            logger.info(
+                "[TRIAL-SETUP LOG-11] Done | email=%s token_prefix=%s", email, verification_token[:8]
+            )
+
+            return {
+                "success": True,
+                "message": "Verification email sent. Please check your inbox to activate your free trial.",
+                "email_sent": True,
+                "email": email,
+            }, ""
+
+        except Exception as _exc:
+            logger.exception(
+                "[TRIAL-SETUP FATAL] Unhandled exception in initiate_trial_registration | "
+                "email=%s username=%s error_type=%s error=%s",
+                email, username, type(_exc).__name__, _exc,
+            )
+            raise
 
     @staticmethod
     async def verify_and_provision_trial(token: str) -> Tuple[Optional[dict], str]:

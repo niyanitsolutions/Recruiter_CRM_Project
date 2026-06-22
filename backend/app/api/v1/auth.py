@@ -254,6 +254,10 @@ async def trial_setup(request: TrialSetupRequest):
     - company_name, email, username, contact_number must be unique
     - no_website=true → website stored as null
     """
+    logger.info(
+        "[TRIAL-SETUP ENDPOINT] Payload received | email=%s username=%s company=%s designation=%s",
+        request.email, request.username, request.company_name, request.designation,
+    )
     module = getattr(request, "module", "crm_hrm")
     crm_enabled = module in ("crm_only", "crm_hrm")
     hrm_enabled = module in ("hrm_only", "crm_hrm")
