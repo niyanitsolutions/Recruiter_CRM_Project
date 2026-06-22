@@ -1,21 +1,21 @@
-import re
 """
 Tenant Service
 Handles company registration and management
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Tuple, List
+import re
+import secrets
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Tuple, List
 
 from app.core.database import get_master_db, DatabaseManager
 from app.core.security import hash_password
-from app.models.master.tenant import (
-    TenantStatus
-)
+from app.models.master.tenant import TenantStatus
 from app.models.company.user import UserRole, UserStatus, ROLE_PERMISSIONS
 from app.models.master.global_user import upsert_global_user, ensure_user_company_map
+from app.services.email_service import send_trial_verification_email
 
 logger = logging.getLogger(__name__)
 
@@ -404,7 +404,6 @@ class TenantService:
 
         # ── 2. Generate token + expiry ────────────────────────────────────────
         now = datetime.now(timezone.utc)
-        import secrets
         verification_token = secrets.token_hex(32)
         verification_expiry = now + timedelta(hours=24)
 
@@ -442,7 +441,6 @@ class TenantService:
         trial_days = trial_plan.get("trial_days", 14) if trial_plan else 14
 
         # ── 6. Send verification email ────────────────────────────────────────
-        from app.services.email_service import send_trial_verification_email
         email_sent = await send_trial_verification_email(
             to_email=email,
             full_name=person_name,
@@ -699,7 +697,6 @@ class TenantService:
             return True, "If an unverified registration exists, a new email has been sent."
 
         now = datetime.now(timezone.utc)
-        import secrets
         new_token = secrets.token_hex(32)
         new_expiry = now + timedelta(hours=24)
 
@@ -711,7 +708,6 @@ class TenantService:
         trial_plan = await master_db.plans.find_one({"is_trial_plan": True, "is_active": {"$ne": False}})
         trial_days = trial_plan.get("trial_days", 14) if trial_plan else 14
 
-        from app.services.email_service import send_trial_verification_email
         await send_trial_verification_email(
             to_email=pending["email"],
             full_name=pending["person_name"],
