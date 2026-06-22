@@ -36,8 +36,9 @@ const Register        = lazy(() => import('./pages/auth').then(m => ({ default: 
 const ForgotPassword  = lazy(() => import('./pages/auth').then(m => ({ default: m.ForgotPassword })))
 const ResetPassword   = lazy(() => import('./pages/auth').then(m => ({ default: m.ResetPassword })))
 const UpgradePlan     = lazy(() => import('./pages/auth').then(m => ({ default: m.UpgradePlan })))
-const VerifyEmail     = lazy(() => import('./pages/auth').then(m => ({ default: m.VerifyEmail })))
-const ChangePassword  = lazy(() => import('./pages/auth').then(m => ({ default: m.ChangePassword })))
+const VerifyEmail           = lazy(() => import('./pages/auth').then(m => ({ default: m.VerifyEmail })))
+const ChangePassword        = lazy(() => import('./pages/auth').then(m => ({ default: m.ChangePassword })))
+const VerificationPending   = lazy(() => import('./pages/auth').then(m => ({ default: m.VerificationPending })))
 
 // Super Admin
 const SuperAdminDashboard  = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Dashboard })))
@@ -1207,6 +1208,9 @@ function App() {
         <Route path="/verify-email"   element={<VerifyEmail />} />
         <Route path="/reset-password" element={<ResetPassword />} />
       </Route>
+
+      {/* Trial registration verification pending — full-page, no auth layout */}
+      <Route path="/verify-pending" element={<VerificationPending />} />
 
       {/* SUPER ADMIN */}
       <Route element={<ProtectedRoute requireSuperAdmin><Layout title="Super Admin" /></ProtectedRoute>}>

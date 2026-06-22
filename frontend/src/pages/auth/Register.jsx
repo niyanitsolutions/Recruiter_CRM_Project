@@ -121,7 +121,6 @@ const SUBSCRIPTION_STEPS = [
 const TrialSetupForm = () => {
   const navigate  = useNavigate()
   const [isLoading, setIsLoading] = useState(false)
-  const [done, setDone] = useState(null)           // holds success response data
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm,  setShowConfirm]  = useState(false)
   const selectedModule = 'crm_hrm'
@@ -190,8 +189,8 @@ const TrialSetupForm = () => {
       }
 
       const response = await authService.trialSetup(payload)
-      setDone(response.data)
-      toast.success('Trial account created successfully!')
+      const emailAddr = response.data?.email || payload.email
+      navigate(`/verify-pending?email=${encodeURIComponent(emailAddr)}`)
     } catch (err) {
       const msg =
         err.response?.data?.detail ||
@@ -201,46 +200,6 @@ const TrialSetupForm = () => {
     } finally {
       setIsLoading(false)
     }
-  }
-
-  // ── Success screen ────────────────────────────────────────────────────────
-  if (done) {
-    return (
-      <div className="min-h-screen bg-surface-50 flex flex-col">
-        {/* Header */}
-        <div className="bg-white border-b border-surface-200 px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/Hire_Flow_Logo.png" alt="HireFlow" style={{ height: '32px', width: 'auto' }} />
-            <div>
-              <p className="text-xs text-surface-500">Recruitment & Partner Management</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 flex items-center justify-center px-4 py-10">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-surface-200 p-10 text-center animate-fade-in">
-            <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-10 h-10 text-green-500" />
-            </div>
-            <h2 className="text-2xl font-bold text-surface-900 mb-2">Trial Activated!</h2>
-            <p className="text-surface-500 mb-6 text-sm">
-              Your company has been registered and your trial is now active.
-              Explore all features free for the next 14 days.
-            </p>
-            <div className="bg-accent-50 border border-accent-100 rounded-xl p-4 mb-6 text-sm text-accent-800">
-              You can now sign in using the credentials you just created.
-            </div>
-            <button
-              onClick={() => navigate('/login')}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-white text-sm"
-              style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 0 20px rgba(99,102,241,.3)' }}
-            >
-              Go to Login <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-    )
   }
 
   // ── Field helpers ─────────────────────────────────────────────────────────

@@ -523,6 +523,46 @@ async def send_verification_email(
     )
 
 
+async def send_trial_verification_email(
+    to_email: str,
+    full_name: str,
+    company_name: str,
+    token: str,
+    trial_days: int = 14,
+) -> bool:
+    verify_url = f"{settings.FRONTEND_URL}/verify-email?token={token}&type=trial"
+    subject = f"Activate your {_BRAND} free trial"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Activate Your Free Trial</h2>
+      <p>Hi <strong>{full_name}</strong>,</p>
+      <p>Thanks for signing up! You're one step away from activating your
+         <strong>{trial_days}-day free trial</strong> for
+         <strong>{company_name}</strong>.</p>
+      <p>Click the button below to verify your email and set up your workspace.</p>
+      <div style="text-align:center;margin:32px 0">
+        <a href="{verify_url}"
+           style="background:#4F46E5;color:#fff;padding:14px 28px;border-radius:8px;
+                  text-decoration:none;font-weight:700;display:inline-block;font-size:14px">
+          Verify Email &amp; Activate Trial
+        </a>
+      </div>
+      <p style="color:#6B7280;font-size:13px">
+        Or copy this link:<br>
+        <a href="{verify_url}" style="color:#4F46E5;word-break:break-all">{verify_url}</a>
+      </p>
+      <p style="color:#6B7280;font-size:12px">
+        &#8987; This link expires in <strong>24 hours</strong>.
+        If you did not create an account, you can safely ignore this email.
+      </p>""")
+    text = (
+        f"Hi {full_name},\n\nActivate your {trial_days}-day free trial for {company_name}:\n"
+        f"{verify_url}\n\nExpires in 24 hours."
+    )
+    return await send_email(
+        to_email, subject, html, text, "trial_verification", force_system=True
+    )
+
+
 async def send_password_reset_email(
     to_email: str,
     full_name: str,
@@ -1989,6 +2029,7 @@ class EmailService:
 
     # --- system emails ---
     send_verification_email = staticmethod(send_verification_email)
+    send_trial_verification_email = staticmethod(send_trial_verification_email)
     send_password_reset_email = staticmethod(send_password_reset_email)
     send_password_changed_email = staticmethod(send_password_changed_email)
     send_subscription_reminder_email = staticmethod(send_subscription_reminder_email)

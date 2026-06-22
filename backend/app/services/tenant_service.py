@@ -62,7 +62,7 @@ class TenantService:
             })
             if existing:
                 return False, "Email already registered"
-            
+
             # Check in super_admins
             existing = await master_db.super_admins.find_one({
                 "email": email,
@@ -70,7 +70,15 @@ class TenantService:
             })
             if existing:
                 return False, "Email already registered"
-        
+
+            # Check in pending registrations awaiting verification
+            existing = await master_db.pending_registrations.find_one({
+                "email": email,
+                "status": "pending_verification",
+            })
+            if existing:
+                return False, "Email already registered. Please check your inbox to verify your account."
+
         if mobile:
             existing = await master_db.tenants.find_one({
                 "owner.mobile": mobile,
@@ -78,7 +86,15 @@ class TenantService:
             })
             if existing:
                 return False, "Mobile number already registered"
-        
+
+            # Check pending registrations
+            existing = await master_db.pending_registrations.find_one({
+                "contact_number": mobile,
+                "status": "pending_verification",
+            })
+            if existing:
+                return False, "Mobile number already registered. Please check your inbox to verify your account."
+
         if username:
             existing = await master_db.tenants.find_one({
                 "owner.username": username.lower(),
@@ -86,7 +102,15 @@ class TenantService:
             })
             if existing:
                 return False, "Username already taken"
-        
+
+            # Check pending registrations
+            existing = await master_db.pending_registrations.find_one({
+                "username": username.lower(),
+                "status": "pending_verification",
+            })
+            if existing:
+                return False, "Username already taken"
+
         return True, ""
     
     @staticmethod
@@ -337,6 +361,367 @@ class TenantService:
         }, ""
     
     # ── Trial Setup ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    async def initiate_trial_registration(
+        *,
+        company_name: str,
+        company_contact: Optional[str],
+        website: Optional[str],
+        no_website: bool,
+        person_name: str,
+        username: str,
+        email: str,
+        contact_number: str,
+        password: str,
+        designation: str,
+        crm_enabled: bool = True,
+        hrm_enabled: bool = True,
+        module: str = "crm_hrm",
+    ) -> Tuple[Optional[dict], str]:
+        """
+        Step 1 of email-verified trial onboarding.
+
+        Creates a pending_registration record and sends a verification email.
+        Does NOT provision any tenant, database, or user.
+        Actual provisioning happens in verify_and_provision_trial() after the user
+        clicks the verification link.
+
+        Returns: (result_dict | None, error_message)
+        """
+        master_db = get_master_db()
+
+        # ── 1. Uniqueness checks (tenants + pending_registrations) ───────────
+        is_unique, error = await TenantService.check_unique_fields(
+            company_name=company_name,
+            email=email,
+            mobile=contact_number,
+            username=username,
+        )
+        if not is_unique:
+            logger.warning("Trial initiation uniqueness failure | reason=%s", error)
+            return None, error
+
+        # ── 2. Generate token + expiry ────────────────────────────────────────
+        now = datetime.now(timezone.utc)
+        import secrets
+        verification_token = secrets.token_hex(32)
+        verification_expiry = now + timedelta(hours=24)
+
+        # ── 3. Hash password ──────────────────────────────────────────────────
+        hashed_pw = hash_password(password)
+        resolved_website = None if no_website else (website or None)
+
+        # ── 4. Persist pending record ─────────────────────────────────────────
+        reg_id = str(uuid.uuid4())
+        pending_doc = {
+            "_id": reg_id,
+            "company_name": company_name,
+            "company_contact": company_contact or "",
+            "website": resolved_website,
+            "no_website": no_website,
+            "person_name": person_name,
+            "username": username.lower(),
+            "email": email.lower(),
+            "contact_number": contact_number,
+            "password_hash": hashed_pw,
+            "designation": designation,
+            "module": module,
+            "crm_enabled": crm_enabled,
+            "hrm_enabled": hrm_enabled,
+            "verification_token": verification_token,
+            "verification_expiry": verification_expiry,
+            "status": "pending_verification",
+            "created_at": now,
+            "verified_at": None,
+        }
+        await master_db.pending_registrations.insert_one(pending_doc)
+
+        # ── 5. Resolve trial_days for email copy ──────────────────────────────
+        trial_plan = await master_db.plans.find_one({"is_trial_plan": True, "is_active": {"$ne": False}})
+        trial_days = trial_plan.get("trial_days", 14) if trial_plan else 14
+
+        # ── 6. Send verification email ────────────────────────────────────────
+        from app.services.email_service import send_trial_verification_email
+        email_sent = await send_trial_verification_email(
+            to_email=email,
+            full_name=person_name,
+            company_name=company_name,
+            token=verification_token,
+            trial_days=trial_days,
+        )
+
+        if not email_sent:
+            await master_db.pending_registrations.delete_one({"_id": reg_id})
+            logger.error(
+                "Trial verification email failed — pending record rolled back | email=%s", email
+            )
+            return None, "Failed to send verification email. Please check your email address and try again."
+
+        logger.info(
+            "Trial registration pending | email=%s | token_prefix=%s", email, verification_token[:8]
+        )
+
+        return {
+            "success": True,
+            "message": "Verification email sent. Please check your inbox to activate your free trial.",
+            "email_sent": True,
+            "email": email,
+        }, ""
+
+    @staticmethod
+    async def verify_and_provision_trial(token: str) -> Tuple[Optional[dict], str]:
+        """
+        Step 2 of email-verified trial onboarding.
+
+        Validates the token from the verification email, then provisions:
+        tenant record, company DB, owner user, global identity, audit log.
+        Marks the pending_registration as verified.
+
+        Returns: (result_dict | None, error_message)
+        """
+        master_db = get_master_db()
+        now = datetime.now(timezone.utc)
+
+        # ── 1. Look up pending record ─────────────────────────────────────────
+        pending = await master_db.pending_registrations.find_one(
+            {"verification_token": token}
+        )
+
+        if not pending:
+            return None, "Invalid verification link. The link may have already been used or does not exist."
+
+        status_val = pending.get("status", "")
+
+        if status_val == "verified":
+            return None, "This email has already been verified. You can log in now."
+
+        if status_val == "expired":
+            return None, "This verification link has expired. Please register again."
+
+        # Check expiry
+        expiry = pending.get("verification_expiry")
+        if expiry:
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+            if now > expiry:
+                await master_db.pending_registrations.update_one(
+                    {"_id": pending["_id"]}, {"$set": {"status": "expired"}}
+                )
+                return None, "This verification link has expired. Please register again."
+
+        # ── 2. Race-condition guard ───────────────────────────────────────────
+        existing_tenant = await master_db.tenants.find_one({
+            "$or": [
+                {"owner.email": pending["email"]},
+                {"owner.username": pending["username"]},
+            ],
+            "is_deleted": False,
+        })
+        if existing_tenant:
+            return None, "An account with this email or username already exists. Please log in."
+
+        # ── 3. Resolve trial plan ─────────────────────────────────────────────
+        trial_plan = await master_db.plans.find_one({"is_trial_plan": True, "is_active": {"$ne": False}})
+        trial_days = trial_plan.get("trial_days", 14) if trial_plan else 14
+        plan_id_val = str(trial_plan["_id"]) if trial_plan else "trial"
+        plan_name_val = trial_plan.get("name", "Trial") if trial_plan else "Trial"
+        plan_display_val = trial_plan.get("display_name", "Trial Plan") if trial_plan else "Trial Plan"
+        max_users_val = trial_plan.get("max_users", 5) if trial_plan else 5
+
+        # ── 4. Build IDs and dates ────────────────────────────────────────────
+        company_id = str(uuid.uuid4())[:8]
+        tenant_id = str(uuid.uuid4())
+        user_id = str(uuid.uuid4())
+        trial_start = now
+        trial_end = now + timedelta(days=trial_days)
+
+        # Extract from pending record
+        email = pending["email"]
+        username = pending["username"]
+        person_name = pending["person_name"]
+        contact_number = pending["contact_number"]
+        hashed_pw = pending["password_hash"]
+        designation = pending["designation"]
+        company_name = pending["company_name"]
+        crm_enabled = pending.get("crm_enabled", True)
+        hrm_enabled = pending.get("hrm_enabled", True)
+        resolved_website = pending.get("website")
+
+        is_owner = designation == "Owner"
+        permissions = list(ROLE_PERMISSIONS.get("admin", []))
+
+        # ── 5. Create tenant record ───────────────────────────────────────────
+        tenant_data = {
+            "_id": tenant_id,
+            "company_id": company_id,
+            "company_name": company_name,
+            "display_name": company_name,
+            "industry": "other",
+            "website": resolved_website,
+            "phone": pending.get("company_contact", ""),
+            "email": email,
+            "location": None,
+            "address": {"street": "", "city": "", "state": "", "zip_code": "", "country": "India"},
+            "owner": {
+                "_id": user_id,
+                "full_name": person_name,
+                "email": email,
+                "mobile": contact_number,
+                "username": username,
+                "designation": designation,
+                "password_hash": hashed_pw,
+            },
+            "plan_id": plan_id_val,
+            "plan_name": plan_name_val,
+            "plan_display_name": plan_display_val,
+            "billing_cycle": "trial",
+            "max_users": max_users_val,
+            "plan_start_date": trial_start,
+            "plan_expiry": trial_end,
+            "trial_start_date": trial_start,
+            "trial_end_date": trial_end,
+            "is_trial": True,
+            "has_used_trial": True,
+            "email_verified": True,
+            "email_verification_token": None,
+            "email_verification_expiry": None,
+            "crm_enabled": crm_enabled,
+            "hrm_enabled": hrm_enabled,
+            "status": TenantStatus.ACTIVE,
+            "created_at": now,
+            "updated_at": now,
+            "is_deleted": False,
+        }
+
+        await master_db.tenants.insert_one(tenant_data)
+        logger.info(
+            "Trial tenant record created | company=%s | id=%s", company_name, company_id
+        )
+
+        # ── 6. Provision company DB + owner user ──────────────────────────────
+        try:
+            await DatabaseManager.create_company_database(company_id)
+            company_db = DatabaseManager.get_company_db(company_id)
+
+            owner_user = {
+                "_id": user_id,
+                "username": username,
+                "email": email,
+                "full_name": person_name,
+                "mobile": contact_number,
+                "password_hash": hashed_pw,
+                "role": UserRole.ADMIN,
+                "permissions": permissions,
+                "designation": designation,
+                "status": UserStatus.ACTIVE,
+                "is_owner": is_owner,
+                "user_type": "internal",
+                "reporting_to": user_id if is_owner else None,
+                "profile_completed": True,
+                "must_change_password": False,
+                "created_at": now,
+                "updated_at": now,
+                "is_deleted": False,
+            }
+            await company_db.users.insert_one(owner_user)
+
+            global_user_id = await upsert_global_user(
+                master_db,
+                email=email,
+                mobile=contact_number,
+                password_hash=hashed_pw,
+            )
+            await ensure_user_company_map(
+                master_db,
+                global_user_id=global_user_id,
+                company_id=company_id,
+                local_user_id=user_id,
+                role="admin",
+                is_owner=is_owner,
+            )
+
+            await company_db.audit_logs.insert_one({
+                "_id": str(uuid.uuid4()),
+                "action": "create",
+                "entity_type": "user",
+                "entity_id": user_id,
+                "entity_name": person_name,
+                "user_id": "system",
+                "user_name": "System",
+                "user_role": "system",
+                "description": f"Trial account created via email verification — designation: {designation}",
+                "created_at": now,
+            })
+
+        except Exception as exc:
+            logger.error(
+                "Trial provisioning failed after verification | company=%s | error=%s",
+                company_id, exc, exc_info=True,
+            )
+            await master_db.tenants.delete_one({"_id": tenant_id})
+            return None, "Failed to provision your workspace. Please try again or contact support."
+
+        # ── 7. Mark pending registration as verified ──────────────────────────
+        await master_db.pending_registrations.update_one(
+            {"_id": pending["_id"]},
+            {"$set": {"status": "verified", "verified_at": now}},
+        )
+
+        logger.info(
+            "Trial provisioning complete | company=%s | user=%s | designation=%s",
+            company_id, user_id, designation,
+        )
+
+        return {
+            "verified": True,
+            "message": "Email verified successfully! Your trial workspace is ready.",
+            "company_name": company_name,
+            "email": email,
+            "trial_days": trial_days,
+        }, ""
+
+    @staticmethod
+    async def resend_trial_verification(email: str) -> Tuple[bool, str]:
+        """
+        Resend the trial verification email for a pending registration.
+        Always returns True to avoid revealing account existence.
+        """
+        master_db = get_master_db()
+        _email = email.lower().strip()
+
+        pending = await master_db.pending_registrations.find_one({
+            "email": _email,
+            "status": "pending_verification",
+        })
+
+        if not pending:
+            return True, "If an unverified registration exists, a new email has been sent."
+
+        now = datetime.now(timezone.utc)
+        import secrets
+        new_token = secrets.token_hex(32)
+        new_expiry = now + timedelta(hours=24)
+
+        await master_db.pending_registrations.update_one(
+            {"_id": pending["_id"]},
+            {"$set": {"verification_token": new_token, "verification_expiry": new_expiry}},
+        )
+
+        trial_plan = await master_db.plans.find_one({"is_trial_plan": True, "is_active": {"$ne": False}})
+        trial_days = trial_plan.get("trial_days", 14) if trial_plan else 14
+
+        from app.services.email_service import send_trial_verification_email
+        await send_trial_verification_email(
+            to_email=pending["email"],
+            full_name=pending["person_name"],
+            company_name=pending["company_name"],
+            token=new_token,
+            trial_days=trial_days,
+        )
+
+        logger.info("Trial verification email resent | email=%s", _email)
+        return True, "If an unverified registration exists, a new email has been sent."
 
     @staticmethod
     async def setup_trial(

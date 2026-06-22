@@ -67,6 +67,28 @@ async def login(data: LoginRequest, request: Request):
     Any existing active session for the user is automatically terminated
     and replaced by the new session (new device always wins).
     """
+    # Block unverified trial registrants before attempting login
+    _master_db = get_master_db()
+    _ident = data.identifier.strip()
+    _ident_lower = _ident.lower()
+    _pending_reg = await _master_db.pending_registrations.find_one({
+        "$or": [
+            {"email": _ident_lower},
+            {"username": _ident_lower},
+            {"contact_number": _ident},
+        ],
+        "status": "pending_verification",
+    })
+    if _pending_reg:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "email_not_verified": True,
+                "email": _pending_reg.get("email", ""),
+                "message": "Please verify your email before logging in. Check your inbox for the verification link.",
+            },
+        )
+
     result, error = await auth_service.login(
         data.identifier, data.password, request=request, company_code=data.company_code,
         force_login=data.force_login, device_fingerprint=data.device_fingerprint or "",
@@ -218,10 +240,11 @@ async def login_with_tenant(data: TenantLoginRequest, request: Request):
 @router.post("/trial-setup", response_model=TrialSetupResponse)
 async def trial_setup(request: TrialSetupRequest):
     """
-    Single-page trial onboarding.
+    Trial onboarding — Step 1: initiate registration with email verification.
 
-    Creates a company + first user (Owner or Admin) in one call.
-    No plan selection required — automatically assigns the active trial plan.
+    Creates a pending_registration record and sends a verification email.
+    Does NOT provision any tenant, database, or user yet — that happens when
+    the user clicks the verification link (GET /auth/verify-email?token=...&type=trial).
 
     Validations enforced:
     - designation must be "Owner" or "Admin" (rejects "Select", empty, null)
@@ -235,7 +258,7 @@ async def trial_setup(request: TrialSetupRequest):
     crm_enabled = module in ("crm_only", "crm_hrm")
     hrm_enabled = module in ("hrm_only", "crm_hrm")
 
-    result, error = await tenant_service.setup_trial(
+    result, error = await tenant_service.initiate_trial_registration(
         company_name=request.company_name,
         company_contact=request.company_contact,
         website=request.website,
@@ -248,10 +271,11 @@ async def trial_setup(request: TrialSetupRequest):
         designation=request.designation,
         crm_enabled=crm_enabled,
         hrm_enabled=hrm_enabled,
+        module=module,
     )
 
     if error:
-        logger.warning("Trial setup failed | reason=%s", error)
+        logger.warning("Trial registration initiation failed | reason=%s", error)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
     return result
@@ -768,9 +792,20 @@ async def verify_email(token: str, type: str = "tenant"):
     """
     Verify email address using the token from the verification link.
 
-    Called when the user clicks the link in the verification email.
-    Sets email_verified = True on the account.
+    For type=trial: validates the token, provisions the tenant + DB + user, and
+    returns workspace details (company_name, email, trial_days).
+
+    For type=tenant (default): sets email_verified=True on the existing tenant record.
     """
+    if type == "trial":
+        result, error = await tenant_service.verify_and_provision_trial(token)
+        if error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"message": error, "verified": False},
+            )
+        return result
+
     success, message = await auth_service.verify_email(token=token, account_type=type)
     if not success:
         raise HTTPException(
@@ -785,8 +820,22 @@ async def resend_verification_email(data: ResendVerificationRequest):
     """
     Resend email-verification link to the given email address.
 
+    Checks pending_registrations first (trial flow); falls back to tenant records.
     Always returns success to avoid revealing whether an account exists.
     """
+    _master_db = get_master_db()
+    _email = data.email.lower().strip()
+
+    # Check if this is a pending trial registration
+    pending = await _master_db.pending_registrations.find_one({
+        "email": _email,
+        "status": "pending_verification",
+    })
+    if pending:
+        await tenant_service.resend_trial_verification(data.email)
+        return {"success": True, "message": "If an unverified registration exists, a new email has been sent."}
+
+    # Existing tenant email verification resend
     success, message = await auth_service.resend_verification_email(data.email)
     return {"success": success, "message": message}
 

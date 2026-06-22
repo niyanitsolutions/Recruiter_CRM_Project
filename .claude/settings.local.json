@@ -157,7 +157,8 @@
       "Bash(git -C d:/crm-project diff --name-only)",
       "Bash(git -C d:/crm-project diff backend/app/main.py backend/app/models/company/role.py frontend/src/pages/auth/ForgotPassword.jsx)",
       "Bash(git -C d:/crm-project add backend/app/main.py backend/app/models/company/role.py frontend/src/pages/auth/ForgotPassword.jsx)",
-      "Bash(git -C d:/crm-project commit -m ' *)"
+      "Bash(git -C d:/crm-project commit -m ' *)",
+      "Bash(git reset *)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",

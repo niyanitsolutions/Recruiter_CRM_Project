@@ -257,7 +257,9 @@ class TrialSetupRequest(BaseModel):
 
 
 class TrialSetupResponse(BaseModel):
-    """Response returned after a successful trial setup."""
+    """Response returned after initiating trial registration (verification email sent)."""
     success: bool
     message: str
-    data: dict
+    email_sent: bool = False
+    email: Optional[str] = None
+    data: Optional[dict] = None
