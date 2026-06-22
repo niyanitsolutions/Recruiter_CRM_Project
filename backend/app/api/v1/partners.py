@@ -172,6 +172,24 @@ async def create_partner(
     )
     if not success:
         raise HTTPException(status_code=400, detail=message)
+
+    # Send partner welcome + credentials email (fire-and-forget)
+    if partner_data.email:
+        try:
+            from app.services.email_service import send_partner_created_email, _fire_email
+            _company_id = current_user.get("company_id", "")
+            _company_name = current_user.get("company_name", _company_id or "your company")
+            _fire_email(send_partner_created_email(
+                to_email=str(partner_data.email),
+                full_name=partner_data.full_name,
+                username=partner_data.username,
+                company_name=_company_name,
+                temp_password=partner_data.password,
+                company_id=_company_id,
+            ))
+        except Exception:
+            pass  # email never blocks partner creation
+
     return {"success": True, "message": message, "data": partner}
 
 

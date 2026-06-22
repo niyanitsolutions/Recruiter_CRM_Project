@@ -408,15 +408,19 @@ async def reset_password(request: ResetPasswordRequest):
         "is_deleted": False,
     })
     if sa:
+        sa_id = sa["_id"]
         await master_db.super_admins.update_one(
-            {"_id": sa["_id"]},
+            {"_id": sa_id},
             {"$set": {
                 "password_hash": hash_password(new_password),
                 "reset_token": None,
                 "reset_token_expiry": None,
+                "logout_at": now,
                 "updated_at": now,
             }}
         )
+        # Revoke all active sessions for this super admin
+        await master_db.user_active_sessions.delete_one({"_id": str(sa_id)})
         return {"message": "Password reset successfully. Please log in.", "success": True}
 
     # Check tenant owner
@@ -433,6 +437,9 @@ async def reset_password(request: ResetPasswordRequest):
                 "owner.password_hash": new_hash,
                 "owner.reset_token": None,
                 "owner.reset_token_expiry": None,
+                "owner.logout_at": now,
+                "owner.active_session_token": None,
+                "owner.active_session_at": None,
             }}
         )
         # Sync to company_db.users so both auth paths (login + refresh) see the same hash
@@ -442,8 +449,17 @@ async def reset_password(request: ResetPasswordRequest):
             _cdb = _get_company_db(tenant["company_id"])
             await _cdb.users.update_one(
                 {"_id": _owner_id},
-                {"$set": {"password_hash": new_hash, "reset_token": None, "reset_token_expiry": None, "updated_at": now}},
+                {"$set": {
+                    "password_hash": new_hash,
+                    "reset_token": None,
+                    "reset_token_expiry": None,
+                    "logout_at": now,
+                    "active_session_token": None,
+                    "active_session_at": None,
+                    "updated_at": now,
+                }},
             )
+            await master_db.user_active_sessions.delete_one({"_id": str(_owner_id)})
         return {"message": "Password reset successfully. Please log in.", "success": True}
 
     # Check company users
@@ -457,8 +473,9 @@ async def reset_password(request: ResetPasswordRequest):
             "is_deleted": False,
         })
         if user:
+            user_id = user["_id"]
             await company_db.users.update_one(
-                {"_id": user["_id"]},
+                {"_id": user_id},
                 {"$set": {
                     "password_hash": hash_password(new_password),
                     "reset_token": None,
@@ -467,9 +484,14 @@ async def reset_password(request: ResetPasswordRequest):
                     # to /change-password again after using the forgot-password link.
                     "must_change_password": False,
                     "password_changed_at": now,
+                    "logout_at": now,
+                    "active_session_token": None,
+                    "active_session_at": None,
                     "updated_at": now,
                 }}
             )
+            # Revoke all active sessions for this user
+            await master_db.user_active_sessions.delete_one({"_id": str(user_id)})
             return {"message": "Password reset successfully. Please log in.", "success": True}
 
     raise HTTPException(

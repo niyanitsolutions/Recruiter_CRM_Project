@@ -316,7 +316,51 @@ async def cancel_interview(
         reason=reason,
         cancelled_by=current_user["id"]
     )
-    
+
+    # Send cancellation emails (fire-and-forget)
+    try:
+        from app.services.email_service import (
+            send_interview_cancelled_email,
+            send_interviewer_cancelled_email,
+            _fire_email,
+        )
+        _cid = current_user.get("company_id", "")
+        _company = current_user.get("company_name", _cid or "")
+        _data = interview if isinstance(interview, dict) else interview.model_dump()
+        _candidate_email = _data.get("candidate_email")
+        _candidate_name  = _data.get("candidate_name", "")
+        _job_title       = _data.get("job_title", "")
+
+        if _candidate_email:
+            _fire_email(send_interview_cancelled_email(
+                to_email=_candidate_email,
+                candidate_name=_candidate_name,
+                job_title=_job_title,
+                company_name=_company,
+                reason=reason,
+                company_id=_cid,
+            ))
+
+        _iv_ids = _data.get("interviewer_ids") or []
+        if _iv_ids:
+            _ivs = await db["users"].find(
+                {"_id": {"$in": _iv_ids}, "email": {"$exists": True}},
+                {"_id": 1, "full_name": 1, "email": 1},
+            ).to_list(length=20)
+            for _iv in _ivs:
+                if _iv.get("email"):
+                    _fire_email(send_interviewer_cancelled_email(
+                        to_email=_iv["email"],
+                        interviewer_name=_iv.get("full_name", ""),
+                        candidate_name=_candidate_name,
+                        job_title=_job_title,
+                        company_name=_company,
+                        reason=reason,
+                        company_id=_cid,
+                    ))
+    except Exception:
+        pass  # email never blocks the cancel response
+
     return {"success": True, "message": "Interview cancelled", "data": interview}
 
 

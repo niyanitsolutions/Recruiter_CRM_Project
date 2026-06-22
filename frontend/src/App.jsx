@@ -34,6 +34,7 @@ import { Layout, AuthLayout } from './components/layout'
 const Login           = lazy(() => import('./pages/auth').then(m => ({ default: m.Login })))
 const Register        = lazy(() => import('./pages/auth').then(m => ({ default: m.Register })))
 const ForgotPassword  = lazy(() => import('./pages/auth').then(m => ({ default: m.ForgotPassword })))
+const ResetPassword   = lazy(() => import('./pages/auth').then(m => ({ default: m.ResetPassword })))
 const UpgradePlan     = lazy(() => import('./pages/auth').then(m => ({ default: m.UpgradePlan })))
 const VerifyEmail     = lazy(() => import('./pages/auth').then(m => ({ default: m.VerifyEmail })))
 const ChangePassword  = lazy(() => import('./pages/auth').then(m => ({ default: m.ChangePassword })))
@@ -1201,9 +1202,10 @@ function App() {
       {/* Public asset QR scan page — no auth required */}
       <Route path="/asset/public/:publicToken" element={<AssetPublicPage />} />
 
-      {/* Email verification — public, uses AuthLayout for consistent design */}
+      {/* Email verification and password reset — public, use AuthLayout for consistent design */}
       <Route element={<AuthLayout />}>
-        <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/verify-email"   element={<VerifyEmail />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
       </Route>
 
       {/* SUPER ADMIN */}

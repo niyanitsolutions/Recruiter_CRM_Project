@@ -1103,6 +1103,881 @@ async def send_job_opened_email(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  System emails — password change notifications  (force_system=True)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def send_password_changed_email(
+    to_email: str,
+    full_name: str,
+) -> bool:
+    """System email notifying a user their password was just changed."""
+    subject = f"Your {_BRAND} password has been changed"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Password Changed</h2>
+      <p>Hi <strong>{full_name}</strong>,</p>
+      <p>Your <strong>{_BRAND}</strong> account password was recently changed.</p>
+      <p>If you made this change, no further action is required.</p>
+      <div style="background:#FEF2F2;border-left:4px solid #EF4444;padding:16px;
+                  border-radius:4px;margin:16px 0">
+        <strong style="color:#991B1B">Didn't change your password?</strong><br>
+        <span style="color:#7F1D1D;font-size:13px">
+          Please contact your administrator immediately or use the Forgot Password
+          option to secure your account.
+        </span>
+      </div>""")
+    text = (
+        f"Hi {full_name},\n\nYour {_BRAND} password was recently changed.\n"
+        "If you did not make this change, contact your administrator immediately."
+    )
+    return await send_email(
+        to_email, subject, html, text, "password_changed", force_system=True
+    )
+
+
+async def send_admin_password_reset_email(
+    to_email: str,
+    full_name: str,
+    temp_password: str,
+    company_name: str,
+    reset_by_name: str,
+    company_id: str = "",
+) -> bool:
+    """Email sent when an admin resets a user's password — includes temp credentials."""
+    login_url = f"{settings.FRONTEND_URL}/login"
+    subject = f"Your {_BRAND} password has been reset"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Password Reset by Administrator</h2>
+      <p>Hi <strong>{full_name}</strong>,</p>
+      <p><strong>{reset_by_name}</strong> has reset your password for
+         <strong>{company_name}</strong>.</p>
+      <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 8px"><strong>Temporary Password:</strong>
+          <code style="background:#DCFCE7;padding:2px 8px;border-radius:4px;
+                       font-size:13px">{temp_password}</code>
+        </p>
+        <p style="margin:0;color:#16A34A;font-size:12px">
+          You will be prompted to change this password on first login.
+        </p>
+      </div>
+      <div style="text-align:center;margin:24px 0">
+        <a href="{login_url}"
+           style="background:#4F46E5;color:#fff;padding:14px 28px;border-radius:8px;
+                  text-decoration:none;font-weight:700;display:inline-block;font-size:14px">
+          Login Now
+        </a>
+      </div>""")
+    text = (
+        f"Hi {full_name},\n\n{reset_by_name} reset your {_BRAND} password.\n"
+        f"Temporary Password: {temp_password}\nLogin: {login_url}"
+    )
+    return await send_email(
+        to_email, subject, html, text, "admin_password_reset", company_id=company_id
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Recruitment emails — interview cancelled, candidate status, offers
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def send_interview_cancelled_email(
+    to_email: str,
+    candidate_name: str,
+    job_title: str,
+    company_name: str,
+    reason: Optional[str],
+    company_id: str = "",
+) -> bool:
+    subject = f"Interview Cancelled — {job_title} at {company_name}"
+    reason_block = (
+        f"<p style='color:#6B7280;font-size:13px'><strong>Reason:</strong> {reason}</p>"
+        if reason else ""
+    )
+    html = _wrap(f"""
+      <h2 style="color:#DC2626;margin-top:0">Interview Cancelled</h2>
+      <p>Dear <strong>{candidate_name}</strong>,</p>
+      <p>We regret to inform you that your interview for
+         <strong>{job_title}</strong> at <strong>{company_name}</strong>
+         has been cancelled.</p>
+      {reason_block}
+      <p style="color:#6B7280;font-size:13px">
+        Our recruitment team will be in touch to reschedule or provide further information.
+      </p>""")
+    text = (
+        f"Interview Cancelled — {job_title} at {company_name}\n"
+        f"Dear {candidate_name},\n\nYour interview has been cancelled."
+        + (f"\nReason: {reason}" if reason else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, "interview_cancelled", company_id=company_id
+    )
+
+
+async def send_interviewer_cancelled_email(
+    to_email: str,
+    interviewer_name: str,
+    candidate_name: str,
+    job_title: str,
+    company_name: str,
+    reason: Optional[str],
+    company_id: str = "",
+) -> bool:
+    subject = f"Interview Cancelled — {candidate_name} for {job_title}"
+    reason_block = (
+        f"<p style='color:#6B7280;font-size:13px'><strong>Reason:</strong> {reason}</p>"
+        if reason else ""
+    )
+    html = _wrap(f"""
+      <h2 style="color:#DC2626;margin-top:0">Interview Cancelled</h2>
+      <p>Hi <strong>{interviewer_name}</strong>,</p>
+      <p>The interview for <strong>{candidate_name}</strong> ({job_title}) at
+         <strong>{company_name}</strong> has been cancelled.</p>
+      {reason_block}
+      <p style="color:#6B7280;font-size:13px">
+        Please disregard any calendar invites related to this interview.
+      </p>""")
+    text = (
+        f"Interview Cancelled — {candidate_name} for {job_title}\n"
+        f"Hi {interviewer_name}, the interview has been cancelled."
+        + (f"\nReason: {reason}" if reason else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, "interviewer_cancelled", company_id=company_id
+    )
+
+
+async def send_candidate_status_email(
+    to_email: str,
+    candidate_name: str,
+    job_title: str,
+    company_name: str,
+    status_label: str,       # "shortlisted" | "selected" | "rejected"
+    company_id: str = "",
+    message: Optional[str] = None,
+) -> bool:
+    """Generic candidate status update email — shortlisted, selected, or rejected."""
+    colour_map = {
+        "shortlisted": ("#D97706", "#FEF3C7", "#92400E", "Shortlisted"),
+        "selected":    ("#059669", "#D1FAE5", "#065F46", "Selected"),
+        "rejected":    ("#DC2626", "#FEF2F2", "#7F1D1D", "Not Selected"),
+    }
+    bg_color, border_color, text_color, label = colour_map.get(
+        status_label.lower(), ("#6B7280", "#F9FAFB", "#374151", status_label.title())
+    )
+    subject = f"Application Update — {job_title} at {company_name}"
+    msg_block = f"<p style='color:#6B7280;font-size:13px'>{message}</p>" if message else ""
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Application Status Update</h2>
+      <p>Dear <strong>{candidate_name}</strong>,</p>
+      <p>We have an update regarding your application for
+         <strong>{job_title}</strong> at <strong>{company_name}</strong>.</p>
+      <div style="background:{border_color};border-left:4px solid {bg_color};
+                  padding:16px;border-radius:4px;margin:16px 0">
+        <strong style="color:{text_color}">Status: {label}</strong>
+      </div>
+      {msg_block}
+      <p style="color:#6B7280;font-size:13px">
+        Thank you for your interest in {company_name}.
+        Our recruitment team will contact you for next steps.
+      </p>""")
+    text = (
+        f"Application Update — {job_title} at {company_name}\n"
+        f"Dear {candidate_name}, your application status: {label}"
+        + (f"\n{message}" if message else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, f"candidate_{status_label.lower()}", company_id=company_id
+    )
+
+
+async def send_offer_letter_email(
+    to_email: str,
+    candidate_name: str,
+    job_title: str,
+    company_name: str,
+    offer_details: str,
+    offer_deadline: Optional[str],
+    company_id: str = "",
+) -> bool:
+    subject = f"Offer Letter — {job_title} at {company_name}"
+    deadline_line = (
+        f"<p style='color:#DC2626;font-size:13px'>"
+        f"<strong>Please respond by:</strong> {offer_deadline}</p>"
+        if offer_deadline else ""
+    )
+    html = _wrap(f"""
+      <h2 style="color:#059669;margin-top:0">Congratulations! You Have an Offer</h2>
+      <p>Dear <strong>{candidate_name}</strong>,</p>
+      <p>We are pleased to offer you the position of
+         <strong>{job_title}</strong> at <strong>{company_name}</strong>.</p>
+      <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;
+                  padding:16px;margin:16px 0;white-space:pre-wrap">
+        {offer_details}
+      </div>
+      {deadline_line}
+      <p style="color:#6B7280;font-size:13px">
+        Please review the offer and respond at your earliest convenience.
+        Contact your recruiter if you have any questions.
+      </p>""")
+    text = (
+        f"Offer Letter — {job_title} at {company_name}\n"
+        f"Dear {candidate_name}, congratulations!\n\n{offer_details}"
+        + (f"\n\nPlease respond by: {offer_deadline}" if offer_deadline else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, "offer_letter", company_id=company_id
+    )
+
+
+async def send_offer_response_email(
+    to_email: str,
+    candidate_name: str,
+    job_title: str,
+    company_name: str,
+    accepted: bool,
+    company_id: str = "",
+) -> bool:
+    """Confirmation to candidate after they accept or reject an offer."""
+    action = "Accepted" if accepted else "Declined"
+    colour = "#059669" if accepted else "#DC2626"
+    subject = f"Offer {action} — {job_title} at {company_name}"
+    body = (
+        f"We have received your <strong>acceptance</strong>. Welcome to <strong>{company_name}</strong>! "
+        f"Our HR team will be in touch soon with onboarding details."
+        if accepted else
+        f"We have noted that you have <strong>declined</strong> our offer for {job_title}. "
+        f"Thank you for your time and we wish you all the best."
+    )
+    html = _wrap(f"""
+      <h2 style="color:{colour};margin-top:0">Offer {action}</h2>
+      <p>Dear <strong>{candidate_name}</strong>,</p>
+      <p>{body}</p>""")
+    text = f"Offer {action} — {job_title} at {company_name}\nDear {candidate_name},\n\n{body}"
+    return await send_email(
+        to_email, subject, html, text, f"offer_{'accepted' if accepted else 'rejected'}", company_id=company_id
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  HRM emails — leave, WFH, attendance, shift, exit, payslip
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def send_leave_decision_email(
+    to_email: str,
+    employee_name: str,
+    leave_type: str,
+    start_date: str,
+    end_date: str,
+    approved: bool,
+    reason: Optional[str],
+    decided_by: str,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    action = "Approved" if approved else "Rejected"
+    colour = "#059669" if approved else "#DC2626"
+    bg = "#D1FAE5" if approved else "#FEF2F2"
+    subject = f"Leave {action} — {leave_type}"
+    reason_line = (
+        f"<p style='color:#6B7280;font-size:13px'><strong>Reason:</strong> {reason}</p>"
+        if reason else ""
+    )
+    html = _wrap(f"""
+      <h2 style="color:{colour};margin-top:0">Leave {action}</h2>
+      <p>Hi <strong>{employee_name}</strong>,</p>
+      <p>Your leave request has been <strong style="color:{colour}">{action.lower()}</strong>
+         by <strong>{decided_by}</strong>.</p>
+      <div style="background:{bg};border-radius:8px;padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>Leave Type:</strong> {leave_type}</p>
+        <p style="margin:0 0 6px"><strong>From:</strong> {start_date}</p>
+        <p style="margin:0"><strong>To:</strong> {end_date}</p>
+      </div>
+      {reason_line}""")
+    text = (
+        f"Leave {action} — {leave_type}\n"
+        f"Hi {employee_name}, your leave from {start_date} to {end_date} has been {action.lower()}."
+        + (f"\nReason: {reason}" if reason else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, f"leave_{action.lower()}", company_id=company_id
+    )
+
+
+async def send_wfh_decision_email(
+    to_email: str,
+    employee_name: str,
+    date_str: str,
+    approved: bool,
+    reason: Optional[str],
+    decided_by: str,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    action = "Approved" if approved else "Rejected"
+    colour = "#059669" if approved else "#DC2626"
+    bg = "#D1FAE5" if approved else "#FEF2F2"
+    subject = f"WFH Request {action} — {date_str}"
+    reason_line = (
+        f"<p style='color:#6B7280;font-size:13px'><strong>Reason:</strong> {reason}</p>"
+        if reason else ""
+    )
+    html = _wrap(f"""
+      <h2 style="color:{colour};margin-top:0">WFH Request {action}</h2>
+      <p>Hi <strong>{employee_name}</strong>,</p>
+      <p>Your Work From Home request for <strong>{date_str}</strong> has been
+         <strong style="color:{colour}">{action.lower()}</strong>
+         by <strong>{decided_by}</strong>.</p>
+      {reason_line}""")
+    text = (
+        f"WFH {action} — {date_str}\n"
+        f"Hi {employee_name}, your WFH request has been {action.lower()}."
+        + (f"\nReason: {reason}" if reason else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, f"wfh_{action.lower()}", company_id=company_id
+    )
+
+
+async def send_attendance_regularization_decision_email(
+    to_email: str,
+    employee_name: str,
+    date_str: str,
+    approved: bool,
+    reason: Optional[str],
+    decided_by: str,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    action = "Approved" if approved else "Rejected"
+    colour = "#059669" if approved else "#DC2626"
+    subject = f"Attendance Regularization {action} — {date_str}"
+    reason_line = (
+        f"<p style='color:#6B7280;font-size:13px'><strong>Reason:</strong> {reason}</p>"
+        if reason else ""
+    )
+    html = _wrap(f"""
+      <h2 style="color:{colour};margin-top:0">Attendance Regularization {action}</h2>
+      <p>Hi <strong>{employee_name}</strong>,</p>
+      <p>Your attendance regularization request for <strong>{date_str}</strong> has been
+         <strong style="color:{colour}">{action.lower()}</strong>
+         by <strong>{decided_by}</strong>.</p>
+      {reason_line}""")
+    text = (
+        f"Attendance Regularization {action} — {date_str}\n"
+        f"Hi {employee_name}, your request has been {action.lower()}."
+        + (f"\nReason: {reason}" if reason else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, f"attendance_regularization_{action.lower()}", company_id=company_id
+    )
+
+
+async def send_shift_change_decision_email(
+    to_email: str,
+    employee_name: str,
+    new_shift: str,
+    effective_date: str,
+    approved: bool,
+    reason: Optional[str],
+    decided_by: str,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    action = "Approved" if approved else "Rejected"
+    colour = "#059669" if approved else "#DC2626"
+    subject = f"Shift Change {action}"
+    reason_line = (
+        f"<p style='color:#6B7280;font-size:13px'><strong>Reason:</strong> {reason}</p>"
+        if reason else ""
+    )
+    html = _wrap(f"""
+      <h2 style="color:{colour};margin-top:0">Shift Change {action}</h2>
+      <p>Hi <strong>{employee_name}</strong>,</p>
+      <p>Your shift change request has been
+         <strong style="color:{colour}">{action.lower()}</strong>
+         by <strong>{decided_by}</strong>.</p>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>New Shift:</strong> {new_shift}</p>
+        <p style="margin:0"><strong>Effective From:</strong> {effective_date}</p>
+      </div>
+      {reason_line}""")
+    text = (
+        f"Shift Change {action}\n"
+        f"Hi {employee_name}, shift: {new_shift} effective {effective_date} has been {action.lower()}."
+        + (f"\nReason: {reason}" if reason else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, f"shift_change_{action.lower()}", company_id=company_id
+    )
+
+
+async def send_exit_request_decision_email(
+    to_email: str,
+    employee_name: str,
+    last_working_day: Optional[str],
+    approved: bool,
+    reason: Optional[str],
+    decided_by: str,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    action = "Approved" if approved else "Rejected"
+    colour = "#059669" if approved else "#DC2626"
+    subject = f"Exit Request {action} — {company_name}"
+    lwd_line = (
+        f"<p style='margin:0'><strong>Last Working Day:</strong> {last_working_day}</p>"
+        if last_working_day and approved else ""
+    )
+    reason_line = (
+        f"<p style='color:#6B7280;font-size:13px'><strong>Reason:</strong> {reason}</p>"
+        if reason else ""
+    )
+    html = _wrap(f"""
+      <h2 style="color:{colour};margin-top:0">Exit Request {action}</h2>
+      <p>Hi <strong>{employee_name}</strong>,</p>
+      <p>Your exit request has been
+         <strong style="color:{colour}">{action.lower()}</strong>
+         by <strong>{decided_by}</strong>.</p>
+      {'<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:16px;margin:16px 0">' + lwd_line + '</div>' if lwd_line else ""}
+      {reason_line}""")
+    text = (
+        f"Exit Request {action} — {company_name}\n"
+        f"Hi {employee_name}, your exit request has been {action.lower()}."
+        + (f"\nLast Working Day: {last_working_day}" if last_working_day and approved else "")
+        + (f"\nReason: {reason}" if reason else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, f"exit_request_{action.lower()}", company_id=company_id
+    )
+
+
+async def send_payslip_generated_email(
+    to_email: str,
+    employee_name: str,
+    month_year: str,
+    net_pay: float,
+    currency: str,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    login_url = f"{settings.FRONTEND_URL}/login"
+    subject = f"Payslip for {month_year} — {company_name}"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Payslip Generated</h2>
+      <p>Hi <strong>{employee_name}</strong>,</p>
+      <p>Your payslip for <strong>{month_year}</strong> has been generated.</p>
+      <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;
+                  padding:16px;margin:16px 0;text-align:center">
+        <p style="margin:0;font-size:13px;color:#374151">Net Pay</p>
+        <p style="margin:4px 0 0;font-size:28px;font-weight:700;color:#059669">
+          {currency} {net_pay:,.2f}
+        </p>
+      </div>
+      <div style="text-align:center;margin:24px 0">
+        <a href="{login_url}"
+           style="background:#4F46E5;color:#fff;padding:12px 24px;border-radius:8px;
+                  text-decoration:none;font-weight:700;display:inline-block">
+          View Payslip
+        </a>
+      </div>""")
+    text = (
+        f"Payslip for {month_year} — {company_name}\n"
+        f"Hi {employee_name}, your payslip is ready. Net Pay: {currency} {net_pay:,.2f}\n"
+        f"Login to view: {login_url}"
+    )
+    return await send_email(
+        to_email, subject, html, text, "payslip_generated", company_id=company_id
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Task emails — updated, completed, due reminder, overdue
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def send_task_updated_email(
+    to_email: str,
+    assignee_name: str,
+    task_title: str,
+    updated_by_name: str,
+    changes_summary: str,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    login_url = f"{settings.FRONTEND_URL}/tasks"
+    subject = f"Task Updated — {task_title}"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Task Updated</h2>
+      <p>Hi <strong>{assignee_name}</strong>,</p>
+      <p><strong>{updated_by_name}</strong> updated a task assigned to you
+         in <strong>{company_name}</strong>.</p>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>Task:</strong> {task_title}</p>
+        <p style="margin:0;color:#6B7280;font-size:13px">{changes_summary}</p>
+      </div>
+      <div style="text-align:center;margin:24px 0">
+        <a href="{login_url}"
+           style="background:#4F46E5;color:#fff;padding:12px 24px;border-radius:8px;
+                  text-decoration:none;font-weight:700;display:inline-block">
+          View Task
+        </a>
+      </div>""")
+    text = (
+        f"Task Updated — {task_title}\n"
+        f"Hi {assignee_name}, {updated_by_name} updated your task: {changes_summary}"
+    )
+    return await send_email(
+        to_email, subject, html, text, "task_updated", company_id=company_id
+    )
+
+
+async def send_task_reminder_email(
+    to_email: str,
+    assignee_name: str,
+    task_title: str,
+    due_date: str,
+    priority: str,
+    company_name: str,
+    overdue: bool = False,
+    company_id: str = "",
+) -> bool:
+    label = "Overdue" if overdue else "Due Soon"
+    colour = "#DC2626" if overdue else "#D97706"
+    subject = f"Task {label} — {task_title}"
+    event = "task_overdue" if overdue else "task_due_reminder"
+    login_url = f"{settings.FRONTEND_URL}/tasks"
+    html = _wrap(f"""
+      <div style="background:{'#FEF2F2' if overdue else '#FFFBEB'};
+                  border-left:4px solid {colour};padding:16px;
+                  border-radius:4px;margin-bottom:24px">
+        <strong style="color:{colour}">{'⚠ Task Overdue' if overdue else '⏰ Task Due Soon'}</strong>
+      </div>
+      <p>Hi <strong>{assignee_name}</strong>,</p>
+      <p>A task assigned to you in <strong>{company_name}</strong> is
+         {'overdue' if overdue else 'due soon'}.</p>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>Task:</strong> {task_title}</p>
+        <p style="margin:0 0 6px"><strong>Due Date:</strong>
+          <span style="color:{colour};font-weight:700">{due_date}</span></p>
+        <p style="margin:0"><strong>Priority:</strong> {priority.upper()}</p>
+      </div>
+      <div style="text-align:center;margin:24px 0">
+        <a href="{login_url}"
+           style="background:{colour};color:#fff;padding:12px 24px;border-radius:8px;
+                  text-decoration:none;font-weight:700;display:inline-block">
+          {'View Overdue Task' if overdue else 'View Task'}
+        </a>
+      </div>""")
+    text = (
+        f"Task {label} — {task_title}\n"
+        f"Hi {assignee_name}, your task is {'overdue' if overdue else 'due soon'}.\n"
+        f"Due: {due_date} | Priority: {priority}"
+    )
+    return await send_email(
+        to_email, subject, html, text, event, company_id=company_id
+    )
+
+
+async def send_task_completed_email(
+    to_email: str,
+    recipient_name: str,
+    task_title: str,
+    completed_by_name: str,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    subject = f"Task Completed — {task_title}"
+    html = _wrap(f"""
+      <h2 style="color:#059669;margin-top:0">Task Completed ✓</h2>
+      <p>Hi <strong>{recipient_name}</strong>,</p>
+      <p><strong>{completed_by_name}</strong> has marked the following task as completed
+         in <strong>{company_name}</strong>.</p>
+      <div style="background:#D1FAE5;border:1px solid #6EE7B7;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0"><strong>{task_title}</strong></p>
+      </div>""")
+    text = (
+        f"Task Completed — {task_title}\n"
+        f"Hi {recipient_name}, {completed_by_name} completed: {task_title}"
+    )
+    return await send_email(
+        to_email, subject, html, text, "task_completed", company_id=company_id
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Partner emails
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def send_partner_created_email(
+    to_email: str,
+    full_name: str,
+    username: str,
+    company_name: str,
+    temp_password: Optional[str] = None,
+    company_id: str = "",
+) -> bool:
+    """Welcome + credentials email for newly created partner accounts."""
+    login_url = f"{settings.FRONTEND_URL}/login"
+    subject = f"Your {_BRAND} Partner account — {company_name}"
+    creds_block = (
+        f"""<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;
+                        padding:16px;margin:16px 0">
+          <p style="margin:0 0 8px"><strong>Username:</strong> {username}</p>
+          <p style="margin:0 0 8px"><strong>Temporary Password:</strong>
+            <code style="background:#DCFCE7;padding:2px 8px;border-radius:4px;
+                         font-size:13px">{temp_password}</code>
+          </p>
+          <p style="margin:0;color:#16A34A;font-size:12px">
+            You will be prompted to change this password on first login.
+          </p>
+        </div>"""
+        if temp_password else
+        f"<p><strong>Username:</strong> {username}</p>"
+    )
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Welcome to {_BRAND} Partner Portal!</h2>
+      <p>Hi <strong>{full_name}</strong>,</p>
+      <p>A partner account has been created for you at <strong>{company_name}</strong>.</p>
+      {creds_block}
+      <div style="text-align:center;margin:32px 0">
+        <a href="{login_url}"
+           style="background:#4F46E5;color:#fff;padding:14px 28px;border-radius:8px;
+                  text-decoration:none;font-weight:700;display:inline-block;font-size:14px">
+          Login to Partner Portal
+        </a>
+      </div>""")
+    text = (
+        f"Hi {full_name},\n\nYour {_BRAND} partner account is ready for {company_name}.\n"
+        f"Login: {login_url}\nUsername: {username}"
+        + (f"\nTemporary Password: {temp_password}" if temp_password else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, "partner_created", company_id=company_id
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  CRM emails — lead assigned, client assigned, target achieved
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def send_lead_assigned_email(
+    to_email: str,
+    assignee_name: str,
+    lead_name: str,
+    company_name: str,
+    assigned_by_name: str,
+    company_id: str = "",
+) -> bool:
+    login_url = f"{settings.FRONTEND_URL}/leads"
+    subject = f"Lead Assigned — {lead_name}"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">New Lead Assigned</h2>
+      <p>Hi <strong>{assignee_name}</strong>,</p>
+      <p><strong>{assigned_by_name}</strong> has assigned a new lead to you
+         in <strong>{company_name}</strong>.</p>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0"><strong>Lead:</strong> {lead_name}</p>
+      </div>
+      <div style="text-align:center;margin:24px 0">
+        <a href="{login_url}"
+           style="background:#4F46E5;color:#fff;padding:12px 24px;border-radius:8px;
+                  text-decoration:none;font-weight:700;display:inline-block">
+          View Lead
+        </a>
+      </div>""")
+    text = f"Hi {assignee_name}, {assigned_by_name} assigned lead: {lead_name}"
+    return await send_email(
+        to_email, subject, html, text, "lead_assigned", company_id=company_id
+    )
+
+
+async def send_client_assigned_email(
+    to_email: str,
+    assignee_name: str,
+    client_name: str,
+    company_name: str,
+    assigned_by_name: str,
+    company_id: str = "",
+) -> bool:
+    login_url = f"{settings.FRONTEND_URL}/clients"
+    subject = f"Client Assigned — {client_name}"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">New Client Assigned</h2>
+      <p>Hi <strong>{assignee_name}</strong>,</p>
+      <p><strong>{assigned_by_name}</strong> has assigned a client to you
+         in <strong>{company_name}</strong>.</p>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0"><strong>Client:</strong> {client_name}</p>
+      </div>
+      <div style="text-align:center;margin:24px 0">
+        <a href="{login_url}"
+           style="background:#4F46E5;color:#fff;padding:12px 24px;border-radius:8px;
+                  text-decoration:none;font-weight:700;display:inline-block">
+          View Client
+        </a>
+      </div>""")
+    text = f"Hi {assignee_name}, {assigned_by_name} assigned client: {client_name}"
+    return await send_email(
+        to_email, subject, html, text, "client_assigned", company_id=company_id
+    )
+
+
+async def send_target_achieved_email(
+    to_email: str,
+    recipient_name: str,
+    target_name: str,
+    target_value: float,
+    achieved_value: float,
+    unit: str,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    """Email sent to assignee (and optionally reporting manager) when a target is achieved."""
+    subject = f"Target Achieved — {target_name}"
+    pct = int((achieved_value / target_value * 100)) if target_value else 0
+    html = _wrap(f"""
+      <h2 style="color:#059669;margin-top:0">Target Achieved!</h2>
+      <p>Hi <strong>{recipient_name}</strong>,</p>
+      <p>Congratulations! A target has been achieved in <strong>{company_name}</strong>.</p>
+      <div style="background:#D1FAE5;border:1px solid #6EE7B7;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>Target:</strong> {target_name}</p>
+        <p style="margin:0 0 6px"><strong>Goal:</strong> {target_value} {unit}</p>
+        <p style="margin:0 0 6px"><strong>Achieved:</strong>
+          <span style="color:#059669;font-weight:700">{achieved_value} {unit}</span></p>
+        <p style="margin:0"><strong>Achievement:</strong>
+          <span style="color:#059669;font-weight:700">{pct}%</span></p>
+      </div>""")
+    text = (
+        f"Target Achieved — {target_name}\n"
+        f"Hi {recipient_name}, the target has been achieved!\n"
+        f"Goal: {target_value} {unit} | Achieved: {achieved_value} {unit} ({pct}%)"
+    )
+    return await send_email(
+        to_email, subject, html, text, "target_achieved", company_id=company_id
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Owner / Admin notification emails  (force_system=True)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def send_new_user_added_notification(
+    to_email: str,
+    admin_name: str,
+    new_user_name: str,
+    new_user_email: str,
+    new_user_role: str,
+    added_by_name: str,
+    company_name: str,
+) -> bool:
+    subject = f"New User Added — {new_user_name}"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">New User Added</h2>
+      <p>Hi <strong>{admin_name}</strong>,</p>
+      <p>A new user has been added to <strong>{company_name}</strong>
+         by <strong>{added_by_name}</strong>.</p>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>Name:</strong> {new_user_name}</p>
+        <p style="margin:0 0 6px"><strong>Email:</strong> {new_user_email}</p>
+        <p style="margin:0"><strong>Role:</strong> {new_user_role}</p>
+      </div>""")
+    text = (
+        f"New User Added — {company_name}\n"
+        f"Hi {admin_name}, {added_by_name} added: {new_user_name} ({new_user_email}) as {new_user_role}."
+    )
+    return await send_email(
+        to_email, subject, html, text, "admin_new_user_added", force_system=True
+    )
+
+
+async def send_seat_limit_reached_notification(
+    to_email: str,
+    admin_name: str,
+    company_name: str,
+    seat_limit: int,
+) -> bool:
+    subject = f"Seat Limit Reached — {company_name}"
+    html = _wrap(f"""
+      <div style="background:#FEF2F2;border-left:4px solid #EF4444;padding:16px;
+                  border-radius:4px;margin-bottom:24px">
+        <strong style="color:#991B1B">⚠ User Seat Limit Reached</strong>
+      </div>
+      <p>Hi <strong>{admin_name}</strong>,</p>
+      <p>Your <strong>{company_name}</strong> account has reached the maximum seat limit
+         of <strong>{seat_limit} users</strong>.</p>
+      <p>To add more users, please upgrade your subscription plan.</p>""")
+    text = (
+        f"Seat Limit Reached — {company_name}\n"
+        f"Hi {admin_name}, you have reached the {seat_limit}-user limit. Upgrade to add more users."
+    )
+    return await send_email(
+        to_email, subject, html, text, "seat_limit_reached", force_system=True
+    )
+
+
+async def send_payment_failed_notification(
+    to_email: str,
+    admin_name: str,
+    company_name: str,
+    amount: float,
+    currency: str,
+    reason: Optional[str],
+) -> bool:
+    subject = f"Payment Failed — {company_name}"
+    html = _wrap(f"""
+      <div style="background:#FEF2F2;border-left:4px solid #EF4444;padding:16px;
+                  border-radius:4px;margin-bottom:24px">
+        <strong style="color:#991B1B">⚠ Payment Failed</strong>
+      </div>
+      <p>Hi <strong>{admin_name}</strong>,</p>
+      <p>A payment of <strong>{currency} {amount:,.2f}</strong> for your
+         <strong>{company_name}</strong> subscription could not be processed.</p>
+      {f"<p style='color:#6B7280;font-size:13px'>Reason: {reason}</p>" if reason else ""}
+      <p>Please update your payment details to avoid service interruption.</p>""")
+    text = (
+        f"Payment Failed — {company_name}\n"
+        f"Hi {admin_name}, payment of {currency} {amount:,.2f} failed."
+        + (f"\nReason: {reason}" if reason else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, "payment_failed", force_system=True
+    )
+
+
+async def send_subscription_cancelled_notification(
+    to_email: str,
+    admin_name: str,
+    company_name: str,
+    cancelled_date: str,
+) -> bool:
+    subject = f"Subscription Cancelled — {company_name}"
+    html = _wrap(f"""
+      <div style="background:#FEF2F2;border-left:4px solid #EF4444;padding:16px;
+                  border-radius:4px;margin-bottom:24px">
+        <strong style="color:#991B1B">Subscription Cancelled</strong>
+      </div>
+      <p>Hi <strong>{admin_name}</strong>,</p>
+      <p>Your <strong>{company_name}</strong> subscription has been cancelled
+         effective <strong>{cancelled_date}</strong>.</p>
+      <p>Access to the platform will be restricted from this date.
+         Contact support to re-activate your subscription.</p>""")
+    text = (
+        f"Subscription Cancelled — {company_name}\n"
+        f"Hi {admin_name}, your subscription was cancelled on {cancelled_date}."
+    )
+    return await send_email(
+        to_email, subject, html, text, "subscription_cancelled", force_system=True
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  Backwards-compatibility wrapper
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1115,19 +1990,56 @@ class EmailService:
     # --- system emails ---
     send_verification_email = staticmethod(send_verification_email)
     send_password_reset_email = staticmethod(send_password_reset_email)
+    send_password_changed_email = staticmethod(send_password_changed_email)
     send_subscription_reminder_email = staticmethod(send_subscription_reminder_email)
 
-    # --- business emails ---
+    # --- admin credential emails ---
+    send_admin_password_reset_email = staticmethod(send_admin_password_reset_email)
+
+    # --- business / user emails ---
     send_welcome_email = staticmethod(send_welcome_email)
+    send_partner_created_email = staticmethod(send_partner_created_email)
+
+    # --- task emails ---
     send_task_assigned_email = staticmethod(send_task_assigned_email)
+    send_task_updated_email = staticmethod(send_task_updated_email)
+    send_task_reminder_email = staticmethod(send_task_reminder_email)
+    send_task_completed_email = staticmethod(send_task_completed_email)
+
+    # --- CRM emails ---
     send_target_assigned_email = staticmethod(send_target_assigned_email)
+    send_target_achieved_email = staticmethod(send_target_achieved_email)
+    send_lead_assigned_email = staticmethod(send_lead_assigned_email)
+    send_client_assigned_email = staticmethod(send_client_assigned_email)
     send_invoice_sent_email = staticmethod(send_invoice_sent_email)
+
+    # --- recruitment emails ---
     send_candidate_registered_email = staticmethod(send_candidate_registered_email)
+    send_candidate_status_email = staticmethod(send_candidate_status_email)
     send_candidate_form_link_email = staticmethod(send_candidate_form_link_email)
+    send_offer_letter_email = staticmethod(send_offer_letter_email)
+    send_offer_response_email = staticmethod(send_offer_response_email)
     send_interview_scheduled_email = staticmethod(send_interview_scheduled_email)
     send_interview_rescheduled_email = staticmethod(send_interview_rescheduled_email)
+    send_interview_cancelled_email = staticmethod(send_interview_cancelled_email)
     send_interviewer_assigned_email = staticmethod(send_interviewer_assigned_email)
+    send_interviewer_cancelled_email = staticmethod(send_interviewer_cancelled_email)
     send_job_opened_email = staticmethod(send_job_opened_email)
+
+    # --- HRM emails ---
+    send_leave_decision_email = staticmethod(send_leave_decision_email)
+    send_wfh_decision_email = staticmethod(send_wfh_decision_email)
+    send_attendance_regularization_decision_email = staticmethod(send_attendance_regularization_decision_email)
+    send_shift_change_decision_email = staticmethod(send_shift_change_decision_email)
+    send_exit_request_decision_email = staticmethod(send_exit_request_decision_email)
+    send_payslip_generated_email = staticmethod(send_payslip_generated_email)
+    send_employee_onboarding_link_email = staticmethod(send_employee_onboarding_link_email)
+
+    # --- admin notifications ---
+    send_new_user_added_notification = staticmethod(send_new_user_added_notification)
+    send_seat_limit_reached_notification = staticmethod(send_seat_limit_reached_notification)
+    send_payment_failed_notification = staticmethod(send_payment_failed_notification)
+    send_subscription_cancelled_notification = staticmethod(send_subscription_cancelled_notification)
 
     @staticmethod
     def _send_smtp(
