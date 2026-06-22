@@ -152,7 +152,12 @@
       "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\backend\\\\app\" -Directory | ForEach-Object { \"$\\($_.Name\\)\"; Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue | ForEach-Object { \"  $\\($_.Name\\)\" } } | Select-Object -First 100)",
       "PowerShell(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\" -Directory | ForEach-Object { \"$\\($_.Name\\)\"; Get-ChildItem -Path $_.FullName -File -ErrorAction SilentlyContinue | ForEach-Object { \"  $\\($_.Name\\)\" } } | Select-Object -First 100)",
       "Skill(claude-api)",
-      "Skill(claude-api:*)"
+      "Skill(claude-api:*)",
+      "Bash(git -C d:/crm-project ls-files backend/.env)",
+      "Bash(git -C d:/crm-project diff --name-only)",
+      "Bash(git -C d:/crm-project diff backend/app/main.py backend/app/models/company/role.py frontend/src/pages/auth/ForgotPassword.jsx)",
+      "Bash(git -C d:/crm-project add backend/app/main.py backend/app/models/company/role.py frontend/src/pages/auth/ForgotPassword.jsx)",
+      "Bash(git -C d:/crm-project commit -m ' *)"
     ],
     "additionalDirectories": [
       "d:\\crm-project\\frontend",
