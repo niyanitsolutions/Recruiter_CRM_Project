@@ -192,11 +192,19 @@ const TrialSetupForm = () => {
       const emailAddr = response.data?.email || payload.email
       navigate(`/verify-pending?email=${encodeURIComponent(emailAddr)}`)
     } catch (err) {
+      // DEBUG: log full error so backend error is visible in browser console
+      console.error('[TrialSetup] API error:', {
+        status: err.response?.status,
+        detail: err.response?.data?.detail,
+        message: err.response?.data?.message,
+        data: err.response?.data,
+      })
       const msg =
         err.response?.data?.detail ||
         err.response?.data?.message ||
+        err.message ||
         'Registration failed. Please try again.'
-      toast.error(typeof msg === 'string' ? msg : 'Registration failed.')
+      toast.error(typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setIsLoading(false)
     }
