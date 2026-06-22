@@ -61,6 +61,7 @@ async def get_current_user(
     user = {
         "id": payload.get("sub"),
         "company_id": payload.get("company_id"),
+        "company_name": payload.get("company_name", ""),
         "role": payload.get("role"),
         "user_type": payload.get("user_type", "internal"),
         "permissions": payload.get("permissions", []),

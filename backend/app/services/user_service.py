@@ -232,7 +232,7 @@ class UserService:
                     to_email=user_data.email,
                     full_name=user_data.full_name,
                     username=user_data.username,
-                    company_name=company_name or company_id or "your company",
+                    company_name=company_name or "your company",
                     temp_password=user_data.password,
                     company_id=company_id or "",
                 ))

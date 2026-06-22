@@ -663,6 +663,7 @@ class AuthService:
         token_data = {
             "sub":          user_id,
             "company_id":   company_id,
+            "company_name": tenant.get("company_name", ""),
             "role":         role_name,
             "user_type":    _user_type,
             "permissions":  effective_perms,
@@ -1379,6 +1380,7 @@ class AuthService:
             token_data = {
                 "sub": str(user_id),
                 "company_id": company_id,
+                "company_name": tenant.get("company_name", ""),
                 "role": role_name,
                 "user_type": _user_type,
                 "permissions": effective_perms,

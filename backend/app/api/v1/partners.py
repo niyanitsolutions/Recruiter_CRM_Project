@@ -178,7 +178,7 @@ async def create_partner(
         try:
             from app.services.email_service import send_partner_created_email, _fire_email
             _company_id = current_user.get("company_id", "")
-            _company_name = current_user.get("company_name", _company_id or "your company")
+            _company_name = current_user.get("company_name") or "your company"
             _fire_email(send_partner_created_email(
                 to_email=str(partner_data.email),
                 full_name=partner_data.full_name,

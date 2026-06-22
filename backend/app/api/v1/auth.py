@@ -262,21 +262,30 @@ async def trial_setup(request: TrialSetupRequest):
     crm_enabled = module in ("crm_only", "crm_hrm")
     hrm_enabled = module in ("hrm_only", "crm_hrm")
 
-    result, error = await tenant_service.initiate_trial_registration(
-        company_name=request.company_name,
-        company_contact=request.company_contact,
-        website=request.website,
-        no_website=request.no_website,
-        person_name=request.person_name,
-        username=request.username,
-        email=str(request.email),
-        contact_number=request.contact_number,
-        password=request.password,
-        designation=request.designation,
-        crm_enabled=crm_enabled,
-        hrm_enabled=hrm_enabled,
-        module=module,
-    )
+    import traceback as _tb
+    try:
+        result, error = await tenant_service.initiate_trial_registration(
+            company_name=request.company_name,
+            company_contact=request.company_contact,
+            website=request.website,
+            no_website=request.no_website,
+            person_name=request.person_name,
+            username=request.username,
+            email=str(request.email),
+            contact_number=request.contact_number,
+            password=request.password,
+            designation=request.designation,
+            crm_enabled=crm_enabled,
+            hrm_enabled=hrm_enabled,
+            module=module,
+        )
+    except Exception as _exc:
+        _trace = _tb.format_exc()
+        logger.error("[TRIAL-SETUP ENDPOINT EXCEPTION] %s\n%s", _exc, _trace)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"[DEBUG] {type(_exc).__name__}: {_exc}",
+        )
 
     if error:
         logger.warning("Trial registration initiation failed | reason=%s", error)

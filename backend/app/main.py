@@ -169,6 +169,21 @@ async def lifespan(app: FastAPI):
     from app.services.email_service import validate_smtp_on_startup
     validate_smtp_on_startup()
     print(" SMTP configuration validated")
+    # Ensure pending_registrations collection exists (created once, idempotent)
+    try:
+        _master_db = get_master_db()
+        _existing = await _master_db.list_collection_names()
+        if "pending_registrations" not in _existing:
+            await _master_db.create_collection("pending_registrations")
+            print(" pending_registrations collection created")
+        else:
+            print(" pending_registrations collection already exists")
+    except Exception as _col_err:
+        logger.warning(
+            "Could not ensure pending_registrations collection: %s — "
+            "Trial registration will fail if collection does not exist. "
+            "Check MongoDB Atlas collection limit.", _col_err
+        )
     # Run schema migrations across all tenant databases (idempotent, safe)
     from app.migrations.runner import run_migrations
     await run_migrations()

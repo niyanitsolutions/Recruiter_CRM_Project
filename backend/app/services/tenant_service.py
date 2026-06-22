@@ -10,6 +10,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple, List
 
+from pymongo.errors import OperationFailure
+
 from app.core.database import get_master_db, DatabaseManager
 from app.core.security import hash_password
 from app.models.master.tenant import TenantStatus
@@ -478,6 +480,11 @@ class TenantService:
                 "email": email,
             }, ""
 
+        except OperationFailure as _exc:
+            logger.error(
+                "[TRIAL-SETUP] MongoDB OperationFailure | email=%s error=%s", email, _exc
+            )
+            return None, "Registration is temporarily unavailable due to a server issue. Please try again later or contact support."
         except Exception as _exc:
             logger.exception(
                 "[TRIAL-SETUP FATAL] Unhandled exception in initiate_trial_registration | "
