@@ -130,6 +130,30 @@ async def list_tenants(
     }
 
 
+@router.get("/tenants/deleted")
+async def list_deleted_tenants(
+    auth: AuthContext = Depends(require_super_admin),
+    search: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+):
+    """
+    List soft-deleted tenants.
+    Shows company name, plan, deleted date, scheduled permanent deletion date,
+    and days remaining in the retention period.
+    """
+    tenants, total = await tenant_service.get_deleted_tenants(
+        page=page, limit=limit, search=search
+    )
+    return {
+        "tenants": tenants,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": (total + limit - 1) // limit,
+    }
+
+
 @router.get("/tenants/{tenant_id}")
 async def get_tenant(
     tenant_id: str,
@@ -241,24 +265,81 @@ async def create_tenant_with_payment(
 @router.delete("/tenants/{tenant_id}")
 async def delete_tenant(
     tenant_id: str,
-    auth: AuthContext = Depends(require_super_admin)
+    auth: AuthContext = Depends(require_super_admin),
 ):
     """
-    Soft delete a tenant
-    
-    This will:
-    - Mark tenant as deleted
-    - Set status to cancelled
-    - Block all users from logging in
+    Soft-delete a tenant with a retention period.
+
+    - Trial tenants: 15-day retention before permanent deletion
+    - Paid tenants:  30-day retention before permanent deletion
+
+    The company is immediately blocked from logging in, but all data is
+    preserved.  The company can be restored before the retention period expires.
     """
     success, message = await tenant_service.soft_delete_tenant(tenant_id, auth.user_id)
-    
+
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=message
+            detail=message,
         )
-    
+
+    return {"success": True, "message": message}
+
+
+@router.post("/tenants/{tenant_id}/restore")
+async def restore_tenant(
+    tenant_id: str,
+    auth: AuthContext = Depends(require_super_admin),
+):
+    """
+    Restore a soft-deleted tenant before its permanent deletion date.
+    All data is preserved — no recreation required.
+    """
+    success, message = await tenant_service.restore_tenant(tenant_id, auth.user_id)
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message,
+        )
+
+    return {"success": True, "message": message}
+
+
+class PermanentDeletePayload(BaseModel):
+    confirm_company_name: str
+
+
+@router.delete("/tenants/{tenant_id}/permanent")
+async def permanent_delete_tenant(
+    tenant_id: str,
+    payload: PermanentDeletePayload,
+    auth: AuthContext = Depends(require_super_admin),
+):
+    """
+    Permanently delete a tenant.
+
+    IRREVERSIBLE. This will:
+    1. Drop the tenant's MongoDB database (company_<id>_db)
+    2. Delete the tenant record from master_db
+    3. Delete related payment records
+    4. Write an audit log
+
+    Requires the caller to confirm the exact company name in the request body.
+    """
+    success, message = await tenant_service.permanent_delete_tenant(
+        tenant_id=tenant_id,
+        deleted_by=auth.user_id,
+        confirm_company_name=payload.confirm_company_name,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message,
+        )
+
     return {"success": True, "message": message}
 
 

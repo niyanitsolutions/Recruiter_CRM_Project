@@ -32,10 +32,34 @@ const superAdminService = {
   },
 
   /**
-   * Delete tenant (soft delete)
+   * Soft-delete a tenant (with retention period)
    */
   deleteTenant: (tenantId) => {
     return api.delete(`/super-admin/tenants/${tenantId}`)
+  },
+
+  /**
+   * Restore a soft-deleted tenant
+   */
+  restoreTenant: (tenantId) => {
+    return api.post(`/super-admin/tenants/${tenantId}/restore`)
+  },
+
+  /**
+   * Permanently delete a tenant (irreversible)
+   * confirmCompanyName must match the company name exactly
+   */
+  permanentDeleteTenant: (tenantId, confirmCompanyName) => {
+    return api.delete(`/super-admin/tenants/${tenantId}/permanent`, {
+      data: { confirm_company_name: confirmCompanyName },
+    })
+  },
+
+  /**
+   * List soft-deleted tenants
+   */
+  getDeletedTenants: (params = {}) => {
+    return api.get('/super-admin/tenants/deleted', { params })
   },
 
   /**

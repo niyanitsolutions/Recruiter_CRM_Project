@@ -1065,25 +1065,279 @@ class TenantService:
     
     @staticmethod
     async def soft_delete_tenant(tenant_id: str, deleted_by: str) -> Tuple[bool, str]:
-        """Soft delete a tenant"""
+        """
+        Soft-delete a tenant with a retention period before permanent removal.
+
+        Retention rules:
+          - Trial tenants  → 15 days
+          - Paid tenants   → 30 days
+
+        The tenant is immediately blocked from logging in (status = DELETED),
+        but all data is preserved until the cleanup job runs after the retention
+        period expires.
+        """
         master_db = get_master_db()
-        
+
+        tenant = await master_db.tenants.find_one({"_id": tenant_id})
+        if not tenant:
+            return False, "Tenant not found"
+
+        if tenant.get("is_deleted"):
+            return False, "Tenant is already deleted"
+
+        is_trial = bool(tenant.get("is_trial", True))
+        retention_days = 15 if is_trial else 30
+        now = datetime.now(timezone.utc)
+        deletion_scheduled_at = now + timedelta(days=retention_days)
+
         result = await master_db.tenants.update_one(
             {"_id": tenant_id},
             {
                 "$set": {
                     "is_deleted": True,
-                    "deleted_at": datetime.now(timezone.utc),
+                    "deleted_at": now,
                     "deleted_by": deleted_by,
-                    "status": TenantStatus.CANCELLED
+                    "deletion_scheduled_at": deletion_scheduled_at,
+                    "status": TenantStatus.DELETED,
+                    "updated_at": now,
                 }
             }
         )
-        
+
         if result.modified_count == 0:
+            return False, "Failed to delete tenant"
+
+        # Audit log in master_db
+        await master_db.tenant_audit_logs.insert_one({
+            "_id": str(uuid.uuid4()),
+            "company_id": tenant.get("company_id"),
+            "company_name": tenant.get("company_name"),
+            "action": "company_deleted",
+            "performed_by": deleted_by,
+            "timestamp": now,
+            "details": {
+                "retention_days": retention_days,
+                "deletion_scheduled_at": deletion_scheduled_at.isoformat(),
+            },
+        })
+
+        return True, f"Company deleted. Scheduled for permanent removal in {retention_days} days."
+
+    @staticmethod
+    async def restore_tenant(tenant_id: str, restored_by: str) -> Tuple[bool, str]:
+        """Restore a soft-deleted tenant before permanent deletion."""
+        master_db = get_master_db()
+
+        tenant = await master_db.tenants.find_one({"_id": tenant_id})
+        if not tenant:
             return False, "Tenant not found"
-        
-        return True, "Tenant deleted successfully"
+
+        if not tenant.get("is_deleted"):
+            return False, "Tenant is not deleted"
+
+        now = datetime.now(timezone.utc)
+        result = await master_db.tenants.update_one(
+            {"_id": tenant_id},
+            {
+                "$set": {
+                    "is_deleted": False,
+                    "status": TenantStatus.ACTIVE,
+                    "updated_at": now,
+                },
+                "$unset": {
+                    "deleted_at": "",
+                    "deleted_by": "",
+                    "deletion_scheduled_at": "",
+                }
+            }
+        )
+
+        if result.modified_count == 0:
+            return False, "Failed to restore tenant"
+
+        await master_db.tenant_audit_logs.insert_one({
+            "_id": str(uuid.uuid4()),
+            "company_id": tenant.get("company_id"),
+            "company_name": tenant.get("company_name"),
+            "action": "company_restored",
+            "performed_by": restored_by,
+            "timestamp": now,
+            "details": {},
+        })
+
+        return True, "Company restored successfully"
+
+    @staticmethod
+    async def permanent_delete_tenant(
+        tenant_id: str,
+        deleted_by: str,
+        confirm_company_name: str,
+    ) -> Tuple[bool, str]:
+        """
+        Permanently delete a tenant and drop its company database.
+
+        Safety checks:
+        1. Tenant must exist.
+        2. Confirmed company name must match exactly (case-insensitive).
+        3. Drops only the database that belongs to this company_id.
+        """
+        master_db = get_master_db()
+
+        tenant = await master_db.tenants.find_one({"_id": tenant_id})
+        if not tenant:
+            return False, "Tenant not found"
+
+        actual_name = tenant.get("company_name", "")
+        if actual_name.lower().strip() != confirm_company_name.lower().strip():
+            return False, "Company name confirmation does not match"
+
+        company_id = tenant.get("company_id")
+        if not company_id:
+            return False, "Company ID missing — cannot safely identify the database"
+
+        now = datetime.now(timezone.utc)
+
+        # 1. Drop tenant database (idempotent — returns False if already gone)
+        db_deleted = await DatabaseManager.delete_company_database(company_id)
+
+        # 2. Remove master DB records
+        await master_db.tenants.delete_one({"_id": tenant_id})
+        await master_db.payments.delete_many({"tenant_id": tenant_id})
+
+        # 3. Audit log (written before delete so company info is available)
+        await master_db.tenant_audit_logs.insert_one({
+            "_id": str(uuid.uuid4()),
+            "company_id": company_id,
+            "company_name": actual_name,
+            "action": "company_permanently_deleted",
+            "performed_by": deleted_by,
+            "timestamp": now,
+            "details": {
+                "database_dropped": db_deleted,
+                "tenant_id": tenant_id,
+            },
+        })
+
+        msg = "Company permanently deleted"
+        if not db_deleted:
+            msg += " (database was already missing)"
+        return True, msg
+
+    @staticmethod
+    async def get_deleted_tenants(
+        page: int = 1,
+        limit: int = 20,
+        search: str = None,
+    ) -> Tuple[List[dict], int]:
+        """List soft-deleted tenants with days remaining before permanent deletion."""
+        master_db = get_master_db()
+
+        query: dict = {"is_deleted": True}
+        if search:
+            query["$or"] = [
+                {"company_name": {"$regex": re.escape(search), "$options": "i"}},
+                {"owner.email": {"$regex": re.escape(search), "$options": "i"}},
+            ]
+
+        total = await master_db.tenants.count_documents(query)
+        skip = (page - 1) * limit
+        tenants = (
+            await master_db.tenants.find(query)
+            .sort("deletion_scheduled_at", 1)
+            .skip(skip)
+            .limit(limit)
+            .to_list(limit)
+        )
+
+        now = datetime.now(timezone.utc)
+        for t in tenants:
+            t.get("owner", {}).pop("password_hash", None)
+            sched = t.get("deletion_scheduled_at")
+            if sched:
+                if sched.tzinfo is None:
+                    sched = sched.replace(tzinfo=timezone.utc)
+                t["days_remaining"] = max((sched - now).days, 0)
+            else:
+                t["days_remaining"] = 0
+
+        return tenants, total
+
+    @staticmethod
+    async def cleanup_expired_tenants(run_by: str = "scheduler") -> dict:
+        """
+        Permanently delete all tenants whose retention period has expired.
+
+        Idempotent: if a database is already gone the step is skipped gracefully.
+        Called by the daily cleanup background loop (2 AM).
+        """
+        master_db = get_master_db()
+        now = datetime.now(timezone.utc)
+
+        expired = await master_db.tenants.find({
+            "is_deleted": True,
+            "deletion_scheduled_at": {"$lte": now},
+        }).to_list(None)
+
+        processed = 0
+        skipped = 0
+        errors = []
+
+        for tenant in expired:
+            tenant_id = tenant.get("_id")
+            company_id = tenant.get("company_id")
+            company_name = tenant.get("company_name", "unknown")
+
+            try:
+                # Safety: only process tenants still marked deleted and still expired
+                current = await master_db.tenants.find_one({"_id": tenant_id})
+                if not current:
+                    skipped += 1
+                    continue
+                if not current.get("is_deleted"):
+                    # Was restored between query and now
+                    skipped += 1
+                    continue
+                sched = current.get("deletion_scheduled_at")
+                if sched:
+                    if sched.tzinfo is None:
+                        sched = sched.replace(tzinfo=timezone.utc)
+                    if sched > now:
+                        skipped += 1
+                        continue
+
+                db_deleted = False
+                if company_id:
+                    db_deleted = await DatabaseManager.delete_company_database(company_id)
+
+                await master_db.tenants.delete_one({"_id": tenant_id})
+                await master_db.payments.delete_many({"tenant_id": tenant_id})
+
+                await master_db.tenant_audit_logs.insert_one({
+                    "_id": str(uuid.uuid4()),
+                    "company_id": company_id,
+                    "company_name": company_name,
+                    "action": "automatic_cleanup_executed",
+                    "performed_by": run_by,
+                    "timestamp": now,
+                    "details": {
+                        "database_dropped": db_deleted,
+                        "tenant_id": tenant_id,
+                    },
+                })
+
+                processed += 1
+                logger.info(
+                    "Cleanup: permanently deleted company=%s (id=%s, db_dropped=%s)",
+                    company_name, company_id, db_deleted,
+                )
+
+            except Exception as exc:
+                errors.append({"company_id": company_id, "error": str(exc)})
+                logger.error(
+                    "Cleanup error for company=%s: %s", company_id, exc, exc_info=True
+                )
+
+        return {"processed": processed, "skipped": skipped, "errors": errors}
     
     @staticmethod
     async def get_tenant_stats() -> dict:

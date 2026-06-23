@@ -17,6 +17,7 @@ class TenantStatus(str, Enum):
     SUSPENDED = "suspended"      # Temporarily suspended (e.g., payment issue)
     CANCELLED = "cancelled"      # Account cancelled
     TRIAL_EXPIRED = "trial_expired"  # Trial period ended, needs upgrade
+    DELETED = "deleted"          # Soft-deleted, pending permanent removal after retention period
 
 
 class Industry(str, Enum):
@@ -119,9 +120,11 @@ class TenantModel(BaseModel):
     crm_enabled: bool = Field(default=True)   # Recruitment / CRM module
     hrm_enabled: bool = Field(default=True)   # HR Management module — always enabled
 
-    # Soft Delete
+    # Soft Delete / Deletion Lifecycle
     is_deleted: bool = Field(default=False)
     deleted_at: Optional[datetime] = None
+    deleted_by: Optional[str] = None
+    deletion_scheduled_at: Optional[datetime] = None
 
     model_config = ConfigDict(populate_by_name=True)
     

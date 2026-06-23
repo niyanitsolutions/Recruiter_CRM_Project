@@ -24,6 +24,33 @@ from app.core.redis import init_redis, close_redis
 from app.services.plan_service import plan_service
 from app.services.subscription_reminder_service import reminder_background_loop
 from app.services.hrm_auto_checkout_loop import hrm_auto_checkout_loop, run_startup_recovery
+from app.services.tenant_service import tenant_service as _tenant_service
+
+
+async def tenant_cleanup_loop():
+    """Daily background loop that permanently deletes companies past their retention period.
+    Runs at 2:00 AM UTC every day. Idempotent and safe to restart."""
+    from datetime import datetime, timezone, timedelta as _td
+    await asyncio.sleep(30)  # brief startup delay
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            # Calculate seconds until next 2 AM UTC (handles month/year boundaries)
+            target = now.replace(hour=2, minute=0, second=0, microsecond=0)
+            if now >= target:
+                target = target + _td(days=1)
+            seconds_until_2am = (target - now).total_seconds()
+            await asyncio.sleep(seconds_until_2am)
+            result = await _tenant_service.cleanup_expired_tenants(run_by="scheduler")
+            logger.info(
+                "Tenant cleanup complete — processed=%d skipped=%d errors=%d",
+                result["processed"], result["skipped"], len(result["errors"]),
+            )
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.error("Tenant cleanup loop error: %s", exc, exc_info=True)
+            await asyncio.sleep(3600)  # back off 1 hour on unexpected failure
 from app.models.master.global_user import ensure_global_indexes
 
 # ============== Phase 1 - Auth & Tenant Management ==============
@@ -229,6 +256,8 @@ async def lifespan(app: FastAPI):
     print(" Session cleanup scheduler started")
     auto_checkout_task = asyncio.create_task(hrm_auto_checkout_loop())
     print(" HRM midnight auto punch-out scheduler started")
+    tenant_cleanup_task = asyncio.create_task(tenant_cleanup_loop())
+    print(" Tenant deletion cleanup scheduler started (runs daily at 2 AM UTC)")
     # Layer-2 recovery: close any attendance records left open from a previous
     # day because the server was down/restarting over its last shift-end window.
     # Fire-and-forget so a large tenant count doesn't delay app readiness.
@@ -248,6 +277,7 @@ async def lifespan(app: FastAPI):
 
     yield
     # Shutdown
+    tenant_cleanup_task.cancel()
     auto_checkout_task.cancel()
     cleanup_task.cancel()
     reminder_task.cancel()

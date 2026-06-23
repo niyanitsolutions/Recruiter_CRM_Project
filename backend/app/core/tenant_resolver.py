@@ -85,12 +85,14 @@ class TenantResolver:
         Returns:
             Tuple of (is_valid, error_message)
         """
-        # Check tenant status — only hard-block suspended/cancelled accounts
+        # Check tenant status — only hard-block suspended/cancelled/deleted accounts
         status = tenant.get("status")
         if status == TenantStatus.SUSPENDED:
             return False, "Company account is suspended. Please contact support."
         if status == TenantStatus.CANCELLED:
             return False, "Company account has been cancelled. Please contact support."
+        if status == TenantStatus.DELETED:
+            return False, "Company account has been deleted. Please contact support to restore it."
         if status == TenantStatus.TRIAL_EXPIRED:
             return False, "SUBSCRIPTION_EXPIRED|None|Your trial has expired. Please subscribe to a plan to continue."
 

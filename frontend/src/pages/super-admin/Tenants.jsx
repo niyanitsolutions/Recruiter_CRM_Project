@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  Search, Filter, Building2, MoreVertical, Eye, Edit, Ban, Trash2,
-  CheckCircle, XCircle, RefreshCw, Plus, CreditCard, UserPlus, Download,
+  Search, Building2, MoreVertical, Eye, Ban, Trash2,
+  CheckCircle, XCircle, RefreshCw, Plus, CreditCard, UserPlus,
+  Download, RotateCcw, AlertTriangle, Skull, Clock, ChevronDown,
 } from 'lucide-react'
 import { Button, Card, Table, Badge, StatusBadge, Input, Select, Modal } from '../../components/common'
 import superAdminService from '../../services/superAdminService'
@@ -21,7 +22,7 @@ const emptyBase = {
 }
 
 const CreateTenantModal = ({ isOpen, onClose, onCreated }) => {
-  const [mode, setMode] = useState('free')   // 'free' | 'paid'
+  const [mode, setMode] = useState('free')
   const [form, setForm] = useState({ ...emptyBase, amount_paid: '', payment_mode: 'upi', payment_date: '', payment_reference: '' })
   const [errors, setErrors] = useState({})
   const [plans, setPlans] = useState([])
@@ -137,7 +138,6 @@ const CreateTenantModal = ({ isOpen, onClose, onCreated }) => {
           </button>
         </div>
 
-        {/* Mode description */}
         {mode === 'free' ? (
           <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
             <strong>Mode A — Without Payment:</strong> Creates account immediately. Useful for demo accounts, manual onboarding, and partner accounts. <code>payment_status = manual_by_admin</code>
@@ -148,7 +148,6 @@ const CreateTenantModal = ({ isOpen, onClose, onCreated }) => {
           </div>
         )}
 
-        {/* Company Info */}
         <div>
           <p className="text-xs font-semibold text-surface-500 uppercase mb-3">Company Information</p>
           <div className="grid grid-cols-2 gap-4">
@@ -161,7 +160,6 @@ const CreateTenantModal = ({ isOpen, onClose, onCreated }) => {
           </div>
         </div>
 
-        {/* Owner Info */}
         <div>
           <p className="text-xs font-semibold text-surface-500 uppercase mb-3">Owner / Admin</p>
           <div className="grid grid-cols-2 gap-4">
@@ -186,7 +184,6 @@ const CreateTenantModal = ({ isOpen, onClose, onCreated }) => {
           </div>
         </div>
 
-        {/* Plan & Seats */}
         <div>
           <p className="text-xs font-semibold text-surface-500 uppercase mb-3">Plan & Subscription</p>
           <div className="grid grid-cols-3 gap-4">
@@ -209,7 +206,6 @@ const CreateTenantModal = ({ isOpen, onClose, onCreated }) => {
           </div>
         </div>
 
-        {/* Payment fields (Mode B only) */}
         {mode === 'paid' && (
           <div>
             <p className="text-xs font-semibold text-surface-500 uppercase mb-3">Payment Details</p>
@@ -245,13 +241,11 @@ const CreateTenantModal = ({ isOpen, onClose, onCreated }) => {
           </div>
         )}
 
-        {/* Options */}
         <div className="flex items-center gap-2">
           <input type="checkbox" id="welcome_email" checked={form.send_welcome_email} onChange={f('send_welcome_email')} className="rounded" />
           <label htmlFor="welcome_email" className="text-sm text-surface-700">Send welcome email with login credentials</label>
         </div>
 
-        {/* Actions */}
         <div className="flex justify-end gap-3 pt-2 border-t border-surface-200">
           <Button variant="secondary" onClick={handleClose}>Cancel</Button>
           <Button onClick={handleSubmit} isLoading={loading} leftIcon={<Plus className="w-4 h-4" />}>
@@ -260,6 +254,306 @@ const CreateTenantModal = ({ isOpen, onClose, onCreated }) => {
         </div>
       </div>
     </Modal>
+  )
+}
+
+// ── Soft Delete Confirmation Modal ────────────────────────────────────────────
+
+const DeleteCompanyModal = ({ isOpen, onClose, tenant, onConfirm, loading }) => {
+  if (!tenant) return null
+  const retentionDays = tenant.is_trial ? 15 : 30
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Delete Company" size="md">
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-800">
+            <p className="font-semibold mb-1">Are you sure you want to delete this company?</p>
+            <p>
+              <strong>{tenant.company_name}</strong> will be disabled immediately and scheduled for
+              permanent deletion after <strong>{retentionDays} days</strong> (
+              {tenant.is_trial ? 'trial' : 'paid'} retention period).
+            </p>
+            <p className="mt-2">You can restore it before permanent deletion.</p>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-2 border-t border-surface-200">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="danger" onClick={onConfirm} isLoading={loading}
+            leftIcon={<Trash2 className="w-4 h-4" />}>
+            Delete Company
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Permanent Delete Confirmation Modal ───────────────────────────────────────
+
+const PermanentDeleteModal = ({ isOpen, onClose, tenant, onConfirm, loading }) => {
+  const [confirmName, setConfirmName] = useState('')
+  const matches = tenant && confirmName.trim().toLowerCase() === tenant.company_name.trim().toLowerCase()
+
+  useEffect(() => {
+    if (!isOpen) setConfirmName('')
+  }, [isOpen])
+
+  if (!tenant) return null
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Permanent Delete" size="md">
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-300 rounded-lg">
+          <Skull className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-red-800">
+            <p className="font-bold mb-2 text-base">WARNING — This action cannot be undone.</p>
+            <p className="mb-2">The following data will be permanently deleted:</p>
+            <ul className="list-disc ml-4 space-y-0.5 text-xs">
+              <li>Company record &amp; all settings</li>
+              <li>All users &amp; roles</li>
+              <li>All candidates, jobs, interviews</li>
+              <li>All employees &amp; HR data</li>
+              <li>All documents &amp; uploaded files</li>
+              <li>Tenant database (<code>company_{tenant.company_id}_db</code>)</li>
+            </ul>
+          </div>
+        </div>
+
+        <div>
+          <label className="form-label">
+            Type <strong>{tenant.company_name}</strong> to confirm
+          </label>
+          <input
+            className="input"
+            value={confirmName}
+            onChange={e => setConfirmName(e.target.value)}
+            placeholder={tenant.company_name}
+            autoFocus
+          />
+        </div>
+
+        <div className="flex justify-end gap-3 pt-2 border-t border-surface-200">
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="danger"
+            onClick={() => onConfirm(confirmName)}
+            isLoading={loading}
+            disabled={!matches}
+            leftIcon={<Skull className="w-4 h-4" />}
+          >
+            Delete Permanently
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Deleted Companies Section ─────────────────────────────────────────────────
+
+const DeletedCompaniesSection = ({ onRefreshActive }) => {
+  const [tenants, setTenants] = useState([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+  const [actionLoading, setActionLoading] = useState(false)
+  const [restoreTarget, setRestoreTarget] = useState(null)
+  const [permDeleteTarget, setPermDeleteTarget] = useState(null)
+  const [permDeleteLoading, setPermDeleteLoading] = useState(false)
+  const [restoreLoading, setRestoreLoading] = useState(false)
+  const limit = 10
+
+  const fetchDeleted = async () => {
+    setIsLoading(true)
+    try {
+      const res = await superAdminService.getDeletedTenants({ page, limit, search: search || undefined })
+      setTenants(res.data.tenants)
+      setTotal(res.data.total)
+    } catch {
+      toast.error('Failed to load deleted companies')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchDeleted() }, [page])
+
+  const handleRestore = async () => {
+    if (!restoreTarget) return
+    setRestoreLoading(true)
+    try {
+      await superAdminService.restoreTenant(restoreTarget._id)
+      toast.success(`${restoreTarget.company_name} restored successfully`)
+      setRestoreTarget(null)
+      fetchDeleted()
+      onRefreshActive()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to restore company')
+    } finally {
+      setRestoreLoading(false)
+    }
+  }
+
+  const handlePermanentDelete = async (confirmName) => {
+    if (!permDeleteTarget) return
+    setPermDeleteLoading(true)
+    try {
+      await superAdminService.permanentDeleteTenant(permDeleteTarget._id, confirmName)
+      toast.success(`${permDeleteTarget.company_name} permanently deleted`)
+      setPermDeleteTarget(null)
+      fetchDeleted()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to permanently delete company')
+    } finally {
+      setPermDeleteLoading(false)
+    }
+  }
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    setPage(1)
+    fetchDeleted()
+  }
+
+  const columns = [
+    {
+      header: 'Company',
+      render: (row) => (
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-surface-300 flex items-center justify-center text-surface-600 font-semibold text-sm">
+            {row.company_name?.charAt(0) || 'C'}
+          </div>
+          <div>
+            <p className="font-medium text-surface-700">{row.company_name}</p>
+            <p className="text-xs text-surface-400">{row.company_id}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      header: 'Plan',
+      render: (row) => (
+        <Badge variant={row.is_trial ? 'warning' : 'info'}>
+          {row.plan_name?.toUpperCase() || 'N/A'}
+        </Badge>
+      ),
+    },
+    {
+      header: 'Deleted On',
+      render: (row) => (
+        <div>
+          <p className="text-sm text-surface-700">{formatDate(row.deleted_at)}</p>
+          <p className="text-xs text-surface-400">{formatRelativeTime(row.deleted_at)}</p>
+        </div>
+      ),
+    },
+    {
+      header: 'Permanent Deletion',
+      render: (row) => (
+        <div>
+          <p className="text-sm text-surface-700">{formatDate(row.deletion_scheduled_at)}</p>
+          <p className={`text-xs font-medium ${row.days_remaining <= 3 ? 'text-red-500' : 'text-amber-600'}`}>
+            <Clock className="w-3 h-3 inline mr-1" />
+            {row.days_remaining} day{row.days_remaining !== 1 ? 's' : ''} remaining
+          </p>
+        </div>
+      ),
+    },
+    {
+      header: 'Actions',
+      width: '140px',
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setRestoreTarget(row)}
+            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg transition-colors"
+            title="Restore"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Restore
+          </button>
+          <button
+            onClick={() => setPermDeleteTarget(row)}
+            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors"
+            title="Delete Permanently"
+          >
+            <Skull className="w-3.5 h-3.5" />
+            Delete
+          </button>
+        </div>
+      ),
+    },
+  ]
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <form onSubmit={handleSearch} className="flex gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
+            <input
+              type="text"
+              placeholder="Search deleted companies..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="input pl-10 w-64"
+            />
+          </div>
+          <Button type="submit" variant="secondary" size="sm">Search</Button>
+        </form>
+        <Button variant="secondary" size="sm" onClick={fetchDeleted} leftIcon={<RefreshCw className="w-4 h-4" />}>
+          Refresh
+        </Button>
+      </div>
+
+      <Table columns={columns} data={tenants} isLoading={isLoading}
+        emptyMessage="No deleted companies found" />
+
+      {total > limit && (
+        <Table.Pagination
+          currentPage={page}
+          totalPages={Math.ceil(total / limit)}
+          totalItems={total}
+          itemsPerPage={limit}
+          onPageChange={setPage}
+        />
+      )}
+
+      {/* Restore confirmation */}
+      <Modal
+        isOpen={!!restoreTarget}
+        onClose={() => setRestoreTarget(null)}
+        title="Restore Company"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <RotateCcw className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-green-800">
+              Restore <strong>{restoreTarget?.company_name}</strong>? All data will be immediately accessible again and the company can log in.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t border-surface-200">
+            <Button variant="secondary" onClick={() => setRestoreTarget(null)}>Cancel</Button>
+            <Button onClick={handleRestore} isLoading={restoreLoading}
+              leftIcon={<RotateCcw className="w-4 h-4" />}>
+              Restore Company
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <PermanentDeleteModal
+        isOpen={!!permDeleteTarget}
+        onClose={() => setPermDeleteTarget(null)}
+        tenant={permDeleteTarget}
+        onConfirm={handlePermanentDelete}
+        loading={permDeleteLoading}
+      />
+    </div>
   )
 }
 
@@ -278,6 +572,15 @@ const Tenants = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [showDeleted, setShowDeleted] = useState(false)
+
+  // Soft delete modal
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // Permanent delete modal (from active list, i.e. already-deleted tenant actions)
+  const [permDeleteTarget, setPermDeleteTarget] = useState(null)
+  const [permDeleteLoading, setPermDeleteLoading] = useState(false)
 
   const limit = 10
 
@@ -319,17 +622,33 @@ const Tenants = () => {
     }
   }
 
-  const handleDelete = async (tenantId) => {
-    if (!window.confirm('Are you sure you want to delete this tenant?')) return
-    setIsActionLoading(true)
+  const handleSoftDelete = async () => {
+    if (!deleteTarget) return
+    setDeleteLoading(true)
     try {
-      await superAdminService.deleteTenant(tenantId)
-      toast.success('Tenant deleted successfully')
+      const res = await superAdminService.deleteTenant(deleteTarget._id)
+      toast.success(res.data.message || 'Company deleted')
+      setDeleteTarget(null)
       fetchTenants()
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to delete tenant')
+      toast.error(error.response?.data?.detail || 'Failed to delete company')
     } finally {
-      setIsActionLoading(false)
+      setDeleteLoading(false)
+    }
+  }
+
+  const handlePermanentDelete = async (confirmName) => {
+    if (!permDeleteTarget) return
+    setPermDeleteLoading(true)
+    try {
+      await superAdminService.permanentDeleteTenant(permDeleteTarget._id, confirmName)
+      toast.success(`${permDeleteTarget.company_name} permanently deleted`)
+      setPermDeleteTarget(null)
+      fetchTenants()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to permanently delete company')
+    } finally {
+      setPermDeleteLoading(false)
     }
   }
 
@@ -415,9 +734,9 @@ const Tenants = () => {
     },
     {
       header: 'Actions',
-      width: '100px',
+      width: '120px',
       render: (row) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <button
             onClick={() => { setSelectedTenant(row); setIsViewModalOpen(true) }}
             className="p-2 text-surface-400 hover:text-accent-600 hover:bg-accent-50 rounded-lg transition-colors"
@@ -438,9 +757,24 @@ const Tenants = () => {
             </button>
           ) : null}
 
-          <button onClick={() => handleDelete(row._id)} disabled={isActionLoading}
-            className="p-2 text-surface-400 hover:text-danger-600 hover:bg-danger-50 rounded-lg transition-colors" title="Delete">
+          {/* Delete Company (soft delete) */}
+          <button
+            onClick={() => setDeleteTarget(row)}
+            disabled={isActionLoading}
+            className="p-2 text-surface-400 hover:text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
+            title="Delete Company"
+          >
             <Trash2 className="w-4 h-4" />
+          </button>
+
+          {/* Delete Permanently */}
+          <button
+            onClick={() => setPermDeleteTarget(row)}
+            disabled={isActionLoading}
+            className="p-2 text-surface-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+            title="Delete Permanently"
+          >
+            <Skull className="w-4 h-4" />
           </button>
         </div>
       ),
@@ -477,7 +811,7 @@ const Tenants = () => {
         </div>
       </div>
 
-      {/* Filters */}
+      {/* Active Tenants Table */}
       <Card padding={false}>
         <div className="p-4 border-b border-surface-200">
           <div className="flex flex-col md:flex-row gap-4">
@@ -514,6 +848,31 @@ const Tenants = () => {
           />
         )}
       </Card>
+
+      {/* Deleted Companies Section */}
+      <div className="border border-surface-200 rounded-xl overflow-hidden">
+        <button
+          onClick={() => setShowDeleted(v => !v)}
+          className="w-full flex items-center justify-between px-5 py-4 bg-surface-50 hover:bg-surface-100 transition-colors text-left"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center">
+              <Trash2 className="w-4 h-4 text-red-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-surface-900">Deleted Companies</p>
+              <p className="text-xs text-surface-500">Companies pending permanent deletion after retention period</p>
+            </div>
+          </div>
+          <ChevronDown className={`w-5 h-5 text-surface-400 transition-transform ${showDeleted ? 'rotate-180' : ''}`} />
+        </button>
+
+        {showDeleted && (
+          <div className="p-5 bg-white">
+            <DeletedCompaniesSection onRefreshActive={fetchTenants} />
+          </div>
+        )}
+      </div>
 
       {/* View Tenant Modal */}
       <Modal isOpen={isViewModalOpen} onClose={() => setIsViewModalOpen(false)} title="Tenant Details" size="lg">
@@ -591,6 +950,24 @@ const Tenants = () => {
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         onCreated={fetchTenants}
+      />
+
+      {/* Soft Delete Modal */}
+      <DeleteCompanyModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        tenant={deleteTarget}
+        onConfirm={handleSoftDelete}
+        loading={deleteLoading}
+      />
+
+      {/* Permanent Delete Modal (triggered from active list) */}
+      <PermanentDeleteModal
+        isOpen={!!permDeleteTarget}
+        onClose={() => setPermDeleteTarget(null)}
+        tenant={permDeleteTarget}
+        onConfirm={handlePermanentDelete}
+        loading={permDeleteLoading}
       />
 
       <ExportModal

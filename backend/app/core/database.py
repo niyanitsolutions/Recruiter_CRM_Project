@@ -298,16 +298,27 @@ class DatabaseManager:
         await cls.create_company_database(company_id)
 
     @classmethod
-    async def delete_company_database(cls, company_id: str):
+    async def delete_company_database(cls, company_id: str) -> bool:
         """
-        Delete a company database (soft delete preferred in production)
-        Used only by SuperAdmin for complete tenant removal
+        Delete a company database permanently.
+        Resolves the correct DB name (new or legacy format) before dropping.
+        Returns True if deleted, False if the database did not exist.
         """
         if cls.client is None:
             raise RuntimeError("Database not connected. Call connect() first.")
-        db_name = get_company_db_name(company_id)
+        db_name = await cls.resolve_company_db_name(company_id)
+        existing = await cls.client.list_database_names()
+        if db_name not in existing:
+            logger.warning(
+                "⚠️ Company database not found (already removed?): %s", db_name
+            )
+            # Evict stale cache entry so future accesses use fresh format
+            cls._db_name_cache.pop(company_id, None)
+            return False
         await cls.client.drop_database(db_name)
-        logger.warning("⚠️ Company database deleted: %s", db_name)
+        cls._db_name_cache.pop(company_id, None)
+        logger.warning("⚠️ Company database permanently deleted: %s", db_name)
+        return True
 
 
 # Convenience functions
