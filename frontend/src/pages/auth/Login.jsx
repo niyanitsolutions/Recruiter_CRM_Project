@@ -647,7 +647,7 @@ const Login = () => {
             className="glass-btn-primary"
             style={{ marginBottom: 10 }}
           >
-            <ArrowRight size={15} /> Upgrade Plan
+            <ArrowRight size={15} /> Manage Subscription
           </button>
           <div style={{ textAlign: 'center' }}>
             <button onClick={() => dispatch(clearError())} className="glass-btn-ghost">← Back to Login</button>

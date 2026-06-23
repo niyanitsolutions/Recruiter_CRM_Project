@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import {
   Check, CreditCard, Calendar, Users, ArrowRight, CheckCircle,
-  Smartphone, Minus, Plus, Clock, Layers,
+  Smartphone, Minus, Plus, Clock, Layers, Settings, RefreshCw,
 } from 'lucide-react'
 import authService from '../../services/authService'
 import subscriptionService from '../../services/subscriptionService'
@@ -25,7 +25,7 @@ const DURATION_OPTIONS = [
   { months: 12, label: '12 Months', desc: '+365 days' },
 ]
 
-// ── Helper ────────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function addMonths(dateStr, months) {
   if (!dateStr) return null
@@ -44,6 +44,48 @@ function fmtDate(d) {
   })
 }
 
+// ── Page config per upgrade type ──────────────────────────────────────────────
+const PAGE_CONFIG = {
+  extend: {
+    title:     'Extend Current Subscription',
+    subtitle:  'Add more time to your existing plan',
+    icon:      Clock,
+    iconBg:    'bg-purple-100',
+    iconColor: 'text-purple-600',
+  },
+  seats: {
+    title:     'Add User Seats',
+    subtitle:  'Add more seats without changing your plan',
+    icon:      Users,
+    iconBg:    'bg-blue-100',
+    iconColor: 'text-blue-600',
+  },
+  change_plan: {
+    title:     'Change Plan',
+    subtitle:  'Switch to a different plan for your current seats',
+    icon:      Layers,
+    iconBg:    'bg-indigo-100',
+    iconColor: 'text-indigo-600',
+  },
+  change_plan_seats: {
+    title:     'Change Plan + Add Seats',
+    subtitle:  'Switch plan and expand your team',
+    icon:      RefreshCw,
+    iconBg:    'bg-violet-100',
+    iconColor: 'text-violet-600',
+  },
+  renewal: {
+    title:     'Renew Your Subscription',
+    subtitle:  'Choose a plan to restore access',
+    icon:      Calendar,
+    iconBg:    'bg-amber-100',
+    iconColor: 'text-amber-600',
+  },
+}
+
+// upgradeTypes that need the plan selector UI
+const NEEDS_PLAN_SELECTOR = new Set(['change_plan', 'change_plan_seats', 'renewal'])
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const UpgradePlan = () => {
@@ -51,52 +93,67 @@ const UpgradePlan = () => {
   const navigate    = useNavigate()
   const state       = location.state || {}
 
-  // ── Navigation state fields ────────────────────────────────────────────────
+  // ── Navigation state ───────────────────────────────────────────────────────
   const fromDashboard  = Boolean(state.fromDashboard)
-  const upgradeType    = state.upgradeType || 'renewal'   // 'duration' | 'seats' | 'both' | 'renewal'
+  const upgradeType    = state.upgradeType || 'renewal'
   const tenantId       = state.tenantId
   const existingSeats  = state.existingSeats  || 0
   const currentExpiry  = state.currentExpiry  || null
   const currentPlan    = state.currentPlan    || ''
 
+  // For 'seats' and 'change_plan_seats', this holds the additional seats from the modal
+  const initialAdditional = state.additionalSeats || 1
+
   // ── Local state ────────────────────────────────────────────────────────────
   const [plans,        setPlans]        = useState([])
   const [selectedPlan, setSelectedPlan] = useState(null)
   const [billing,      setBilling]      = useState('monthly')
-  const [userCount,    setUserCount]    = useState(
-    fromDashboard ? (state.additionalSeats || 1) : 3
-  )
+  const [userCount,    setUserCount]    = useState(() => {
+    // For plan selector flows (renewal), start at 3 if fresh, else carry forward
+    if (!fromDashboard) return 3
+    // For seat-adding flows, carry the pre-selected additional count
+    if (upgradeType === 'seats' || upgradeType === 'change_plan_seats') return initialAdditional
+    // For extend / change_plan, no user count needed
+    return 1
+  })
   const [extendMonths, setExtendMonths] = useState(state.extendMonths || null)
   const [isLoading,    setIsLoading]    = useState(false)
   const [loadingPlans, setLoadingPlans] = useState(true)
   const [success,      setSuccess]      = useState(null)
 
-  // ── Guards ─────────────────────────────────────────────────────────────────
+  // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!tenantId && !fromDashboard && !state.fromRegistration) {
       navigate('/login', { replace: true })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fetch plans (needed for pricing) ──────────────────────────────────────
+  // ── Fetch plans ────────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchPlans = async () => {
       try {
-        const res = await authService.getPlans()
+        const res  = await authService.getPlans()
         const paid = (res.data.plans || []).filter(p => !p.is_trial)
         setPlans(paid)
         if (paid.length > 0) {
-          // For dashboard upgrade flows, always use the tenant's current plan for pricing.
-          // Selecting the wrong plan (e.g. popular Quantum when user is on Neon) causes
-          // wrong amounts to be shown and the wrong plan name to be written to DB after payment.
-          if (fromDashboard && currentPlan) {
+          if (fromDashboard && currentPlan && NEEDS_PLAN_SELECTOR.has(upgradeType)) {
+            // For change_plan flows from dashboard, pre-select current plan
+            // (user can switch to a different one)
             const matched = paid.find(p =>
               p.display_name?.toLowerCase() === currentPlan.toLowerCase() ||
               p.name?.toLowerCase() === currentPlan.toLowerCase()
             )
             setSelectedPlan(matched || paid.find(p => p.is_popular) || paid[0])
-          } else {
+          } else if (!fromDashboard) {
+            // Renewal from expired state: default to popular/first
             setSelectedPlan(paid.find(p => p.is_popular) || paid[0])
+          } else {
+            // Dashboard extend/seats: auto-match current plan for pricing
+            const matched = paid.find(p =>
+              p.display_name?.toLowerCase() === currentPlan.toLowerCase() ||
+              p.name?.toLowerCase() === currentPlan.toLowerCase()
+            )
+            setSelectedPlan(matched || paid.find(p => p.is_popular) || paid[0])
           }
         }
       } catch {
@@ -111,12 +168,10 @@ const UpgradePlan = () => {
   // ── Pricing helpers ────────────────────────────────────────────────────────
   const getPricePerUser = (plan) => {
     if (!plan) return 0
-    return billing === 'yearly'
-      ? plan.price_per_user_yearly
-      : plan.price_per_user_monthly
+    return billing === 'yearly' ? plan.price_per_user_yearly : plan.price_per_user_monthly
   }
 
-  // For duration extensions: 12-month automatically uses the yearly (discounted) rate
+  // 12-month extension uses the yearly (discounted) rate
   const getPpuForExtension = (plan, months) => {
     if (!plan) return 0
     return months >= 12 ? plan.price_per_user_yearly : plan.price_per_user_monthly
@@ -126,34 +181,38 @@ const UpgradePlan = () => {
     if (!plan) return 0
     const ppu = getPricePerUser(plan)
 
-    if (upgradeType === 'duration') {
-      // 12-month extension uses yearly (discounted) rate automatically
-      const months = extendMonths || 1
-      return getPpuForExtension(plan, months) * existingSeats * months
-    }
+    switch (upgradeType) {
+      case 'extend': {
+        const months = extendMonths || 1
+        return getPpuForExtension(plan, months) * existingSeats * months
+      }
+      case 'seats':
+        return billing === 'yearly'
+          ? ppu * Math.max(userCount, 1) * 12
+          : ppu * Math.max(userCount, 1)
 
-    if (upgradeType === 'seats') {
-      // Charge: additional_seats × price (× 12 if yearly)
-      return billing === 'yearly'
-        ? ppu * Math.max(userCount, 1) * 12
-        : ppu * Math.max(userCount, 1)
-    }
+      case 'change_plan':
+        // New plan pricing × current seat count × billing period
+        return billing === 'yearly'
+          ? ppu * existingSeats * 12
+          : ppu * existingSeats
 
-    if (upgradeType === 'both') {
-      const months   = extendMonths || 1
-      const ppuExt   = getPpuForExtension(plan, months)
-      const seatCost = ppu * Math.max(userCount, 1)
-      const extCost  = ppuExt * existingSeats * months
-      return seatCost + extCost
-    }
+      case 'change_plan_seats': {
+        // New plan pricing × (existing + additional) seats × billing period
+        const totalSeats = existingSeats + Math.max(userCount, 1)
+        return billing === 'yearly'
+          ? ppu * totalSeats * 12
+          : ppu * totalSeats
+      }
 
-    // renewal — standard billing
-    return billing === 'yearly'
-      ? ppu * Math.max(userCount, 1) * 12
-      : ppu * Math.max(userCount, 1)
+      default: // renewal
+        return billing === 'yearly'
+          ? ppu * Math.max(userCount, 1) * 12
+          : ppu * Math.max(userCount, 1)
+    }
   }
 
-  // ── Adjust counts ──────────────────────────────────────────────────────────
+  // ── Seat count helpers ─────────────────────────────────────────────────────
   const adjustUserCount = (delta) => setUserCount(prev => Math.max(1, prev + delta))
   const handleUserCountInput = (e) => {
     const val = parseInt(e.target.value, 10)
@@ -163,11 +222,7 @@ const UpgradePlan = () => {
   // ── Payment handler ────────────────────────────────────────────────────────
   const handleUpgrade = async () => {
     if (!selectedPlan) { toast.error('Please select a plan'); return }
-    if (upgradeType === 'duration' && !extendMonths) {
-      toast.error('Please select how many months to extend')
-      return
-    }
-    if (upgradeType === 'both' && !extendMonths) {
+    if (upgradeType === 'extend' && !extendMonths) {
       toast.error('Please select how many months to extend')
       return
     }
@@ -176,47 +231,34 @@ const UpgradePlan = () => {
     try {
       let orderRes
 
-      if (upgradeType === 'duration') {
-        // Flow A — extend expiry only, no seat change
+      if (upgradeType === 'extend') {
         orderRes = await subscriptionService.createExtensionOrder(
-          tenantId,
-          selectedPlan.id,
-          extendMonths,
+          tenantId, selectedPlan.id, extendMonths,
         )
       } else if (upgradeType === 'seats') {
-        // Flow B — add seats only, no expiry change
         orderRes = await subscriptionService.createSeatUpgradeOrder(
-          tenantId,
-          selectedPlan.id,
-          Math.max(userCount, 1),
-          billing,
+          tenantId, selectedPlan.id, Math.max(userCount, 1), billing,
         )
-      } else if (upgradeType === 'both') {
-        // Flow C — add seats + extend expiry
-        orderRes = await subscriptionService.createCombinedUpgradeOrder(
-          tenantId,
-          selectedPlan.id,
-          Math.max(userCount, 1),
-          extendMonths,
-          billing,
+      } else if (upgradeType === 'change_plan') {
+        // Plan change: same seat count, new plan + billing cycle
+        orderRes = await subscriptionService.createPlanChangeOrder(
+          tenantId, selectedPlan.id, billing, existingSeats,
+        )
+      } else if (upgradeType === 'change_plan_seats') {
+        // Plan change + seat increase
+        orderRes = await subscriptionService.createPlanChangeOrder(
+          tenantId, selectedPlan.id, billing, existingSeats + Math.max(userCount, 1),
         )
       } else {
-        // Flow D — standard renewal (plan selector mode)
-        orderRes = await import('../../services/api').then(m =>
-          m.default.post('/auth/renew/create-order', {
-            tenant_id:     tenantId,
-            plan_id:       selectedPlan.id,
-            billing_cycle: billing,
-            user_count:    Math.max(userCount, 1),
-            payment_type:  'renewal',
-            extend_months: 0,
-          })
+        // renewal — standard plan purchase
+        orderRes = await subscriptionService.createPlanChangeOrder(
+          tenantId, selectedPlan.id, billing, Math.max(userCount, 1),
         )
       }
 
       const order = orderRes.data
 
-      // Simulate successful payment (replace with Razorpay in production)
+      // Razorpay payment (simulated in dev — replace with real Razorpay SDK call)
       const dummyPaymentId = `pay_${Date.now()}`
       const dummySignature = 'simulated_signature'
 
@@ -227,13 +269,19 @@ const UpgradePlan = () => {
         razorpay_signature:  dummySignature,
       })
 
+      const newSeatTotal =
+        upgradeType === 'seats'             ? existingSeats + Math.max(userCount, 1) :
+        upgradeType === 'change_plan_seats' ? existingSeats + Math.max(userCount, 1) :
+        upgradeType === 'change_plan'       ? existingSeats :
+        upgradeType === 'renewal'           ? Math.max(userCount, 1) :
+        existingSeats
+
       setSuccess({
-        planName:     selectedPlan.display_name || selectedPlan.name,
-        planExpiry:   verifyRes.data.plan_expiry,
-        invoice:      verifyRes.data.invoice_number,
+        planName:    selectedPlan.display_name || selectedPlan.name,
+        planExpiry:  verifyRes.data.plan_expiry,
+        invoice:     verifyRes.data.invoice_number,
         upgradeType,
-        newSeats:     upgradeType !== 'duration' ? existingSeats + Math.max(userCount, 1) : existingSeats,
-        extendMonths: upgradeType !== 'seats' ? extendMonths : 0,
+        newSeats:    newSeatTotal,
       })
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Payment failed. Please try again.')
@@ -242,30 +290,37 @@ const UpgradePlan = () => {
     }
   }
 
-  // ── Computed values ────────────────────────────────────────────────────────
+  // ── Computed ───────────────────────────────────────────────────────────────
   const subtotal    = selectedPlan ? getSubtotal(selectedPlan) : 0
   const taxAmount   = Math.round(subtotal * 0.18)
   const totalAmount = subtotal + taxAmount
-  const newExpiry   = upgradeType !== 'seats' && extendMonths
+  const newExpiry   = upgradeType === 'extend' && extendMonths
     ? addMonths(currentExpiry, extendMonths)
     : null
-  const canProceed = upgradeType === 'seats'
-    ? userCount >= 1
-    : upgradeType === 'duration'
-    ? extendMonths != null
-    : upgradeType === 'both'
-    ? userCount >= 1 || extendMonths != null
-    : !!selectedPlan
+
+  const canProceed =
+    upgradeType === 'seats'             ? userCount >= 1 :
+    upgradeType === 'extend'            ? extendMonths != null :
+    upgradeType === 'change_plan'       ? !!selectedPlan :
+    upgradeType === 'change_plan_seats' ? (!!selectedPlan && userCount >= 1) :
+    !!selectedPlan  // renewal
+
+  // Show the plan selector for types that require plan selection
+  const showPlanSelector = NEEDS_PLAN_SELECTOR.has(upgradeType)
+
+  const pc      = PAGE_CONFIG[upgradeType] || PAGE_CONFIG.renewal
+  const PageIcon = pc.icon
 
   // ─────────────────────────────────────────────────────────────────────────
   // SUCCESS SCREEN
   // ─────────────────────────────────────────────────────────────────────────
   if (success) {
     const successMessages = {
-      duration: 'Your subscription has been extended!',
-      seats:    'New seats have been added to your plan!',
-      both:     'Seats added and subscription extended!',
-      renewal:  'Subscription Renewed!',
+      extend:            'Your subscription has been extended!',
+      seats:             'New seats have been added to your plan!',
+      change_plan:       'Your plan has been changed!',
+      change_plan_seats: 'Plan changed and seats added!',
+      renewal:           'Subscription Renewed!',
     }
     return (
       <div className="min-h-screen bg-surface-50 flex items-center justify-center px-4">
@@ -285,7 +340,7 @@ const UpgradePlan = () => {
                 New expiry: <strong>{fmtDate(success.planExpiry)}</strong>
               </p>
             )}
-            {success.newSeats > existingSeats && (
+            {success.newSeats > 0 && (
               <p className="text-sm text-surface-600">
                 Total seats: <strong>{success.newSeats}</strong>
               </p>
@@ -306,17 +361,8 @@ const UpgradePlan = () => {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // PAGE TITLE per upgrade type
+  // MAIN PAGE
   // ─────────────────────────────────────────────────────────────────────────
-  const pageConfig = {
-    duration: { title: 'Extend Subscription Duration', subtitle: 'Add more time to your current plan', icon: Clock,    iconBg: 'bg-purple-100', iconColor: 'text-purple-600' },
-    seats:    { title: 'Add User Seats',                subtitle: 'Add more seats to your plan',        icon: Users,    iconBg: 'bg-blue-100',   iconColor: 'text-blue-600'   },
-    both:     { title: 'Upgrade: Seats + Extend',       subtitle: 'Add seats and extend your plan',     icon: Layers,   iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600' },
-    renewal:  { title: 'Renew Your Subscription',       subtitle: 'Choose a plan to restore access',    icon: Calendar, iconBg: 'bg-amber-100',  iconColor: 'text-amber-600'  },
-  }
-  const pc = pageConfig[upgradeType] || pageConfig.renewal
-  const PageIcon = pc.icon
-
   return (
     <div className="min-h-screen bg-surface-50">
       {/* Header */}
@@ -324,7 +370,7 @@ const UpgradePlan = () => {
         <div className="flex items-center gap-3">
           <img src="/Hire_Flow_Logo.png" alt="HireFlow" style={{ height: '32px', width: 'auto' }} />
           <div>
-            <p className="text-xs text-surface-500">Subscription Management</p>
+            <p className="text-xs text-surface-500">Manage Subscription</p>
           </div>
         </div>
         <Link
@@ -348,12 +394,13 @@ const UpgradePlan = () => {
             {currentPlan && (
               <p className="text-xs text-surface-400 mt-1">
                 Current plan: <span className="font-medium text-surface-600">{currentPlan}</span>
+                {existingSeats > 0 && <span> · <span className="font-medium text-surface-600">{existingSeats} seats</span></span>}
               </p>
             )}
           </div>
 
-          {/* ── Plan selector — only for full renewal (not dashboard upgrades) ── */}
-          {!fromDashboard && (
+          {/* ── Plan selector (for renewal / change_plan / change_plan_seats) ── */}
+          {showPlanSelector && (
             <>
               {/* Billing cycle toggle */}
               <div className="flex items-center justify-center gap-2 mb-6">
@@ -389,6 +436,8 @@ const UpgradePlan = () => {
                     const ppu        = getPricePerUser(plan)
                     const origPpu    = plan.original_price_monthly || 0
                     const isSelected = selectedPlan?.id === plan.id
+                    const isCurrent  = plan.display_name?.toLowerCase() === currentPlan?.toLowerCase() ||
+                                       plan.name?.toLowerCase() === currentPlan?.toLowerCase()
                     return (
                       <button
                         key={plan.id}
@@ -403,6 +452,11 @@ const UpgradePlan = () => {
                         {plan.is_popular && (
                           <span className="absolute -top-3 left-4 text-xs bg-accent-500 text-white px-3 py-0.5 rounded-full font-semibold">
                             Popular
+                          </span>
+                        )}
+                        {isCurrent && !plan.is_popular && (
+                          <span className="absolute -top-3 left-4 text-xs bg-surface-500 text-white px-3 py-0.5 rounded-full font-semibold">
+                            Current
                           </span>
                         )}
                         {isSelected && (
@@ -458,12 +512,12 @@ const UpgradePlan = () => {
             </>
           )}
 
-          {/* ══════════════════════════════════════════════════════════════════ */}
-          {/* FLOW-SPECIFIC INPUT SECTIONS                                       */}
-          {/* ══════════════════════════════════════════════════════════════════ */}
+          {/* ═══════════════════════════════════════════════════════════════ */}
+          {/* FLOW-SPECIFIC INPUT SECTIONS                                    */}
+          {/* ═══════════════════════════════════════════════════════════════ */}
 
-          {/* ── FLOW A / C : Duration picker ─────────────────────────────────── */}
-          {(upgradeType === 'duration' || upgradeType === 'both') && selectedPlan && (
+          {/* ── FLOW 1 (extend): Duration picker ── */}
+          {upgradeType === 'extend' && selectedPlan && (
             <div className="bg-white rounded-xl border border-surface-200 p-5 mb-4">
               <label className="block text-sm font-medium text-surface-700 mb-3 flex items-center gap-2">
                 <Clock className="w-4 h-4 text-purple-500" />
@@ -481,10 +535,7 @@ const UpgradePlan = () => {
                         : 'border-surface-200 bg-surface-50 hover:border-surface-300'
                     )}
                   >
-                    <p className={clsx(
-                      'text-sm font-bold',
-                      extendMonths === opt.months ? 'text-purple-700' : 'text-surface-800'
-                    )}>
+                    <p className={clsx('text-sm font-bold', extendMonths === opt.months ? 'text-purple-700' : 'text-surface-800')}>
                       {opt.months}M
                     </p>
                     <p className="text-[10px] text-surface-500">{opt.desc}</p>
@@ -507,39 +558,26 @@ const UpgradePlan = () => {
             </div>
           )}
 
-          {/* ── FLOW B / C : Seat count ───────────────────────────────────────── */}
-          {(upgradeType === 'seats' || upgradeType === 'both') && selectedPlan && (
+          {/* ── FLOW 2 (seats): Additional seat count ── */}
+          {upgradeType === 'seats' && selectedPlan && (
             <div className="bg-white rounded-xl border border-surface-200 p-5 mb-4">
               <label className="block text-sm font-medium text-surface-700 mb-3 flex items-center gap-2">
                 <Users className="w-4 h-4 text-blue-500" />
                 Additional seats to add
               </label>
               <div className="flex items-center gap-3 mb-3">
-                <button
-                  type="button"
-                  onClick={() => adjustUserCount(-1)}
-                  className="w-9 h-9 rounded-lg border border-surface-200 flex items-center justify-center hover:bg-surface-50 transition-colors"
-                >
+                <button type="button" onClick={() => adjustUserCount(-1)}
+                  className="w-9 h-9 rounded-lg border border-surface-200 flex items-center justify-center hover:bg-surface-50 transition-colors">
                   <Minus className="w-4 h-4 text-surface-600" />
                 </button>
-                <input
-                  type="number"
-                  min={1}
-                  value={userCount}
-                  onChange={handleUserCountInput}
-                  className="w-20 text-center border border-surface-200 rounded-lg py-2 text-sm font-semibold text-surface-900 focus:outline-none focus:ring-2 focus:ring-accent-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => adjustUserCount(1)}
-                  className="w-9 h-9 rounded-lg border border-surface-200 flex items-center justify-center hover:bg-surface-50 transition-colors"
-                >
+                <input type="number" min={1} value={userCount} onChange={handleUserCountInput}
+                  className="w-20 text-center border border-surface-200 rounded-lg py-2 text-sm font-semibold text-surface-900 focus:outline-none focus:ring-2 focus:ring-accent-500" />
+                <button type="button" onClick={() => adjustUserCount(1)}
+                  className="w-9 h-9 rounded-lg border border-surface-200 flex items-center justify-center hover:bg-surface-50 transition-colors">
                   <Plus className="w-4 h-4 text-surface-600" />
                 </button>
                 <span className="text-sm text-surface-500">new seats</span>
               </div>
-
-              {/* Current → total seats preview */}
               <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-100">
                 <div className="text-xs text-surface-600">
                   <span className="font-medium">Current seats:</span> {existingSeats}
@@ -552,32 +590,88 @@ const UpgradePlan = () => {
             </div>
           )}
 
-          {/* ── FLOW D (renewal) : User count ────────────────────────────────── */}
-          {upgradeType === 'renewal' && selectedPlan && (
+          {/* ── FLOW 3 (change_plan): Info — seats unchanged ── */}
+          {upgradeType === 'change_plan' && selectedPlan && (
             <div className="bg-white rounded-xl border border-surface-200 p-5 mb-4">
-              <label className="block text-sm font-medium text-surface-700 mb-3">
-                Number of Users
-              </label>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => adjustUserCount(-1)}
-                  className="w-9 h-9 rounded-lg border border-surface-200 flex items-center justify-center hover:bg-surface-50 transition-colors"
-                >
+              <div className="flex items-center gap-2 mb-3">
+                <Layers className="w-4 h-4 text-indigo-500" />
+                <span className="text-sm font-medium text-surface-700">Plan Change Summary</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-surface-50 rounded-lg p-3 border border-surface-100">
+                  <p className="text-xs text-surface-500 mb-1">Current Plan</p>
+                  <p className="text-sm font-semibold text-surface-900">{currentPlan || '—'}</p>
+                </div>
+                <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-100">
+                  <p className="text-xs text-indigo-500 mb-1">New Plan</p>
+                  <p className="text-sm font-semibold text-indigo-900">{selectedPlan.display_name || selectedPlan.name}</p>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center gap-2 text-xs text-surface-500 bg-surface-50 rounded-lg p-2.5">
+                <Users className="w-3.5 h-3.5" />
+                <span>Seats remain unchanged: <strong className="text-surface-800">{existingSeats}</strong></span>
+              </div>
+            </div>
+          )}
+
+          {/* ── FLOW 4 (change_plan_seats): Additional seat count ── */}
+          {upgradeType === 'change_plan_seats' && selectedPlan && (
+            <div className="bg-white rounded-xl border border-surface-200 p-5 mb-4">
+              <div className="flex items-center gap-2 mb-3">
+                <RefreshCw className="w-4 h-4 text-violet-500" />
+                <span className="text-sm font-medium text-surface-700">Plan Change + Additional Seats</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-surface-50 rounded-lg p-3 border border-surface-100">
+                  <p className="text-xs text-surface-500 mb-1">Current Plan</p>
+                  <p className="text-sm font-semibold text-surface-900">{currentPlan || '—'}</p>
+                  <p className="text-xs text-surface-400 mt-0.5">{existingSeats} seats</p>
+                </div>
+                <div className="bg-violet-50 rounded-lg p-3 border border-violet-100">
+                  <p className="text-xs text-violet-500 mb-1">New Plan</p>
+                  <p className="text-sm font-semibold text-violet-900">{selectedPlan.display_name || selectedPlan.name}</p>
+                  <p className="text-xs text-violet-400 mt-0.5">{existingSeats + Math.max(userCount, 1)} seats</p>
+                </div>
+              </div>
+              <label className="block text-xs font-medium text-surface-700 mb-2">Additional seats to add</label>
+              <div className="flex items-center gap-3 mb-3">
+                <button type="button" onClick={() => adjustUserCount(-1)}
+                  className="w-9 h-9 rounded-lg border border-surface-200 flex items-center justify-center hover:bg-surface-50 transition-colors">
                   <Minus className="w-4 h-4 text-surface-600" />
                 </button>
-                <input
-                  type="number"
-                  min={1}
-                  value={userCount}
-                  onChange={handleUserCountInput}
-                  className="w-20 text-center border border-surface-200 rounded-lg py-2 text-sm font-semibold text-surface-900 focus:outline-none focus:ring-2 focus:ring-accent-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => adjustUserCount(1)}
-                  className="w-9 h-9 rounded-lg border border-surface-200 flex items-center justify-center hover:bg-surface-50 transition-colors"
-                >
+                <input type="number" min={1} value={userCount} onChange={handleUserCountInput}
+                  className="w-20 text-center border border-surface-200 rounded-lg py-2 text-sm font-semibold text-surface-900 focus:outline-none focus:ring-2 focus:ring-accent-500" />
+                <button type="button" onClick={() => adjustUserCount(1)}
+                  className="w-9 h-9 rounded-lg border border-surface-200 flex items-center justify-center hover:bg-surface-50 transition-colors">
+                  <Plus className="w-4 h-4 text-surface-600" />
+                </button>
+                <span className="text-sm text-surface-500">new seats</span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-violet-50 border border-violet-100">
+                <div className="text-xs text-surface-600">
+                  <span className="font-medium">Current seats:</span> {existingSeats}
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-surface-400 mx-2" />
+                <div className="text-xs font-bold text-violet-700">
+                  New total: {existingSeats + Math.max(userCount, 1)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── FLOW renewal: User count ── */}
+          {upgradeType === 'renewal' && selectedPlan && (
+            <div className="bg-white rounded-xl border border-surface-200 p-5 mb-4">
+              <label className="block text-sm font-medium text-surface-700 mb-3">Number of Users</label>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => adjustUserCount(-1)}
+                  className="w-9 h-9 rounded-lg border border-surface-200 flex items-center justify-center hover:bg-surface-50 transition-colors">
+                  <Minus className="w-4 h-4 text-surface-600" />
+                </button>
+                <input type="number" min={1} value={userCount} onChange={handleUserCountInput}
+                  className="w-20 text-center border border-surface-200 rounded-lg py-2 text-sm font-semibold text-surface-900 focus:outline-none focus:ring-2 focus:ring-accent-500" />
+                <button type="button" onClick={() => adjustUserCount(1)}
+                  className="w-9 h-9 rounded-lg border border-surface-200 flex items-center justify-center hover:bg-surface-50 transition-colors">
                   <Plus className="w-4 h-4 text-surface-600" />
                 </button>
                 <span className="text-sm text-surface-500">users</span>
@@ -585,17 +679,17 @@ const UpgradePlan = () => {
             </div>
           )}
 
-          {/* ── Order summary ──────────────────────────────────────────────────── */}
+          {/* ── Order summary ── */}
           {selectedPlan && (
             <div className="bg-white rounded-xl border border-surface-200 p-6">
               <h3 className="font-semibold text-surface-900 mb-4">Order Summary</h3>
 
-              {/* Line items */}
               <div className="space-y-2 mb-3">
-                {upgradeType === 'duration' && (
+                {/* Line item per type */}
+                {upgradeType === 'extend' && (
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-surface-600">
-                      {formatCurrency(getPricePerUser(selectedPlan))} × {existingSeats} seat{existingSeats !== 1 ? 's' : ''} × {extendMonths || 0} month{(extendMonths || 0) !== 1 ? 's' : ''}
+                      {formatCurrency(getPpuForExtension(selectedPlan, extendMonths || 0))} × {existingSeats} seat{existingSeats !== 1 ? 's' : ''} × {extendMonths || 0} month{(extendMonths || 0) !== 1 ? 's' : ''}
                     </span>
                     <span className="font-medium text-surface-800">{formatCurrency(subtotal)}</span>
                   </div>
@@ -611,26 +705,35 @@ const UpgradePlan = () => {
                   </div>
                 )}
 
-                {upgradeType === 'both' && (
+                {upgradeType === 'change_plan' && (
                   <>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-surface-600">
-                        {Math.max(userCount, 1)} new seat{userCount !== 1 ? 's' : ''} × {formatCurrency(getPricePerUser(selectedPlan))}
-                      </span>
-                      <span className="font-medium text-surface-800">
-                        {formatCurrency(getPricePerUser(selectedPlan) * Math.max(userCount, 1))}
-                      </span>
+                      <span className="text-surface-600">Plan: {selectedPlan.display_name || selectedPlan.name}</span>
+                      <span className="font-medium text-surface-800">{billing === 'yearly' ? 'Yearly' : 'Monthly'}</span>
                     </div>
-                    {extendMonths && (
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-surface-600">
-                          Extension: {existingSeats} seat{existingSeats !== 1 ? 's' : ''} × {formatCurrency(getPricePerUser(selectedPlan))} × {extendMonths} month{extendMonths !== 1 ? 's' : ''}
-                        </span>
-                        <span className="font-medium text-surface-800">
-                          {formatCurrency(getPricePerUser(selectedPlan) * existingSeats * extendMonths)}
-                        </span>
-                      </div>
-                    )}
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-surface-600">
+                        {formatCurrency(getPricePerUser(selectedPlan))} × {existingSeats} seat{existingSeats !== 1 ? 's' : ''}
+                        {billing === 'yearly' ? ' × 12 months' : ''}
+                      </span>
+                      <span className="font-medium text-surface-800">{formatCurrency(subtotal)}</span>
+                    </div>
+                  </>
+                )}
+
+                {upgradeType === 'change_plan_seats' && (
+                  <>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-surface-600">Plan: {selectedPlan.display_name || selectedPlan.name}</span>
+                      <span className="font-medium text-surface-800">{billing === 'yearly' ? 'Yearly' : 'Monthly'}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-surface-600">
+                        {formatCurrency(getPricePerUser(selectedPlan))} × {existingSeats + Math.max(userCount, 1)} seats
+                        {billing === 'yearly' ? ' × 12 months' : ''}
+                      </span>
+                      <span className="font-medium text-surface-800">{formatCurrency(subtotal)}</span>
+                    </div>
                   </>
                 )}
 
@@ -671,8 +774,8 @@ const UpgradePlan = () => {
             </div>
           )}
 
-          {/* Loading state for plan fetch */}
-          {loadingPlans && fromDashboard && (
+          {/* Loading spinner when plans are being fetched for dashboard flows */}
+          {loadingPlans && fromDashboard && !showPlanSelector && (
             <div className="flex justify-center py-12">
               <div className="w-8 h-8 border-4 border-accent-500 border-t-transparent rounded-full animate-spin" />
             </div>

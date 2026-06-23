@@ -1,15 +1,11 @@
 /**
- * UpgradeSeatsModal
+ * UpgradeSeatsModal — "Manage Subscription"
  *
- * Supports three upgrade modes:
- *   A — Extend subscription duration only (1 / 3 / 6 / 12 months)
- *   B — Add seats only
- *   C — Add seats + extend duration together
- *
- * The "Proceed" button is enabled when:
- *   A → a duration is selected
- *   B → additionalSeats >= 1
- *   C → additionalSeats >= 1 OR a duration is selected
+ * Four independent actions:
+ *   extend            – Extend current subscription duration (1 / 3 / 6 / 12 months)
+ *   seats             – Add seats only, no plan change
+ *   change_plan       – Change plan + billing cycle; seat count stays the same
+ *   change_plan_seats – Change plan + add seats
  *
  * Props:
  *   isOpen     – boolean
@@ -24,8 +20,8 @@ import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
 import {
-  X, Users, Minus, Plus, ArrowRight, CreditCard,
-  Calendar, Clock, Layers,
+  X, Users, Minus, Plus, ArrowRight, Settings,
+  Calendar, Clock, Layers, RefreshCw,
 } from 'lucide-react'
 
 const DURATION_OPTIONS = [
@@ -36,16 +32,16 @@ const DURATION_OPTIONS = [
 ]
 
 const MODES = [
-  { key: 'duration', label: 'Extend Duration', icon: Clock,   desc: 'Add more time to your subscription' },
-  { key: 'seats',    label: 'Add Seats',        icon: Users,   desc: 'Add more user seats to your plan'   },
-  { key: 'both',     label: 'Seats + Extend',   icon: Layers,  desc: 'Add seats and extend subscription'  },
+  { key: 'extend',            label: 'Extend Subscription',  icon: Clock,      desc: 'Add more time to current plan'   },
+  { key: 'seats',             label: 'Add Seats',            icon: Users,      desc: 'Add more user seats'             },
+  { key: 'change_plan',       label: 'Change Plan',          icon: Layers,     desc: 'Switch to a different plan'      },
+  { key: 'change_plan_seats', label: 'Change Plan + Seats',  icon: RefreshCw,  desc: 'New plan with more seats'        },
 ]
 
 function addMonths(dateStr, months) {
   if (!dateStr) return null
   const d = new Date(dateStr)
   if (isNaN(d)) return null
-  // Extend from current expiry (or today if already expired)
   const base = d < new Date() ? new Date() : d
   const result = new Date(base)
   result.setMonth(result.getMonth() + months)
@@ -57,25 +53,68 @@ function fmtDate(d) {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function SeatCounter({ value, onAdjust, onChange }) {
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => onAdjust(-1)}
+        className="w-9 h-9 rounded-xl border flex items-center justify-center transition-colors"
+        style={{ borderColor: 'var(--border)', background: 'var(--bg-hover)' }}
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-active)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+      >
+        <Minus className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)' }} />
+      </button>
+      <input
+        type="number"
+        min={1}
+        value={value}
+        onChange={onChange}
+        className="w-20 text-center border rounded-xl py-2 text-sm font-bold focus:outline-none focus:ring-2"
+        style={{
+          borderColor: 'var(--border)',
+          background:  'var(--bg-card)',
+          color:       'var(--text-heading)',
+          '--tw-ring-color': '#7c3aed',
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => onAdjust(1)}
+        className="w-9 h-9 rounded-xl border flex items-center justify-center transition-colors"
+        style={{ borderColor: 'var(--border)', background: 'var(--bg-hover)' }}
+        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-active)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+      >
+        <Plus className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)' }} />
+      </button>
+      <span className="text-sm" style={{ color: 'var(--text-muted)' }}>seats</span>
+    </div>
+  )
+}
+
 export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) {
   const navigate = useNavigate()
   const user = useSelector(selectUser)
 
-  const [mode, setMode]                 = useState('seats')
+  const [mode, setMode]                       = useState('extend')
   const [additionalSeats, setAdditionalSeats] = useState(1)
-  const [extendMonths, setExtendMonths] = useState(null)
+  const [extendMonths, setExtendMonths]       = useState(null)
 
-  // ── Button enable logic — must be before early return (Rules of Hooks) ──────
+  // canProceed per mode
   const canProceed = useMemo(() => {
-    if (mode === 'duration') return extendMonths != null
-    if (mode === 'seats')    return additionalSeats >= 1
-    return additionalSeats >= 1 || extendMonths != null
+    if (mode === 'extend')            return extendMonths != null
+    if (mode === 'seats')             return additionalSeats >= 1
+    if (mode === 'change_plan')       return true   // plan selected on next screen
+    if (mode === 'change_plan_seats') return additionalSeats >= 1
+    return false
   }, [mode, additionalSeats, extendMonths])
 
-  // Reset state when modal opens
+  // Reset when modal opens
   useEffect(() => {
     if (isOpen) {
-      setMode('seats')
+      setMode('extend')
       setAdditionalSeats(1)
       setExtendMonths(null)
       document.body.style.overflow = 'hidden'
@@ -99,14 +138,11 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
 
   const planLabel = plan_display_name || plan_name || 'Current Plan'
 
-  // ── Preview calculations ──────────────────────────────────────────────────
-  const newSeats   = total_user_seats + (mode !== 'duration' ? additionalSeats : 0)
-  const newExpiry  = (mode !== 'seats' && extendMonths)
-    ? addMonths(plan_expiry, extendMonths)
-    : null
+  // Preview calculations
+  const newSeats  = total_user_seats + (mode === 'seats' || mode === 'change_plan_seats' ? additionalSeats : 0)
+  const newExpiry = (mode === 'extend' && extendMonths) ? addMonths(plan_expiry, extendMonths) : null
 
   const adjustSeats = (delta) => setAdditionalSeats(prev => Math.max(1, prev + delta))
-
   const handleInputSeats = (e) => {
     const val = parseInt(e.target.value, 10)
     if (!isNaN(val) && val >= 1) setAdditionalSeats(val)
@@ -119,15 +155,12 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
       state: {
         tenantId:        user?.companyId,
         currentPlan:     planLabel,
-        // seats
-        additionalSeats: mode !== 'duration' ? additionalSeats : 0,
+        additionalSeats: (mode === 'seats' || mode === 'change_plan_seats') ? additionalSeats : 0,
         existingSeats:   total_user_seats,
-        // duration
-        extendMonths:    mode !== 'seats' ? (extendMonths || 0) : 0,
+        extendMonths:    mode === 'extend' ? (extendMonths || 0) : 0,
         currentExpiry:   plan_expiry,
         newExpiry:       newExpiry?.toISOString() ?? null,
-        // upgrade type
-        upgradeType:     mode,   // 'duration' | 'seats' | 'both'
+        upgradeType:     mode,   // 'extend' | 'seats' | 'change_plan' | 'change_plan_seats'
         fromDashboard:   true,
       },
     })
@@ -147,12 +180,15 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(124,58,237,0.10)' }}>
-              <CreditCard className="w-5 h-5" style={{ color: '#7c3aed' }} />
+              <Settings className="w-5 h-5" style={{ color: '#7c3aed' }} />
             </div>
             <div>
-              <h2 className="text-base font-bold" style={{ color: 'var(--text-heading)' }}>Upgrade Subscription</h2>
+              <h2 className="text-base font-bold" style={{ color: 'var(--text-heading)' }}>Manage Subscription</h2>
               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                {planLabel}{is_trial && <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">Trial</span>}
+                {planLabel}
+                {is_trial && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">Trial</span>
+                )}
               </p>
             </div>
           </div>
@@ -171,8 +207,8 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
           {/* ── Current plan summary ── */}
           <div className="grid grid-cols-4 gap-2">
             {[
-              { label: 'Seats',     value: total_user_seats,    color: 'var(--text-heading)' },
-              { label: 'Active',    value: current_active_users, color: '#4FACFE'            },
+              { label: 'Seats',     value: total_user_seats,     color: 'var(--text-heading)' },
+              { label: 'Active',    value: current_active_users, color: '#4FACFE'             },
               { label: 'Remaining', value: remaining_seats,
                 color: remaining_seats === 0 ? '#ef4444' : '#22c55e' },
               { label: 'Expiry',    value: fmtDate(plan_expiry ? new Date(plan_expiry) : null), color: 'var(--text-heading)' },
@@ -184,10 +220,10 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
             ))}
           </div>
 
-          {/* ── Mode selector ── */}
+          {/* ── Action selector ── */}
           <div>
             <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>What would you like to do?</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {MODES.map(m => {
                 const MIcon = m.icon
                 const active = mode === m.key
@@ -195,27 +231,30 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
                   <button
                     key={m.key}
                     onClick={() => { setMode(m.key); setExtendMonths(null); setAdditionalSeats(1) }}
-                    className="flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all"
+                    className="flex items-start gap-2.5 p-3 rounded-xl border-2 text-left transition-all"
                     style={{
                       borderColor: active ? '#7c3aed' : 'var(--border)',
                       background:  active ? 'rgba(124,58,237,0.06)' : 'var(--bg-hover)',
                     }}
                   >
-                    <MIcon className="w-4 h-4" style={{ color: active ? '#7c3aed' : 'var(--text-muted)' }} />
-                    <span className="text-xs font-semibold leading-tight" style={{ color: active ? '#7c3aed' : 'var(--text-secondary)' }}>
-                      {m.label}
-                    </span>
+                    <MIcon className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: active ? '#7c3aed' : 'var(--text-muted)' }} />
+                    <div>
+                      <p className="text-xs font-semibold leading-tight" style={{ color: active ? '#7c3aed' : 'var(--text-secondary)' }}>
+                        {m.label}
+                      </p>
+                      <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{m.desc}</p>
+                    </div>
                   </button>
                 )
               })}
             </div>
           </div>
 
-          {/* ── Mode inputs ── */}
-          <div className="space-y-4">
+          {/* ── Mode-specific inputs ── */}
+          <div className="space-y-3">
 
-            {/* Duration picker — shown for 'duration' and 'both' */}
-            {(mode === 'duration' || mode === 'both') && (
+            {/* Extend: duration picker */}
+            {mode === 'extend' && (
               <div>
                 <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
                   <Calendar className="inline w-3.5 h-3.5 mr-1" />
@@ -240,8 +279,11 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
                   ))}
                 </div>
                 {extendMonths && plan_expiry && (
-                  <div className="mt-2 flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.15)' }}>
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Current expiry</span>
+                  <div className="mt-2 flex items-center justify-between px-3 py-2 rounded-lg"
+                    style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.15)' }}>
+                    <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <span className="font-medium">Current:</span> {fmtDate(new Date(plan_expiry))}
+                    </div>
                     <ArrowRight className="w-3 h-3" style={{ color: 'var(--text-muted)' }} />
                     <span className="text-xs font-bold" style={{ color: '#7c3aed' }}>
                       {fmtDate(newExpiry)} <span className="font-normal opacity-70">(new expiry)</span>
@@ -251,51 +293,17 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
               </div>
             )}
 
-            {/* Seat counter — shown for 'seats' and 'both' */}
-            {(mode === 'seats' || mode === 'both') && (
+            {/* Add Seats: seat counter */}
+            {mode === 'seats' && (
               <div>
                 <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
                   <Users className="inline w-3.5 h-3.5 mr-1" />
                   Additional seats to add
                 </p>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => adjustSeats(-1)}
-                    className="w-9 h-9 rounded-xl border flex items-center justify-center transition-colors"
-                    style={{ borderColor: 'var(--border)', background: 'var(--bg-hover)' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-active)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                  >
-                    <Minus className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)' }} />
-                  </button>
-                  <input
-                    type="number"
-                    min={1}
-                    value={additionalSeats}
-                    onChange={handleInputSeats}
-                    className="w-20 text-center border rounded-xl py-2 text-sm font-bold focus:outline-none focus:ring-2"
-                    style={{
-                      borderColor: 'var(--border)',
-                      background: 'var(--bg-card)',
-                      color: 'var(--text-heading)',
-                      '--tw-ring-color': '#7c3aed',
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => adjustSeats(1)}
-                    className="w-9 h-9 rounded-xl border flex items-center justify-center transition-colors"
-                    style={{ borderColor: 'var(--border)', background: 'var(--bg-hover)' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-active)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                  >
-                    <Plus className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)' }} />
-                  </button>
-                  <span className="text-sm" style={{ color: 'var(--text-muted)' }}>seats</span>
-                </div>
+                <SeatCounter value={additionalSeats} onAdjust={adjustSeats} onChange={handleInputSeats} />
                 {additionalSeats >= 1 && (
-                  <div className="mt-2 flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'rgba(79,172,254,0.06)', border: '1px solid rgba(79,172,254,0.15)' }}>
+                  <div className="mt-2 flex items-center justify-between px-3 py-2 rounded-lg"
+                    style={{ background: 'rgba(79,172,254,0.06)', border: '1px solid rgba(79,172,254,0.15)' }}>
                     <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{total_user_seats} seats</span>
                     <ArrowRight className="w-3 h-3" style={{ color: 'var(--text-muted)' }} />
                     <span className="text-xs font-bold" style={{ color: '#4FACFE' }}>
@@ -303,6 +311,45 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
                     </span>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Change Plan: info only — plan selected on next screen */}
+            {mode === 'change_plan' && (
+              <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.15)' }}>
+                <p className="text-xs font-semibold mb-1" style={{ color: '#7c3aed' }}>Plan selection on next screen</p>
+                <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  Your current <strong>{total_user_seats}</strong> seats will carry over to the new plan.
+                  Choose your plan and billing cycle on the payment screen.
+                </p>
+              </div>
+            )}
+
+            {/* Change Plan + Seats: seat counter + info */}
+            {mode === 'change_plan_seats' && (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
+                    <Users className="inline w-3.5 h-3.5 mr-1" />
+                    Additional seats to add
+                  </p>
+                  <SeatCounter value={additionalSeats} onAdjust={adjustSeats} onChange={handleInputSeats} />
+                  {additionalSeats >= 1 && (
+                    <div className="mt-2 flex items-center justify-between px-3 py-2 rounded-lg"
+                      style={{ background: 'rgba(79,172,254,0.06)', border: '1px solid rgba(79,172,254,0.15)' }}>
+                      <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{total_user_seats} seats</span>
+                      <ArrowRight className="w-3 h-3" style={{ color: 'var(--text-muted)' }} />
+                      <span className="text-xs font-bold" style={{ color: '#4FACFE' }}>
+                        {newSeats} seats <span className="font-normal opacity-70">(new total)</span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.15)' }}>
+                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    You'll select the new plan and billing cycle on the payment screen.
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -313,14 +360,14 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
             disabled={!canProceed}
             className="w-full flex items-center justify-center gap-2 font-semibold py-3 px-4 rounded-xl transition-all text-white"
             style={{
-              background:  canProceed ? '#7c3aed' : 'var(--bg-disabled)',
-              cursor:      canProceed ? 'pointer' : 'not-allowed',
-              opacity:     canProceed ? 1 : 0.6,
+              background: canProceed ? '#7c3aed' : 'var(--bg-disabled)',
+              cursor:     canProceed ? 'pointer' : 'not-allowed',
+              opacity:    canProceed ? 1 : 0.6,
             }}
             onMouseEnter={e => canProceed && (e.currentTarget.style.background = '#6d28d9')}
             onMouseLeave={e => canProceed && (e.currentTarget.style.background = '#7c3aed')}
           >
-            Proceed to Payment
+            {(mode === 'change_plan' || mode === 'change_plan_seats') ? 'Select Plan & Pay' : 'Proceed to Payment'}
             <ArrowRight className="w-4 h-4" />
           </button>
           <button

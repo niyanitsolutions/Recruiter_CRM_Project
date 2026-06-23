@@ -647,7 +647,7 @@ const AdminDashboard = () => {
                     </div>
                   )}
                 </div>
-                {/* Upgrade button */}
+                {/* Manage Subscription button */}
                 <button
                   onClick={() => setShowUpgradeModal(true)}
                   className="flex-shrink-0 text-[10px] font-semibold px-2 py-1 rounded-lg transition-all whitespace-nowrap ml-1"
@@ -655,7 +655,7 @@ const AdminDashboard = () => {
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.08)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
-                  Upgrade
+                  Manage
                 </button>
               </div>
             )}

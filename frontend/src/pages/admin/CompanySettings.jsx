@@ -544,18 +544,10 @@ const CompanySettings = () => {
               {/* Action buttons */}
               <div className="flex flex-wrap gap-3 pt-2">
                 <button
-                  onClick={() => navigate('/upgrade-plan', {
-                    state: { tenantId: user?.companyId, currentPlan: subscription?.plan_display_name || subscription?.plan_name }
-                  })}
+                  onClick={() => setShowUpgradeModal(true)}
                   className="px-4 py-2 bg-accent-600 text-white text-sm font-medium rounded-lg hover:bg-accent-700 transition-colors"
                 >
-                  Upgrade Plan
-                </button>
-                <button
-                  onClick={() => setShowUpgradeModal(true)}
-                  className="px-4 py-2 bg-white border border-surface-200 text-surface-700 text-sm font-medium rounded-lg hover:bg-surface-50 transition-colors"
-                >
-                  Add More Users
+                  Manage Subscription
                 </button>
                 <button
                   onClick={() => navigate('/payouts/invoices')}

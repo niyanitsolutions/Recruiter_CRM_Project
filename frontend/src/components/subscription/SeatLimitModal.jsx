@@ -65,7 +65,7 @@ export default function SeatLimitModal({ isOpen, onClose, onUpgrade, seatStatus 
           User Limit Reached
         </h2>
         <p className="text-sm text-surface-500 text-center mb-6">
-          You have used all purchased user seats. Upgrade to add more users.
+          You have used all purchased user seats. Manage your subscription to add more users.
         </p>
 
         {/* Seat stats */}
@@ -94,7 +94,7 @@ export default function SeatLimitModal({ isOpen, onClose, onUpgrade, seatStatus 
           className="w-full flex items-center justify-center gap-2 bg-accent-600 hover:bg-accent-700 text-white font-semibold py-3 px-4 rounded-xl transition-colors"
         >
           <Users className="w-4 h-4" />
-          Upgrade Users
+          Manage Subscription
           <ArrowRight className="w-4 h-4" />
         </button>
         <button

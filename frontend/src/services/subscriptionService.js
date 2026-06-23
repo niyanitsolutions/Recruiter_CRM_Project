@@ -1,10 +1,11 @@
 /**
  * Subscription Service
- * Fetches seat usage and subscription status from the backend.
- * Supports three upgrade payment types:
- *   seat_upgrade        – add seats only, preserve expiry
- *   extend_duration     – extend expiry only, preserve seats
- *   seat_upgrade_extend – add seats AND extend expiry together
+ *
+ * Four independent upgrade flows:
+ *   extend            – Extend expiry only (extend_duration)
+ *   seats             – Add seats only, preserve expiry (seat_upgrade)
+ *   change_plan       – Change plan + billing cycle, same seat count (renewal)
+ *   change_plan_seats – Change plan + billing cycle + add seats (renewal)
  */
 import api from './api'
 
@@ -18,7 +19,23 @@ const subscriptionService = {
     api.get('/sellers/me/seat-status'),
 
   /**
-   * Add seats only — does NOT change the subscription expiry date.
+   * FLOW 1 — Extend subscription duration only.
+   * Does NOT change plan or seat count.
+   * payment_type = "extend_duration"
+   */
+  createExtensionOrder: (tenantId, planId, extendMonths) =>
+    api.post('/auth/renew/create-order', {
+      tenant_id:     tenantId,
+      plan_id:       planId,
+      billing_cycle: 'monthly',
+      user_count:    0,
+      payment_type:  'extend_duration',
+      extend_months: extendMonths,
+    }),
+
+  /**
+   * FLOW 2 — Add seats only.
+   * Does NOT change the subscription expiry date or plan.
    * payment_type = "seat_upgrade"
    */
   createSeatUpgradeOrder: (tenantId, planId, additionalSeats, billingCycle = 'monthly') =>
@@ -32,32 +49,23 @@ const subscriptionService = {
     }),
 
   /**
-   * Extend subscription duration only — does NOT change seat count.
-   * payment_type = "extend_duration"
-   * extend_months: 1 | 3 | 6 | 12
+   * FLOW 3 & 4 — Change plan (and optionally seats).
+   * Updates plan_name, billing_cycle, max_users, and resets plan_expiry.
+   * payment_type = "renewal"
+   *
+   * @param {string} tenantId
+   * @param {string} planId        – new plan ID
+   * @param {string} billingCycle  – 'monthly' | 'yearly'
+   * @param {number} userCount     – total seats after change (existingSeats for plan-only, existingSeats + added for plan+seats)
    */
-  createExtensionOrder: (tenantId, planId, extendMonths) =>
-    api.post('/auth/renew/create-order', {
-      tenant_id:     tenantId,
-      plan_id:       planId,
-      billing_cycle: 'monthly',
-      user_count:    0,
-      payment_type:  'extend_duration',
-      extend_months: extendMonths,
-    }),
-
-  /**
-   * Add seats AND extend duration together.
-   * payment_type = "seat_upgrade_extend"
-   */
-  createCombinedUpgradeOrder: (tenantId, planId, additionalSeats, extendMonths, billingCycle = 'monthly') =>
+  createPlanChangeOrder: (tenantId, planId, billingCycle, userCount) =>
     api.post('/auth/renew/create-order', {
       tenant_id:     tenantId,
       plan_id:       planId,
       billing_cycle: billingCycle,
-      user_count:    additionalSeats,
-      payment_type:  'seat_upgrade_extend',
-      extend_months: extendMonths,
+      user_count:    userCount,
+      payment_type:  'renewal',
+      extend_months: 0,
     }),
 }
 

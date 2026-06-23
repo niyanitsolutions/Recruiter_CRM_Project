@@ -83,7 +83,7 @@ export default function SubscriptionBanner({ seatStatus, onUpgrade }) {
             onClick={onUpgrade}
             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${btnClass}`}
           >
-            {isExpired ? 'Renew Now' : 'Upgrade'}
+            {isExpired ? 'Renew Now' : 'Manage Subscription'}
             <ArrowRight className="w-3 h-3" />
           </button>
           {!isExpired && (
