@@ -107,7 +107,9 @@ const authService = {
    * Verify email address using the token from the verification link
    */
   verifyEmail: (token, type = 'tenant') => {
-    return api.get('/auth/verify-email', { params: { token, type } })
+    // 120s — verify-email provisions the full company DB (23 collections + indexes);
+    // the default 15s timeout fires before provisioning completes on Atlas.
+    return api.get('/auth/verify-email', { params: { token, type }, timeout: 120000 })
   },
 
   /**

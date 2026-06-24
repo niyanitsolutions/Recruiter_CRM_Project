@@ -697,7 +697,15 @@ class TenantService:
                 "Trial provisioning failed after verification | company=%s | error=%s",
                 company_id, exc, exc_info=True,
             )
-            await master_db.tenants.delete_one({"_id": tenant_id})
+            # Clean up both the tenant record and the company DB so the user can retry cleanly
+            try:
+                await master_db.tenants.delete_one({"_id": tenant_id})
+            except Exception as _del_exc:
+                logger.error("Tenant cleanup failed | tenant_id=%s | error=%s", tenant_id, _del_exc)
+            try:
+                await DatabaseManager.delete_company_database(company_id)
+            except Exception as _db_exc:
+                logger.error("Company DB cleanup failed | company_id=%s | error=%s", company_id, _db_exc)
             return None, "Failed to provision your workspace. Please try again or contact support."
 
         # ── 7. Mark pending registration as verified ──────────────────────────

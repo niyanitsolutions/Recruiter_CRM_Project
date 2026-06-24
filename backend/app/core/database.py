@@ -8,6 +8,8 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from typing import Any, ClassVar
 import logging
 
+from pymongo import IndexModel, ASCENDING, DESCENDING, TEXT
+
 from app.core.config import settings, get_company_db_name, get_company_db_name_legacy
 
 logger = logging.getLogger(__name__)
@@ -128,164 +130,170 @@ class DatabaseManager:
     @classmethod
     async def create_company_database(cls, company_id: str) -> AsyncIOMotorDatabase:
         """
-        Create and initialize a new company database
-        Called during company registration
+        Create and initialize a new company database.
+        Called during company registration.
+
+        Uses create_indexes() (batch) instead of sequential create_index() calls so
+        all indexes for a collection are sent in a single command — reduces Atlas
+        round-trips from ~83 to 23, cutting provisioning time by ~4x.
         """
         db = await cls.resolve_and_get_company_db(company_id)
-        
-        # Create required collections with indexes
-        collections_config = {
+
+        def _mk(keys, *, unique=False, sparse=False):
+            """Build an IndexModel from a key list (ints or 'text')."""
+            # Convert plain int directions to pymongo constants
+            converted = []
+            for field, direction in keys:
+                if direction == 1:
+                    converted.append((field, ASCENDING))
+                elif direction == -1:
+                    converted.append((field, DESCENDING))
+                else:
+                    converted.append((field, TEXT))
+            return IndexModel(converted, unique=unique, sparse=sparse)
+
+        collections_indexes = {
             "users": [
-                {"keys": [("email", 1)], "unique": True, "sparse": True},
-                {"keys": [("mobile", 1)], "unique": True, "sparse": True},
-                {"keys": [("username", 1)], "unique": True, "sparse": True},
-                {"keys": [("role", 1)]},
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("is_deleted", 1), ("role", 1)]},
+                _mk([("email", 1)], unique=True, sparse=True),
+                _mk([("mobile", 1)], unique=True, sparse=True),
+                _mk([("username", 1)], unique=True, sparse=True),
+                _mk([("role", 1)]),
+                _mk([("is_deleted", 1)]),
+                _mk([("is_deleted", 1), ("role", 1)]),
             ],
             "roles": [
-                {"keys": [("name", 1)], "unique": True},
+                _mk([("name", 1)], unique=True),
             ],
             "permissions": [
-                {"keys": [("code", 1)], "unique": True},
+                _mk([("code", 1)], unique=True),
             ],
             "audit_logs": [
-                {"keys": [("created_at", -1)]},
-                {"keys": [("user_id", 1)]},
-                {"keys": [("action", 1)]},
-                {"keys": [("entity_type", 1), ("entity_id", 1)]},
+                _mk([("created_at", -1)]),
+                _mk([("user_id", 1)]),
+                _mk([("action", 1)]),
+                _mk([("entity_type", 1), ("entity_id", 1)]),
             ],
             "notifications": [
-                {"keys": [("user_id", 1), ("is_read", 1)]},
-                {"keys": [("created_at", -1)]},
+                _mk([("user_id", 1), ("is_read", 1)]),
+                _mk([("created_at", -1)]),
             ],
             # ── Recruitment core ───────────────────────────────────────────────
             "candidates": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("is_deleted", 1), ("status", 1)]},
-                {"keys": [("is_deleted", 1), ("created_at", -1)]},
-                {"keys": [("is_deleted", 1), ("created_by", 1), ("created_at", -1)]},
-                {"keys": [("is_deleted", 1), ("partner_id", 1)]},
-                {"keys": [("email", 1)], "sparse": True},
-                {"keys": [("skill_tags", 1)]},
-                # Text index enables $text search (much faster than $regex)
-                {"keys": [("full_name", "text"), ("email", "text"),
-                          ("skill_tags", "text"), ("current_company", "text"),
-                          ("current_designation", "text"), ("current_city", "text")],
-                 "text": True},
+                _mk([("is_deleted", 1)]),
+                _mk([("is_deleted", 1), ("status", 1)]),
+                _mk([("is_deleted", 1), ("created_at", -1)]),
+                _mk([("is_deleted", 1), ("created_by", 1), ("created_at", -1)]),
+                _mk([("is_deleted", 1), ("partner_id", 1)]),
+                _mk([("email", 1)], sparse=True),
+                _mk([("skill_tags", 1)]),
+                # Text index for $text search (full_name, email, skill_tags, …)
+                _mk([("full_name", "text"), ("email", "text"),
+                     ("skill_tags", "text"), ("current_company", "text"),
+                     ("current_designation", "text"), ("current_city", "text")]),
             ],
             "jobs": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("is_deleted", 1), ("status", 1)]},
-                {"keys": [("is_deleted", 1), ("client_id", 1)]},
-                {"keys": [("is_deleted", 1), ("created_at", -1)]},
+                _mk([("is_deleted", 1)]),
+                _mk([("is_deleted", 1), ("status", 1)]),
+                _mk([("is_deleted", 1), ("client_id", 1)]),
+                _mk([("is_deleted", 1), ("created_at", -1)]),
             ],
             "applications": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("is_deleted", 1), ("status", 1)]},
-                {"keys": [("is_deleted", 1), ("candidate_id", 1)]},
-                {"keys": [("is_deleted", 1), ("job_id", 1)]},
-                {"keys": [("is_deleted", 1), ("created_at", -1)]},
-                # Compound for duplicate-application detection
-                {"keys": [("candidate_id", 1), ("job_id", 1), ("is_deleted", 1)]},
+                _mk([("is_deleted", 1)]),
+                _mk([("is_deleted", 1), ("status", 1)]),
+                _mk([("is_deleted", 1), ("candidate_id", 1)]),
+                _mk([("is_deleted", 1), ("job_id", 1)]),
+                _mk([("is_deleted", 1), ("created_at", -1)]),
+                _mk([("candidate_id", 1), ("job_id", 1), ("is_deleted", 1)]),
             ],
             "interviews": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("is_deleted", 1), ("status", 1)]},
-                {"keys": [("is_deleted", 1), ("candidate_id", 1)]},
-                {"keys": [("is_deleted", 1), ("job_id", 1)]},
-                {"keys": [("is_deleted", 1), ("application_id", 1)]},
-                {"keys": [("is_deleted", 1), ("interviewer_ids", 1)]},
-                {"keys": [("is_deleted", 1), ("scheduled_date", 1)]},
-                {"keys": [("is_deleted", 1), ("scheduled_at", -1)]},
+                _mk([("is_deleted", 1)]),
+                _mk([("is_deleted", 1), ("status", 1)]),
+                _mk([("is_deleted", 1), ("candidate_id", 1)]),
+                _mk([("is_deleted", 1), ("job_id", 1)]),
+                _mk([("is_deleted", 1), ("application_id", 1)]),
+                _mk([("is_deleted", 1), ("interviewer_ids", 1)]),
+                _mk([("is_deleted", 1), ("scheduled_date", 1)]),
+                _mk([("is_deleted", 1), ("scheduled_at", -1)]),
             ],
             "clients": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("is_deleted", 1), ("status", 1)]},
-                {"keys": [("is_deleted", 1), ("created_at", -1)]},
+                _mk([("is_deleted", 1)]),
+                _mk([("is_deleted", 1), ("status", 1)]),
+                _mk([("is_deleted", 1), ("created_at", -1)]),
             ],
             "onboards": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("is_deleted", 1), ("status", 1)]},
-                {"keys": [("is_deleted", 1), ("created_at", -1)]},
+                _mk([("is_deleted", 1)]),
+                _mk([("is_deleted", 1), ("status", 1)]),
+                _mk([("is_deleted", 1), ("created_at", -1)]),
             ],
             "payouts": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("is_deleted", 1), ("status", 1)]},
-                {"keys": [("is_deleted", 1), ("partner_id", 1)]},
-                {"keys": [("is_deleted", 1), ("created_at", -1)]},
+                _mk([("is_deleted", 1)]),
+                _mk([("is_deleted", 1), ("status", 1)]),
+                _mk([("is_deleted", 1), ("partner_id", 1)]),
+                _mk([("is_deleted", 1), ("created_at", -1)]),
             ],
             "targets": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("is_deleted", 1), ("user_id", 1)]},
+                _mk([("is_deleted", 1)]),
+                _mk([("is_deleted", 1), ("user_id", 1)]),
             ],
             "departments": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("name", 1)]},
+                _mk([("is_deleted", 1)]),
+                _mk([("name", 1)]),
             ],
             "designations": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("name", 1)]},
+                _mk([("is_deleted", 1)]),
+                _mk([("name", 1)]),
             ],
             # ── HRM ────────────────────────────────────────────────────────────
             "employees": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("is_deleted", 1), ("status", 1)]},
-                {"keys": [("employee_id", 1)], "sparse": True},
+                _mk([("is_deleted", 1)]),
+                _mk([("is_deleted", 1), ("status", 1)]),
+                _mk([("employee_id", 1)], sparse=True),
             ],
             "hrm_employees": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("is_deleted", 1), ("status", 1)]},
-                {"keys": [("company_id", 1), ("is_deleted", 1)]},
-                {"keys": [("email", 1), ("company_id", 1)], "sparse": True},
-                {"keys": [("employee_id", 1), ("company_id", 1)], "sparse": True},
+                _mk([("is_deleted", 1)]),
+                _mk([("is_deleted", 1), ("status", 1)]),
+                _mk([("company_id", 1), ("is_deleted", 1)]),
+                _mk([("email", 1), ("company_id", 1)], sparse=True),
+                _mk([("employee_id", 1), ("company_id", 1)], sparse=True),
             ],
             "hrm_assets": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("company_id", 1), ("is_deleted", 1)]},
-                {"keys": [("company_id", 1), ("status", 1), ("is_deleted", 1)]},
-                {"keys": [("asset_tag", 1), ("company_id", 1)], "unique": True, "sparse": True},
-                {"keys": [("assigned_to_id", 1), ("company_id", 1)], "sparse": True},
-                {"keys": [("public_token", 1)], "unique": True, "sparse": True},
+                _mk([("is_deleted", 1)]),
+                _mk([("company_id", 1), ("is_deleted", 1)]),
+                _mk([("company_id", 1), ("status", 1), ("is_deleted", 1)]),
+                _mk([("asset_tag", 1), ("company_id", 1)], unique=True, sparse=True),
+                _mk([("assigned_to_id", 1), ("company_id", 1)], sparse=True),
+                _mk([("public_token", 1)], unique=True, sparse=True),
             ],
             "hrm_exit": [
-                {"keys": [("is_deleted", 1)]},
-                {"keys": [("company_id", 1), ("is_deleted", 1)]},
-                {"keys": [("company_id", 1), ("status", 1), ("is_deleted", 1)]},
-                {"keys": [("employee_id", 1), ("company_id", 1), ("is_deleted", 1)]},
+                _mk([("is_deleted", 1)]),
+                _mk([("company_id", 1), ("is_deleted", 1)]),
+                _mk([("company_id", 1), ("status", 1), ("is_deleted", 1)]),
+                _mk([("employee_id", 1), ("company_id", 1), ("is_deleted", 1)]),
             ],
             "hrm_doc_upload_tokens": [
-                {"keys": [("token", 1)], "unique": True, "sparse": True},
-                {"keys": [("company_id", 1), ("employee_id", 1)]},
-                {"keys": [("company_id", 1), ("status", 1)]},
-                {"keys": [("expires_at", 1)], "sparse": True},
+                _mk([("token", 1)], unique=True, sparse=True),
+                _mk([("company_id", 1), ("employee_id", 1)]),
+                _mk([("company_id", 1), ("status", 1)]),
+                _mk([("expires_at", 1)], sparse=True),
             ],
             "attendance": [
-                {"keys": [("employee_id", 1), ("date", -1)]},
-                {"keys": [("date", -1)]},
+                _mk([("employee_id", 1), ("date", -1)]),
+                _mk([("date", -1)]),
             ],
             "leaves": [
-                {"keys": [("employee_id", 1)]},
-                {"keys": [("status", 1)]},
+                _mk([("employee_id", 1)]),
+                _mk([("status", 1)]),
             ],
             "payroll": [
-                {"keys": [("employee_id", 1), ("month", -1)]},
+                _mk([("employee_id", 1), ("month", -1)]),
             ],
         }
 
-        for collection_name, indexes in collections_config.items():
-            collection = db[collection_name]
-            for index_config in indexes:
-                if index_config.get("text"):
-                    # Text indexes use a different create_index signature
-                    await collection.create_index(index_config["keys"])
-                else:
-                    await collection.create_index(
-                        index_config["keys"],
-                        unique=index_config.get("unique", False),
-                        sparse=index_config.get("sparse", False),
-                    )
-        
+        # One create_indexes() call per collection — all indexes sent in a single
+        # MongoDB command, reducing Atlas round-trips from ~83 to 23 (~4x faster).
+        for collection_name, index_models in collections_indexes.items():
+            await db[collection_name].create_indexes(index_models)
+
         logger.info("✅ Company database created: c_%s", company_id.replace("-", ""))
         return db
 

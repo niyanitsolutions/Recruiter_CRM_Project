@@ -43,11 +43,15 @@ const VerifyEmail = () => {
           ? detail.message
           : (detail || 'Verification failed. The link may have expired.')
         setMessage(msg)
-        // Already verified or account exists → go to login, no resend needed
-        if (
-          msg?.toLowerCase().includes('already been verified') ||
-          msg?.toLowerCase().includes('already exists')
-        ) {
+        // Already verified → workspace is ready, just needs to log in; show success-like state
+        if (msg?.toLowerCase().includes('already been verified')) {
+          setStatus('success')
+          setMessage(msg)
+          setTrialData(null)  // no company details available, show generic success
+          return
+        }
+        // Account already exists → direct to login, no resend needed
+        if (msg?.toLowerCase().includes('already exists')) {
           setCanResend(false)
         }
       })
