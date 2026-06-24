@@ -508,20 +508,31 @@ class TenantService:
         now = datetime.now(timezone.utc)
 
         # ── 1. Look up pending record ─────────────────────────────────────────
+        logger.info(
+            "[VERIFY-TRIAL] Token lookup | prefix=%s...", token[:8] if len(token) >= 8 else token
+        )
         pending = await master_db.pending_registrations.find_one(
             {"verification_token": token}
         )
 
         if not pending:
+            logger.warning(
+                "[VERIFY-TRIAL] No pending registration found for token prefix=%s",
+                token[:8] if len(token) >= 8 else token,
+            )
             return None, "Invalid verification link. The link may have already been used or does not exist."
 
         status_val = pending.get("status", "")
+        logger.info(
+            "[VERIFY-TRIAL] Pending doc found | id=%s email=%s status=%s",
+            pending.get("_id"), pending.get("email"), status_val,
+        )
 
         if status_val == "verified":
             return None, "This email has already been verified. You can log in now."
 
         if status_val == "expired":
-            return None, "This verification link has expired. Please register again."
+            return None, "This verification link has expired. Please request a new one."
 
         # Check expiry
         expiry = pending.get("verification_expiry")
@@ -532,7 +543,11 @@ class TenantService:
                 await master_db.pending_registrations.update_one(
                     {"_id": pending["_id"]}, {"$set": {"status": "expired"}}
                 )
-                return None, "This verification link has expired. Please register again."
+                logger.warning(
+                    "[VERIFY-TRIAL] Token expired | email=%s expiry=%s now=%s",
+                    pending.get("email"), expiry, now,
+                )
+                return None, "This verification link has expired. Please request a new one."
 
         # ── 2. Race-condition guard ───────────────────────────────────────────
         existing_tenant = await master_db.tenants.find_one({
@@ -618,13 +633,12 @@ class TenantService:
             "is_deleted": False,
         }
 
-        await master_db.tenants.insert_one(tenant_data)
-        logger.info(
-            "Trial tenant record created | company=%s | id=%s", company_name, company_id
-        )
-
         # ── 6. Provision company DB + owner user ──────────────────────────────
         try:
+            await master_db.tenants.insert_one(tenant_data)
+            logger.info(
+                "Trial tenant record created | company=%s | id=%s", company_name, company_id
+            )
             await DatabaseManager.create_company_database(company_id)
             company_db = DatabaseManager.get_company_db(company_id)
 
@@ -714,9 +728,10 @@ class TenantService:
         master_db = get_master_db()
         _email = email.lower().strip()
 
+        # Accept both pending_verification AND expired (token expired, user requests new link)
         pending = await master_db.pending_registrations.find_one({
             "email": _email,
-            "status": "pending_verification",
+            "status": {"$in": ["pending_verification", "expired"]},
         })
 
         if not pending:
@@ -728,7 +743,11 @@ class TenantService:
 
         await master_db.pending_registrations.update_one(
             {"_id": pending["_id"]},
-            {"$set": {"verification_token": new_token, "verification_expiry": new_expiry}},
+            {"$set": {
+                "verification_token": new_token,
+                "verification_expiry": new_expiry,
+                "status": "pending_verification",  # reset expired status
+            }},
         )
 
         trial_plan = await master_db.plans.find_one({"is_trial_plan": True, "is_active": {"$ne": False}})

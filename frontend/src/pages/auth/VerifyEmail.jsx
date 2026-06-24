@@ -15,6 +15,7 @@ const VerifyEmail = () => {
   const [resendEmail, setResendEmail]     = useState('')
   const [resendLoading, setResendLoading] = useState(false)
   const [resendSent, setResendSent]       = useState(false)
+  const [canResend, setCanResend]         = useState(true)
 
   useEffect(() => {
     if (!token) {
@@ -38,9 +39,17 @@ const VerifyEmail = () => {
       .catch(err => {
         setStatus('error')
         const detail = err.response?.data?.detail
-        setMessage(
-          typeof detail === 'object' ? detail.message : (detail || 'Verification failed. The link may have expired.')
-        )
+        const msg = typeof detail === 'object'
+          ? detail.message
+          : (detail || 'Verification failed. The link may have expired.')
+        setMessage(msg)
+        // Already verified or account exists → go to login, no resend needed
+        if (
+          msg?.toLowerCase().includes('already been verified') ||
+          msg?.toLowerCase().includes('already exists')
+        ) {
+          setCanResend(false)
+        }
       })
   }, [token, type])
 
@@ -134,40 +143,42 @@ const VerifyEmail = () => {
             <p className="text-surface-500 mt-2">{message}</p>
           </div>
 
-          {!resendSent ? (
-            <form onSubmit={handleResend} className="space-y-4">
-              <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
-                Enter your email address to receive a new verification link.
-              </div>
-              <div>
-                <label className="form-label">Email Address</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
-                  <input
-                    type="email"
-                    className="input pl-10"
-                    placeholder="owner@company.com"
-                    value={resendEmail}
-                    onChange={(e) => setResendEmail(e.target.value)}
-                    required
-                  />
+          {canResend ? (
+            !resendSent ? (
+              <form onSubmit={handleResend} className="space-y-4">
+                <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+                  Enter your email address to receive a new verification link.
                 </div>
+                <div>
+                  <label className="form-label">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
+                    <input
+                      type="email"
+                      className="input pl-10"
+                      placeholder="owner@company.com"
+                      value={resendEmail}
+                      onChange={(e) => setResendEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <Button
+                  type="submit"
+                  isLoading={resendLoading}
+                  className="w-full"
+                  leftIcon={<RefreshCw className="w-4 h-4" />}
+                >
+                  Resend Verification Email
+                </Button>
+              </form>
+            ) : (
+              <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-4 text-center text-sm text-green-700">
+                <CheckCircle className="w-5 h-5 mx-auto mb-2 text-green-600" />
+                If an unverified account exists with that email, a new link has been sent. Check your inbox.
               </div>
-              <Button
-                type="submit"
-                isLoading={resendLoading}
-                className="w-full"
-                leftIcon={<RefreshCw className="w-4 h-4" />}
-              >
-                Resend Verification Email
-              </Button>
-            </form>
-          ) : (
-            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-4 text-center text-sm text-green-700">
-              <CheckCircle className="w-5 h-5 mx-auto mb-2 text-green-600" />
-              If an unverified account exists with that email, a new link has been sent. Check your inbox.
-            </div>
-          )}
+            )
+          ) : null}
 
           <Link to="/login" className="block text-center text-sm text-accent-600 hover:underline mt-2">
             &#8592; Back to Login

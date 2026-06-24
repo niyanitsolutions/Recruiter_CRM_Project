@@ -810,8 +810,20 @@ async def verify_email(token: str, type: str = "tenant"):
 
     For type=tenant (default): sets email_verified=True on the existing tenant record.
     """
+    logger.info(
+        "[VERIFY-EMAIL] Received | type=%s token_prefix=%s...",
+        type, token[:8] if len(token) >= 8 else token,
+    )
+
     if type == "trial":
-        result, error = await tenant_service.verify_and_provision_trial(token)
+        try:
+            result, error = await tenant_service.verify_and_provision_trial(token)
+        except Exception as _exc:
+            logger.error("[VERIFY-EMAIL] Unexpected error in verify_and_provision_trial | error=%s", _exc, exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"message": "Verification failed due to a server error. Please try again.", "verified": False},
+            )
         if error:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -821,6 +833,14 @@ async def verify_email(token: str, type: str = "tenant"):
 
     success, message = await auth_service.verify_email(token=token, account_type=type)
     if not success:
+        # Fallback: maybe the email client dropped &type=trial; try the trial path
+        try:
+            trial_result, trial_error = await tenant_service.verify_and_provision_trial(token)
+            if not trial_error:
+                logger.info("[VERIFY-EMAIL] Tenant path failed but trial path succeeded — type param likely missing from URL")
+                return trial_result
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"message": message, "verified": False}
@@ -839,10 +859,10 @@ async def resend_verification_email(data: ResendVerificationRequest):
     _master_db = get_master_db()
     _email = data.email.lower().strip()
 
-    # Check if this is a pending trial registration
+    # Check if this is a pending trial registration (also handles expired tokens)
     pending = await _master_db.pending_registrations.find_one({
         "email": _email,
-        "status": "pending_verification",
+        "status": {"$in": ["pending_verification", "expired"]},
     })
     if pending:
         await tenant_service.resend_trial_verification(data.email)
