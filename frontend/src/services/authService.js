@@ -46,10 +46,25 @@ const authService = {
   },
 
   /**
-   * Forgot password - initiate reset
+   * Look up which companies are associated with an email.
+   * Returns [{company_id, company_name, user_type}].
+   * Used to decide whether to show scope-selection UI.
    */
-  forgotPassword: (email) => {
-    return api.post('/auth/forgot-password', { email })
+  lookupForgotPasswordScope: (email) => {
+    return api.post('/auth/forgot-password/lookup', { email })
+  },
+
+  /**
+   * Initiate password reset.
+   * resetScope: 'auto' (default) | 'single' | 'all'
+   * companyId: required when resetScope='single'
+   */
+  forgotPassword: (email, resetScope = 'auto', companyId = null) => {
+    return api.post('/auth/forgot-password', {
+      email,
+      reset_scope: resetScope,
+      ...(companyId ? { company_id: companyId } : {}),
+    })
   },
 
   /**

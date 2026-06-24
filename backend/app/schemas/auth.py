@@ -112,9 +112,23 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
-class ForgotPasswordRequest(BaseModel):
-    """Forgot password request"""
+class ForgotPasswordLookupRequest(BaseModel):
+    """Look up which companies are associated with an email (for scope selection)"""
     email: EmailStr
+
+
+class CompanyAccountInfo(BaseModel):
+    """A single company account entry returned by the lookup endpoint"""
+    company_id: str
+    company_name: str
+    user_type: str  # "owner" | "user"
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Forgot password request — supports optional multi-company scope"""
+    email: EmailStr
+    reset_scope: str = Field(default="auto", description="'auto' | 'single' | 'all'")
+    company_id: Optional[str] = Field(None, description="Target company for reset_scope='single'")
 
 
 class ResetPasswordRequest(BaseModel):

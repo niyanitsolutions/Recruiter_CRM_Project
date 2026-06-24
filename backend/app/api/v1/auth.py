@@ -15,6 +15,7 @@ from app.schemas.auth import (
     LoginRequest,
     RefreshTokenRequest,
     ForgotPasswordRequest,
+    ForgotPasswordLookupRequest,
     ResetPasswordRequest,
     ChangePasswordRequest,
     VerifyPasswordRequest,
@@ -387,37 +388,64 @@ async def logout(auth: AuthContext = Depends(get_current_user)):
     return {"message": "Logged out successfully", "success": True}
 
 
-async def _bg_password_reset(email: str) -> None:
+async def _bg_password_reset_scoped(
+    email: str, reset_scope: str = "auto", company_id: Optional[str] = None
+) -> None:
     """
-    Wrapper so background-task exceptions appear in the app logger, not just
-    uvicorn stderr.  Without this, any exception inside initiate_password_reset
-    is silently swallowed from the application-log perspective.
+    Background wrapper for scoped password reset.
+    Exceptions are logged here so they are visible in the app logger rather than
+    being silently swallowed by Starlette.
     """
     try:
-        logger.info("[FORGOT-PWD] background task STARTED for email=%s", email)
-        result = await auth_service.initiate_password_reset(email)
-        logger.info("[FORGOT-PWD] background task FINISHED for email=%s result=%s", email, result)
+        logger.info(
+            "[FORGOT-PWD] bg task STARTED email=%s scope=%s company=%s",
+            email, reset_scope, company_id,
+        )
+        result = await auth_service.initiate_scoped_password_reset(email, reset_scope, company_id)
+        logger.info("[FORGOT-PWD] bg task FINISHED email=%s result=%s", email, result)
     except Exception:
         logger.exception(
-            "[FORGOT-PWD] UNHANDLED EXCEPTION in background task for email=%s — "
-            "this would have been silently swallowed by Starlette without this wrapper",
-            email,
+            "[FORGOT-PWD] UNHANDLED EXCEPTION in bg task email=%s", email
         )
+
+
+@router.post("/forgot-password/lookup")
+@limiter.limit("10/minute")
+async def forgot_password_lookup(request: Request, body: ForgotPasswordLookupRequest):
+    """
+    Return the list of companies associated with an email address.
+    Used by the frontend to decide whether to show scope-selection UI.
+    Returns an empty list when the email belongs to no company accounts
+    (super-admin accounts are excluded — their reset path is automatic).
+    """
+    email = str(body.email).lower().strip()
+    logger.info("[FORGOT-PWD-LOOKUP] email=%s", email)
+    companies = await auth_service.lookup_accounts_for_reset(email)
+    return {"companies": companies}
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
 @limiter.limit("5/minute")
 async def forgot_password(request: Request, body: ForgotPasswordRequest, background_tasks: BackgroundTasks):
     """
-    Initiate password reset process.
+    Initiate password reset.
 
     Responds immediately (<1 s). Token generation and email delivery happen in the
-    background so SMTP latency never delays the HTTP response.
-    Account existence is never revealed (anti-enumeration).
+    background — SMTP latency never blocks the HTTP response.
+    Account existence is never revealed by this endpoint (anti-enumeration).
+
+    reset_scope values:
+      "auto"   — legacy / single-company callers; picks the first account found
+      "single" — reset password for one specific company (company_id required)
+      "all"    — reset password across every company the email belongs to
     """
-    logger.info("[FORGOT-PWD] endpoint hit — email=%s", body.email)
-    background_tasks.add_task(_bg_password_reset, body.email)
-    logger.info("[FORGOT-PWD] background task queued for email=%s", body.email)
+    logger.info(
+        "[FORGOT-PWD] endpoint hit — email=%s scope=%s company=%s",
+        body.email, body.reset_scope, body.company_id,
+    )
+    background_tasks.add_task(
+        _bg_password_reset_scoped, str(body.email), body.reset_scope, body.company_id
+    )
     return {
         "message": "If an account exists with this email, reset instructions have been sent",
         "success": True,
@@ -427,9 +455,15 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest, backgro
 @router.post("/reset-password", response_model=MessageResponse)
 async def reset_password(request: ResetPasswordRequest):
     """
-    Reset password using token from email.
+    Reset password using the token from the reset email.
+
+    Lookup order:
+    1. master_db.password_reset_tokens  — new centralised system (supports scope)
+    2. master_db.super_admins           — backward compat
+    3. master_db.tenants.owner          — backward compat
+    4. company_db.users (all tenants)   — backward compat
     """
-    from app.core.database import get_master_db as _get_master_db
+    from app.core.database import get_master_db as _get_master_db, DatabaseManager as _DB
     from app.core.security import hash_password
     from datetime import datetime, timezone
 
@@ -437,8 +471,119 @@ async def reset_password(request: ResetPasswordRequest):
     now = datetime.now(timezone.utc)
     token = request.token
     new_password = request.new_password
+    new_hash = hash_password(new_password)
 
-    # Check super_admins
+    # ── 1. Centralised password_reset_tokens (new scoped system) ─────────────
+    reset_record = await master_db.password_reset_tokens.find_one({
+        "_id": token,
+        "expires_at": {"$gt": now},
+    })
+
+    if reset_record:
+        _email = reset_record["email"]
+        _scope = reset_record.get("reset_scope", "single")
+        _cid = reset_record.get("company_id")
+        logger.info(
+            "[RESET] centralised token found — email=%s scope=%s company=%s",
+            _email, _scope, _cid,
+        )
+
+        async def _update_company_password(cid: str) -> bool:
+            """Update password in one company's DB (owner + users). Returns True on success."""
+            t = await master_db.tenants.find_one(
+                {"company_id": cid, "is_deleted": {"$ne": True}}
+            )
+            owner = t.get("owner", {}) if t else {}
+            is_owner = owner.get("email", "").lower() == _email.lower()
+
+            if is_owner:
+                await master_db.tenants.update_one(
+                    {"company_id": cid},
+                    {"$set": {
+                        "owner.password_hash": new_hash,
+                        "owner.logout_at": now,
+                        "owner.active_session_token": None,
+                        "owner.active_session_at": None,
+                    }},
+                )
+                owner_id = owner.get("_id")
+                if owner_id:
+                    await master_db.user_active_sessions.delete_one({"_id": str(owner_id)})
+
+            try:
+                cdb = await _DB.resolve_and_get_company_db(cid)
+                res = await cdb.users.update_one(
+                    {"email": _email, "is_deleted": {"$ne": True}},
+                    {"$set": {
+                        "password_hash": new_hash,
+                        "must_change_password": False,
+                        "password_changed_at": now,
+                        "logout_at": now,
+                        "active_session_token": None,
+                        "active_session_at": None,
+                        "updated_at": now,
+                    }},
+                )
+                # Revoke company user session
+                u = await cdb.users.find_one({"email": _email})
+                if u:
+                    await master_db.user_active_sessions.delete_one({"_id": str(u["_id"])})
+
+                # Verify hash was actually written
+                updated = await cdb.users.find_one({"email": _email})
+                if updated and updated.get("password_hash") != new_hash:
+                    logger.error("[RESET] hash verification FAILED company=%s email=%s", cid, _email)
+                    return False
+
+                return res.modified_count > 0 or is_owner
+            except Exception as exc:
+                logger.error("[RESET] company update error company=%s | %s", cid, exc)
+                return is_owner  # owner update succeeded even if company_db failed
+
+        if _scope == "all":
+            accounts = await auth_service.lookup_accounts_for_reset(_email)
+            if not accounts:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No accounts found for this reset token.",
+                )
+            failures = []
+            for acct in accounts:
+                ok = await _update_company_password(acct["company_id"])
+                if not ok:
+                    failures.append(acct["company_id"])
+            if failures:
+                logger.error("[RESET] all-scope: failed companies=%s email=%s", failures, _email)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Password update failed for one or more companies. Please try again.",
+                )
+            await master_db.password_reset_tokens.delete_one({"_id": token})
+            logger.info(
+                "[RESET] all-scope SUCCESS email=%s companies=%d", _email, len(accounts)
+            )
+            return {
+                "message": "Password reset successfully for all companies. Please log in.",
+                "success": True,
+            }
+
+        else:  # single
+            if not _cid:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid reset token — missing company information.",
+                )
+            ok = await _update_company_password(_cid)
+            if not ok:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Account not found or password update failed.",
+                )
+            await master_db.password_reset_tokens.delete_one({"_id": token})
+            logger.info("[RESET] single-scope SUCCESS email=%s company=%s", _email, _cid)
+            return {"message": "Password reset successfully. Please log in.", "success": True}
+
+    # ── 2. Backward compat: super_admins.reset_token ──────────────────────────
     sa = await master_db.super_admins.find_one({
         "reset_token": token,
         "reset_token_expiry": {"$gt": now},
@@ -449,25 +594,23 @@ async def reset_password(request: ResetPasswordRequest):
         await master_db.super_admins.update_one(
             {"_id": sa_id},
             {"$set": {
-                "password_hash": hash_password(new_password),
+                "password_hash": new_hash,
                 "reset_token": None,
                 "reset_token_expiry": None,
                 "logout_at": now,
                 "updated_at": now,
-            }}
+            }},
         )
-        # Revoke all active sessions for this super admin
         await master_db.user_active_sessions.delete_one({"_id": str(sa_id)})
         return {"message": "Password reset successfully. Please log in.", "success": True}
 
-    # Check tenant owner
+    # ── 3. Backward compat: tenant owner.reset_token ──────────────────────────
     tenant = await master_db.tenants.find_one({
         "owner.reset_token": token,
         "owner.reset_token_expiry": {"$gt": now},
         "is_deleted": False,
     })
     if tenant:
-        new_hash = hash_password(new_password)
         await master_db.tenants.update_one(
             {"_id": tenant["_id"]},
             {"$set": {
@@ -477,15 +620,15 @@ async def reset_password(request: ResetPasswordRequest):
                 "owner.logout_at": now,
                 "owner.active_session_token": None,
                 "owner.active_session_at": None,
-            }}
+            }},
         )
-        # Sync to company_db.users so both auth paths (login + refresh) see the same hash
-        from app.core.database import get_company_db as _get_company_db
-        _owner_id = tenant.get("owner", {}).get("id") or tenant.get("owner", {}).get("_id")
-        if tenant.get("company_id") and _owner_id:
-            _cdb = _get_company_db(tenant["company_id"])
-            await _cdb.users.update_one(
-                {"_id": _owner_id},
+        owner_id = tenant.get("owner", {}).get("_id")
+        cid = tenant.get("company_id")
+        if cid and owner_id:
+            # Sync to company_db.users so the auth refresh path also sees the new hash
+            cdb = await _DB.resolve_and_get_company_db(cid)
+            await cdb.users.update_one(
+                {"_id": owner_id},
                 {"$set": {
                     "password_hash": new_hash,
                     "reset_token": None,
@@ -496,44 +639,42 @@ async def reset_password(request: ResetPasswordRequest):
                     "updated_at": now,
                 }},
             )
-            await master_db.user_active_sessions.delete_one({"_id": str(_owner_id)})
+            await master_db.user_active_sessions.delete_one({"_id": str(owner_id)})
         return {"message": "Password reset successfully. Please log in.", "success": True}
 
-    # Check company users
-    from app.core.database import get_company_db as _get_company_db
-    tenants_cursor = master_db.tenants.find({"is_deleted": {"$ne": True}})
-    async for t in tenants_cursor:
-        company_db = _get_company_db(t["company_id"])
-        user = await company_db.users.find_one({
+    # ── 4. Backward compat: company user reset_token (scan all tenants) ───────
+    async for t in master_db.tenants.find({"is_deleted": {"$ne": True}}):
+        cid = t.get("company_id", "")
+        if not cid:
+            continue
+        cdb = await _DB.resolve_and_get_company_db(cid)
+        user = await cdb.users.find_one({
             "reset_token": token,
             "reset_token_expiry": {"$gt": now},
             "is_deleted": False,
         })
         if user:
             user_id = user["_id"]
-            await company_db.users.update_one(
+            await cdb.users.update_one(
                 {"_id": user_id},
                 {"$set": {
-                    "password_hash": hash_password(new_password),
+                    "password_hash": new_hash,
                     "reset_token": None,
                     "reset_token_expiry": None,
-                    # Clear the forced-change flag so the user is not redirected
-                    # to /change-password again after using the forgot-password link.
                     "must_change_password": False,
                     "password_changed_at": now,
                     "logout_at": now,
                     "active_session_token": None,
                     "active_session_at": None,
                     "updated_at": now,
-                }}
+                }},
             )
-            # Revoke all active sessions for this user
             await master_db.user_active_sessions.delete_one({"_id": str(user_id)})
             return {"message": "Password reset successfully. Please log in.", "success": True}
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Invalid or expired reset token"
+        detail="Invalid or expired reset token",
     )
 
 

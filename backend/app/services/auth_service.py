@@ -1662,6 +1662,189 @@ class AuthService:
         )
         return True, _NOT_FOUND
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # Multi-company password reset helpers
+    # ──────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    async def lookup_accounts_for_reset(email: str) -> list:
+        """
+        Return all company accounts (owners + regular users) associated with email.
+        Super-admin accounts are excluded — they use a separate reset path.
+        Each entry: {company_id, company_name, user_type ("owner"|"user")}
+        """
+        from app.core.database import get_master_db, DatabaseManager
+
+        master_db = get_master_db()
+        _email = str(email).lower().strip()
+        results = []
+        seen_cids: set = set()
+
+        # Tenant owners (same email can theoretically own multiple companies)
+        async for tenant in master_db.tenants.find(
+            {"owner.email": _email, "is_deleted": {"$ne": True}}
+        ):
+            cid = tenant.get("company_id", "")
+            if cid:
+                results.append({
+                    "company_id": cid,
+                    "company_name": tenant.get("company_name", ""),
+                    "user_type": "owner",
+                })
+                seen_cids.add(cid)
+
+        # Regular users across all company DBs
+        async for tenant in master_db.tenants.find({"is_deleted": {"$ne": True}}):
+            cid = tenant.get("company_id", "")
+            if not cid or cid in seen_cids:
+                continue
+            try:
+                company_db = await DatabaseManager.resolve_and_get_company_db(cid)
+                user = await company_db.users.find_one(
+                    {"email": _email, "is_deleted": {"$ne": True}}
+                )
+                if user:
+                    results.append({
+                        "company_id": cid,
+                        "company_name": tenant.get("company_name", ""),
+                        "user_type": "user",
+                    })
+                    seen_cids.add(cid)
+            except Exception as exc:
+                logger.warning("[RESET-LOOKUP] company_id=%s skipped: %s", cid, exc)
+
+        return results
+
+    @staticmethod
+    async def initiate_scoped_password_reset(
+        email: str,
+        reset_scope: str = "auto",
+        company_id: Optional[str] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Centralised, scope-aware password-reset initiator.
+
+        reset_scope:
+          "auto"   — detect from account count (1 company → single; 0 → generic msg)
+          "single" — reset password for one specific company only
+          "all"    — reset password across every company this email belongs to
+
+        Stores a token in master_db.password_reset_tokens (new centralised collection).
+        Super-admin accounts fall through to their own reset path (unchanged).
+        """
+        from app.core.database import get_master_db, DatabaseManager
+        from app.core.security import generate_reset_token
+        from app.services.email_service import send_password_reset_email as _send_reset
+
+        master_db = get_master_db()
+        _email = str(email).lower().strip()
+        now = datetime.now(timezone.utc)
+
+        _EMAIL_UNAVAILABLE = (
+            "Email service unavailable. Please try again later or contact support."
+        )
+        _EMAIL_OK = "Password reset instructions sent to your email"
+        _NOT_FOUND = (
+            "If an account exists with this email, reset instructions have been sent"
+        )
+
+        logger.info(
+            "[RESET-SCOPED] email=%s scope=%s company_id=%s", _email, reset_scope, company_id
+        )
+
+        # ── Super admin (unchanged path — token stored in super_admins collection) ──
+        sa = await master_db.super_admins.find_one(
+            {"email": _email, "is_deleted": {"$ne": True}}
+        )
+        if sa:
+            token = generate_reset_token()
+            await master_db.super_admins.update_one(
+                {"_id": sa["_id"]},
+                {"$set": {
+                    "reset_token": token,
+                    "reset_token_expiry": now + timedelta(hours=1),
+                }},
+            )
+            sent = await _send_reset(
+                to_email=_email,
+                full_name=sa.get("full_name", "Admin"),
+                reset_token=token,
+            )
+            if not sent:
+                return False, _EMAIL_UNAVAILABLE
+            logger.info("[RESET-SCOPED] super_admin reset sent: email=%s", _email)
+            return True, _EMAIL_OK
+
+        # ── Determine target company/companies ────────────────────────────────
+        if reset_scope == "auto" or (reset_scope == "single" and not company_id):
+            accounts = await AuthService.lookup_accounts_for_reset(_email)
+            if not accounts:
+                logger.warning("[RESET-SCOPED] no accounts found for email=%s", _email)
+                return True, _NOT_FOUND
+            reset_scope = "single"
+            company_id = accounts[0]["company_id"]
+
+        # ── Resolve full_name for the email in a given company ────────────────
+        async def _get_full_name(cid: str) -> str:
+            t = await master_db.tenants.find_one(
+                {"company_id": cid, "is_deleted": {"$ne": True}}
+            )
+            if t and t.get("owner", {}).get("email", "").lower() == _email:
+                return t.get("owner", {}).get("full_name", _email)
+            try:
+                cdb = await DatabaseManager.resolve_and_get_company_db(cid)
+                u = await cdb.users.find_one({"email": _email, "is_deleted": {"$ne": True}})
+                return u.get("full_name", _email) if u else _email
+            except Exception:
+                return _email
+
+        # ── "all" scope — one token covers every company ──────────────────────
+        if reset_scope == "all":
+            accounts = await AuthService.lookup_accounts_for_reset(_email)
+            if not accounts:
+                return True, _NOT_FOUND
+            full_name = await _get_full_name(accounts[0]["company_id"])
+            token = generate_reset_token()
+            await master_db.password_reset_tokens.insert_one({
+                "_id": token,
+                "email": _email,
+                "reset_scope": "all",
+                "company_id": None,
+                "full_name": full_name,
+                "created_at": now,
+                "expires_at": now + timedelta(hours=1),
+            })
+            sent = await _send_reset(to_email=_email, full_name=full_name, reset_token=token)
+            if not sent:
+                await master_db.password_reset_tokens.delete_one({"_id": token})
+                return False, _EMAIL_UNAVAILABLE
+            logger.info(
+                "[RESET-SCOPED] all-scope reset sent: email=%s companies=%d",
+                _email, len(accounts),
+            )
+            return True, _EMAIL_OK
+
+        # ── "single" scope — one token for one company ────────────────────────
+        full_name = await _get_full_name(company_id)
+        token = generate_reset_token()
+        await master_db.password_reset_tokens.insert_one({
+            "_id": token,
+            "email": _email,
+            "reset_scope": "single",
+            "company_id": company_id,
+            "full_name": full_name,
+            "created_at": now,
+            "expires_at": now + timedelta(hours=1),
+        })
+        sent = await _send_reset(to_email=_email, full_name=full_name, reset_token=token)
+        if not sent:
+            await master_db.password_reset_tokens.delete_one({"_id": token})
+            return False, _EMAIL_UNAVAILABLE
+        logger.info(
+            "[RESET-SCOPED] single-scope reset sent: email=%s company=%s", _email, company_id
+        )
+        return True, _EMAIL_OK
+
 
 # Singleton instance
 auth_service = AuthService()
