@@ -465,6 +465,7 @@ async def reset_password(request: ResetPasswordRequest):
     """
     from app.core.database import get_master_db as _get_master_db, DatabaseManager as _DB
     from app.core.security import hash_password
+    from app.models.master.global_user import sync_global_password as _sync_global
     from datetime import datetime, timezone
 
     master_db = _get_master_db()
@@ -559,6 +560,9 @@ async def reset_password(request: ResetPasswordRequest):
                     detail="Password update failed for one or more companies. Please try again.",
                 )
             await master_db.password_reset_tokens.delete_one({"_id": token})
+            # Sync the new hash into global_users so the O(1) no-company-code
+            # login path immediately uses the updated credentials.
+            await _sync_global(master_db, email=_email, new_password_hash=new_hash)
             logger.info(
                 "[RESET] all-scope SUCCESS email=%s companies=%d", _email, len(accounts)
             )
@@ -580,6 +584,9 @@ async def reset_password(request: ResetPasswordRequest):
                     detail="Account not found or password update failed.",
                 )
             await master_db.password_reset_tokens.delete_one({"_id": token})
+            # Sync the new hash into global_users so the O(1) no-company-code
+            # login path immediately uses the updated credentials.
+            await _sync_global(master_db, email=_email, new_password_hash=new_hash)
             logger.info("[RESET] single-scope SUCCESS email=%s company=%s", _email, _cid)
             return {"message": "Password reset successfully. Please log in.", "success": True}
 
@@ -640,6 +647,10 @@ async def reset_password(request: ResetPasswordRequest):
                 }},
             )
             await master_db.user_active_sessions.delete_one({"_id": str(owner_id)})
+        # Sync to global_users so the O(1) no-company-code login path uses the new hash
+        _owner_email = tenant.get("owner", {}).get("email", "")
+        if _owner_email:
+            await _sync_global(master_db, email=_owner_email, new_password_hash=new_hash)
         return {"message": "Password reset successfully. Please log in.", "success": True}
 
     # ── 4. Backward compat: company user reset_token (scan all tenants) ───────
@@ -670,6 +681,10 @@ async def reset_password(request: ResetPasswordRequest):
                 }},
             )
             await master_db.user_active_sessions.delete_one({"_id": str(user_id)})
+            # Sync to global_users so the O(1) no-company-code login path uses the new hash
+            _user_email = user.get("email", "")
+            if _user_email:
+                await _sync_global(master_db, email=_user_email, new_password_hash=new_hash)
             return {"message": "Password reset successfully. Please log in.", "success": True}
 
     raise HTTPException(
@@ -710,16 +725,27 @@ async def change_password(
         tenant = await master_db.tenants.find_one({"company_id": auth.company_id})
         if not tenant or not verify_password(current_password, tenant.get("owner", {}).get("password_hash", "")):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+        _new_hash = hash_password(new_password)
         await master_db.tenants.update_one(
             {"company_id": auth.company_id},
-            {"$set": {"owner.password_hash": hash_password(new_password)}}
+            {"$set": {"owner.password_hash": _new_hash}}
         )
-        # Also clear must_change_password in company_db if the owner doc exists there
+        # Sync password + clear must_change_password in company_db.users
         company_db = _get_company_db(auth.company_id)
         await company_db.users.update_one(
             {"_id": auth.user_id},
-            {"$set": {"must_change_password": False, "password_changed_at": now}}
+            {"$set": {
+                "password_hash": _new_hash,
+                "must_change_password": False,
+                "password_changed_at": now,
+                "updated_at": now,
+            }}
         )
+        # Sync to global_users so no-company-code login uses the new hash immediately
+        from app.models.master.global_user import sync_global_password as _sync_global_pw
+        _owner_email = tenant.get("owner", {}).get("email", "")
+        if _owner_email:
+            await _sync_global_pw(master_db, email=_owner_email, new_password_hash=_new_hash)
         return {"message": "Password changed successfully.", "success": True}
 
     if auth.company_id:
@@ -727,15 +753,21 @@ async def change_password(
         user = await company_db.users.find_one({"_id": auth.user_id, "is_deleted": False})
         if not user or not verify_password(current_password, user.get("password_hash", "")):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+        _new_hash = hash_password(new_password)
         await company_db.users.update_one(
             {"_id": auth.user_id},
             {"$set": {
-                "password_hash": hash_password(new_password),
+                "password_hash": _new_hash,
                 "must_change_password": False,
                 "password_changed_at": now,
                 "updated_at": now,
             }}
         )
+        # Sync to global_users so no-company-code login uses the new hash immediately
+        from app.models.master.global_user import sync_global_password as _sync_global_pw
+        _user_email = user.get("email", "")
+        if _user_email:
+            await _sync_global_pw(_get_master_db(), email=_user_email, new_password_hash=_new_hash)
         return {"message": "Password changed successfully.", "success": True}
 
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to change password")
