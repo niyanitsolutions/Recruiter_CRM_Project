@@ -13,7 +13,7 @@ from typing import Optional, List
 
 _BACKEND_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
