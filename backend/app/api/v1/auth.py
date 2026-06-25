@@ -3,7 +3,7 @@ Authentication API Endpoints
 Login, registration, and token management
 """
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from typing import Optional
 from pydantic import BaseModel
 import logging
