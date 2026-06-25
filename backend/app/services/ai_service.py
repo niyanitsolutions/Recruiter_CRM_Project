@@ -439,9 +439,12 @@ class GeminiAdapter(BaseAIAdapter):
             )
         elif http == 429:
             detail = "Gemini API quota exceeded. Please retry in a moment."
+        elif http == 503:
+            detail = f"Gemini API error 503: {g_msg}"
         else:
             detail = f"Gemini API error {http}: {g_msg}"
-        raise HTTPException(status_code=http if http in (400, 401, 403, 404, 429) else 502, detail=detail)
+        # Preserve 429 and 503 status codes so _call_with_retry can identify them as retryable.
+        raise HTTPException(status_code=http if http in (400, 401, 403, 404, 429, 503) else 502, detail=detail)
 
     # ── Test connection (full: list models + generate) ────────────────────────
 
@@ -859,23 +862,73 @@ class AIService:
             )
         return adapter
 
+    # Status codes from provider APIs that indicate a transient overload —
+    # safe to retry with backoff.  Non-transient errors (400, 401, 403, 404, 502)
+    # are surfaced immediately so the user sees the real reason.
+    _RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429, 503})
+
     @staticmethod
     async def _call_with_retry(adapter: BaseAIAdapter, prompt: str, config: dict) -> str:
-        retries = max(1, int(config.get("retry_count", 2)))
+        """Call provider with structured retry logic.
+
+        retry_count (from saved config, default 2) = total number of attempts.
+        Exponential backoff: 1 s after attempt 1, 2 s after attempt 2, etc.
+        429 and 503 are retried; all other HTTPExceptions surface immediately.
+        After all retries, the last provider error is re-raised verbatim so the
+        user sees "Gemini API error 503: ..." rather than a generic wrapper.
+        """
+        max_attempts = max(1, int(config.get("retry_count", 2)))
         last_exc: Exception | None = None
-        for attempt in range(retries):
+
+        for attempt in range(max_attempts):
             try:
+                logger.info(
+                    "ai_call attempt=%d/%d provider=%s model=%s",
+                    attempt + 1, max_attempts,
+                    config.get("provider", "?"), config.get("model", "?"),
+                )
                 return await adapter.call(prompt, config)
-            except HTTPException:
+
+            except HTTPException as exc:
+                last_exc = exc
+                remaining = max_attempts - attempt - 1
+                is_retryable = exc.status_code in AIService._RETRYABLE_HTTP_STATUSES
+
+                logger.warning(
+                    "ai_call_failed attempt=%d/%d http=%d retryable=%s remaining=%d detail=%r",
+                    attempt + 1, max_attempts, exc.status_code, is_retryable,
+                    remaining, str(exc.detail)[:200],
+                )
+
+                if is_retryable and remaining > 0:
+                    wait = float(2 ** attempt)  # 1 s, 2 s, 4 s …
+                    logger.info(
+                        "ai_retry_backoff attempt=%d/%d wait=%.1fs next_attempt=%d",
+                        attempt + 1, max_attempts, wait, attempt + 2,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+
+                # Non-retryable, or retryable but all attempts exhausted:
+                # re-raise the exact provider error so callers see the real detail.
                 raise
+
             except Exception as exc:
                 last_exc = exc
-                logger.warning("AI call attempt %d/%d failed: %s", attempt + 1, retries, exc)
-                if attempt < retries - 1:
-                    await asyncio.sleep(1)
+                remaining = max_attempts - attempt - 1
+                logger.warning(
+                    "ai_call_unexpected attempt=%d/%d remaining=%d error=%s",
+                    attempt + 1, max_attempts, remaining, exc,
+                )
+                if remaining > 0:
+                    await asyncio.sleep(float(2 ** attempt))
+
+        # Reached only when unexpected (non-HTTPException) errors exhaust all attempts.
+        if isinstance(last_exc, HTTPException):
+            raise last_exc
         raise HTTPException(
             status_code=502,
-            detail=f"AI provider failed after {retries} attempt(s): {last_exc}",
+            detail=f"AI provider failed after {max_attempts} attempt(s): {last_exc}",
         )
 
     @classmethod

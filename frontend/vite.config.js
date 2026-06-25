@@ -14,9 +14,11 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://127.0.0.1:8000',
           changeOrigin: true,
-          // Generous timeouts so employee leave requests (more DB queries) don't get dropped
-          proxyTimeout: 30000,   // 30 s — time for proxy to wait for backend response
-          timeout: 30000,        // 30 s — socket inactivity timeout
+          // Must exceed the Gemini backend timeout (60 s) so the proxy does not cut
+          // the connection before the backend can return the actual provider error.
+          // Formula: Gemini timeout (60 s) × max retry attempts (2) + backoff (3 s) + buffer = 150 s.
+          proxyTimeout: 150000,  // 150 s — time for proxy to wait for backend response
+          timeout: 150000,       // 150 s — socket inactivity timeout
         },
         // Proxy /uploads so resume files served by FastAPI StaticFiles
         // are accessible during local development without setting VITE_API_URL.
