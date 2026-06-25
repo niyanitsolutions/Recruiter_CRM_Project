@@ -670,6 +670,10 @@ class TenantService:
                 mobile=contact_number,
                 password_hash=hashed_pw,
             )
+            logger.info(
+                "[PROVISION-DIAG] upsert_global_user done | email=%s | global_user_id=%s | company_id=%s | user_id=%s",
+                email, global_user_id, company_id, user_id,
+            )
             await ensure_user_company_map(
                 master_db,
                 global_user_id=global_user_id,
@@ -677,6 +681,10 @@ class TenantService:
                 local_user_id=user_id,
                 role="admin",
                 is_owner=is_owner,
+            )
+            logger.info(
+                "[PROVISION-DIAG] ensure_user_company_map done | global_user_id=%s | company_id=%s | local_user_id=%s | is_owner=%s",
+                global_user_id, company_id, user_id, is_owner,
             )
 
             await company_db.audit_logs.insert_one({

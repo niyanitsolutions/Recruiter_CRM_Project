@@ -37,8 +37,19 @@ const ResetPassword = () => {
       toast.success('Password reset successfully!')
       setTimeout(() => navigate('/login'), 3000)
     } catch (err) {
-      const detail = err.response?.data?.detail
-      const msg = typeof detail === 'string' ? detail : 'Invalid or expired reset link.'
+      const data = err.response?.data
+      const detail = data?.detail
+      const message = data?.message
+      const msg =
+        (typeof detail === 'string' && detail)
+          ? detail
+          : (typeof message === 'string' && message)
+          ? message
+          : err.response?.status === 429
+          ? 'Too many attempts. Please wait a minute before trying again.'
+          : err.response?.status
+          ? `Reset failed (HTTP ${err.response.status}). Please request a new reset link.`
+          : 'Unable to reach the server. Check your connection and try again.'
       setStatus('error')
       setErrorMessage(msg)
     } finally {

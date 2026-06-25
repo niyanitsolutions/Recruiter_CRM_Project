@@ -8,7 +8,6 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from contextlib import asynccontextmanager
 import asyncio
@@ -304,7 +303,18 @@ app = FastAPI(
 )
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+async def _json_rate_limit_handler(_request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    msg = f"Too many requests. Limit: {exc.detail}. Please wait before trying again."
+    return JSONResponse(
+        status_code=429,
+        content={"success": False, "detail": msg, "message": msg},
+        headers={"Retry-After": "60"},
+    )
+
+
+app.add_exception_handler(RateLimitExceeded, _json_rate_limit_handler)
 
 # ── Global exception handlers ─────────────────────────────────────────────────
 
@@ -320,9 +330,10 @@ async def validation_exception_handler(_request: Request, exc: RequestValidation
         loc = " → ".join(str(l) for l in err.get("loc", []) if l != "body")
         msg = err.get("msg", "Invalid value").replace("Value error, ", "")
         messages.append(f"{loc}: {msg}" if loc else msg)
+    combined = "; ".join(messages)
     return JSONResponse(
         status_code=422,
-        content={"success": False, "message": "; ".join(messages)},
+        content={"success": False, "detail": combined, "message": combined},
     )
 
 
@@ -330,7 +341,7 @@ async def validation_exception_handler(_request: Request, exc: RequestValidation
 async def unhandled_exception_handler(request: Request, exc: Exception):
     """
     Catch-all handler: converts any unhandled exception into a standard
-    {"success": false, "message": "..."} JSON response and logs it.
+    JSON response and logs it.
     HTTPException is intentionally excluded — FastAPI handles those natively.
     """
     from fastapi import HTTPException as FastAPIHTTPException
@@ -338,9 +349,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         # Let FastAPI's default HTTPException handler deal with it
         raise exc
     logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    msg = "An unexpected error occurred. Please try again later."
     return JSONResponse(
         status_code=500,
-        content={"success": False, "message": "An unexpected error occurred. Please try again later."},
+        content={"success": False, "detail": msg, "message": msg},
     )
 
 

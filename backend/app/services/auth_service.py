@@ -224,7 +224,18 @@ class AuthService:
             ]
         })
 
+        logger.info(
+            "[LOGIN-DIAG] Global user lookup | identifier=%s | found=%s",
+            identifier_normalized, bool(global_user),
+        )
+
         if global_user:
+            _gu_hash = global_user.get("password_hash", "")
+            logger.info(
+                "[LOGIN-DIAG] Global user found | id=%s | has_hash=%s | hash_prefix=%s",
+                global_user.get("_id"), bool(_gu_hash), _gu_hash[:7] if _gu_hash else "NONE",
+            )
+
             if not global_user.get("is_active", True):
                 return None, "Your account has been deactivated. Please contact support."
 
@@ -232,7 +243,10 @@ class AuthService:
             if _lo_err:
                 return None, _lo_err
 
-            if not verify_password(password, global_user.get("password_hash", "")):
+            _pw_ok = verify_password(password, _gu_hash)
+            logger.info("[LOGIN-DIAG] Password verify (global path) | ok=%s", _pw_ok)
+
+            if not _pw_ok:
                 # ── FIX 4: apply lockout after threshold (global-users path) ──
                 _gu_new_count = (global_user.get("failed_login_attempts", 0) or 0) + 1
                 _gu_upd: dict = {"$inc": {"failed_login_attempts": 1}}
@@ -249,6 +263,11 @@ class AuthService:
                 {"global_user_id": global_user["_id"], "status": "active"}
             ).to_list(None)
 
+            logger.info(
+                "[LOGIN-DIAG] Mappings found | global_user_id=%s | count=%d",
+                global_user.get("_id"), len(mappings),
+            )
+
             if mappings:
                 valid_matches = []
                 last_error = ""
@@ -258,9 +277,11 @@ class AuthService:
                         {"company_id": cid, "is_deleted": {"$ne": True}}
                     )
                     if not tenant:
+                        logger.warning("[LOGIN-DIAG] Tenant not found for company_id=%s", cid)
                         continue
                     is_valid, error = await tenant_resolver.validate_tenant_access(tenant)
                     if not is_valid:
+                        logger.warning("[LOGIN-DIAG] Tenant access invalid | company_id=%s | error=%s", cid, error)
                         if mapping.get("is_owner") and error.startswith("SUBSCRIPTION_EXPIRED"):
                             error = "SUBSCRIPTION_EXPIRED_OWNER" + error[len("SUBSCRIPTION_EXPIRED"):]
                         last_error = error
@@ -270,6 +291,10 @@ class AuthService:
                         {"_id": mapping["local_user_id"], "is_deleted": False}
                     )
                     if not company_user:
+                        logger.warning(
+                            "[LOGIN-DIAG] company_user not found | company_id=%s | local_user_id=%s",
+                            cid, mapping["local_user_id"],
+                        )
                         continue
                     if mapping.get("is_owner"):
                         company_user["is_owner"] = True
@@ -277,6 +302,10 @@ class AuthService:
                     valid_matches.append((tenant, company_user))
 
                 if not valid_matches:
+                    logger.warning(
+                        "[LOGIN-DIAG] No valid matches after checking %d mapping(s) | last_error=%s",
+                        len(mappings), last_error,
+                    )
                     return None, last_error or "No valid company access found. Please check your subscription."
 
                 # Reset failed-attempt counter and clear any lockout on successful auth
@@ -308,6 +337,13 @@ class AuthService:
 
         # ── Legacy fallback: O(N) scan for users not yet in global_users ─────
         # Covers tenants registered before the global_users migration was run.
+        if global_user:
+            logger.warning(
+                "[LOGIN-DIAG] Global user found but NO active mappings — falling through to legacy path | identifier=%s | global_user_id=%s",
+                identifier_normalized, global_user.get("_id"),
+            )
+        else:
+            logger.info("[LOGIN-DIAG] Global user not found — trying legacy path | identifier=%s", identifier_normalized)
         ci = _re.compile(f"^{_re.escape(identifier)}$", _re.IGNORECASE)
 
         # Step 1 — owner lookup (single-pass across master_db.tenants)
@@ -347,7 +383,12 @@ class AuthService:
                 return None, _lo_err
 
             ph = owner_tenant.get("owner", {}).get("password_hash", "")
-            if not verify_password(password, ph):
+            _legacy_pw_ok = verify_password(password, ph)
+            logger.info(
+                "[LOGIN-DIAG] Legacy owner path | company_id=%s | has_ph=%s | pw_ok=%s",
+                owner_tenant.get("company_id"), bool(ph), _legacy_pw_ok,
+            )
+            if not _legacy_pw_ok:
                 await AuthService._increment_failed_attempts(
                     company_id, str(owner_basic.get("_id", "")), True
                 )

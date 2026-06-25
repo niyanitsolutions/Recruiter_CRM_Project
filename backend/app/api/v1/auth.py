@@ -493,27 +493,27 @@ async def reset_password(_http_request: Request, request: ResetPasswordRequest):
 
         async def _update_company_password(cid: str) -> bool:
             """Update password in one company's DB (owner + users). Returns True on success."""
-            t = await master_db.tenants.find_one(
-                {"company_id": cid, "is_deleted": {"$ne": True}}
-            )
-            owner = t.get("owner", {}) if t else {}
-            is_owner = owner.get("email", "").lower() == _email.lower()
-
-            if is_owner:
-                await master_db.tenants.update_one(
-                    {"company_id": cid},
-                    {"$set": {
-                        "owner.password_hash": new_hash,
-                        "owner.logout_at": now,
-                        "owner.active_session_token": None,
-                        "owner.active_session_at": None,
-                    }},
-                )
-                owner_id = owner.get("_id")
-                if owner_id:
-                    await master_db.user_active_sessions.delete_one({"_id": str(owner_id)})
-
             try:
+                t = await master_db.tenants.find_one(
+                    {"company_id": cid, "is_deleted": {"$ne": True}}
+                )
+                owner = t.get("owner", {}) if t else {}
+                is_owner = owner.get("email", "").lower() == _email.lower()
+
+                if is_owner:
+                    await master_db.tenants.update_one(
+                        {"company_id": cid},
+                        {"$set": {
+                            "owner.password_hash": new_hash,
+                            "owner.logout_at": now,
+                            "owner.active_session_token": None,
+                            "owner.active_session_at": None,
+                        }},
+                    )
+                    owner_id = owner.get("_id")
+                    if owner_id:
+                        await master_db.user_active_sessions.delete_one({"_id": str(owner_id)})
+
                 cdb = await _DB.resolve_and_get_company_db(cid)
                 res = await cdb.users.update_one(
                     {"email": _email, "is_deleted": {"$ne": True}},
@@ -540,8 +540,8 @@ async def reset_password(_http_request: Request, request: ResetPasswordRequest):
 
                 return res.modified_count > 0 or is_owner
             except Exception as exc:
-                logger.error("[RESET] company update error company=%s | %s", cid, exc)
-                return is_owner  # owner update succeeded even if company_db failed
+                logger.error("[RESET] company update error company=%s | %s", cid, exc, exc_info=True)
+                return False
 
         if _scope == "all":
             accounts = await auth_service.lookup_accounts_for_reset(_email)
