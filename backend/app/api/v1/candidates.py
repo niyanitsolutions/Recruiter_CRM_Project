@@ -286,107 +286,17 @@ async def extract_resume_file(
     if not raw_text.strip():
         raise HTTPException(status_code=422, detail="Could not extract text from the uploaded file.")
 
-    return await _parse_resume_with_claude(raw_text)
+    return await _ai_parse_resume(raw_text)
 
 
-async def _parse_resume_with_claude(raw_text: str) -> dict:
-    """
-    Send extracted resume text to Claude API and return fully structured
-    candidate data: name, contact, skills, education array, experience array.
-    Falls back to empty defaults if any field is missing.
-    """
-    import json
-    import logging as _log
-    from app.core.config import settings
+async def _ai_parse_resume(raw_text: str) -> dict:
+    """Parse resume via the centralized AI provider service and return formatted candidate data."""
+    import re
+    from app.services.ai_service import AIService
 
-    logger = _log.getLogger(__name__)
+    parsed = await AIService.parse_resume(raw_text, get_master_db())
 
-    if not settings.ANTHROPIC_API_KEY:
-        logger.warning("ANTHROPIC_API_KEY not configured — resume parsing unavailable")
-        raise HTTPException(
-            status_code=503,
-            detail="Resume parsing is not configured. Please set ANTHROPIC_API_KEY in environment."
-        )
-
-    prompt = f"""Parse this resume and return a JSON object with exactly this structure.
-Return ONLY the raw JSON — no explanation, no markdown, no code fences.
-
-{{
-  "full_name": "",
-  "email": "",
-  "phone": "",
-  "location": "",
-  "linkedin": "",
-  "current_role": "",
-  "total_experience_years": 0,
-  "skills": [],
-  "education": [
-    {{
-      "degree": "",
-      "field_of_study": "",
-      "institution": "",
-      "year_from": "",
-      "year_to": "",
-      "score": "",
-      "score_type": ""
-    }}
-  ],
-  "experience": [
-    {{
-      "company_name": "",
-      "job_title": "",
-      "start_date": "",
-      "end_date": "",
-      "is_current": false,
-      "description": ""
-    }}
-  ]
-}}
-
-Rules:
-- degree: full degree name (e.g. "Bachelor of Technology", "Master of Business Administration")
-- field_of_study: specialization/branch (e.g. "Computer Science", "Finance")
-- institution: college or university name
-- year_from / year_to: 4-digit year strings (e.g. "2018", "2022")
-- score: numeric value as string (e.g. "8.5" or "78")
-- score_type: "CGPA" or "Percentage" — infer from context
-- start_date / end_date: "YYYY-MM" format if known, else ""
-- is_current: true if candidate is currently working at this company
-- If a field cannot be determined, use "" for strings, 0 for numbers, [] for arrays, false for booleans
-- total_experience_years: numeric (e.g. 3.5 for 3 years 6 months)
-- skills: flat list of skill name strings
-
-Resume text:
-{raw_text[:8000]}"""
-
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-        message = client.messages.create(
-            model="claude-sonnet-4-5-20251001",
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        response_text = message.content[0].text.strip()
-    except Exception as exc:
-        logger.error("Claude API call failed: %s", exc)
-        raise HTTPException(status_code=502, detail=f"Resume parsing service error: {exc}")
-
-    # Strip accidental markdown code fences
-    if response_text.startswith("```"):
-        response_text = response_text.split("```")[1]
-        if response_text.startswith("json"):
-            response_text = response_text[4:]
-    response_text = response_text.strip()
-
-    try:
-        parsed = json.loads(response_text)
-    except json.JSONDecodeError as e:
-        logger.error("Claude returned invalid JSON: %s\nRaw: %s", e, response_text[:500])
-        raise HTTPException(status_code=502, detail="Resume parser returned invalid data. Please try again.")
-
-    # Normalise: split full_name → first_name / last_name
-    full_name = (parsed.get("full_name") or "").strip()
+    full_name = parsed.get("full_name", "")
     name_parts = full_name.split(" ", 1) if full_name else ["", ""]
     first_name = name_parts[0]
     last_name = name_parts[1] if len(name_parts) > 1 else ""
@@ -1243,7 +1153,7 @@ async def public_extract_resume_file(file: UploadFile = File(...)):
     if not raw_text.strip():
         raise HTTPException(status_code=422, detail="Could not extract text from the uploaded file.")
 
-    return await _parse_resume_with_claude(raw_text)
+    return await _ai_parse_resume(raw_text)
 
 
 @public_router.get("/candidate-form/{token}")

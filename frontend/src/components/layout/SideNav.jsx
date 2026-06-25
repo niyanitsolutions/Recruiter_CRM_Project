@@ -37,6 +37,7 @@ import {
   LayoutGrid,
   Layers,
   BookOpen,
+  Brain,
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType } from '../../store/authSlice'
@@ -236,6 +237,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
           { path: '/super-admin/subscriptions', icon: FileText,        label: 'Subscriptions' },
           { path: '/super-admin/payments',      icon: DollarSign,      label: 'Payments' },
           { path: '/super-admin/reports',       icon: BarChart2,       label: 'Reports' },
+          { path: '/super-admin/ai-provider',   icon: Brain,           label: 'AI Provider' },
           { path: '/super-admin/settings',      icon: Settings,        label: 'Settings' },
         ],
         sections: [],

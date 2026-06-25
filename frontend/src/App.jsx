@@ -51,6 +51,7 @@ const Plans                = lazy(() => import('./pages/super-admin').then(m => 
 const Subscriptions        = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Subscriptions })))
 const SuperAdminReports    = lazy(() => import('./pages/super-admin').then(m => ({ default: m.SuperAdminReports })))
 const Discounts            = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Discounts })))
+const AIProviderManagement = lazy(() => import('./pages/super-admin').then(m => ({ default: m.AIProviderManagement })))
 
 // Seller Portal
 const SellerDashboard      = lazy(() => import('./pages/seller').then(m => ({ default: m.SellerDashboard })))
@@ -1223,7 +1224,8 @@ function App() {
         <Route path="/super-admin/payments"          element={<Payments />} />
         <Route path="/super-admin/reports"           element={<SuperAdminReports />} />
         <Route path="/super-admin/profile"           element={<SuperAdminProfile />} />
-        <Route path="/super-admin/settings"          element={<SuperAdminSettings />} />
+        <Route path="/super-admin/settings"            element={<SuperAdminSettings />} />
+        <Route path="/super-admin/ai-provider"        element={<AIProviderManagement />} />
       </Route>
 
       {/* SELLER PORTAL */}
