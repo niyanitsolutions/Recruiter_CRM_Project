@@ -339,12 +339,21 @@ class SettingsService:
             upsert=True
         )
         
-        await AuditService.log(
-            db=db, action="update", entity_type="company_settings",
-            entity_id="settings", entity_name="Company Settings",
-            user_id=updated_by, new_value=update_dict
-        )
-        
+        try:
+            await AuditService(db).log(
+                action="update",
+                entity_type="company_settings",
+                entity_id="settings",
+                entity_name="Company Settings",
+                user_id=updated_by,
+                user_name="",
+                user_role="",
+                description="Company settings updated",
+                new_value=update_dict,
+            )
+        except Exception:
+            pass  # Audit logging must never break settings save
+
         return await SettingsService.get_company_settings(db)
     
     # ============== Dropdown Data ==============

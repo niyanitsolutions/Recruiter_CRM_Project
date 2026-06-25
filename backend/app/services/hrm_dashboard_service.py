@@ -38,6 +38,10 @@ class HRMDashboardService:
         total_employees = await emp_col.count_documents({
             "company_id": company_id,
             "is_deleted": False,
+        })
+        active_employees = await emp_col.count_documents({
+            "company_id": company_id,
+            "is_deleted": False,
             "employment_status": "active",
         })
 
@@ -103,8 +107,8 @@ class HRMDashboardService:
             "to_date": {"$gte": today_str},
         })
 
-        # Absent = employees who have NO attendance record today and are not on leave
-        absent_today = max(0, total_employees - present_today - on_leave_today)
+        # Absent = active employees who have no attendance record today and are not on leave
+        absent_today = max(0, active_employees - present_today - on_leave_today)
 
         pending_leaves = await leave_col.count_documents({
             "company_id": company_id,
@@ -141,6 +145,7 @@ class HRMDashboardService:
 
         return {
             "total_employees":              total_employees,
+            "active_employees":             active_employees,
             "present_today":                present_today,
             "absent_today":                 absent_today,
             "late_today":                   late_today,

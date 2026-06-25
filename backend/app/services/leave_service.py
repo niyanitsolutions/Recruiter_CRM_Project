@@ -374,36 +374,12 @@ class LeaveService:
     # ── Balance management ────────────────────────────────────────────────────
 
     async def _deduct_balance(self, emp_id: str, company_id: str, leave_type: str, days: float):
-        year = date.today().year
-        field_map = {
-            LeaveType.CASUAL: "casual_used",
-            LeaveType.SICK:   "sick_used",
-            LeaveType.EARNED: "earned_used",
-        }
-        field = field_map.get(leave_type)
-        if not field:
-            return
-        await self.bal.update_one(
-            {"employee_id": emp_id, "company_id": company_id, "year": year},
-            {"$inc": {field: days}},
-            upsert=True,
-        )
+        """No-op: balance is now computed live from leave records via get_policy_balances()."""
+        pass
 
     async def _restore_balance(self, emp_id: str, company_id: str, leave_type: str, days: float):
-        """Restore balance when leave is cancelled after approval."""
-        year = date.today().year
-        field_map = {
-            LeaveType.CASUAL: "casual_used",
-            LeaveType.SICK:   "sick_used",
-            LeaveType.EARNED: "earned_used",
-        }
-        field = field_map.get(leave_type)
-        if not field:
-            return
-        await self.bal.update_one(
-            {"employee_id": emp_id, "company_id": company_id, "year": year},
-            {"$inc": {field: -days}},
-        )
+        """No-op: balance is now computed live from leave records via get_policy_balances()."""
+        pass
 
     async def get_balance(self, employee_id: str, company_id: str, year: int) -> dict:
         """Legacy single-doc balance (kept for backward compat). Prefer get_policy_balances()."""
@@ -615,7 +591,7 @@ class LeaveService:
         today_str = date.today().isoformat()
         return await self.col.count_documents({
             "company_id": company_id,
-            "status": LeaveStatus.APPROVED,
+            "status": LeaveStatus.APPROVED.value,
             "from_date": {"$lte": today_str},
             "to_date":   {"$gte": today_str},
         })

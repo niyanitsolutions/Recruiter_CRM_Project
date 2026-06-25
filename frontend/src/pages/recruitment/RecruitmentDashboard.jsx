@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import toast from 'react-hot-toast'
 import { useSelector } from 'react-redux'
 import { Link } from 'react-router-dom'
 import {
@@ -234,7 +235,7 @@ const RecruitmentDashboard = () => {
       _cache.ts = Date.now()
       _cache.company_id = companyId
     } catch (err) {
-      console.error('Dashboard error:', err)
+      toast.error('Failed to load dashboard data')
     } finally {
       setLoading(false)
       setRefreshing(false)

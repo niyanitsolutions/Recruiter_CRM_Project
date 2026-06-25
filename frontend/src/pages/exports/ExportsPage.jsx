@@ -3,6 +3,7 @@
  * Data export management
  */
 import React, { useState, useEffect } from 'react';
+import { toast } from 'react-hot-toast';
 import { Download, FileSpreadsheet, Clock, CheckCircle, XCircle, RefreshCw, Plus } from 'lucide-react';
 import importExportService from '../../services/importExportService';
 import { formatDateTime } from '../../utils/format';
@@ -26,7 +27,7 @@ const ExportsPage = () => {
       const res = await importExportService.getExportJobs({ page_size: 20 });
       setExports(res.items || []);
     } catch (error) {
-      console.error('Error loading exports:', error);
+      toast.error('Failed to load exports');
     } finally {
       setLoading(false);
     }
@@ -37,9 +38,11 @@ const ExportsPage = () => {
       const res = await importExportService.downloadExport(exportJob.id);
       if (res.download_url) {
         window.open(res.download_url, '_blank');
+      } else {
+        toast.error('Download link not available');
       }
     } catch (error) {
-      console.error('Error downloading export:', error);
+      toast.error(error?.response?.data?.detail || 'Failed to download export');
     }
   };
 

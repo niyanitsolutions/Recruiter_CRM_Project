@@ -181,12 +181,13 @@ class ApplicationService:
             pass
 
         try:
-            await AuditService.log(
-                db=db, action="create", entity_type="application",
+            await AuditService(db).log(
+                action="create", entity_type="application",
                 entity_id=app_dict["_id"],
                 entity_name=f"{candidate.get('full_name')} - {job.get('title')}",
-                user_id=created_by,
-                new_value={"candidate": candidate.get("full_name"), "job": job.get("title")}
+                user_id=created_by, user_name="", user_role="",
+                description=f"Application created for {candidate.get('full_name')}",
+                new_value={"candidate": candidate.get("full_name"), "job": job.get("title")},
             )
         except Exception:
             pass
@@ -467,14 +468,14 @@ class ApplicationService:
             pass
 
         try:
-            await AuditService.log(
-                db=db, action="status_change", entity_type="application",
+            await AuditService(db).log(
+                action="status_change", entity_type="application",
                 entity_id=application_id,
                 entity_name=f"{existing.get('candidate_name')} - {existing.get('job_title')}",
-                user_id=updated_by,
+                user_id=updated_by, user_name="", user_role="",
                 description=f"Status changed from {old_status} to {new_status}",
                 old_value={"status": old_status},
-                new_value={"status": new_status}
+                new_value={"status": new_status},
             )
         except Exception:
             pass
@@ -540,14 +541,17 @@ class ApplicationService:
             }}
         )
         
-        await AuditService.log(
-            db=db, action="assign", entity_type="application",
-            entity_id=application_id,
-            entity_name=f"{existing.get('candidate_name')} - {existing.get('job_title')}",
-            user_id=assigned_by,
-            description=f"Assigned to {assignee.get('full_name')}"
-        )
-        
+        try:
+            await AuditService(db).log(
+                action="assign", entity_type="application",
+                entity_id=application_id,
+                entity_name=f"{existing.get('candidate_name')} - {existing.get('job_title')}",
+                user_id=assigned_by, user_name="", user_role="",
+                description=f"Assigned to {assignee.get('full_name')}",
+            )
+        except Exception:
+            pass
+
         return await ApplicationService.get_application(db, application_id)
     
     @staticmethod
@@ -586,13 +590,17 @@ class ApplicationService:
             {"$inc": {"total_applications": -1}}
         )
         
-        await AuditService.log(
-            db=db, action="delete", entity_type="application",
-            entity_id=application_id,
-            entity_name=f"{existing.get('candidate_name')} - {existing.get('job_title')}",
-            user_id=deleted_by
-        )
-        
+        try:
+            await AuditService(db).log(
+                action="delete", entity_type="application",
+                entity_id=application_id,
+                entity_name=f"{existing.get('candidate_name')} - {existing.get('job_title')}",
+                user_id=deleted_by, user_name="", user_role="",
+                description="Application deleted",
+            )
+        except Exception:
+            pass
+
         return True
     
     @staticmethod

@@ -1,6 +1,6 @@
 """HRM — Offer Template API Routes"""
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
 from app.models.company.hrm_offer_template import (
@@ -24,8 +24,8 @@ async def create_template(
 @router.get("")
 async def list_templates(
     template_type: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:offer_templates:view"])),

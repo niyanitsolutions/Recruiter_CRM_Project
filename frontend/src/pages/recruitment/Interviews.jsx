@@ -77,7 +77,7 @@ const Interviews = () => {
       const statusRes = await interviewService.getStatuses()
       setStatuses(statusRes.data || [])
     } catch (error) {
-      console.error('Error loading dropdowns:', error)
+      toast.error('Failed to load filter options')
     }
   }
 

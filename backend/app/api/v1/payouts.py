@@ -22,7 +22,7 @@ from app.services.partner_payout_service import PartnerPayoutService
 router = APIRouter(prefix="/payouts", tags=["Partner Payouts"])
 
 
-# ============== Payout Endpoints ==============
+# ============== Payout list / self routes (static paths first) ==============
 
 @router.get("", response_model=PartnerPayoutListResponse)
 async def list_payouts(
@@ -37,11 +37,8 @@ async def list_payouts(
 ):
     """List payouts with filters"""
     service = PartnerPayoutService(db)
-    
-    # Partners can only see their own payouts
     if current_user.get("role") == "partner":
         partner_id = current_user["id"]
-    
     return await service.list_payouts(
         company_id=current_user["company_id"],
         page=page,
@@ -111,44 +108,7 @@ async def get_accounts_dashboard(
     return await service.get_accounts_dashboard(current_user["company_id"])
 
 
-@router.get("/{payout_id}", response_model=PartnerPayoutResponse)
-async def get_payout(
-    payout_id: str,
-    current_user: dict = Depends(require_permissions(["payouts:view"])),
-    db = Depends(get_company_db)
-):
-    """Get payout by ID"""
-    service = PartnerPayoutService(db)
-    payout = await service.get_payout_by_id(payout_id, current_user["company_id"])
-    
-    if not payout:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payout not found"
-        )
-    
-    # Partners can only see their own payouts
-    if current_user.get("role") == "partner" and payout.partner_id != current_user["id"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
-    
-    return payout
-
-
-@router.post("/update-eligibility")
-async def update_payout_eligibility(
-    current_user: dict = Depends(require_permissions(["payouts:edit"])),
-    db = Depends(get_company_db)
-):
-    """Update payout eligibility for all pending payouts (scheduler/admin)"""
-    service = PartnerPayoutService(db)
-    count = await service.update_payout_eligibility(current_user["company_id"])
-    return {"message": f"Updated {count} payouts to eligible"}
-
-
-# ============== Invoice Endpoints ==============
+# ============== Invoice Endpoints (all BEFORE /{payout_id} to avoid shadowing) ==============
 
 @router.post("/invoices", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
 async def raise_invoice(
@@ -158,7 +118,6 @@ async def raise_invoice(
 ):
     """Raise invoice for eligible payouts (Partner)"""
     service = PartnerPayoutService(db)
-    
     try:
         return await service.raise_invoice(
             data=data,
@@ -167,10 +126,7 @@ async def raise_invoice(
             created_by=current_user["id"]
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.get("/invoices", response_model=InvoiceListResponse)
@@ -184,11 +140,8 @@ async def list_invoices(
 ):
     """List invoices with filters"""
     service = PartnerPayoutService(db)
-    
-    # Partners can only see their own invoices
     if current_user.get("role") == "partner":
         partner_id = current_user["id"]
-    
     return await service.list_invoices(
         company_id=current_user["company_id"],
         page=page,
@@ -256,20 +209,10 @@ async def get_invoice(
     """Get invoice by ID"""
     service = PartnerPayoutService(db)
     invoice = await service.get_invoice_by_id(invoice_id, current_user["company_id"])
-    
     if not invoice:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invoice not found"
-        )
-    
-    # Partners can only see their own invoices
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invoice not found")
     if current_user.get("role") == "partner" and invoice.partner_id != current_user["id"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     return invoice
 
 
@@ -288,13 +231,9 @@ async def approve_invoice(
         company_id=current_user["company_id"],
         approved_by=current_user["id"]
     )
-    
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invoice not found or not in submitted status"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Invoice not found or not in submitted status")
     return result
 
 
@@ -313,13 +252,9 @@ async def reject_invoice(
         company_id=current_user["company_id"],
         rejected_by=current_user["id"]
     )
-    
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invoice not found or not in submitted status"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Invoice not found or not in submitted status")
     return result
 
 
@@ -338,14 +273,39 @@ async def record_payment(
         company_id=current_user["company_id"],
         recorded_by=current_user["id"]
     )
-    
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Invoice not found or not in approved status"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Invoice not found or not in approved status")
     return result
+
+
+# ============== Parameterised payout route (AFTER all static paths) ==============
+
+@router.post("/update-eligibility")
+async def update_payout_eligibility(
+    current_user: dict = Depends(require_permissions(["payouts:edit"])),
+    db = Depends(get_company_db)
+):
+    """Update payout eligibility for all pending payouts (scheduler/admin)"""
+    service = PartnerPayoutService(db)
+    count = await service.update_payout_eligibility(current_user["company_id"])
+    return {"message": f"Updated {count} payouts to eligible"}
+
+
+@router.get("/{payout_id}", response_model=PartnerPayoutResponse)
+async def get_payout(
+    payout_id: str,
+    current_user: dict = Depends(require_permissions(["payouts:view"])),
+    db = Depends(get_company_db)
+):
+    """Get payout by ID"""
+    service = PartnerPayoutService(db)
+    payout = await service.get_payout_by_id(payout_id, current_user["company_id"])
+    if not payout:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payout not found")
+    if current_user.get("role") == "partner" and payout.partner_id != current_user["id"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    return payout
 
 
 # ============== Partner Stats ==============

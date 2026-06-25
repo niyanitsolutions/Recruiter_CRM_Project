@@ -100,8 +100,9 @@ async def validate_login_access(
 
     # ── Load tenant attendance settings ───────────────────────────────────────
     settings_doc = await company_db["company_settings"].find_one({}) or {}
-    geo_enabled   = bool(settings_doc.get("attendance_geo_fence_enabled", False))
-    ip_enabled    = bool(settings_doc.get("attendance_ip_restriction_enabled", False))
+    # Field names match CompanySettings model: geo_fence_enabled, geo_fence_locations
+    geo_enabled = bool(settings_doc.get("geo_fence_enabled", False))
+    ip_enabled  = bool(settings_doc.get("attendance_ip_restriction_enabled", False))
 
     # Fast-exit if both are disabled (default state)
     if not geo_enabled and not ip_enabled:
@@ -149,21 +150,30 @@ async def validate_login_access(
     # ── OFFICE MODE: apply geo fence + IP restriction ──────────────────────────
     deny_reason = ""
 
-    # Geo fence
+    # Geo fence — settings stores a list of GeoFenceLocation objects
+    # (each has latitude, longitude, radius in metres).
+    # Employee is allowed if they are within ANY configured zone.
     if geo_enabled and not bypass_geo:
-        office_lat = settings_doc.get("attendance_geo_fence_latitude")
-        office_lon = settings_doc.get("attendance_geo_fence_longitude")
-        radius_m   = int(settings_doc.get("attendance_geo_fence_radius_meters", 100))
+        geo_locations = settings_doc.get("geo_fence_locations") or []
 
-        if office_lat is not None and office_lon is not None:
-            if latitude is not None and longitude is not None:
-                dist = _haversine_meters(latitude, longitude, office_lat, office_lon)
-                if dist > radius_m:
-                    deny_reason = (
-                        "You are not in the office location required by your organization. "
-                        "Please contact HR if you require remote access approval."
-                    )
-            # If lat/lon not provided by client → geo check skipped (backward compatible)
+        if geo_locations and latitude is not None and longitude is not None:
+            inside_any = False
+            for zone in geo_locations:
+                zone_lat = zone.get("latitude")
+                zone_lon = zone.get("longitude")
+                zone_radius = int(zone.get("radius", 500))
+                if zone_lat is None or zone_lon is None:
+                    continue
+                dist = _haversine_meters(latitude, longitude, zone_lat, zone_lon)
+                if dist <= zone_radius:
+                    inside_any = True
+                    break
+            if not inside_any:
+                deny_reason = (
+                    "You are not in the office location required by your organization. "
+                    "Please contact HR if you require remote access approval."
+                )
+        # If no zones configured or lat/lon not provided → geo check skipped (backward compatible)
 
     # IP restriction (only if geo did not already deny)
     if not deny_reason and ip_enabled and not bypass_ip:

@@ -3,7 +3,7 @@ from datetime import datetime, date, timezone, timedelta
 from typing import Optional
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
 from app.models.company.exit_management import ExitCreate, ExitUpdate, ExitStatusUpdate
@@ -98,8 +98,8 @@ async def list_exit_requests(
     status: Optional[str] = None,
     department_id: Optional[str] = None,
     search: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:exit:manage"])),

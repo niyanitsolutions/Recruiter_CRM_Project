@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from app.core.dependencies import get_current_user, get_company_db, require_permissions
 from app.middleware.tenant import get_master_database
 from app.services.settings_service import SettingsService
+from app.services.audit_service import AuditService
 from app.models.company.settings import (
     CompanySettingsUpdate,
     GeoFenceLocation,
@@ -279,6 +280,16 @@ async def save_smtp_config(
         }},
         upsert=True,
     )
+    try:
+        await AuditService(db).log(
+            action="update", entity_type="smtp_config",
+            entity_id="smtp", entity_name="SMTP Configuration",
+            user_id=current_user["id"], user_name=current_user.get("full_name", ""),
+            user_role=current_user.get("role", ""),
+            description=f"SMTP configuration updated (host={data.host})",
+        )
+    except Exception:
+        pass
     return {"success": True, "message": "SMTP configuration saved and verified"}
 
 
@@ -289,6 +300,16 @@ async def delete_smtp_config(
 ):
     """Remove tenant SMTP config (will fall back to system SMTP)."""
     await db.smtp_config.delete_one({"_id": "smtp"})
+    try:
+        await AuditService(db).log(
+            action="delete", entity_type="smtp_config",
+            entity_id="smtp", entity_name="SMTP Configuration",
+            user_id=current_user["id"], user_name=current_user.get("full_name", ""),
+            user_role=current_user.get("role", ""),
+            description="SMTP configuration removed",
+        )
+    except Exception:
+        pass
     return {"success": True, "message": "SMTP configuration removed"}
 
 

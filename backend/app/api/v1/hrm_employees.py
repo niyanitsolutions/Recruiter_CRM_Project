@@ -1,14 +1,15 @@
 """HRM — Employee API Routes"""
+import logging
 import os
-import sys
 from typing import Optional
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions, require_any_permission
 from app.models.company.employee import EmployeeCreate, EmployeeUpdate
 from app.services.employee_service import EmployeeService
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/hrm/employees", tags=["HRM - Employees"])
 
 
@@ -36,8 +37,8 @@ async def list_employees(
     status: Optional[str] = None,
     department_id: Optional[str] = None,
     search: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:employees:view"])),
@@ -113,11 +114,9 @@ async def upload_employee_photo(
         {"_id": 1, "crm_user_id": 1},
     )
     if not emp:
-        print(
-            f"[photo-upload] employee not found — id={employee_id!r}  "
-            f"company_id={cu.get('company_id')!r}",
-            file=sys.stderr,
-            flush=True,
+        logger.warning(
+            "photo-upload: employee not found — id=%r company_id=%r",
+            employee_id, cu.get("company_id"),
         )
         raise HTTPException(status_code=404, detail="Employee not found")
 
@@ -136,12 +135,7 @@ async def upload_employee_photo(
             {"$set": {"avatar_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
         )
 
-    print(
-        f"[photo-upload] ok — employee={employee_id!r}  file={fpath}  "
-        f"size={len(contents)}B  url={photo_url!r}",
-        file=sys.stderr,
-        flush=True,
-    )
+    logger.info("photo-upload ok — employee=%r file=%s size=%dB", employee_id, fpath, len(contents))
     return {"photo_url": photo_url}
 
 

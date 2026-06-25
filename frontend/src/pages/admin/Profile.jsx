@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useSelector } from 'react-redux'
 import { Save, Loader2, Key, User, Mail, Phone } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import { selectUser } from '../../store/authSlice'
 import userService from '../../services/userService'
 
@@ -26,7 +27,7 @@ const Profile = () => {
           state: response.data.state || '',
           zip_code: response.data.zip_code || '',
         })
-      } catch (err) { console.error(err) }
+      } catch (err) { toast.error('Failed to load profile') }
       finally { setLoading(false) }
     }
     fetchProfile()

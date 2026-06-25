@@ -108,7 +108,7 @@ const JobForm = () => {
       setPriorities(priorityRes.data || [])
       setPipelines(pipelineRes.data || [])
     } catch (error) {
-      console.error('Error loading dropdowns:', error)
+      toast.error('Failed to load form options')
     }
   }
 

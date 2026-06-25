@@ -304,6 +304,12 @@ class DatabaseManager:
         Safe to call on startup for all tenants — MongoDB skips existing indexes.
         """
         await cls.create_company_database(company_id)
+        try:
+            from app.core.indexes import ensure_company_indexes
+            db = cls.get_company_db(company_id)
+            await ensure_company_indexes(db)
+        except Exception as _idx_err:
+            logger.warning("Company index init failed for %s: %s", company_id, _idx_err)
 
     @classmethod
     async def delete_company_database(cls, company_id: str) -> bool:

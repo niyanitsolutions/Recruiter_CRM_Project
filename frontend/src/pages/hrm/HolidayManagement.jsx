@@ -294,6 +294,7 @@ export default function HolidayManagement() {
             )}
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
               <tr>
@@ -356,6 +357,7 @@ export default function HolidayManagement() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

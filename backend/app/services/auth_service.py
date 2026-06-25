@@ -1180,6 +1180,20 @@ class AuthService:
                     "active_session_at": None,
                 }}
             )
+            try:
+                from app.services.audit_service import AuditService
+                await AuditService(company_db).log(
+                    action="logout",
+                    entity_type="user",
+                    entity_id=user_id,
+                    entity_name="",
+                    user_id=user_id,
+                    user_name="",
+                    user_role="",
+                    description="User logged out",
+                )
+            except Exception:
+                pass
 
     @staticmethod
     async def refresh_tokens(refresh_token_payload: dict) -> Tuple[Optional[dict], str]:

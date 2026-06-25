@@ -4,7 +4,7 @@ import logging
 import re as _re
 from typing import Optional
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from app.core.dependencies import (
     get_company_db, require_hrm_module, require_permissions, require_non_partner,
@@ -181,8 +181,8 @@ async def apply_leave(
 async def list_leaves(
     employee_id: Optional[str] = None,
     status: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:leave:team_approve"])),
@@ -221,8 +221,8 @@ async def get_balance(
 @router.get("/me")
 async def list_my_leaves(
     status: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_non_partner),
     db=Depends(get_company_db),
 ):

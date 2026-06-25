@@ -106,19 +106,22 @@ class RoleService:
             await self.collection.insert_one(role_doc)
             
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.CREATE.value,
-                entity_type=EntityType.ROLE.value,
-                entity_id=role_id,
-                entity_name=role_data.display_name,
-                user_id=created_by_id,
-                user_name=created_by_name,
-                user_role=created_by_role,
-                new_value=role_doc,
-                description=f"Created new role: {role_data.display_name}",
-                ip_address=ip_address
-            )
-            
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.CREATE.value,
+                    entity_type=EntityType.ROLE.value,
+                    entity_id=role_id,
+                    entity_name=role_data.display_name,
+                    user_id=created_by_id,
+                    user_name=created_by_name,
+                    user_role=created_by_role,
+                    new_value=role_doc,
+                    description=f"Created new role: {role_data.display_name}",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
+
             role_doc["id"] = role_doc.pop("_id")
             return True, "Role created successfully", role_doc
             
@@ -261,20 +264,23 @@ class RoleService:
                 )
 
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.UPDATE.value,
-                entity_type=EntityType.ROLE.value,
-                entity_id=role_id,
-                entity_name=existing.get("display_name"),
-                user_id=updated_by_id,
-                user_name=updated_by_name,
-                user_role=updated_by_role,
-                old_value=existing,
-                new_value=update_dict,
-                changed_fields=list(update_dict.keys()),
-                description=f"Updated role: {existing.get('display_name')}",
-                ip_address=ip_address
-            )
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.UPDATE.value,
+                    entity_type=EntityType.ROLE.value,
+                    entity_id=role_id,
+                    entity_name=existing.get("display_name"),
+                    user_id=updated_by_id,
+                    user_name=updated_by_name,
+                    user_role=updated_by_role,
+                    old_value=existing,
+                    new_value=update_dict,
+                    changed_fields=list(update_dict.keys()),
+                    description=f"Updated role: {existing.get('display_name')}",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
 
             return True, "Role updated successfully", updated_role
             
@@ -330,19 +336,22 @@ class RoleService:
             )
             
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.DELETE.value,
-                entity_type=EntityType.ROLE.value,
-                entity_id=role_id,
-                entity_name=role.get("display_name"),
-                user_id=deleted_by_id,
-                user_name=deleted_by_name,
-                user_role=deleted_by_role,
-                old_value=role,
-                description=f"Deleted role: {role.get('display_name')}",
-                ip_address=ip_address
-            )
-            
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.DELETE.value,
+                    entity_type=EntityType.ROLE.value,
+                    entity_id=role_id,
+                    entity_name=role.get("display_name"),
+                    user_id=deleted_by_id,
+                    user_name=deleted_by_name,
+                    user_role=deleted_by_role,
+                    old_value=role,
+                    description=f"Deleted role: {role.get('display_name')}",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
+
             return True, "Role deleted successfully"
             
         except Exception as e:
@@ -420,21 +429,24 @@ class RoleService:
             )
             
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.ROLE_ASSIGN.value,
-                entity_type=EntityType.USER.value,
-                entity_id=user_id,
-                entity_name=user.get("full_name"),
-                user_id=assigned_by_id,
-                user_name=assigned_by_name,
-                user_role=assigned_by_role,
-                old_value={"role": old_role},
-                new_value={"role": role_name},
-                changed_fields=["role", "permissions"],
-                description=f"Assigned role '{role_name}' to user: {user.get('full_name')}",
-                ip_address=ip_address
-            )
-            
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.ROLE_ASSIGN.value,
+                    entity_type=EntityType.USER.value,
+                    entity_id=user_id,
+                    entity_name=user.get("full_name"),
+                    user_id=assigned_by_id,
+                    user_name=assigned_by_name,
+                    user_role=assigned_by_role,
+                    old_value={"role": old_role},
+                    new_value={"role": role_name},
+                    changed_fields=["role", "permissions"],
+                    description=f"Assigned role '{role_name}' to user: {user.get('full_name')}",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
+
             return True, f"Role '{role_name}' assigned successfully"
             
         except Exception as e:

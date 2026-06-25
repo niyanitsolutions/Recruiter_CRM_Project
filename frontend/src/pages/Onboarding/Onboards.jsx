@@ -283,7 +283,7 @@ const Onboards = () => {
       setOnboards(response.items || [])
       setPagination({ total: response.total, pages: response.pages })
     } catch (error) {
-      console.error('Error fetching onboards:', error)
+      toast.error('Failed to load onboarding records')
     } finally {
       setLoading(false)
     }

@@ -212,18 +212,21 @@ class UserService:
                     logger.warning("Global user sync failed for %s: %s", user_data.email, _ge)
 
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.CREATE.value,
-                entity_type=EntityType.USER.value,
-                entity_id=user_id,
-                entity_name=user_data.full_name,
-                user_id=created_by_id,
-                user_name=created_by_name,
-                user_role=created_by_role,
-                new_value=self._sanitize_for_audit(user_doc),
-                description=f"Created new user: {user_data.full_name} ({user_data.username})",
-                ip_address=ip_address
-            )
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.CREATE.value,
+                    entity_type=EntityType.USER.value,
+                    entity_id=user_id,
+                    entity_name=user_data.full_name,
+                    user_id=created_by_id,
+                    user_name=created_by_name,
+                    user_role=created_by_role,
+                    new_value=self._sanitize_for_audit(user_doc),
+                    description=f"Created new user: {user_data.full_name} ({user_data.username})",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
 
             # Send welcome email with credentials (fire-and-forget — never blocks user creation)
             if user_data.email:
@@ -618,20 +621,23 @@ class UserService:
                 pass  # sync must never block user update
 
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.UPDATE.value,
-                entity_type=EntityType.USER.value,
-                entity_id=user_id,
-                entity_name=existing.get("full_name"),
-                user_id=updated_by_id,
-                user_name=updated_by_name,
-                user_role=updated_by_role,
-                old_value=self._sanitize_for_audit(existing),
-                new_value=update_dict,
-                changed_fields=list(update_dict.keys()),
-                description=f"Updated user: {existing.get('full_name')}",
-                ip_address=ip_address
-            )
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.UPDATE.value,
+                    entity_type=EntityType.USER.value,
+                    entity_id=user_id,
+                    entity_name=existing.get("full_name"),
+                    user_id=updated_by_id,
+                    user_name=updated_by_name,
+                    user_role=updated_by_role,
+                    old_value=self._sanitize_for_audit(existing),
+                    new_value=update_dict,
+                    changed_fields=list(update_dict.keys()),
+                    description=f"Updated user: {existing.get('full_name')}",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
 
             return True, "User updated successfully", updated_user
             
@@ -684,21 +690,24 @@ class UserService:
             updated_user = await self.get_user(user_id)
             
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.UPDATE.value,
-                entity_type=EntityType.USER.value,
-                entity_id=user_id,
-                entity_name=existing.get("full_name"),
-                user_id=user_id,
-                user_name=existing.get("full_name"),
-                user_role=existing.get("role"),
-                old_value=self._sanitize_for_audit(existing),
-                new_value=update_dict,
-                changed_fields=list(update_dict.keys()),
-                description="Updated own profile",
-                ip_address=ip_address
-            )
-            
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.UPDATE.value,
+                    entity_type=EntityType.USER.value,
+                    entity_id=user_id,
+                    entity_name=existing.get("full_name"),
+                    user_id=user_id,
+                    user_name=existing.get("full_name"),
+                    user_role=existing.get("role"),
+                    old_value=self._sanitize_for_audit(existing),
+                    new_value=update_dict,
+                    changed_fields=list(update_dict.keys()),
+                    description="Updated own profile",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
+
             return True, "Profile updated successfully", updated_user
             
         except Exception as e:
@@ -761,17 +770,20 @@ class UserService:
                 logger.warning("Global password sync failed for user %s: %s", user_id, _ge)
 
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.PASSWORD_CHANGE.value,
-                entity_type=EntityType.USER.value,
-                entity_id=user_id,
-                entity_name=user.get("full_name"),
-                user_id=user_id,
-                user_name=user.get("full_name"),
-                user_role=user.get("role"),
-                description="Changed own password",
-                ip_address=ip_address
-            )
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.PASSWORD_CHANGE.value,
+                    entity_type=EntityType.USER.value,
+                    entity_id=user_id,
+                    entity_name=user.get("full_name"),
+                    user_id=user_id,
+                    user_name=user.get("full_name"),
+                    user_role=user.get("role"),
+                    description="Changed own password",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
 
             return True, "Password changed successfully"
             
@@ -826,18 +838,21 @@ class UserService:
                 logger.warning("Global password sync failed for user %s: %s", user_id, _ge)
 
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.PASSWORD_RESET.value,
-                entity_type=EntityType.USER.value,
-                entity_id=user_id,
-                entity_name=user.get("full_name"),
-                user_id=admin_id,
-                user_name=admin_name,
-                user_role=admin_role,
-                description=f"Reset password for user: {user.get('full_name')}",
-                ip_address=ip_address
-            )
-            
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.PASSWORD_RESET.value,
+                    entity_type=EntityType.USER.value,
+                    entity_id=user_id,
+                    entity_name=user.get("full_name"),
+                    user_id=admin_id,
+                    user_name=admin_name,
+                    user_role=admin_role,
+                    description=f"Reset password for user: {user.get('full_name')}",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
+
             return True, "Password reset successfully"
             
         except Exception as e:
@@ -889,21 +904,24 @@ class UserService:
                 action = AuditAction.SUSPEND.value
             
             # Audit log
-            await self.audit_service.log(
-                action=action,
-                entity_type=EntityType.USER.value,
-                entity_id=user_id,
-                entity_name=user.get("full_name"),
-                user_id=updated_by_id,
-                user_name=updated_by_name,
-                user_role=updated_by_role,
-                old_value={"status": old_status},
-                new_value={"status": status},
-                changed_fields=["status"],
-                description=f"Changed user status from {old_status} to {status}: {user.get('full_name')}",
-                ip_address=ip_address
-            )
-            
+            try:
+                await self.audit_service.log(
+                    action=action,
+                    entity_type=EntityType.USER.value,
+                    entity_id=user_id,
+                    entity_name=user.get("full_name"),
+                    user_id=updated_by_id,
+                    user_name=updated_by_name,
+                    user_role=updated_by_role,
+                    old_value={"status": old_status},
+                    new_value={"status": status},
+                    changed_fields=["status"],
+                    description=f"Changed user status from {old_status} to {status}: {user.get('full_name')}",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
+
             return True, f"User status updated to {status}"
             
         except Exception as e:
@@ -951,19 +969,22 @@ class UserService:
             )
             
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.DELETE.value,
-                entity_type=EntityType.USER.value,
-                entity_id=user_id,
-                entity_name=user.get("full_name"),
-                user_id=deleted_by_id,
-                user_name=deleted_by_name,
-                user_role=deleted_by_role,
-                old_value=self._sanitize_for_audit(user),
-                description=f"Deleted user: {user.get('full_name')} ({user.get('username')})",
-                ip_address=ip_address
-            )
-            
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.DELETE.value,
+                    entity_type=EntityType.USER.value,
+                    entity_id=user_id,
+                    entity_name=user.get("full_name"),
+                    user_id=deleted_by_id,
+                    user_name=deleted_by_name,
+                    user_role=deleted_by_role,
+                    old_value=self._sanitize_for_audit(user),
+                    description=f"Deleted user: {user.get('full_name')} ({user.get('username')})",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
+
             return True, "User deleted successfully"
             
         except Exception as e:

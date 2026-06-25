@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { toast } from 'react-hot-toast'
 import usePermissions from '../../hooks/usePermissions'
 import {
   Plus,
@@ -276,7 +277,7 @@ const Partners = () => {
       setPartners(response.data || [])
       setPagination(response.pagination || { page: 1, total: 0, totalPages: 0 })
     } catch (err) {
-      console.error('Failed to fetch partners:', err)
+      toast.error('Failed to load partners')
     } finally {
       setLoading(false)
     }
@@ -315,7 +316,7 @@ const Partners = () => {
       setDeleteDialog({ open: false, partner: null })
       fetchPartners()
     } catch (err) {
-      console.error('Failed to delete partner:', err)
+      toast.error(err?.response?.data?.detail || 'Failed to delete partner')
     }
   }
 
@@ -326,7 +327,7 @@ const Partners = () => {
       setStatusDialog({ open: false, partner: null, status: '' })
       fetchPartners()
     } catch (err) {
-      console.error('Failed to update status:', err)
+      toast.error(err?.response?.data?.detail || 'Failed to update partner status')
     }
   }
 
@@ -336,7 +337,7 @@ const Partners = () => {
       await partnerService.resetPartnerPassword(resetPasswordDialog.partner.id, passwordData)
       setResetPasswordDialog({ open: false, partner: null })
     } catch (err) {
-      console.error('Failed to reset password:', err)
+      toast.error(err?.response?.data?.detail || 'Failed to reset password')
     }
   }
 

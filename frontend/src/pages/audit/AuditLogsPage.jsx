@@ -8,6 +8,7 @@ import {
   ChevronDown, Download, RefreshCw, Eye, AlertTriangle,
   Monitor, Smartphone, Globe, LogIn, LogOut
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import auditService from '../../services/auditAdvancedService';
 
 const AuditLogsPage = () => {
@@ -44,7 +45,7 @@ const AuditLogsPage = () => {
         setAlerts(res.items || []);
       }
     } catch (error) {
-      console.error('Error loading data:', error);
+      toast.error('Failed to load audit data');
     } finally {
       setLoading(false);
     }
@@ -56,7 +57,7 @@ const AuditLogsPage = () => {
       await auditService.revokeSession(sessionId);
       loadData();
     } catch (error) {
-      console.error('Error revoking session:', error);
+      toast.error(error?.response?.data?.detail || 'Failed to revoke session');
     }
   };
 
@@ -65,7 +66,7 @@ const AuditLogsPage = () => {
       await auditService.resolveAlert(alertId);
       loadData();
     } catch (error) {
-      console.error('Error resolving alert:', error);
+      toast.error(error?.response?.data?.detail || 'Failed to resolve alert');
     }
   };
 

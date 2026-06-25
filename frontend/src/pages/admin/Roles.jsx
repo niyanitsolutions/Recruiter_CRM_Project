@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Edit, Trash2, Shield, Users, Lock } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import roleService from '../../services/roleService'
 import ModalPortal from '../../components/common/ModalPortal'
 import ActionMenu, { ActionMenuItem } from '../../components/common/ActionMenu'
@@ -20,7 +21,7 @@ const Roles = () => {
       setLoading(true)
       const response = await roleService.getRoles()
       setRoles(response.data || [])
-    } catch (err) { console.error(err) }
+    } catch (err) { toast.error('Failed to load roles') }
     finally { setLoading(false) }
   }
 
@@ -29,7 +30,7 @@ const Roles = () => {
       await roleService.deleteRole(deleteDialog.role.id)
       setDeleteDialog({ open: false, role: null })
       fetchRoles()
-    } catch (err) { console.error(err) }
+    } catch (err) { toast.error(err?.response?.data?.detail || 'Failed to delete role') }
   }
 
   return (

@@ -2,10 +2,13 @@
 Scheduler Service - Phase 5
 Background job execution and task scheduling
 """
+import logging
 from datetime import datetime, date, timedelta, timezone
 from typing import Optional, Dict, Any
 from bson import ObjectId
 import traceback
+
+logger = logging.getLogger(__name__)
 
 from app.models.company.scheduled_task import (
     TaskType, TaskStatus, TaskPriority, TaskFrequency,
@@ -220,7 +223,7 @@ class SchedulerService:
                 await self._execute_task(task, "scheduler")
                 executed_count += 1
             except Exception as e:
-                print(f"Error executing task {task['id']}: {e}")
+                logger.error("Error executing task %s: %s", task.get("id"), e)
         
         return executed_count
     

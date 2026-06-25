@@ -3,7 +3,7 @@ Authentication API Endpoints
 Login, registration, and token management
 """
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from typing import Optional
 from pydantic import BaseModel
 import logging
@@ -296,15 +296,16 @@ async def trial_setup(request: TrialSetupRequest):
 
 
 @router.post("/register", response_model=RegistrationResponse)
-async def register(request: CompleteRegistration):
+@limiter.limit("5/minute")
+async def register(_http_request: Request, request: CompleteRegistration):
     """
     Company registration endpoint
-    
+
     Creates:
     1. Tenant record in master_db
     2. Company database (c_{company_id_no_hyphens})
     3. Owner user account
-    
+
     For paid plans, returns Razorpay order details
     """
     result, error = await tenant_service.register_company(
@@ -453,7 +454,8 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest, backgro
 
 
 @router.post("/reset-password", response_model=MessageResponse)
-async def reset_password(request: ResetPasswordRequest):
+@limiter.limit("5/minute")
+async def reset_password(_http_request: Request, request: ResetPasswordRequest):
     """
     Reset password using the token from the reset email.
 
@@ -1048,8 +1050,8 @@ async def resend_verification_email(data: ResendVerificationRequest):
 
 @router.get("/login-activity")
 async def get_login_activity(
-    page: int = 1,
-    page_size: int = 50,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
     auth: AuthContext = Depends(get_current_user),
 ):
     """Return paginated login activity logs for the current tenant."""
@@ -1277,8 +1279,8 @@ async def get_login_analytics(
 @router.get("/login-history-by-user/{user_id}")
 async def get_login_history_by_user(
     user_id: str,
-    page: int = 1,
-    page_size: int = 30,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(30, ge=1, le=200),
     auth: AuthContext = Depends(get_current_user),
 ):
     """Return paginated login history for a specific user (newest first)."""

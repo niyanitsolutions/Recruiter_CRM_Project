@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download, Users, Building, Briefcase, FileText } from 'lucide-react';
 import importExportService from '../../../services/importExportService';
+import { toast } from 'react-hot-toast';
 
 const ExportModal = ({ onClose, onExportCreated }) => {
   const [entityType, setEntityType] = useState('candidates');
@@ -17,7 +18,7 @@ const ExportModal = ({ onClose, onExportCreated }) => {
       await importExportService.createExport({ entity_type: entityType, format });
       onExportCreated();
     } catch (error) {
-      console.error('Error:', error);
+      toast.error(error?.response?.data?.detail || 'Failed to create export');
     } finally {
       setExporting(false);
     }

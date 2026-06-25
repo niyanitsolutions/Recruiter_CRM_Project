@@ -4,6 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 import {
   FileText, Search, Filter, Plus, Play, Edit, Trash2, Clock,
   Calendar, Star, Download, Copy, Share2
@@ -43,18 +44,19 @@ const SavedReports = () => {
       const result = await reportService.runSavedReport(reportId);
       navigate(`/reports/view/${result.id || reportId}`);
     } catch (error) {
-      console.error('Error running report:', error);
+      toast.error(error?.response?.data?.detail || 'Failed to run report');
     }
   };
 
   const handleDeleteReport = async (reportId) => {
     if (!window.confirm('Are you sure you want to delete this saved report?')) return;
-    
+
     try {
       await reportService.deleteSavedReport(reportId);
       setReports(reports.filter(r => r.id !== reportId));
+      toast.success('Report deleted');
     } catch (error) {
-      console.error('Error deleting report:', error);
+      toast.error(error?.response?.data?.detail || 'Failed to delete report');
     }
   };
 
@@ -67,8 +69,9 @@ const SavedReports = () => {
         columns: report.columns
       });
       loadReports();
+      toast.success('Report duplicated');
     } catch (error) {
-      console.error('Error duplicating report:', error);
+      toast.error(error?.response?.data?.detail || 'Failed to duplicate report');
     }
   };
 

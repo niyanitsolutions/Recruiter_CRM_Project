@@ -2,7 +2,7 @@
 Settings API - Phase 3
 Handles company settings, custom fields, interview stages, email templates
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from typing import Optional, List
 
 from app.models.company.settings import (
@@ -180,7 +180,7 @@ async def delete_interview_stage(
 
 @router.put("/interview-stages/reorder")
 async def reorder_interview_stages(
-    stage_orders: List[dict],  # [{"id": "...", "order": 1}, ...]
+    stage_orders: List[dict] = Body(...),  # [{"id": "...", "order": 1}, ...]
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
     _: bool = Depends(require_permissions(["interview_settings:edit"]))

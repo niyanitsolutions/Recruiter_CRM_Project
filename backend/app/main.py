@@ -275,6 +275,14 @@ async def lifespan(app: FastAPI):
     except Exception as _idx_err2:
         logger.warning("Session index creation skipped: %s", _idx_err2)
 
+    # Master DB indexes (payments, commissions, tenants, sellers)
+    try:
+        from app.core.indexes import ensure_master_indexes
+        await ensure_master_indexes(get_master_db())
+        logger.info("Master DB indexes verified.")
+    except Exception as _midx_err:
+        logger.warning("Master index init skipped: %s", _midx_err)
+
     yield
     # Shutdown
     tenant_cleanup_task.cancel()
@@ -483,11 +491,56 @@ async def root():
 @app.get("/health", tags=["Health Check"])
 @app.get("/healthy", tags=["Health Check"])
 async def health_check():
+    """Liveness probe — returns 200 when the app process is alive."""
     return {
         "status": "healthy",
         "database": "connected",
-        "version": "5.0.0"
+        "version": "5.0.0",
     }
+
+
+@app.get("/live", tags=["Health Check"])
+async def liveness():
+    """Kubernetes-style liveness probe. Returns 200 if the process is alive."""
+    return {"status": "alive"}
+
+
+@app.get("/ready", tags=["Health Check"])
+async def readiness():
+    """Kubernetes-style readiness probe — verifies MongoDB is reachable."""
+    from fastapi import status as http_status
+    from fastapi.responses import JSONResponse
+    checks: dict[str, str] = {}
+    all_ok = True
+
+    # MongoDB ping
+    try:
+        master_db = get_master_db()
+        await master_db.command("ping")
+        checks["mongodb"] = "ok"
+    except Exception as _db_exc:
+        checks["mongodb"] = f"error: {_db_exc}"
+        all_ok = False
+
+    # Redis (optional — gracefully degraded if not configured)
+    try:
+        from app.core.redis import get_redis
+        redis = await get_redis()
+        if redis:
+            await redis.ping()
+            checks["redis"] = "ok"
+        else:
+            checks["redis"] = "not_configured"
+    except Exception as _redis_exc:
+        checks["redis"] = f"degraded: {_redis_exc}"
+        # Redis is non-critical — don't fail readiness
+
+    if not all_ok:
+        return JSONResponse(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "not_ready", "checks": checks},
+        )
+    return {"status": "ready", "checks": checks}
 
 
 @app.get("/api/v1/info", tags=["Info"])

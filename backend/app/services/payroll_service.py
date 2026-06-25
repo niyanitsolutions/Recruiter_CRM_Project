@@ -37,6 +37,7 @@ _PRESENT_STATUSES = {
     "field_work": 1.0,
     "auto_closed": 1.0,
     "half_day":   0.5,
+    "holiday":    1.0,  # worked on a public holiday → counts as present for salary
 }
 
 
@@ -123,16 +124,24 @@ class PayrollService:
         return None
 
     @staticmethod
-    def _calc_working_days(year: int, month: int, holiday_date_strings: Set[str]) -> int:
+    def _calc_working_days(
+        year: int,
+        month: int,
+        holiday_date_strings: Set[str],
+        working_day_nums: Optional[Set[int]] = None,
+    ) -> int:
+        """Count working days in the month, skipping off-days and holidays.
+
+        working_day_nums: Python weekdays that ARE working (0=Mon…6=Sun).
+        Defaults to Mon-Fri (0-4) when None or empty.
         """
-        Count working days in the month:
-            Calendar days - Sundays - company holidays.
-        """
+        if not working_day_nums:
+            working_day_nums = {0, 1, 2, 3, 4}
         _, days_in_month = _cal.monthrange(year, month)
         working = 0
         for day in range(1, days_in_month + 1):
             d = date(year, month, day)
-            if d.weekday() == 6:       # Sunday
+            if d.weekday() not in working_day_nums:
                 continue
             if d.strftime("%Y-%m-%d") in holiday_date_strings:
                 continue
@@ -353,6 +362,44 @@ class PayrollService:
         })
         return [rec async for rec in cursor]
 
+    async def _batch_fetch_attendance(
+        self, company_id: str, emp_ids: List[str], year: int, month: int
+    ) -> dict:
+        """Return {employee_id: [records]} for ALL employees in one query."""
+        _, last_day = _cal.monthrange(year, month)
+        month_start = datetime(year, month, 1, tzinfo=timezone.utc)
+        month_end   = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+        by_emp: dict = {eid: [] for eid in emp_ids}
+        async for rec in self.db[self.ATT_COL].find({
+            "company_id": company_id,
+            "employee_id": {"$in": emp_ids},
+            "date": {"$gte": month_start, "$lte": month_end},
+        }):
+            eid = rec.get("employee_id", "")
+            if eid in by_emp:
+                by_emp[eid].append(rec)
+        return by_emp
+
+    async def _batch_fetch_leaves(
+        self, company_id: str, emp_ids: List[str], year: int, month: int
+    ) -> dict:
+        """Return {employee_id: [records]} for ALL employees in one query."""
+        _, last_day = _cal.monthrange(year, month)
+        month_start = datetime(year, month, 1, tzinfo=timezone.utc)
+        month_end   = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+        by_emp: dict = {eid: [] for eid in emp_ids}
+        async for rec in self.db[self.LEAVE_COL].find({
+            "company_id": company_id,
+            "employee_id": {"$in": emp_ids},
+            "status": "approved",
+            "from_date": {"$lte": month_end},
+            "to_date":   {"$gte": month_start},
+        }):
+            eid = rec.get("employee_id", "")
+            if eid in by_emp:
+                by_emp[eid].append(rec)
+        return by_emp
+
     async def generate(
         self,
         company_id: str,
@@ -361,62 +408,76 @@ class PayrollService:
         employee_ids: Optional[List[str]],
         generated_by: str,
     ) -> List[dict]:
-        query: dict = {
+        emp_query: dict = {
             "company_id": company_id,
             "is_deleted": False,
             "employment_status": "active",
         }
         if employee_ids:
-            query["_id"] = {"$in": employee_ids}
-        cursor = self.db[self.EMP_COL].find(query)
+            emp_query["_id"] = {"$in": employee_ids}
 
-        # Load payroll structure for label/type resolution
+        # ── Load all qualifying employees at once ──────────────────────────────
+        employees = await self.db[self.EMP_COL].find(emp_query).to_list(length=None)
+        if not employees:
+            return []
+        all_emp_ids = [str(e["_id"]) for e in employees]
+
+        # ── Shared reference data (one fetch each) ─────────────────────────────
         structure_doc = await self.db["hrm_payroll_structure"].find_one({"company_id": company_id})
-        all_components = structure_doc.get("components", []) if structure_doc else []
+        all_components   = structure_doc.get("components", []) if structure_doc else []
         active_components = [c for c in all_components if c.get("is_selected", True)]
-        deduction_keys: Set[str] = {c["key"] for c in active_components if c.get("component_type") == "deduction"}
+        deduction_keys: Set[str] = {
+            c["key"] for c in active_components if c.get("component_type") == "deduction"
+        }
         key_to_label = {c["key"]: c["label"] for c in all_components}
 
-        # Fetch holidays once for the whole payroll run
         holiday_dates = await self._fetch_holiday_dates(company_id, year, month)
-        working_days = self._calc_working_days(year, month, holiday_dates)
+        settings_doc  = await self.db["company_settings"].find_one({})
+        raw_wd = settings_doc.get("working_days") if settings_doc else None
+        tenant_working_days: Optional[Set[int]] = set(raw_wd) if raw_wd else None
+        working_days = self._calc_working_days(year, month, holiday_dates, tenant_working_days)
+
+        # ── Batch-fetch the three per-employee collections ─────────────────────
+        existing_map: dict = {}
+        async for ps in self.col.find({
+            "company_id": company_id,
+            "month": month,
+            "year":  year,
+            "employee_id": {"$in": all_emp_ids},
+        }):
+            existing_map[ps["employee_id"]] = ps
+
+        att_map   = await self._batch_fetch_attendance(company_id, all_emp_ids, year, month)
+        leave_map = await self._batch_fetch_leaves(company_id, all_emp_ids, year, month)
 
         now = datetime.now(timezone.utc)
-        results = []
+        results: List[dict] = []
+        docs_to_insert: List[dict] = []
 
-        async for emp in cursor:
+        for emp in employees:
             emp_id = str(emp["_id"])
 
-            # Skip if payslip already exists for this period
-            existing = await self.col.find_one({
-                "employee_id": emp_id,
-                "company_id": company_id,
-                "month": month,
-                "year": year,
-            })
-            if existing:
-                results.append(self._serialize(existing))
+            # Already generated — return existing payslip
+            if emp_id in existing_map:
+                results.append(self._serialize(existing_map[emp_id]))
                 continue
 
             # ── Salary components → payslip fields ────────────────────────────
             salary_components = emp.get("salary_components") or {}
-
             if salary_components:
                 salary_dict = self._calc_from_salary_components(
                     salary_components, deduction_keys, key_to_label
                 )
             else:
-                # Legacy: read from the old salary sub-document
                 sal = emp.get("salary") or {}
                 if isinstance(sal, dict):
-                    basic = float(sal.get("basic", 0) or 0)
-                    hra   = float(sal.get("hra",   0) or 0)
+                    basic             = float(sal.get("basic", 0) or 0)
+                    hra               = float(sal.get("hra",   0) or 0)
                     special_allowance = float(sal.get("special_allowance", 0) or 0)
-                    pf_emp = float(sal.get("pf_employee", 0) or 0)
-                    pt     = float(sal.get("professional_tax", 0) or 0)
+                    pf_emp            = float(sal.get("pf_employee", 0) or 0)
+                    pt                = float(sal.get("professional_tax", 0) or 0)
                 else:
                     basic = hra = special_allowance = pf_emp = pt = 0.0
-
                 gross_earnings = round(basic + hra + special_allowance, 2)
                 salary_dict = {
                     "basic":             basic,
@@ -432,24 +493,20 @@ class PayrollService:
                     "_statutory_deductions": round(pf_emp + pt, 2),
                 }
 
-            # ── Attendance + leave data ────────────────────────────────────────
-            att_records = await self._fetch_attendance(company_id, emp_id, year, month)
-            leave_records = await self._fetch_approved_leaves(company_id, emp_id, year, month)
-
-            if att_records:
-                present_days = self._calc_present_days(att_records)
-            else:
-                # No attendance records → assume full attendance (no LOP)
-                present_days = float(working_days)
+            # ── Attendance + leave (in-memory, no extra DB calls) ──────────────
+            att_records   = att_map.get(emp_id, [])
+            leave_records = leave_map.get(emp_id, [])
 
             paid_leave_days = self._calc_paid_leave_days(
                 leave_records, year, month, holiday_dates
             )
+            if att_records:
+                present_days = self._calc_present_days(att_records)
+            else:
+                present_days = max(0.0, float(working_days) - paid_leave_days)
 
-            # Apply attendance → compute LOP, total_deductions, net_salary
             att_dict = self._apply_attendance(salary_dict, working_days, present_days, paid_leave_days)
 
-            # ── Build payslip document ─────────────────────────────────────────
             doc = {
                 "_id":                  str(ObjectId()),
                 "company_id":           company_id,
@@ -471,8 +528,12 @@ class PayrollService:
                 "created_at":    now,
                 "updated_at":    now,
             }
-            await self.col.insert_one(doc)
+            docs_to_insert.append(doc)
             results.append(self._serialize(doc))
+
+        # ── Bulk insert all new payslips in one round-trip ─────────────────────
+        if docs_to_insert:
+            await self.col.insert_many(docs_to_insert, ordered=False)
 
         return results
 

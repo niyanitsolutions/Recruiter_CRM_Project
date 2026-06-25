@@ -273,7 +273,7 @@ const [errors,       setErrors]       = useState({})
       const response = await userService.getOrgTree()
       setOrgTree(response.data || [])
     } catch (err) {
-      console.error('Failed to load org tree:', err)
+      // Org tree is non-critical — suppress toast to avoid noise
     } finally {
       setOrgTreeLoading(false)
     }
@@ -308,7 +308,7 @@ const [errors,       setErrors]       = useState({})
         setDepartments(deptsRes.data || [])
         setDesignations(desigsRes.data || [])
         setUsers(usersRes.data || [])
-      } catch (err) { console.error(err) }
+      } catch (err) { toast.error('Failed to load reference data') }
     }
     fetchData()
   }, [])

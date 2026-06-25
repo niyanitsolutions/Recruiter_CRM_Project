@@ -19,14 +19,21 @@ from app.models.company.partner_payout import (
 
 class PartnerPayoutService:
     """Service for partner payout operations"""
-    
+
     def __init__(self, db):
         self.db = db
         self.payouts_collection = db.partner_payouts
         self.invoices_collection = db.partner_invoices
-    
+
+    async def _get_tax_rates(self) -> tuple[float, float]:
+        """Return (gst_rate, tds_rate) from company settings, falling back to 18/10."""
+        settings = await self.db.company_settings.find_one({}) or {}
+        gst = float(settings.get("partner_commission_gst_percentage") or 18.0)
+        tds = float(settings.get("partner_commission_tds_percentage") or 10.0)
+        return gst, tds
+
     # ============== Payout CRUD ==============
-    
+
     async def create_payout(
         self,
         data: PartnerPayoutCreate,
@@ -34,10 +41,13 @@ class PartnerPayoutService:
         created_by: str
     ) -> PartnerPayoutResponse:
         """Create payout record"""
-        # Calculate payout
+        # Calculate payout using company-configured tax rates
+        gst_rate, tds_rate = await self._get_tax_rates()
         calculation = PayoutCalculation.calculate(
             ctc=data.candidate_ctc,
-            rule=data.commission_rule
+            rule=data.commission_rule,
+            gst_rate=gst_rate,
+            tds_rate=tds_rate,
         )
         
         payout_eligible_date = data.joined_date + timedelta(days=data.payout_days_required)
@@ -189,6 +199,7 @@ class PartnerPayoutService:
         created_by: str
     ) -> InvoiceResponse:
         """Raise invoice for eligible payouts"""
+        _, tds_rate = await self._get_tax_rates()
         # Get all payouts for this invoice
         payouts = []
         async for payout in self.payouts_collection.find({
@@ -233,8 +244,8 @@ class PartnerPayoutService:
         invoice_count = await self.invoices_collection.count_documents({"company_id": company_id})
         invoice_number = f"INV-{company_id[:6].upper()}-{str(invoice_count + 1).zfill(6)}"
         
-        # Calculate TDS
-        tds_amount = subtotal * 0.10  # 10% TDS
+        # Calculate TDS using company-configured rate
+        tds_amount = subtotal * (tds_rate / 100.0)
         total_amount = subtotal + total_gst - tds_amount
         
         invoice_data = {
@@ -342,7 +353,7 @@ class PartnerPayoutService:
             return None
         
         result = await self.invoices_collection.find_one_and_update(
-            {"id": invoice_id, "company_id": company_id},
+            {"id": invoice_id, "company_id": company_id, "status": InvoiceStatus.SUBMITTED.value},
             {
                 "$set": {
                     "status": InvoiceStatus.APPROVED.value,
@@ -389,7 +400,7 @@ class PartnerPayoutService:
             return None
         
         result = await self.invoices_collection.find_one_and_update(
-            {"id": invoice_id, "company_id": company_id},
+            {"id": invoice_id, "company_id": company_id, "status": InvoiceStatus.SUBMITTED.value},
             {
                 "$set": {
                     "status": InvoiceStatus.REJECTED.value,
@@ -437,7 +448,7 @@ class PartnerPayoutService:
             return None
         
         result = await self.invoices_collection.find_one_and_update(
-            {"id": invoice_id, "company_id": company_id},
+            {"id": invoice_id, "company_id": company_id, "status": InvoiceStatus.APPROVED.value},
             {
                 "$set": {
                     "status": InvoiceStatus.PAID.value,
@@ -534,6 +545,12 @@ class PartnerPayoutService:
             "is_deleted": False
         })
         
+        # total_revenue = lifetime net amount for all non-cancelled statuses
+        total_revenue = sum(
+            d["amount"] for status_val, d in status_data.items()
+            if status_val != PayoutStatus.CANCELLED.value
+        )
+
         return PartnerPayoutStats(
             total_placements=total_placements,
             pending_payouts=pending["count"],
@@ -542,7 +559,12 @@ class PartnerPayoutService:
             invoices_approved=invoice_approved["count"],
             invoices_pending=invoices_pending,
             total_paid=paid["amount"],
-            total_pending_amount=pending["amount"] + eligible["amount"],
+            total_revenue=round(total_revenue, 2),
+            total_pending_amount=round(
+                pending["amount"] + eligible["amount"] +
+                invoice_raised["amount"] + invoice_approved["amount"],
+                2,
+            ),
             this_month_earnings=this_month
         )
     
@@ -591,7 +613,7 @@ class PartnerPayoutService:
             {"$match": {
                 "company_id": company_id,
                 "status": InvoiceStatus.PAID.value,
-                "paid_at": {"$gte": datetime.combine(first_of_month, datetime.min.time())},
+                "paid_at": {"$gte": datetime.combine(first_of_month, datetime.min.time(), timezone.utc)},
                 "is_deleted": False
             }},
             {"$group": {
@@ -599,17 +621,17 @@ class PartnerPayoutService:
                 "total": {"$sum": "$total_amount"}
             }}
         ]
-        
+
         paid_month = 0
         async for doc in self.invoices_collection.aggregate(paid_month_pipeline):
             paid_month = doc.get("total", 0)
-        
+
         # Paid this quarter
         paid_quarter_pipeline = [
             {"$match": {
                 "company_id": company_id,
                 "status": InvoiceStatus.PAID.value,
-                "paid_at": {"$gte": datetime.combine(first_of_quarter, datetime.min.time())},
+                "paid_at": {"$gte": datetime.combine(first_of_quarter, datetime.min.time(), timezone.utc)},
                 "is_deleted": False
             }},
             {"$group": {
@@ -617,17 +639,17 @@ class PartnerPayoutService:
                 "total": {"$sum": "$total_amount"}
             }}
         ]
-        
+
         paid_quarter = 0
         async for doc in self.invoices_collection.aggregate(paid_quarter_pipeline):
             paid_quarter = doc.get("total", 0)
-        
+
         # Overdue payments (approved but not paid for 30+ days)
         overdue_date = today - timedelta(days=30)
         overdue = await self.invoices_collection.count_documents({
             "company_id": company_id,
             "status": InvoiceStatus.APPROVED.value,
-            "approved_at": {"$lte": datetime.combine(overdue_date, datetime.min.time())},
+            "approved_at": {"$lte": datetime.combine(overdue_date, datetime.min.time(), timezone.utc)},
             "is_deleted": False
         })
         

@@ -570,7 +570,7 @@ const Users = () => {
       const res = await departmentService.getDepartments()
       setDeptList(res.data || [])
     } catch (err) {
-      console.error(err)
+      toast.error('Failed to load departments')
     } finally {
       setDeptLoading(false)
     }
@@ -583,7 +583,7 @@ const Users = () => {
       const res = await designationService.getDesignations()
       setDesigList(res.data || [])
     } catch (err) {
-      console.error(err)
+      toast.error('Failed to load designations')
     } finally {
       setDesigLoading(false)
     }
@@ -612,7 +612,7 @@ const Users = () => {
       setUsers(response.data || [])
       setPagination(response.pagination || { page: 1, total: 0, totalPages: 0 })
     } catch (err) {
-      console.error('Failed to fetch users:', err)
+      toast.error('Failed to load users')
     } finally {
       setLoading(false)
     }
@@ -666,7 +666,7 @@ const Users = () => {
       setDeleteDialog({ open: false, user: null })
       fetchUsers()
     } catch (err) {
-      console.error('Failed to delete user:', err)
+      toast.error(err?.response?.data?.detail || 'Failed to delete user')
     }
   }
 
@@ -676,7 +676,7 @@ const Users = () => {
       setStatusDialog({ open: false, user: null, status: '' })
       fetchUsers()
     } catch (err) {
-      console.error('Failed to update status:', err)
+      toast.error(err?.response?.data?.detail || 'Failed to update user status')
     }
   }
 
@@ -685,7 +685,7 @@ const Users = () => {
       await userService.resetUserPassword(resetPasswordDialog.user.id, passwordData)
       setResetPasswordDialog({ open: false, user: null })
     } catch (err) {
-      console.error('Failed to reset password:', err)
+      toast.error(err?.response?.data?.detail || 'Failed to reset password')
     }
   }
 

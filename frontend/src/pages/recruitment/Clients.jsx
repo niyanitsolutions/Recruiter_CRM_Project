@@ -77,7 +77,7 @@ const Clients = () => {
       setStatuses(_dropdownCache.statuses)
       setTypes(_dropdownCache.types)
     } catch (error) {
-      console.error('Error loading dropdowns:', error)
+      toast.error('Failed to load filter options')
     }
   }
 

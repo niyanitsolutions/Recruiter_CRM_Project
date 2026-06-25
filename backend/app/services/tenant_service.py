@@ -1605,6 +1605,28 @@ class TenantService:
             }
             await master_db.payments.insert_one(payment_record)
 
+            # Write commission record so seller dashboard shows manual tenants
+            if seller_commission and seller_commission > 0 and getattr(data, "seller_id", None):
+                seller_doc = await master_db.sellers.find_one({"_id": data.seller_id}, {"seller_name": 1})
+                await master_db.commissions.insert_one({
+                    "_id": str(uuid.uuid4()),
+                    "seller_id": data.seller_id,
+                    "seller_name": (seller_doc.get("seller_name") if seller_doc else "") or "",
+                    "tenant_id": tenant_id,
+                    "tenant_name": data.company_name,
+                    "payment_id": payment_record["_id"],
+                    "plan_id": str(plan.get("_id")),
+                    "plan_name": plan.get("name", ""),
+                    "billing_cycle": "manual",
+                    "base_amount": amount_paise,
+                    "reseller_amount": amount_paise - seller_commission,
+                    "commission_amount": seller_commission,
+                    "reseller_discount_percent": seller_margin,
+                    "status": "pending",
+                    "created_at": now,
+                    "updated_at": now,
+                })
+
         # Send welcome email if requested
         if getattr(data, "send_welcome_email", True):
             try:

@@ -91,8 +91,8 @@ class AttendanceService:
         }
         if department:
             query["$or"] = [
-                {"applicable_departments": []},
-                {"applicable_departments": department},
+                {"applicable_departments": {"$size": 0}},
+                {"applicable_departments": {"$in": [department]}},
             ]
         doc = await self.db["hrm_holidays"].find_one(query)
         return doc["name"] if doc else None
@@ -1431,6 +1431,88 @@ class AttendanceService:
             "half_day":          half_day,
             "wfh":               wfh,
         }
+
+    async def mark_absences_for_date(self, company_id: str, target_date: date) -> dict:
+        """Ensure an attendance record exists for every active employee on target_date.
+
+        Weekend day  → WEEKEND  (informational, no salary impact)
+        Holiday      → HOLIDAY  (informational)
+        Working day  → ABSENT   (counts as LOP in payroll)
+        Existing records are never touched.
+        """
+        target_str = target_date.isoformat()
+        target_dt = datetime(target_date.year, target_date.month, target_date.day)
+        settings = await self._get_settings()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        employees = await self.db["hrm_employees"].find(
+            {"company_id": company_id, "employment_status": "active", "is_deleted": False},
+            {"_id": 1, "department": 1, "full_name": 1},
+        ).to_list(length=None)
+
+        # Build holiday map: dept → name (empty string key = company-wide)
+        holiday_map: dict[str, str] = {}
+        async for h in self.db["hrm_holidays"].find({
+            "company_id": company_id, "date": target_str, "is_active": True, "is_deleted": False
+        }):
+            depts = h.get("applicable_departments") or []
+            if depts:
+                for d in depts:
+                    holiday_map[d] = h["name"]
+            else:
+                holiday_map[""] = h["name"]
+
+        stats = {"processed": 0, "absent": 0, "weekend": 0, "holiday": 0, "skipped": 0}
+
+        for emp in employees:
+            emp_id = str(emp["_id"])
+            dept = emp.get("department") or ""
+            working_days = self._get_effective_working_days(settings, emp)
+            is_weekend_day = target_date.weekday() not in working_days
+            holiday_name = holiday_map.get(dept) or holiday_map.get("") or None
+
+            existing = await self.col.find_one({
+                "employee_id": emp_id, "company_id": company_id, "date": target_dt,
+            })
+            if existing:
+                stats["skipped"] += 1
+                continue
+
+            if holiday_name:
+                auto_status = AttendanceStatus.HOLIDAY
+                stats["holiday"] += 1
+            elif is_weekend_day:
+                auto_status = AttendanceStatus.WEEKEND
+                stats["weekend"] += 1
+            else:
+                auto_status = AttendanceStatus.ABSENT
+                stats["absent"] += 1
+
+            await self.col.insert_one({
+                "_id": str(ObjectId()),
+                "company_id": company_id,
+                "employee_id": emp_id,
+                "employee_name": emp.get("full_name", ""),
+                "date": target_dt,
+                "status": auto_status,
+                "check_in": None,
+                "check_out": None,
+                "work_hours": 0.0,
+                "is_late": False,
+                "late_by_minutes": 0,
+                "is_holiday_worked": False,
+                "is_weekend_worked": False,
+                "is_half_day": False,
+                "holiday_name": holiday_name,
+                "auto_marked": True,
+                "breaks": [],
+                "total_break_minutes": 0.0,
+                "created_at": now,
+                "updated_at": now,
+            })
+            stats["processed"] += 1
+
+        return stats
 
 
 # ── Recovery auto punch-out (Layer 2) ──────────────────────────────────────────

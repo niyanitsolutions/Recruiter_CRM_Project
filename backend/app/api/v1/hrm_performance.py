@@ -1,6 +1,6 @@
 """HRM — Performance API Routes"""
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
 from app.models.company.performance import CreateReview, SubmitSelfReview, SubmitManagerReview
@@ -23,8 +23,8 @@ async def create_review(
 async def list_reviews(
     employee_id: Optional[str] = None,
     year: Optional[int] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:performance:manage"])),
@@ -35,8 +35,8 @@ async def list_reviews(
 @router.get("/self")
 async def list_own_reviews(
     year: Optional[int] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:performance:self"])),

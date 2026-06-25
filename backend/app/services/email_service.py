@@ -192,28 +192,55 @@ def _fire_email(coro) -> None:
 
 async def _get_tenant_smtp(company_id: str) -> Optional[dict]:
     """
-    Load and decrypt tenant SMTP from company_db.smtp_config.
+    Load and decrypt tenant SMTP config.
+
+    Checks two storage locations (in priority order):
+      1. company_db.smtp_config  (_id="smtp")  — saved via /company-settings/smtp
+      2. company_db.tenant_settings (key="email_config") — saved via /tenant-settings/email-config
+
     Returns None if not configured or not enabled.
     """
     if not company_id:
         return None
     try:
         db = get_company_db(company_id)
+
+        # ── Source 1: smtp_config collection ────────────────────────────────────
         doc = await db.smtp_config.find_one({"_id": "smtp"})
-        if not doc or not doc.get("enabled"):
-            return None
-        pwd = decrypt_password(doc.get("password", ""))
-        if not doc.get("username") or not pwd:
-            return None
-        return {
-            "host": doc["host"],
-            "port": int(doc.get("port", 587)),
-            "username": doc["username"],
-            "password": pwd,
-            "from_email": doc.get("from_email") or doc["username"],
-            "from_name": doc.get("from_name", ""),
-            "timeout": settings.SMTP_TIMEOUT,
-        }
+        if doc and doc.get("enabled"):
+            pwd = decrypt_password(doc.get("password", ""))
+            if doc.get("username") and pwd:
+                return {
+                    "host": doc["host"],
+                    "port": int(doc.get("port", 587)),
+                    "username": doc["username"],
+                    "password": pwd,
+                    "from_email": doc.get("from_email") or doc["username"],
+                    "from_name": doc.get("from_name", ""),
+                    "timeout": settings.SMTP_TIMEOUT,
+                }
+
+        # ── Source 2: tenant_settings collection (key="email_config") ───────────
+        ts_doc = await db.tenant_settings.find_one(
+            {"company_id": company_id, "key": "email_config"}
+        )
+        if ts_doc and ts_doc.get("is_enabled"):
+            host = ts_doc.get("smtp_host")
+            username = ts_doc.get("smtp_username")
+            password = ts_doc.get("smtp_password")
+            if host and username and password:
+                pwd = decrypt_password(password)
+                return {
+                    "host": host,
+                    "port": int(ts_doc.get("smtp_port", 587)),
+                    "username": username,
+                    "password": pwd,
+                    "from_email": ts_doc.get("from_email") or username,
+                    "from_name": ts_doc.get("from_name", ""),
+                    "timeout": settings.SMTP_TIMEOUT,
+                }
+
+        return None
     except Exception as exc:
         logger.debug("Tenant SMTP load failed for %s: %s", company_id, exc)
         return None

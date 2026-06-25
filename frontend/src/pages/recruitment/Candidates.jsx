@@ -149,7 +149,7 @@ const Candidates = () => {
       setSources(_dropdownCache.sources)
       setNoticePeriods(_dropdownCache.noticePeriods)
     } catch (error) {
-      console.error('Error loading dropdowns:', error)
+      toast.error('Failed to load filter options')
     }
   }, [])
 
@@ -1075,6 +1075,7 @@ const Candidates = () => {
               ) : eligibleJobs.length === 0 ? (
                 <p className="text-center py-12" style={{ color: 'var(--text-muted)' }}>No open jobs found.</p>
               ) : (
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
@@ -1149,6 +1150,7 @@ const Candidates = () => {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </div>

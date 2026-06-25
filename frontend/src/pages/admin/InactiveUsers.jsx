@@ -83,7 +83,7 @@ const InactiveUsers = () => {
       setUsers(response.data || [])
       setPagination(response.pagination || { total: 0, totalPages: 1 })
     } catch (err) {
-      console.error('Failed to fetch inactive users:', err)
+      toast.error('Failed to load inactive users')
     } finally {
       setLoading(false)
     }

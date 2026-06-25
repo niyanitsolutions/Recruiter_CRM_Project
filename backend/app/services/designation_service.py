@@ -119,19 +119,22 @@ class DesignationService:
             await self.collection.insert_one(desig_doc)
             
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.CREATE.value,
-                entity_type=EntityType.DESIGNATION.value,
-                entity_id=desig_id,
-                entity_name=desig_data.name,
-                user_id=created_by_id,
-                user_name=created_by_name,
-                user_role=created_by_role,
-                new_value=desig_doc,
-                description=f"Created new designation: {desig_data.name}",
-                ip_address=ip_address
-            )
-            
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.CREATE.value,
+                    entity_type=EntityType.DESIGNATION.value,
+                    entity_id=desig_id,
+                    entity_name=desig_data.name,
+                    user_id=created_by_id,
+                    user_name=created_by_name,
+                    user_role=created_by_role,
+                    new_value=desig_doc,
+                    description=f"Created new designation: {desig_data.name}",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
+
             desig_doc["id"] = desig_doc.pop("_id")
             desig_doc["level_name"] = get_level_name(desig_doc["level"])
             return True, "Designation created successfully", desig_doc
@@ -297,21 +300,24 @@ class DesignationService:
             updated_desig = await self.get_designation(desig_id)
             
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.UPDATE.value,
-                entity_type=EntityType.DESIGNATION.value,
-                entity_id=desig_id,
-                entity_name=existing.get("name"),
-                user_id=updated_by_id,
-                user_name=updated_by_name,
-                user_role=updated_by_role,
-                old_value=existing,
-                new_value=update_dict,
-                changed_fields=list(update_dict.keys()),
-                description=f"Updated designation: {existing.get('name')}",
-                ip_address=ip_address
-            )
-            
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.UPDATE.value,
+                    entity_type=EntityType.DESIGNATION.value,
+                    entity_id=desig_id,
+                    entity_name=existing.get("name"),
+                    user_id=updated_by_id,
+                    user_name=updated_by_name,
+                    user_role=updated_by_role,
+                    old_value=existing,
+                    new_value=update_dict,
+                    changed_fields=list(update_dict.keys()),
+                    description=f"Updated designation: {existing.get('name')}",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
+
             return True, "Designation updated successfully", updated_desig
             
         except Exception as e:
@@ -359,19 +365,22 @@ class DesignationService:
             )
             
             # Audit log
-            await self.audit_service.log(
-                action=AuditAction.DELETE.value,
-                entity_type=EntityType.DESIGNATION.value,
-                entity_id=desig_id,
-                entity_name=desig.get("name"),
-                user_id=deleted_by_id,
-                user_name=deleted_by_name,
-                user_role=deleted_by_role,
-                old_value=desig,
-                description=f"Deleted designation: {desig.get('name')}",
-                ip_address=ip_address
-            )
-            
+            try:
+                await self.audit_service.log(
+                    action=AuditAction.DELETE.value,
+                    entity_type=EntityType.DESIGNATION.value,
+                    entity_id=desig_id,
+                    entity_name=desig.get("name"),
+                    user_id=deleted_by_id,
+                    user_name=deleted_by_name,
+                    user_role=deleted_by_role,
+                    old_value=desig,
+                    description=f"Deleted designation: {desig.get('name')}",
+                    ip_address=ip_address
+                )
+            except Exception:
+                pass
+
             return True, "Designation deleted successfully"
             
         except Exception as e:

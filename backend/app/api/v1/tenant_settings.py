@@ -1174,7 +1174,7 @@ class CandidateSourceUpdate(BaseModel):
 
 @router.get("/candidate-sources")
 async def list_candidate_sources(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permissions(["crm_settings:view"])),
     db=Depends(get_company_db),
 ):
     """List all candidate sources (defaults + custom)."""
@@ -1200,7 +1200,7 @@ async def list_candidate_sources(
 @router.post("/candidate-sources")
 async def create_candidate_source(
     data: CandidateSourceCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
@@ -1236,7 +1236,7 @@ async def create_candidate_source(
 async def update_candidate_source(
     source_id: str,
     data: CandidateSourceUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
@@ -1258,7 +1258,7 @@ async def update_candidate_source(
 @router.delete("/candidate-sources/{source_id}")
 async def delete_candidate_source(
     source_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]

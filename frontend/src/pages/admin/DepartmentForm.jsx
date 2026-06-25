@@ -20,7 +20,7 @@ const DepartmentForm = () => {
       try {
         const usersRes = await userService.getUsers({ page_size: 100 })
         setUsers(usersRes.data || [])
-      } catch (err) { console.error(err) }
+      } catch (err) { toast.error('Failed to load users') }
     }
     fetchData()
   }, [])

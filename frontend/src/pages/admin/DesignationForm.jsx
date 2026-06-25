@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Loader2 } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import designationService from '../../services/designationService'
 import departmentService from '../../services/departmentService'
 
@@ -19,7 +20,7 @@ const DesignationForm = () => {
       try {
         const deptsRes = await departmentService.getDepartments()
         setDepartments(deptsRes.data || [])
-      } catch (err) { console.error(err) }
+      } catch (err) { toast.error('Failed to load departments') }
     }
     fetchData()
   }, [])

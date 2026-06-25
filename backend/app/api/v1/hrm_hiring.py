@@ -1,6 +1,6 @@
 """HRM — Hiring Pipeline API Routes (Jobs, Candidates, Interviews, Offers, Onboarding)"""
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions, require_any_permission
 from app.models.company.hrm_job import HRMJobCreate, HRMJobUpdate
@@ -28,8 +28,8 @@ async def create_job(
 @router.get("/jobs")
 async def list_jobs(
     status: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:hiring:view"])),
@@ -92,8 +92,8 @@ async def create_candidate(
 async def list_candidates(
     job_id: Optional[str] = None,
     stage: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:hiring:view"])),
@@ -143,8 +143,8 @@ async def create_interview(
 @router.get("/interviews")
 async def list_interviews(
     candidate_id: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:hiring:view"])),
@@ -182,8 +182,8 @@ async def create_offer(
 async def list_offers(
     candidate_id: Optional[str] = None,
     status: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:hiring:view"])),
@@ -233,8 +233,8 @@ async def create_onboarding(
 @router.get("/onboarding")
 async def list_onboardings(
     status: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:hiring:view"])),

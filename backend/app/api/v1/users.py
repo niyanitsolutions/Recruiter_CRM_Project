@@ -35,6 +35,11 @@ from app.core.dependencies import (
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
+_ALLOWED_SORT_FIELDS = {
+    "created_at", "full_name", "username", "email", "role",
+    "status", "department_id", "updated_at", "last_login"
+}
+
 
 def get_client_ip(request: Request) -> str:
     """Get client IP address from request"""
@@ -55,13 +60,17 @@ async def list_users(
     status: Optional[str] = None,
     reporting_to: Optional[str] = None,
     sort_by: str = "created_at",
-    sort_order: int = -1,
+    sort_order: int = Query(-1, ge=-1, le=1),
     current_user: dict = Depends(get_current_user),
     db = Depends(get_company_db),
 ):
     """List internal users only (user_type=internal). Partners are managed via /partners.
     Any authenticated company user may read this list (needed for Reports To dropdowns).
     Creating / editing / deleting users still requires users:create / edit / delete."""
+    if sort_by not in _ALLOWED_SORT_FIELDS:
+        sort_by = "created_at"
+    if sort_order == 0:
+        sort_order = -1
     user_service = UserService(db)
 
     users, total = await user_service.list_users(

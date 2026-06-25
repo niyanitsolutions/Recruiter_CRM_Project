@@ -68,7 +68,7 @@ const Invoices = () => {
       setInvoices(response.items || [])
       setPagination({ total: response.total, pages: response.pages })
     } catch (error) {
-      console.error('Error fetching invoices:', error)
+      toast.error(error?.response?.data?.detail || 'Failed to load invoices')
     } finally {
       setLoading(false)
     }

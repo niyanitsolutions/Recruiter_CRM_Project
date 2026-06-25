@@ -55,7 +55,7 @@ const OnboardForm = () => {
       const res = await interviewService.getSelectedCandidates()
       setSelectedCandidates(res.data || [])
     } catch (error) {
-      console.error('Error fetching selected candidates:', error)
+      toast.error('Failed to load candidate list')
     }
   }
 
@@ -70,7 +70,7 @@ const OnboardForm = () => {
         expected_doj: data.expected_doj?.split('T')[0] || '',
       })
     } catch (error) {
-      console.error('Error fetching onboard:', error)
+      toast.error(error?.response?.data?.detail || 'Failed to load onboard record')
     } finally {
       setLoading(false)
     }

@@ -20,7 +20,7 @@ const Designations = () => {
       setLoading(true)
       const response = await designationService.getDesignations()
       setDesignations(response.data || [])
-    } catch (err) { console.error(err) }
+    } catch (err) { toast.error('Failed to load designations') }
     finally { setLoading(false) }
   }
 

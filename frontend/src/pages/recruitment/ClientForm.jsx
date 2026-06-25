@@ -67,7 +67,7 @@ const ClientForm = () => {
       setStatuses(statusRes.data || [])
       setTypes(typeRes.data || [])
     } catch (error) {
-      console.error('Error loading dropdowns:', error)
+      toast.error('Failed to load form options')
     }
   }
 

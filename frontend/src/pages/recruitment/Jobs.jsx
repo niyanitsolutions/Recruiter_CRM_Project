@@ -95,7 +95,7 @@ const Jobs = () => {
       setWorkModes(_dropdownCache.workModes)
       setPriorities(_dropdownCache.priorities)
     } catch (error) {
-      console.error('Error loading dropdowns:', error)
+      toast.error('Failed to load filter options')
     }
   }
 

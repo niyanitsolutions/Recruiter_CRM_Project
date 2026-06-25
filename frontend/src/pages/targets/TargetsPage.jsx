@@ -14,6 +14,7 @@ import targetService from '../../services/targetService';
 import TargetCard from './components/TargetCard';
 import Leaderboard from './Leaderboard';
 import { useLivePolling } from '../../hooks/useLivePolling';
+import { toast } from 'react-hot-toast';
 
 const TargetsPage = () => {
   const navigate = useNavigate();
@@ -82,8 +83,9 @@ const TargetsPage = () => {
     try {
       await targetService.deleteTarget(id);
       setTargets(targets.filter(t => t.id !== id));
+      toast.success('Target deleted');
     } catch (error) {
-      console.error('Error deleting target:', error);
+      toast.error(error?.response?.data?.detail || 'Failed to delete target');
     }
   };
 
@@ -466,7 +468,7 @@ const CreateTargetModal = ({ onClose, onCreated }) => {
       });
       onCreated();
     } catch (error) {
-      console.error('Error creating target:', error);
+      toast.error(error?.response?.data?.detail || 'Failed to create target');
     } finally {
       setSaving(false);
     }

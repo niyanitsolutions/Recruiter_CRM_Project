@@ -84,6 +84,28 @@ def _make_doc_entry(
 
 # ── Upload single document ─────────────────────────────────────────────────────
 
+def _can_write_documents(cu: dict, employee_id: str) -> bool:
+    """True when caller may upload/modify documents for employee_id."""
+    if cu.get("hrm_employee_id") == employee_id:
+        return True  # self-service always allowed
+    perms = set(cu.get("permissions") or [])
+    return bool(
+        cu.get("is_owner") or cu.get("is_super_admin") or
+        perms & {"hrm:documents:manage", "hrm:resources:create", "hrm:resources:edit"}
+    )
+
+
+def _can_read_documents(cu: dict, employee_id: str) -> bool:
+    """True when caller may read documents for employee_id."""
+    if cu.get("hrm_employee_id") == employee_id:
+        return True
+    perms = set(cu.get("permissions") or [])
+    return bool(
+        cu.get("is_owner") or cu.get("is_super_admin") or
+        perms & {"hrm:employees:view", "hrm:documents:manage"}
+    )
+
+
 @router.post("/upload/{employee_id}", status_code=201)
 async def upload_document(
     employee_id: str,
@@ -92,9 +114,10 @@ async def upload_document(
     file: UploadFile = File(...),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_any_permission([["hrm:documents:manage"], ["hrm:resources:create"], ["hrm:resources:edit"]])),
 ):
-    """Upload a single document for an employee."""
+    """Upload a single document for an employee (self or manager)."""
+    if not _can_write_documents(cu, employee_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     if not _allowed(file.filename or ""):
         raise HTTPException(status_code=400, detail="File type not allowed. Use PDF, JPG, PNG, or DOCX.")
 
@@ -154,9 +177,10 @@ async def multi_upload_documents(
     doc_names: str = Form(...),   # comma-separated list of doc_name per file
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_any_permission([["hrm:documents:manage"], ["hrm:resources:create"], ["hrm:resources:edit"]])),
 ):
-    """Upload multiple documents at once for an employee."""
+    """Upload multiple documents at once for an employee (self or manager)."""
+    if not _can_write_documents(cu, employee_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     type_list = [t.strip() for t in doc_types.split(",")]
     name_list = [n.strip() for n in doc_names.split(",")]
 
@@ -223,7 +247,7 @@ async def update_document_status(
     body: DocumentStatusUpdate,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_any_permission([["hrm:documents:manage"], ["hrm:resources:create"], ["hrm:resources:edit"]])),
+    _perm=Depends(require_permissions(["hrm:documents:manage"])),
 ):
     """Approve, reject, or mark a document for reupload."""
     if body.status not in DOC_STATUSES:
@@ -273,8 +297,8 @@ async def list_all_documents(
     status: Optional[str] = None,
     search: Optional[str] = None,
     favorites_only: bool = False,
-    page: int = 1,
-    page_size: int = 50,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:employees:view"])),
@@ -354,8 +378,8 @@ async def list_all_documents(
 @router.get("/employee-counts")
 async def get_employee_document_counts(
     search: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 30,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(30, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:employees:view"])),
@@ -663,8 +687,9 @@ async def list_documents(
     employee_id: str,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:employees:view"])),
 ):
+    if not _can_read_documents(cu, employee_id):
+        raise HTTPException(status_code=403, detail="Access denied")
     emp = await db.hrm_employees.find_one(
         {"_id": employee_id, "company_id": cu["company_id"], "is_deleted": False},
         {"documents": 1, "full_name": 1, "employee_id": 1},

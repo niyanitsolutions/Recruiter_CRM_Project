@@ -141,21 +141,22 @@ class PayoutCalculation(BaseModel):
         else:
             gross = 0
         
-        gst = gross * gst_rate / 100
-        tds = gross * tds_rate / 100
-        net = gross + gst - tds
-        
+        gross_r = round(gross, 2)
+        gst_r   = round(gross_r * gst_rate / 100, 2)
+        tds_r   = round(gross_r * tds_rate / 100, 2)
+        net_r   = round(gross_r + gst_r - tds_r, 2)
+
         return cls(
             candidate_ctc=ctc,
             commission_type=rule.commission_type,
             commission_percentage=rule.percentage,
             commission_fixed=rule.fixed_amount,
-            gross_amount=round(gross, 2),
+            gross_amount=gross_r,
             gst_percentage=gst_rate,
-            gst_amount=round(gst, 2),
+            gst_amount=gst_r,
             tds_percentage=tds_rate,
-            tds_amount=round(tds, 2),
-            net_amount=round(net, 2)
+            tds_amount=tds_r,
+            net_amount=net_r,
         )
 
 
@@ -439,6 +440,7 @@ class PartnerPayoutStats(BaseModel):
     invoices_approved: int = 0
     invoices_pending: int = 0
     total_paid: float = 0.0
+    total_revenue: float = 0.0          # lifetime net amount across all non-cancelled statuses
     total_pending_amount: float = 0.0
     this_month_earnings: float = 0.0
 

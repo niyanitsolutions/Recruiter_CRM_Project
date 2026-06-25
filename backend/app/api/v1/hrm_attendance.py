@@ -74,8 +74,14 @@ async def _resolve_emp_id(
 
     Raises HTTPException(422) only when auto_create=False and no profile found.
     """
-    # 1. Explicit employee_id in request (admin use-case)
+    # 1. Explicit employee_id in request (admin use-case) — requires manage permission
     if data_employee_id:
+        own_emp_id = cu.get("hrm_employee_id")
+        if data_employee_id != own_emp_id:
+            perms = set(cu.get("permissions") or [])
+            if not (cu.get("is_owner") or cu.get("is_super_admin") or
+                    perms & {"hrm:attendance:manage", "hrm:attendance:edit"}):
+                raise HTTPException(status_code=403, detail="Cannot submit attendance for another employee")
         return data_employee_id
 
     # 2. JWT fast path
@@ -316,8 +322,12 @@ async def get_today(
     employee_id: str,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:self"])),
 ):
+    is_own = cu.get("hrm_employee_id") == employee_id
+    if not is_own:
+        perms = set(cu.get("permissions") or [])
+        if not perms & {"hrm:attendance:team", "hrm:attendance:view"}:
+            raise HTTPException(status_code=403, detail="Access denied")
     return await AttendanceService(db).get_today(employee_id, cu["company_id"])
 
 
@@ -328,8 +338,12 @@ async def get_monthly(
     month: int,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
-    _perm=Depends(require_permissions(["hrm:attendance:self"])),
 ):
+    is_own = cu.get("hrm_employee_id") == employee_id
+    if not is_own:
+        perms = set(cu.get("permissions") or [])
+        if not perms & {"hrm:attendance:team", "hrm:attendance:view"}:
+            raise HTTPException(status_code=403, detail="Access denied")
     return await AttendanceService(db).get_monthly(employee_id, cu["company_id"], year, month)
 
 
@@ -566,6 +580,24 @@ async def trigger_auto_checkout(
     """Punch out all employees who are still checked in. Idempotent — safe to call multiple times."""
     count = await AttendanceService(db).auto_checkout_all(cu["company_id"], source="manual_admin")
     return {"punched_out": count, "company_id": cu["company_id"]}
+
+
+class MarkAbsencesRequest(BaseModel):
+    target_date: date = Field(..., description="Date to back-fill absences/weekends for (YYYY-MM-DD)")
+
+
+@router.post("/mark-absences")
+async def mark_absences(
+    data: MarkAbsencesRequest,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:attendance:manage"])),
+):
+    """Back-fill attendance records for every active employee on a past date.
+    Working days with no record → ABSENT; weekends → WEEKEND; holidays → HOLIDAY.
+    Existing records are never modified. Safe to re-run multiple times."""
+    stats = await AttendanceService(db).mark_absences_for_date(cu["company_id"], data.target_date)
+    return {**stats, "date": data.target_date.isoformat(), "company_id": cu["company_id"]}
 
 
 # ── Manual update ─────────────────────────────────────────────────────────────

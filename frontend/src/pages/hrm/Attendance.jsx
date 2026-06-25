@@ -1337,6 +1337,7 @@ function ShiftChangesTab() {
         </div>
       ) : (
         <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr style={{ borderBottom:'1px solid var(--border-subtle)', background:'var(--bg-alt)' }}>
@@ -1381,6 +1382,7 @@ function ShiftChangesTab() {
               })}
             </tbody>
           </table>
+          </div>
           {pages > 1 && (
             <div className="flex items-center justify-between px-4 py-2 border-t" style={{ borderColor:'var(--border-subtle)', background:'var(--bg-alt)' }}>
               <span className="text-xs" style={{ color:'var(--text-muted)' }}>Page {page} of {pages} · {total} requests</span>
@@ -1505,6 +1507,7 @@ function WorkModeTab() {
       ) : (
         <div className="rounded-xl border overflow-hidden"
              style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-alt)' }}>
@@ -1564,6 +1567,7 @@ function WorkModeTab() {
               })}
             </tbody>
           </table>
+          </div>
 
           {pages > 1 && (
             <div className="flex items-center justify-between px-4 py-2 border-t"

@@ -13,7 +13,7 @@ from typing import Optional, List
 
 _BACKEND_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent.parent
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
@@ -104,8 +104,8 @@ async def generate_upload_token(
 async def list_upload_tokens(
     employee_id: Optional[str] = None,
     status: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:documents:manage"])),

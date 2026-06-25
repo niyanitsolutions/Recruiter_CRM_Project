@@ -1,6 +1,6 @@
 """HRM — Payroll API Routes"""
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions
 from app.models.company.payroll import GeneratePayrollRequest, UpdatePayslipStatus, UpdatePayslipData, UpsertPayrollStructure
@@ -42,10 +42,10 @@ async def upsert_payroll_structure(
 
 @router.get("/self")
 async def list_own_payslips(
-    month: Optional[int] = None,
-    year: Optional[int] = None,
-    page: int = 1,
-    page_size: int = 20,
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None, ge=2000, le=2100),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:payroll:view_self"])),
@@ -68,12 +68,12 @@ async def list_own_payslips(
 
 @router.get("")
 async def list_payslips(
-    month: Optional[int] = None,
-    year: Optional[int] = None,
+    month: Optional[int] = Query(None, ge=1, le=12),
+    year: Optional[int] = Query(None, ge=2000, le=2100),
     employee_id: Optional[str] = None,
     status: Optional[str] = None,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:payroll:manage"])),
@@ -93,6 +93,19 @@ async def get_payslip(
     ps = await PayrollService(db).get(payslip_id, cu["company_id"])
     if not ps:
         raise HTTPException(status_code=404, detail="Payslip not found")
+    # Ownership check: employee can only view own payslip unless they have manage permission.
+    # Fall back to DB lookup for stale JWTs that don't carry hrm_employee_id.
+    caller_emp_id = cu.get("hrm_employee_id")
+    if not caller_emp_id:
+        emp_doc = await db["hrm_employees"].find_one(
+            {"crm_user_id": cu["id"], "is_deleted": False}, {"_id": 1}
+        )
+        caller_emp_id = str(emp_doc["_id"]) if emp_doc else None
+    is_own = caller_emp_id and caller_emp_id == ps.get("employee_id")
+    if not is_own:
+        perms = set(cu.get("permissions") or [])
+        if "hrm:payroll:manage" not in perms:
+            raise HTTPException(status_code=403, detail="Access denied")
     return ps
 
 

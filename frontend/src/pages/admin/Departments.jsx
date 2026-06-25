@@ -20,7 +20,7 @@ const Departments = () => {
       setLoading(true)
       const response = await departmentService.getDepartments()
       setDepartments(response.data || [])
-    } catch (err) { console.error(err) }
+    } catch (err) { toast.error('Failed to load departments') }
     finally { setLoading(false) }
   }
 

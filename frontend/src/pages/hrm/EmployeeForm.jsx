@@ -745,7 +745,7 @@ export default function EmployeeForm() {
         if (!structure?.is_configured) {
           setStructureSelecting(true)
         }
-      } catch (err) { console.error('EmployeeForm: reference data load failed', err) }
+      } catch (err) { toast.error('Failed to load form reference data') }
     }
     fetchData()
   }, [])

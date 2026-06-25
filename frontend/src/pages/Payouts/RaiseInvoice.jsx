@@ -25,7 +25,7 @@ const RaiseInvoice = () => {
       const data = await payoutService.getEligiblePayouts()
       setEligiblePayouts(data || [])
     } catch (error) {
-      console.error('Error fetching eligible payouts:', error)
+      toast.error(error?.response?.data?.detail || 'Failed to load eligible payouts')
     } finally {
       setLoading(false)
     }

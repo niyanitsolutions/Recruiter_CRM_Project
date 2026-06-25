@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { 
-  Search, Filter, Eye, DollarSign, Clock, CheckCircle, 
+import {
+  Search, Filter, Eye, DollarSign, Clock, CheckCircle,
   XCircle, FileText, TrendingUp, Calendar
 } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { selectUserRole } from '../../store/authSlice'
 import { payoutService } from '../../services'
+import { toast } from 'react-hot-toast'
 
 const STATUS_COLORS = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -59,7 +60,7 @@ const PartnerPayouts = () => {
       setPayouts(response.items || [])
       setPagination({ total: response.total, pages: response.pages })
     } catch (error) {
-      console.error('Error fetching payouts:', error)
+      toast.error(error?.response?.data?.detail || 'Failed to load payouts')
     } finally {
       setLoading(false)
     }
@@ -67,12 +68,12 @@ const PartnerPayouts = () => {
 
   const fetchStats = async () => {
     try {
-      const data = isPartner 
+      const data = isPartner
         ? await payoutService.getMyStats()
         : await payoutService.getAccountsDashboard()
       setStats(data)
     } catch (error) {
-      console.error('Error fetching stats:', error)
+      toast.error('Failed to load payout stats')
     }
   }
 

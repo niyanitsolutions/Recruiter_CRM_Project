@@ -42,7 +42,7 @@ const OnboardDetails = () => {
       const data = await onboardService.getById(id)
       setOnboard(data)
     } catch (error) {
-      console.error('Error fetching onboard:', error)
+      toast.error(error?.response?.data?.detail || 'Failed to load onboard details')
     } finally {
       setLoading(false)
     }

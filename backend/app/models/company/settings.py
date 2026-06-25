@@ -320,6 +320,8 @@ class CompanySettings(BaseModel):
 
     # ===== Partner Settings =====
     default_partner_commission: float = Field(default=8.33)
+    partner_commission_gst_percentage: float = Field(default=18.0)
+    partner_commission_tds_percentage: float = Field(default=10.0)
     partner_can_see_client_name: bool = Field(default=False)
     partner_can_see_candidate_contact: bool = Field(default=True)
 
@@ -403,6 +405,8 @@ class CompanySettingsUpdate(BaseModel):
     default_notice_period: Optional[str] = None
     auto_assign_candidates: Optional[bool] = None
     default_partner_commission: Optional[float] = None
+    partner_commission_gst_percentage: Optional[float] = None
+    partner_commission_tds_percentage: Optional[float] = None
     partner_can_see_client_name: Optional[bool] = None
     partner_can_see_candidate_contact: Optional[bool] = None
 
