@@ -625,7 +625,7 @@ export default function AIProviderManagement() {
                         {testResult.success ? (
                           <>
                             <div className="flex items-center gap-3 mt-1 text-xs text-emerald-700">
-                              <span>Model: <b>{testResult.model || '—'}</b></span>
+                              <span>Tested with: <b>{testResult.steps?.generate_model_used || testResult.model || '—'}</b></span>
                               <span>Latency: <b>{testResult.latency_ms}ms</b></span>
                             </div>
                             {testResult.steps?.available_models?.length > 0 && (
@@ -634,6 +634,12 @@ export default function AIProviderManagement() {
                                 {testResult.steps.available_models.length > 4
                                   ? ` +${testResult.steps.available_models.length - 4} more` : ''}
                               </p>
+                            )}
+                            {testResult.warning && (
+                              <div className="mt-2 flex items-start gap-1.5 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
+                                <p className="text-xs text-amber-700 whitespace-pre-wrap">{testResult.warning}</p>
+                              </div>
                             )}
                           </>
                         ) : (

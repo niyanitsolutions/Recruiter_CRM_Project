@@ -285,6 +285,15 @@ class ClaudeAdapter(BaseAIAdapter):
 # newer models (gemini-2.5-*) even with a valid API key.  Direct REST + API-key
 # query-param auth is the correct path for server-side non-OAuth access.
 
+# Fallback models tried during test_connection when the configured model returns
+# 403.  Gemini 2.5-* requires specific project access; 2.0/1.5 models are
+# available on all valid API keys.
+_GEMINI_FALLBACK_TEST_MODELS = [
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-8b",
+]
+
 class GeminiAdapter(BaseAIAdapter):
     _BASE = "https://generativelanguage.googleapis.com/v1beta"
     _GENERATE_URL = _BASE + "/models/{model}:generateContent"
@@ -514,6 +523,51 @@ class GeminiAdapter(BaseAIAdapter):
                     "gemini_test step=3_generate_content failed http=%d detail=%s",
                     exc.status_code, exc.detail,
                 )
+
+                # ── 403 fallback: configured model may need special access ──
+                # Gemini 2.5-* models require project-level preview access.
+                # Try stable fallback models before reporting failure so the
+                # user gets a useful "your key works, change the model" message.
+                if exc.status_code == 403 and model not in _GEMINI_FALLBACK_TEST_MODELS:
+                    logger.warning(
+                        "gemini_test step=3 model=%s denied (403), trying fallbacks: %s",
+                        model, _GEMINI_FALLBACK_TEST_MODELS,
+                    )
+                    for fb_model in _GEMINI_FALLBACK_TEST_MODELS:
+                        fb_config = {**test_config, "model": fb_model}
+                        try:
+                            fb_text = await self.call("Reply only with the word: OK", fb_config)
+                            steps["generate_content"]     = True
+                            steps["generate_model_used"]  = fb_model
+                            steps["generate_preview"]     = (fb_text or "")[:50]
+                            latency_ms = int((time.monotonic() - start) * 1000)
+                            logger.warning(
+                                "gemini_test fallback succeeded model=%s latency_ms=%d",
+                                fb_model, latency_ms,
+                            )
+                            return {
+                                "success":          True,
+                                "provider":         "gemini",
+                                "model":            model,
+                                "latency_ms":       latency_ms,
+                                "response_preview": steps["generate_preview"],
+                                "message":          (
+                                    f"API access verified with '{fb_model}'. "
+                                    f"Note: configured model '{model}' is not accessible."
+                                ),
+                                "warning": (
+                                    f"Model '{model}' returned HTTP 403 (access not granted). "
+                                    f"Your API key works — tested successfully with '{fb_model}'.\n"
+                                    f"Action: change the Model field to '{fb_model}' "
+                                    f"to enable AI features, or request access to '{model}' "
+                                    f"in Google Cloud Console."
+                                ),
+                                "steps": steps,
+                            }
+                        except Exception:
+                            logger.warning("gemini_test fallback model=%s also failed", fb_model)
+                            continue
+
                 return {
                     "success":     False,
                     "provider":    "gemini",
