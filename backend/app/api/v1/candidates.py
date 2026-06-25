@@ -258,6 +258,7 @@ async def extract_resume_file(
 
     content = await file.read()
     raw_text = ""
+    logger.info("extract_resume filename=%s size=%d ext=%s", file.filename, len(content), ext)
 
     if ext == ".txt":
         raw_text = content.decode("utf-8", errors="ignore")
@@ -272,20 +273,31 @@ async def extract_resume_file(
                     ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
                     texts = [node.text for node in tree.iter(f"{ns}t") if node.text]
                     raw_text = " ".join(texts)
-        except Exception:
+        except Exception as exc:
+            logger.warning("docx_extract_failed filename=%s error=%s", file.filename, exc)
             raw_text = ""
 
-    elif ext in (".pdf", ".doc"):
+    elif ext == ".pdf":
         try:
             from pypdf import PdfReader
             reader = PdfReader(io.BytesIO(content))
             raw_text = "\n".join(page.extract_text() or "" for page in reader.pages)
-        except Exception:
-            raw_text = content.decode("utf-8", errors="ignore")
+            logger.info("pdf_extract filename=%s chars=%d", file.filename, len(raw_text))
+        except ImportError:
+            logger.error("pypdf_not_installed: cannot extract PDF text")
+            raise HTTPException(status_code=503, detail="PDF parsing library is not installed on the server. Please contact support.")
+        except Exception as exc:
+            logger.error("pdf_extract_failed filename=%s error=%s", file.filename, exc)
+            raise HTTPException(status_code=422, detail="Could not read the PDF file. Ensure it is not password-protected or corrupted.")
+
+    elif ext == ".doc":
+        # Legacy binary .doc format — best-effort UTF-8 decode
+        raw_text = content.decode("utf-8", errors="ignore")
 
     if not raw_text.strip():
         raise HTTPException(status_code=422, detail="Could not extract text from the uploaded file.")
 
+    logger.info("resume_text_ready filename=%s chars=%d", file.filename, len(raw_text))
     return await _ai_parse_resume(raw_text)
 
 
@@ -294,7 +306,10 @@ async def _ai_parse_resume(raw_text: str) -> dict:
     import re
     from app.services.ai_service import AIService
 
+    logger.info("ai_parse_resume text_chars=%d", len(raw_text))
     parsed = await AIService.parse_resume(raw_text, get_master_db())
+    logger.info("ai_parse_resume_done first_name=%r email=%r skills_count=%d",
+                parsed.get("first_name"), parsed.get("email"), len(parsed.get("skills") or []))
 
     full_name = parsed.get("full_name", "")
     name_parts = full_name.split(" ", 1) if full_name else ["", ""]
@@ -1127,6 +1142,7 @@ async def public_extract_resume_file(file: UploadFile = File(...)):
 
     content = await file.read()
     raw_text = ""
+    logger.info("public_extract_resume filename=%s size=%d ext=%s", file.filename, len(content), ext)
 
     if ext == ".txt":
         raw_text = content.decode("utf-8", errors="ignore")
@@ -1140,19 +1156,28 @@ async def public_extract_resume_file(file: UploadFile = File(...)):
                     ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
                     texts = [node.text for node in tree.iter(f"{ns}t") if node.text]
                     raw_text = " ".join(texts)
-        except Exception:
+        except Exception as exc:
+            logger.warning("public_docx_extract_failed filename=%s error=%s", file.filename, exc)
             raw_text = ""
-    elif ext in (".pdf", ".doc"):
+    elif ext == ".pdf":
         try:
             from pypdf import PdfReader
             reader = PdfReader(io.BytesIO(content))
             raw_text = "\n".join(page.extract_text() or "" for page in reader.pages)
-        except Exception:
-            raw_text = content.decode("utf-8", errors="ignore")
+            logger.info("public_pdf_extract filename=%s chars=%d", file.filename, len(raw_text))
+        except ImportError:
+            logger.error("pypdf_not_installed: cannot extract PDF text")
+            raise HTTPException(status_code=503, detail="PDF parsing library is not installed on the server. Please contact support.")
+        except Exception as exc:
+            logger.error("public_pdf_extract_failed filename=%s error=%s", file.filename, exc)
+            raise HTTPException(status_code=422, detail="Could not read the PDF file. Ensure it is not password-protected or corrupted.")
+    elif ext == ".doc":
+        raw_text = content.decode("utf-8", errors="ignore")
 
     if not raw_text.strip():
         raise HTTPException(status_code=422, detail="Could not extract text from the uploaded file.")
 
+    logger.info("public_resume_text_ready filename=%s chars=%d", file.filename, len(raw_text))
     return await _ai_parse_resume(raw_text)
 
 

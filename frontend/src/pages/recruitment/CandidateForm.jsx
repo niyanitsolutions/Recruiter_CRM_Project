@@ -422,8 +422,9 @@ const CandidateForm = () => {
 
           if (p.first_name || p.email) toast.success('Resume parsed — form auto-filled')
         }
-      } catch {
-        // non-fatal
+      } catch (err) {
+        const msg = err?.response?.data?.detail || 'Resume parsing failed. Please try again or fill the fields manually.'
+        toast.error(msg)
       } finally {
         setParsing(false)
       }

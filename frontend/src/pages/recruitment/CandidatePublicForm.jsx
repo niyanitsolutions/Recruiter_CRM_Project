@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { CheckCircle, XCircle, Loader2, Plus, Trash2, Upload, Camera, X } from 'lucide-react'
+import { toast } from 'react-hot-toast'
 import api from '../../services/api'
 import candidateService from '../../services/candidateService'
 import ImageCropModal from '../../components/common/ImageCropModal'
@@ -189,27 +190,33 @@ const CandidatePublicForm = () => {
           mobile: p.mobile || prev.mobile,
           skills: p.skills?.length ? p.skills : prev.skills,
           current_city: p.current_city || prev.current_city,
-          total_experience_years: p.experience_years != null ? String(p.experience_years) : prev.total_experience_years,
+          total_experience_years: p.total_experience_years != null && p.total_experience_years > 0
+            ? String(p.total_experience_years) : prev.total_experience_years,
         }))
-        if (p.education_degree || p.institution || p.graduation_year) {
-          setEducation(prev => prev.map((e, i) => i === 0 ? {
-            ...e,
-            degree: p.education_degree || e.degree,
-            institution: p.institution || e.institution,
-            to_year: p.graduation_year ? String(p.graduation_year) : e.to_year
-          } : e))
+        if (p.education?.length) {
+          setEducation(prev => p.education.map((edu, i) => ({
+            ...(prev[i] || {}),
+            degree: edu.degree || prev[i]?.degree || '',
+            field_of_study: edu.field_of_study || prev[i]?.field_of_study || '',
+            institution: edu.institution || prev[i]?.institution || '',
+            from_year: edu.from_year || prev[i]?.from_year || '',
+            to_year: edu.to_year || prev[i]?.to_year || '',
+            percentage: edu.percentage || prev[i]?.percentage || '',
+          })))
         }
-        if (p.current_company || p.current_designation) {
-          setWorkExperience(prev => prev.map((e, i) => i === 0 ? {
-            ...e,
-            company_name: p.current_company || e.company_name,
-            designation: p.current_designation || e.designation,
-            is_current: true
-          } : e))
+        if (p.experience?.length) {
+          setWorkExperience(p.experience.map(exp => ({
+            company_name: exp.company_name || '',
+            designation: exp.designation || '',
+            start_date: exp.start_date || '',
+            end_date: exp.is_current ? '' : (exp.end_date || ''),
+            is_current: exp.is_current || false,
+          })))
         }
       }
-    } catch {
-      // non-fatal
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Resume parsing failed. Please try again or fill the fields manually.'
+      toast.error(msg)
     } finally {
       setParsing(false)
     }
