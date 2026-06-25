@@ -277,45 +277,214 @@ class ClaudeAdapter(BaseAIAdapter):
             raise HTTPException(status_code=502, detail=f"Claude API error: {exc}")
 
 
-# ─── Gemini adapter ───────────────────────────────────────────────────────────
+# ─── Gemini adapter (direct REST — no deprecated SDK) ────────────────────────
+#
+# Uses httpx against the Gemini REST API directly.
+# The old google-generativeai SDK used gRPC transport which triggered 403s on
+# newer models (gemini-2.5-*) even with a valid API key.  Direct REST + API-key
+# query-param auth is the correct path for server-side non-OAuth access.
 
 class GeminiAdapter(BaseAIAdapter):
-    async def call(self, prompt: str, config: dict) -> str:
-        try:
-            import google.generativeai as genai  # type: ignore
-        except ImportError:
-            raise HTTPException(status_code=503, detail="google-generativeai package is not installed. Run: pip install google-generativeai")
+    _BASE = "https://generativelanguage.googleapis.com/v1beta"
+    _GENERATE_URL = _BASE + "/models/{model}:generateContent"
+    _LIST_URL     = _BASE + "/models"
 
-        api_key = config.get("api_key", "")
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _clean_key(raw: str) -> str:
+        """Strip all whitespace / newline chars that would corrupt the key."""
+        return raw.strip()
+
+    @staticmethod
+    def _safe_key_prefix(key: str) -> str:
+        return key[:6] + "******" if len(key) >= 6 else "******"
+
+    @staticmethod
+    def _extract_error(resp_json: dict) -> tuple[int, str]:
+        """Return (google_error_code, message) from a non-200 response body."""
+        err = resp_json.get("error", {})
+        return err.get("code", 0), err.get("message", "")
+
+    # ── Primary call ──────────────────────────────────────────────────────────
+
+    async def call(self, prompt: str, config: dict) -> str:
+        api_key = self._clean_key(config.get("api_key") or "")
         if not api_key:
             raise HTTPException(status_code=503, detail="Gemini API key is not configured.")
 
-        genai.configure(api_key=api_key)
-        model_name = config.get("model", "gemini-2.0-flash")
-        gen_config: dict[str, Any] = {
-            "temperature": config.get("temperature", 0.3),
-            "max_output_tokens": config.get("max_tokens", 2048),
+        model   = (config.get("model") or "gemini-2.0-flash").strip()
+        timeout = int(config.get("timeout") or 30)
+
+        logger.info(
+            "gemini_call model=%s endpoint=%s timeout=%ds key_prefix=%s prompt_len=%d",
+            model, self._GENERATE_URL.format(model=model),
+            timeout, self._safe_key_prefix(api_key), len(prompt),
+        )
+
+        payload: dict[str, Any] = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": float(config.get("temperature") or 0.3),
+                "maxOutputTokens": int(config.get("max_tokens") or 2048),
+            },
         }
-        if config.get("top_p") is not None:
-            gen_config["top_p"] = config["top_p"]
+        top_p = config.get("top_p")
+        if top_p is not None:
+            payload["generationConfig"]["topP"] = float(top_p)
 
-        model = genai.GenerativeModel(model_name, generation_config=gen_config)
-        timeout = config.get("timeout", 30)
+        url = self._GENERATE_URL.format(model=model)
 
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            try:
+                resp = await client.post(
+                    url,
+                    json=payload,
+                    params={"key": api_key},
+                    headers={"Content-Type": "application/json"},
+                )
+            except httpx.TimeoutException:
+                raise HTTPException(status_code=504, detail=f"Gemini API timed out after {timeout}s.")
+            except Exception as exc:
+                raise HTTPException(status_code=502, detail=f"Gemini network error: {exc}")
+
+        logger.info("gemini_response status=%d model=%s", resp.status_code, model)
+
+        if resp.status_code == 200:
+            return self._parse_content(resp.json(), model)
+
+        # ── Error path ────────────────────────────────────────────────────────
         try:
-            loop = asyncio.get_event_loop()
-            response = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: model.generate_content(prompt)),
-                timeout=timeout,
+            body = resp.json()
+        except Exception:
+            body = {}
+
+        g_code, g_msg = self._extract_error(body)
+        logger.error(
+            "gemini_error http=%d google_code=%s message=%s",
+            resp.status_code, g_code, g_msg,
+        )
+        self._raise_for_status(resp.status_code, g_code, g_msg, model)
+
+    # ── Response parser ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def _parse_content(data: dict, model: str) -> str:
+        try:
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError):
+            # Safety-blocked or empty response
+            finish = ""
+            try:
+                finish = data["candidates"][0].get("finishReason", "")
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=502,
+                detail=f"Gemini ({model}) returned no text content. finishReason={finish!r}.",
             )
-            return response.text
-        except asyncio.TimeoutError:
-            raise HTTPException(status_code=504, detail=f"Gemini API timed out after {timeout}s.")
-        except Exception as exc:
-            err = str(exc)
-            if "API_KEY_INVALID" in err or "401" in err:
-                raise HTTPException(status_code=401, detail="Gemini API key is invalid.")
-            raise HTTPException(status_code=502, detail=f"Gemini API error: {exc}")
+
+    # ── Error classifier ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def _raise_for_status(http: int, g_code: int, g_msg: str, model: str) -> None:
+        detail: str
+        if http == 400:
+            detail = f"Gemini bad request: {g_msg}"
+        elif http == 401:
+            detail = "Gemini API key is invalid or expired."
+        elif http == 403:
+            detail = (
+                f"Gemini access denied (403). {g_msg}\n\n"
+                "Verify: API key is correct, Generative Language API is enabled in "
+                "Google Cloud Console, billing is active, and the key has no IP restrictions."
+            )
+        elif http == 404:
+            detail = (
+                f"Gemini model '{model}' not found. "
+                "Check the model name in AI Provider Management."
+            )
+        elif http == 429:
+            detail = "Gemini API quota exceeded. Please retry in a moment."
+        else:
+            detail = f"Gemini API error {http}: {g_msg}"
+        raise HTTPException(status_code=http if http in (400, 401, 403, 404, 429) else 502, detail=detail)
+
+    # ── Test connection (full: list models + generate) ────────────────────────
+
+    async def test_connection(self, config: dict) -> dict:
+        api_key = self._clean_key(config.get("api_key") or "")
+        if not api_key:
+            return {"success": False, "provider": "gemini", "message": "API key is not configured."}
+
+        model   = (config.get("model") or "gemini-2.0-flash").strip()
+        timeout = int(config.get("timeout") or 30)
+        steps: dict[str, Any] = {}
+        start = time.monotonic()
+
+        # Step 1 — API key format
+        steps["api_key_valid"] = bool(api_key)
+        logger.info("gemini_test step=api_key prefix=%s", self._safe_key_prefix(api_key))
+
+        # Step 2 — Authenticate / list models
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            try:
+                lr = await client.get(self._LIST_URL, params={"key": api_key})
+                if lr.status_code == 200:
+                    models = [m.get("name", "").split("/")[-1] for m in lr.json().get("models", [])]
+                    steps["list_models"] = True
+                    steps["available_models"] = models[:10]
+                    logger.info("gemini_test step=list_models count=%d", len(models))
+                else:
+                    try:
+                        _, g_msg = self._extract_error(lr.json())
+                    except Exception:
+                        g_msg = lr.text[:200]
+                    steps["list_models"] = False
+                    steps["list_models_error"] = g_msg
+                    return {
+                        "success": False, "provider": "gemini", "model": model,
+                        "latency_ms": int((time.monotonic() - start) * 1000),
+                        "message": f"Authentication failed ({lr.status_code}): {g_msg}",
+                        "steps": steps,
+                    }
+            except Exception as exc:
+                steps["list_models"] = False
+                steps["list_models_error"] = str(exc)
+                return {
+                    "success": False, "provider": "gemini", "model": model,
+                    "latency_ms": int((time.monotonic() - start) * 1000),
+                    "message": f"Could not reach Gemini API: {exc}",
+                    "steps": steps,
+                }
+
+        # Step 3 — Generate content
+        test_config = {**config, "api_key": api_key, "model": model,
+                       "max_tokens": 16, "temperature": 0.0}
+        try:
+            text = await self.call("Reply only with the word: OK", test_config)
+            steps["generate_content"] = True
+            steps["generate_preview"] = (text or "")[:50]
+            logger.info("gemini_test step=generate_content ok preview=%r", steps["generate_preview"])
+        except HTTPException as exc:
+            steps["generate_content"] = False
+            steps["generate_error"] = exc.detail
+            return {
+                "success": False, "provider": "gemini", "model": model,
+                "latency_ms": int((time.monotonic() - start) * 1000),
+                "message": exc.detail,
+                "steps": steps,
+            }
+
+        latency_ms = int((time.monotonic() - start) * 1000)
+        logger.info("gemini_test success model=%s latency_ms=%d", model, latency_ms)
+        return {
+            "success": True, "provider": "gemini", "model": model,
+            "latency_ms": latency_ms,
+            "response_preview": steps["generate_preview"],
+            "message": "Connection successful",
+            "steps": steps,
+        }
 
 
 # ─── OpenAI adapter ───────────────────────────────────────────────────────────

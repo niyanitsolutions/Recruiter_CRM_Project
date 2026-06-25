@@ -54,7 +54,7 @@ python-docx==1.1.2
 # AI / Provider SDKs (multi-provider support)
 anthropic==0.40.0
 openai>=1.30.0
-google-generativeai>=0.8.0
+# google-generativeai removed — GeminiAdapter now uses httpx REST directly (no SDK needed)
 
 # Date/Time
 python-dateutil==2.8.2
