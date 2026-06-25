@@ -3,6 +3,8 @@
 Only Super Admins can access these endpoints.
 Tenants, owners, employees, and all other roles have zero access.
 """
+import logging
+import traceback
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -12,6 +14,8 @@ from pydantic import BaseModel, Field
 from app.middleware.auth import require_super_admin, AuthContext
 from app.middleware.tenant import get_master_database
 from app.services.ai_service import AIService, SUPPORTED_PROVIDERS, PROVIDER_MODELS, _COLLECTION, _DOC_ID
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Super Admin - AI Provider"])
 
@@ -222,5 +226,20 @@ async def test_ai_provider(
         "custom_headers":  body.custom_headers,
     }
 
-    result = await AIService.test_connection(config_override, master_db)
-    return result
+    try:
+        result = await AIService.test_connection(config_override, master_db)
+        return result
+    except HTTPException:
+        raise  # auth / validation errors propagate normally
+    except Exception as exc:
+        logger.error(
+            "test_ai_provider unhandled exception provider=%s: %s\n%s",
+            body.provider, exc, traceback.format_exc(),
+        )
+        return {
+            "success":  False,
+            "provider": body.provider,
+            "model":    body.model or "",
+            "message":  f"Internal error during test: {exc}",
+            "steps":    {},
+        }

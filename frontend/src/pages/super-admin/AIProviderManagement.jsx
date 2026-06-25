@@ -314,7 +314,29 @@ export default function AIProviderManagement() {
       })
       setTestResult(res.data)
     } catch (err) {
-      setTestResult({ success: false, message: err.response?.data?.detail || 'Connection test failed.' })
+      // Extract the most meaningful error from the axios exception.
+      // detail may be a string (FastAPI HTTPException) or an array (422 validation).
+      const detail = err.response?.data?.detail
+      let msg
+      if (typeof detail === 'string' && detail) {
+        msg = detail
+      } else if (Array.isArray(detail) && detail.length) {
+        msg = detail.map(d => d.msg || JSON.stringify(d)).join('; ')
+      } else {
+        msg = (
+          err.response?.data?.message ||
+          err.message ||
+          'Request failed — check server logs.'
+        )
+      }
+      setTestResult({
+        success:     false,
+        provider:    form.provider,
+        model:       form.model || '',
+        http_status: err.response?.status,
+        message:     msg,
+        steps:       {},
+      })
     } finally {
       setTesting(false)
     }
@@ -580,27 +602,89 @@ export default function AIProviderManagement() {
 
                 {/* ── Test result ──────────────────────────────── */}
                 {testResult && (
-                  <div className={`flex items-start gap-3 p-4 rounded-xl border ${
+                  <div className={`p-4 rounded-xl border ${
                     testResult.success
                       ? 'bg-emerald-50 border-emerald-200'
                       : 'bg-red-50 border-red-200'
                   }`}>
-                    {testResult.success
-                      ? <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                      : <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                    }
-                    <div className="flex-1 min-w-0">
-                      <p className={`font-medium text-sm ${testResult.success ? 'text-emerald-800' : 'text-red-700'}`}>
-                        {testResult.success ? 'Connection Successful' : 'Connection Failed'}
-                      </p>
-                      {testResult.success ? (
-                        <div className="flex items-center gap-3 mt-1 text-xs text-emerald-700">
-                          <span>Model: <b>{testResult.model || '—'}</b></span>
-                          <span>Latency: <b>{testResult.latency_ms}ms</b></span>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-red-600 mt-1 break-words">{testResult.message}</p>
-                      )}
+                    <div className="flex items-start gap-3">
+                      {testResult.success
+                        ? <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                        : <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                      }
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-medium text-sm ${testResult.success ? 'text-emerald-800' : 'text-red-700'}`}>
+                          {testResult.success ? 'Connection Successful' : 'Connection Failed'}
+                          {testResult.http_status && !testResult.success && (
+                            <span className="ml-2 font-normal text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">
+                              HTTP {testResult.http_status}
+                            </span>
+                          )}
+                        </p>
+
+                        {testResult.success ? (
+                          <>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-emerald-700">
+                              <span>Model: <b>{testResult.model || '—'}</b></span>
+                              <span>Latency: <b>{testResult.latency_ms}ms</b></span>
+                            </div>
+                            {testResult.steps?.available_models?.length > 0 && (
+                              <p className="text-xs text-emerald-600 mt-1">
+                                Available: {testResult.steps.available_models.slice(0, 4).join(', ')}
+                                {testResult.steps.available_models.length > 4
+                                  ? ` +${testResult.steps.available_models.length - 4} more` : ''}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs text-red-600 mt-1 break-words whitespace-pre-wrap">
+                              {testResult.message}
+                            </p>
+
+                            {/* Step-by-step diagnostic breakdown */}
+                            {testResult.steps && Object.keys(testResult.steps).length > 0 && (
+                              <div className="mt-2 space-y-1 border-t border-red-100 pt-2">
+                                <p className="text-xs font-medium text-red-700 mb-1">Diagnostic Steps</p>
+                                {testResult.steps.api_key_valid !== undefined && (
+                                  <div className="flex items-center gap-1.5 text-xs">
+                                    <span className={testResult.steps.api_key_valid ? 'text-emerald-600' : 'text-red-500'}>
+                                      {testResult.steps.api_key_valid ? '✓' : '✗'}
+                                    </span>
+                                    <span className="text-surface-600">Step 1: API key present</span>
+                                  </div>
+                                )}
+                                {testResult.steps.list_models !== undefined && (
+                                  <div className="flex items-start gap-1.5 text-xs">
+                                    <span className={`flex-shrink-0 ${testResult.steps.list_models ? 'text-emerald-600' : 'text-red-500'}`}>
+                                      {testResult.steps.list_models ? '✓' : '✗'}
+                                    </span>
+                                    <span className="text-surface-600">
+                                      Step 2: List models
+                                      {testResult.steps.list_models_error && (
+                                        <span className="ml-1 text-red-500">— {testResult.steps.list_models_error}</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+                                {testResult.steps.generate_content !== undefined && (
+                                  <div className="flex items-start gap-1.5 text-xs">
+                                    <span className={`flex-shrink-0 ${testResult.steps.generate_content ? 'text-emerald-600' : 'text-red-500'}`}>
+                                      {testResult.steps.generate_content ? '✓' : '✗'}
+                                    </span>
+                                    <span className="text-surface-600">
+                                      Step 3: Generate content
+                                      {testResult.steps.generate_error && (
+                                        <span className="ml-1 text-red-500 break-all">— {testResult.steps.generate_error}</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

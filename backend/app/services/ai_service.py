@@ -413,78 +413,157 @@ class GeminiAdapter(BaseAIAdapter):
     # ── Test connection (full: list models + generate) ────────────────────────
 
     async def test_connection(self, config: dict) -> dict:
-        api_key = self._clean_key(config.get("api_key") or "")
-        if not api_key:
-            return {"success": False, "provider": "gemini", "message": "API key is not configured."}
-
-        model   = (config.get("model") or "gemini-2.0-flash").strip()
-        timeout = int(config.get("timeout") or 30)
-        steps: dict[str, Any] = {}
+        import traceback
         start = time.monotonic()
-
-        # Step 1 — API key format
-        steps["api_key_valid"] = bool(api_key)
-        logger.info("gemini_test step=api_key prefix=%s", self._safe_key_prefix(api_key))
-
-        # Step 2 — Authenticate / list models
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            try:
-                lr = await client.get(self._LIST_URL, params={"key": api_key})
-                if lr.status_code == 200:
-                    models = [m.get("name", "").split("/")[-1] for m in lr.json().get("models", [])]
-                    steps["list_models"] = True
-                    steps["available_models"] = models[:10]
-                    logger.info("gemini_test step=list_models count=%d", len(models))
-                else:
-                    try:
-                        _, g_msg = self._extract_error(lr.json())
-                    except Exception:
-                        g_msg = lr.text[:200]
-                    steps["list_models"] = False
-                    steps["list_models_error"] = g_msg
-                    return {
-                        "success": False, "provider": "gemini", "model": model,
-                        "latency_ms": int((time.monotonic() - start) * 1000),
-                        "message": f"Authentication failed ({lr.status_code}): {g_msg}",
-                        "steps": steps,
-                    }
-            except Exception as exc:
-                steps["list_models"] = False
-                steps["list_models_error"] = str(exc)
+        steps: dict[str, Any] = {}
+        model = ""
+        try:
+            api_key = self._clean_key(config.get("api_key") or "")
+            if not api_key:
                 return {
-                    "success": False, "provider": "gemini", "model": model,
-                    "latency_ms": int((time.monotonic() - start) * 1000),
-                    "message": f"Could not reach Gemini API: {exc}",
-                    "steps": steps,
+                    "success": False, "provider": "gemini", "model": "",
+                    "latency_ms": 0, "message": "API key is not configured.", "steps": {},
                 }
 
-        # Step 3 — Generate content
-        test_config = {**config, "api_key": api_key, "model": model,
-                       "max_tokens": 16, "temperature": 0.0}
-        try:
-            text = await self.call("Reply only with the word: OK", test_config)
-            steps["generate_content"] = True
-            steps["generate_preview"] = (text or "")[:50]
-            logger.info("gemini_test step=generate_content ok preview=%r", steps["generate_preview"])
-        except HTTPException as exc:
-            steps["generate_content"] = False
-            steps["generate_error"] = exc.detail
+            model   = (config.get("model") or "gemini-2.0-flash").strip()
+            timeout = int(config.get("timeout") or 30)
+
+            # ── Step 1: API key format ─────────────────────────────────────
+            steps["api_key_valid"] = True
+            logger.info(
+                "gemini_test step=1_api_key prefix=%s model=%s timeout=%ds",
+                self._safe_key_prefix(api_key), model, timeout,
+            )
+
+            # ── Step 2: List models (validates key + network) ──────────────
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                try:
+                    lr = await client.get(self._LIST_URL, params={"key": api_key})
+                    logger.info("gemini_test step=2_list_models http=%d", lr.status_code)
+                    if lr.status_code == 200:
+                        try:
+                            models_data = lr.json().get("models", [])
+                            model_names = [m.get("name", "").split("/")[-1] for m in models_data]
+                        except Exception:
+                            model_names = []
+                        steps["list_models"] = True
+                        steps["available_models"] = model_names[:10]
+                        logger.info("gemini_test step=2_list_models ok count=%d", len(model_names))
+                    else:
+                        try:
+                            g_code, g_msg = self._extract_error(lr.json())
+                        except Exception:
+                            g_code, g_msg = 0, lr.text[:300]
+                        steps["list_models"] = False
+                        steps["list_models_error"] = g_msg or f"HTTP {lr.status_code}"
+                        logger.error(
+                            "gemini_test step=2_list_models failed http=%d google_code=%s msg=%s",
+                            lr.status_code, g_code, g_msg,
+                        )
+                        return {
+                            "success":     False,
+                            "provider":    "gemini",
+                            "model":       model,
+                            "http_status": lr.status_code,
+                            "latency_ms":  int((time.monotonic() - start) * 1000),
+                            "message":     (f"HTTP {lr.status_code}: {g_msg}"
+                                            if g_msg else f"Authentication failed (HTTP {lr.status_code})"),
+                            "steps":       steps,
+                        }
+                except httpx.TimeoutException:
+                    steps["list_models"] = False
+                    steps["list_models_error"] = f"Request timed out after {timeout}s"
+                    logger.error("gemini_test step=2_list_models timeout after %ds", timeout)
+                    return {
+                        "success":    False,
+                        "provider":   "gemini",
+                        "model":      model,
+                        "latency_ms": int((time.monotonic() - start) * 1000),
+                        "message":    f"Request timed out after {timeout}s — check your network or increase Timeout.",
+                        "steps":      steps,
+                    }
+                except Exception as exc:
+                    steps["list_models"] = False
+                    steps["list_models_error"] = str(exc)
+                    logger.error("gemini_test step=2_list_models network error: %s", exc)
+                    return {
+                        "success":    False,
+                        "provider":   "gemini",
+                        "model":      model,
+                        "latency_ms": int((time.monotonic() - start) * 1000),
+                        "message":    f"Network error reaching Gemini API: {exc}",
+                        "steps":      steps,
+                    }
+
+            # ── Step 3: Generate content ───────────────────────────────────
+            test_config = {**config, "api_key": api_key, "model": model,
+                           "max_tokens": 16, "temperature": 0.0}
+            try:
+                text = await self.call("Reply only with the word: OK", test_config)
+                steps["generate_content"] = True
+                steps["generate_preview"] = (text or "")[:50]
+                logger.info(
+                    "gemini_test step=3_generate_content ok preview=%r",
+                    steps["generate_preview"],
+                )
+            except HTTPException as exc:
+                steps["generate_content"] = False
+                steps["generate_error"] = exc.detail
+                logger.error(
+                    "gemini_test step=3_generate_content failed http=%d detail=%s",
+                    exc.status_code, exc.detail,
+                )
+                return {
+                    "success":     False,
+                    "provider":    "gemini",
+                    "model":       model,
+                    "http_status": exc.status_code,
+                    "latency_ms":  int((time.monotonic() - start) * 1000),
+                    "message":     exc.detail,
+                    "steps":       steps,
+                }
+            except Exception as exc:
+                steps["generate_content"] = False
+                steps["generate_error"] = str(exc)
+                logger.error(
+                    "gemini_test step=3_generate_content unexpected: %s\n%s",
+                    exc, traceback.format_exc(),
+                )
+                return {
+                    "success":    False,
+                    "provider":   "gemini",
+                    "model":      model,
+                    "latency_ms": int((time.monotonic() - start) * 1000),
+                    "message":    f"Unexpected error during content generation: {exc}",
+                    "steps":      steps,
+                }
+
+            latency_ms = int((time.monotonic() - start) * 1000)
+            logger.info("gemini_test success model=%s latency_ms=%d", model, latency_ms)
             return {
-                "success": False, "provider": "gemini", "model": model,
-                "latency_ms": int((time.monotonic() - start) * 1000),
-                "message": exc.detail,
-                "steps": steps,
+                "success":          True,
+                "provider":         "gemini",
+                "model":            model,
+                "latency_ms":       latency_ms,
+                "response_preview": steps.get("generate_preview", ""),
+                "message":          "Connection successful",
+                "steps":            steps,
             }
 
-        latency_ms = int((time.monotonic() - start) * 1000)
-        logger.info("gemini_test success model=%s latency_ms=%d", model, latency_ms)
-        return {
-            "success": True, "provider": "gemini", "model": model,
-            "latency_ms": latency_ms,
-            "response_preview": steps["generate_preview"],
-            "message": "Connection successful",
-            "steps": steps,
-        }
+        except Exception as exc:
+            # Safety net — should never reach here; logged with full traceback
+            logger.error(
+                "gemini_test_connection fatal error: %s\n%s",
+                exc, traceback.format_exc(),
+            )
+            return {
+                "success":    False,
+                "provider":   "gemini",
+                "model":      model,
+                "latency_ms": int((time.monotonic() - start) * 1000),
+                "message":    f"Unexpected error: {exc}",
+                "steps":      steps,
+            }
 
 
 # ─── OpenAI adapter ───────────────────────────────────────────────────────────
