@@ -380,19 +380,42 @@ class GeminiAdapter(BaseAIAdapter):
 
     @staticmethod
     def _parse_content(data: dict, model: str) -> str:
+        candidate = {}
         try:
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        except (KeyError, IndexError):
-            # Safety-blocked or empty response
-            finish = ""
-            try:
-                finish = data["candidates"][0].get("finishReason", "")
-            except Exception:
-                pass
+            candidate = data["candidates"][0]
+            # Collect all text parts (handles multi-part responses)
+            parts = candidate.get("content", {}).get("parts", [])
+            texts = [p["text"] for p in parts if "text" in p]
+            if texts:
+                return "".join(texts)
+        except (KeyError, IndexError, TypeError):
+            pass
+
+        # No text returned — diagnose why
+        finish = ""
+        try:
+            finish = candidate.get("finishReason", "") if candidate else ""
+        except Exception:
+            pass
+
+        if finish == "MAX_TOKENS":
             raise HTTPException(
                 status_code=502,
-                detail=f"Gemini ({model}) returned no text content. finishReason={finish!r}.",
+                detail=(
+                    f"Gemini ({model}) hit the token limit before producing output "
+                    f"(finishReason='MAX_TOKENS'). "
+                    f"Increase Max Tokens in AI Provider Management."
+                ),
             )
+        if finish in ("SAFETY", "RECITATION"):
+            raise HTTPException(
+                status_code=502,
+                detail=f"Gemini ({model}) blocked the response (finishReason={finish!r}).",
+            )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gemini ({model}) returned no text content. finishReason={finish!r}.",
+        )
 
     # ── Error classifier ──────────────────────────────────────────────────────
 
@@ -506,8 +529,11 @@ class GeminiAdapter(BaseAIAdapter):
                     }
 
             # ── Step 3: Generate content ───────────────────────────────────
+            # Use 1024 tokens — gemini-2.5-flash is a thinking model that
+            # consumes internal reasoning tokens before producing output;
+            # 16 tokens left nothing for the actual response text.
             test_config = {**config, "api_key": api_key, "model": model,
-                           "max_tokens": 16, "temperature": 0.0}
+                           "max_tokens": 1024, "temperature": 0.0}
             try:
                 text = await self.call("Reply only with the word: OK", test_config)
                 steps["generate_content"] = True
