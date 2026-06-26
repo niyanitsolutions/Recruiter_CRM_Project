@@ -15,6 +15,7 @@ import {
 import { formatDateTime } from '../../utils/format'
 import authService from '../../services/authService'
 import ModalPortal from '../../components/common/ModalPortal'
+import LoginAnnouncement from '../../components/announcements/LoginAnnouncement'
 import {
   getSavedEmail, setSavedEmail, removeSavedEmail,
   getSavedPassword, setSavedPassword, removeSavedPassword,
@@ -688,6 +689,9 @@ const Login = () => {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div style={{ animation: 'slideUp 0.45s cubic-bezier(0.16,1,0.3,1) both 0.08s' }}>
+
+      {/* Login-screen announcements (public — no auth required) */}
+      <LoginAnnouncement />
 
       {/* Heading */}
       <div style={{ textAlign: 'center', marginBottom: 26 }}>

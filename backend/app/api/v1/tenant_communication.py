@@ -1,10 +1,16 @@
 """Tenant-facing Communication API.
 
 Company users (any authenticated tenant user) can:
-  • GET  /announcements          — fetch active announcements targeted at their tenant
-  • POST /announcements/dismiss  — record that the user dismissed a popup (permanent)
-  • GET  /payments/gateway-status — check if payments are enabled (for UI gates)
+  • GET  /announcements              — fetch active announcements for their tenant
+  • POST /announcements/dismiss      — record that the user dismissed a popup (permanent)
+  • POST /announcements/{id}/track   — track view / cta_click events for analytics
+  • GET  /payments/gateway-status    — check if payments are enabled (for UI gates)
+
+Public (no auth):
+  • GET  /announcements/public       — login-screen announcements, no auth required
 """
+from __future__ import annotations
+
 import logging
 from typing import Optional
 
@@ -18,6 +24,20 @@ from app.services.communication_service import CommunicationService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Tenant - Announcements"])
+
+
+# ─── Public: Login page announcements (no auth) ───────────────────────────────
+
+@router.get("/announcements/public")
+async def get_public_announcements():
+    """
+    Return active login-screen announcements.
+    No authentication required — called by Login.jsx before auth.
+    """
+    master_db = get_master_db()
+    svc = CommunicationService(master_db)
+    items = await svc.get_public_announcements()
+    return {"items": items, "total": len(items)}
 
 
 # ─── GET active announcements for this tenant ─────────────────────────────────
@@ -35,12 +55,10 @@ async def get_tenant_announcements(
     master_db = get_master_db()
     company_id = current_user.get("company_id")
 
-    # Look up tenant document so we can filter by audience
     tenant = await master_db.tenants.find_one({"company_id": company_id})
     if not tenant:
         return {"items": []}
 
-    # Load permanently dismissed IDs for this user
     try:
         dismissed_cursor = company_db["announcement_dismissals"].find(
             {"user_id": current_user["id"], "permanent": True},
@@ -55,6 +73,7 @@ async def get_tenant_announcements(
         tenant=tenant,
         display_location=location,
         dismissed_ids=dismissed_ids,
+        current_user=current_user,
     )
     return {"items": items}
 
@@ -63,7 +82,7 @@ async def get_tenant_announcements(
 
 class DismissRequest(BaseModel):
     announcement_id: str
-    permanent: bool = False   # True = "Don't show again"
+    permanent: bool = False
 
 
 @router.post("/announcements/dismiss")
@@ -72,10 +91,7 @@ async def dismiss_announcement(
     current_user: dict = Depends(get_current_user),
     company_db=Depends(get_company_db),
 ):
-    """
-    Record that the user dismissed an announcement.
-    permanent=True means "Don't show again" — stored in company DB.
-    """
+    """Record that the user dismissed an announcement (permanent = "Don't show again")."""
     from datetime import datetime, timezone
 
     try:
@@ -92,19 +108,45 @@ async def dismiss_announcement(
     except Exception as exc:
         logger.warning("Failed to record announcement dismissal: %s", exc)
 
+    # Track dismiss in analytics
+    try:
+        master_db = get_master_db()
+        svc = CommunicationService(master_db)
+        await svc.track(body.announcement_id, "dismiss_count")
+    except Exception:
+        pass
+
     return {"message": "Announcement dismissed."}
 
 
-# ─── Payment gateway status (for tenant UI gates) ────────────────────────────
+# ─── TRACK analytics events ───────────────────────────────────────────────────
+
+class TrackRequest(BaseModel):
+    event: str  # "views" | "cta_clicks"
+
+
+@router.post("/announcements/{announcement_id}/track")
+async def track_announcement_event(
+    announcement_id: str,
+    body: TrackRequest,
+    _: dict = Depends(get_current_user),
+):
+    """Track view or CTA click events for analytics."""
+    try:
+        master_db = get_master_db()
+        svc = CommunicationService(master_db)
+        await svc.track(announcement_id, body.event)
+    except Exception as exc:
+        logger.warning("Failed to track announcement event: %s", exc)
+    return {"success": True}
+
+
+# ─── Payment gateway status ───────────────────────────────────────────────────
 
 @router.get("/payments/gateway-status")
 async def payment_gateway_status(
     _current_user: dict = Depends(get_current_user),
 ):
-    """
-    Return whether online payments are enabled and which provider is active.
-    Tenant UI should check this before showing payment buttons.
-    """
     master_db = get_master_db()
     doc = await master_db["payment_provider_config"].find_one(
         {"_id": "global"},
