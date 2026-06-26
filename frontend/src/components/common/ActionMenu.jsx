@@ -23,6 +23,7 @@ export default function ActionMenu({ children, size = 28 }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos]   = useState({ top: 0, bottom: 'auto', right: 0 })
   const btnRef          = useRef(null)
+  const panelRef        = useRef(null)
 
   const close = () => setOpen(false)
 
@@ -30,6 +31,9 @@ export default function ActionMenu({ children, size = 28 }) {
     if (!open) return
     const onOutside = (e) => {
       if (btnRef.current?.contains(e.target)) return
+      // Don't close when the mousedown is on an item inside the dropdown panel —
+      // the click event must fire first so onClick handlers can run.
+      if (panelRef.current?.contains(e.target)) return
       close()
     }
     const onScroll = () => close()
@@ -92,6 +96,7 @@ export default function ActionMenu({ children, size = 28 }) {
           />
           {/* Dropdown panel */}
           <div
+            ref={panelRef}
             className="fixed z-[9999] py-1 rounded-xl"
             style={{
               top:       pos.top,

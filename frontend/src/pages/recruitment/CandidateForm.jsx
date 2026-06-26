@@ -160,9 +160,19 @@ const CandidateForm = () => {
             end_date: w.end_date || '',
             is_current: w.is_current || false
           })))
-          // If candidate has work experience, they're not a fresher
           setIsFresher(false)
-        } else if (!data.current_company) {
+        } else if (data.current_company || data.current_designation) {
+          // work_experience array is empty but top-level fields exist (e.g. Excel imports,
+          // resume-parsed candidates) — pre-populate so the edit form matches list/profile.
+          setWorkExperience([{
+            company_name: data.current_company || '',
+            designation: data.current_designation || '',
+            start_date: '',
+            end_date: '',
+            is_current: true
+          }])
+          setIsFresher(false)
+        } else {
           setIsFresher(true)
         }
 
