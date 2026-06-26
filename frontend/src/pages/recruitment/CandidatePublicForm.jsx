@@ -177,18 +177,39 @@ const CandidatePublicForm = () => {
     setResumeFile(file)
     if (errors.resume) setErrors(prev => ({ ...prev, resume: '' }))
 
+    setParsing(true)
     try {
-      setParsing(true)
-      const res = await candidateService.parseResumeFilePublic(file)
-      if (res.data) {
+      // Phase 1 (fast): regex extraction — fills email/mobile/linkedin in ~300ms
+      // Phase 2 (slow): AI parse — fills name, skills, education, experience
+      const localPromise = candidateService.extractResumeLocalPublic(file)
+        .then(res => {
+          if (res?.data) {
+            const lp = res.data
+            setForm(prev => ({
+              ...prev,
+              email:        lp.email        || prev.email,
+              mobile:       lp.mobile       || prev.mobile,
+              linkedin_url: lp.linkedin_url || prev.linkedin_url,
+            }))
+          }
+        })
+        .catch(() => {})
+
+      const aiPromise = candidateService.parseResumeFilePublic(file)
+
+      const res = await aiPromise
+      await localPromise.catch(() => {})
+
+      if (res?.data) {
         const p = res.data
         setForm(prev => ({
           ...prev,
-          first_name: p.first_name || prev.first_name,
-          last_name: p.last_name || prev.last_name,
-          email: p.email || prev.email,
-          mobile: p.mobile || prev.mobile,
-          skills: p.skills?.length ? p.skills : prev.skills,
+          first_name:   p.first_name   || prev.first_name,
+          last_name:    p.last_name    || prev.last_name,
+          email:        prev.email        || p.email,
+          mobile:       prev.mobile       || p.mobile,
+          linkedin_url: prev.linkedin_url || p.linkedin_url,
+          skills:       p.skills?.length ? p.skills : prev.skills,
           current_city: p.current_city || prev.current_city,
           total_experience_years: p.total_experience_years != null && p.total_experience_years > 0
             ? String(p.total_experience_years) : prev.total_experience_years,
@@ -196,21 +217,21 @@ const CandidatePublicForm = () => {
         if (p.education?.length) {
           setEducation(prev => p.education.map((edu, i) => ({
             ...(prev[i] || {}),
-            degree: edu.degree || prev[i]?.degree || '',
+            degree:         edu.degree         || prev[i]?.degree         || '',
             field_of_study: edu.field_of_study || prev[i]?.field_of_study || '',
-            institution: edu.institution || prev[i]?.institution || '',
-            from_year: edu.from_year || prev[i]?.from_year || '',
-            to_year: edu.to_year || prev[i]?.to_year || '',
-            percentage: edu.percentage || prev[i]?.percentage || '',
+            institution:    edu.institution    || prev[i]?.institution    || '',
+            from_year:      edu.from_year      || prev[i]?.from_year      || '',
+            to_year:        edu.to_year        || prev[i]?.to_year        || '',
+            percentage:     edu.percentage     || prev[i]?.percentage     || '',
           })))
         }
         if (p.experience?.length) {
           setWorkExperience(p.experience.map(exp => ({
             company_name: exp.company_name || '',
-            designation: exp.designation || '',
-            start_date: exp.start_date || '',
-            end_date: exp.is_current ? '' : (exp.end_date || ''),
-            is_current: exp.is_current || false,
+            designation:  exp.designation  || '',
+            start_date:   exp.start_date   || '',
+            end_date:     exp.is_current ? '' : (exp.end_date || ''),
+            is_current:   exp.is_current   || false,
           })))
         }
       }

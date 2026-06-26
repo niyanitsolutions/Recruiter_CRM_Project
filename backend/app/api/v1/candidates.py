@@ -19,11 +19,155 @@ from app.models.company.notification import NotificationCreate, NotificationType
 from app.core.dependencies import get_current_user, get_company_db, require_permissions
 from app.core.database import get_master_db
 
+import hashlib
+import re as _re
 import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/candidates", tags=["Candidates"])
 public_router = APIRouter(prefix="/public", tags=["Public"])
+
+
+# ─── Resume parse helpers ─────────────────────────────────────────────────────
+
+# In-process cache: SHA-256(file bytes) → full parsed response dict.
+# Avoids a second AI call when the exact same resume is re-uploaded.
+_PARSE_CACHE: dict[str, dict] = {}
+_PARSE_CACHE_MAX = 100
+
+
+def _cache_key(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def _cache_get(key: str) -> dict | None:
+    return _PARSE_CACHE.get(key)
+
+
+def _cache_set(key: str, value: dict) -> None:
+    if len(_PARSE_CACHE) >= _PARSE_CACHE_MAX:
+        del _PARSE_CACHE[next(iter(_PARSE_CACHE))]
+    _PARSE_CACHE[key] = value
+
+
+def _extract_text_from_content(content: bytes, ext: str, filename: str) -> str:
+    """Extract raw text from file bytes. Shared by all resume endpoints."""
+    import io
+    if ext == ".txt":
+        return content.decode("utf-8", errors="ignore")
+
+    if ext == ".docx":
+        try:
+            import zipfile
+            import xml.etree.ElementTree as ET
+            with zipfile.ZipFile(io.BytesIO(content)) as z:
+                with z.open("word/document.xml") as xml_file:
+                    tree = ET.parse(xml_file)
+                    ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+                    # Use <w:p> paragraph boundaries to preserve line structure
+                    paragraphs = []
+                    for para in tree.iter(f"{ns}p"):
+                        texts = [node.text for node in para.iter(f"{ns}t") if node.text]
+                        if texts:
+                            paragraphs.append("".join(texts))
+                    return "\n".join(paragraphs)
+        except Exception as exc:
+            logger.warning("docx_extract_failed filename=%s error=%s", filename, exc)
+            return ""
+
+    if ext == ".pdf":
+        try:
+            from pypdf import PdfReader
+            import io as _io
+            reader = PdfReader(_io.BytesIO(content))
+            return "\n".join(page.extract_text() or "" for page in reader.pages)
+        except ImportError:
+            raise HTTPException(
+                status_code=503,
+                detail="PDF parsing library is not installed on the server. Please contact support.",
+            )
+        except Exception as exc:
+            logger.error("pdf_extract_failed filename=%s error=%s", filename, exc)
+            raise HTTPException(
+                status_code=422,
+                detail="Could not read the PDF file. Ensure it is not password-protected or corrupted.",
+            )
+
+    if ext == ".doc":
+        return content.decode("utf-8", errors="ignore")
+
+    return ""
+
+
+def _clean_resume_text(text: str) -> str:
+    """Normalise extracted text: collapse blanks, drop page numbers, remove duplicate lines."""
+    lines = text.splitlines()
+    out: list[str] = []
+    prev = None
+    for line in lines:
+        s = line.strip()
+        if _re.match(r'^\d{1,3}$', s):   # standalone page numbers
+            continue
+        if s == '' and prev == '':         # consecutive blank lines → one
+            continue
+        if s and s == prev:                # exact duplicate (running header/footer)
+            continue
+        out.append(s)
+        prev = s
+    result = '\n'.join(out).strip()
+    result = _re.sub(r'\n{3,}', '\n\n', result)
+    return result
+
+
+def _extract_contact_fields(text: str) -> dict:
+    """Regex-based deterministic extraction of contact fields — no AI required."""
+    # Email
+    email = ''
+    m = _re.search(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,7}\b', text)
+    if m:
+        email = m.group(0).lower()
+
+    # Phone — try Indian mobile first, then generic international
+    mobile = ''
+    for pat in (
+        r'(?:\+?91[\s\-.]?)?[6-9]\d{9}\b',
+        r'\+?\d[\d\s\-\.]{8,14}\d',
+    ):
+        pm = _re.search(pat, text)
+        if pm:
+            digits = _re.sub(r'\D', '', pm.group(0))
+            if len(digits) >= 10:
+                mobile = digits[-10:]
+                break
+
+    # LinkedIn
+    linkedin = ''
+    lm = _re.search(
+        r'(?:https?://)?(?:www\.)?linkedin\.com/in/[\w%\-]+/?', text, _re.IGNORECASE
+    )
+    if lm:
+        url = lm.group(0).rstrip('/')
+        linkedin = url if url.startswith('http') else 'https://' + url
+
+    # GitHub
+    github = ''
+    gm = _re.search(
+        r'(?:https?://)?(?:www\.)?github\.com/[\w\-]+\b', text, _re.IGNORECASE
+    )
+    if gm:
+        url = gm.group(0).rstrip('/')
+        github = url if url.startswith('http') else 'https://' + url
+
+    return {'email': email, 'mobile': mobile, 'linkedin_url': linkedin, 'github_url': github}
+
+
+def _trim_resume_for_ai(text: str, max_chars: int = 5000) -> str:
+    """Smart trim for large resumes: keep beginning (contact+skills) and end (education)."""
+    if len(text) <= max_chars:
+        return text
+    head = int(max_chars * 0.65)
+    tail = max_chars - head
+    return text[:head] + '\n...\n' + text[-tail:]
 
 
 @router.get("/")
@@ -237,68 +381,58 @@ async def parse_resume(
     }
 
 
+@router.post("/extract-resume-local")
+async def extract_resume_local(
+    file: UploadFile = File(...),
+    _: bool = Depends(require_permissions(["candidates:create"]))
+):
+    """Fast regex-only contact extraction — no AI. Returns email/mobile/linkedin/github in <500ms."""
+    import os
+    ALLOWED = {".pdf", ".doc", ".docx", ".txt"}
+    _, ext = os.path.splitext((file.filename or "").lower())
+    if ext not in ALLOWED:
+        raise HTTPException(status_code=400, detail="Only PDF, DOCX, DOC, or TXT files are supported.")
+    content = await file.read()
+    raw_text = _extract_text_from_content(content, ext, file.filename)
+    cleaned = _clean_resume_text(raw_text)
+    fields = _extract_contact_fields(cleaned)
+    logger.info("extract_resume_local filename=%s email=%r mobile=%r", file.filename, fields['email'], bool(fields['mobile']))
+    return {"success": True, "data": fields}
+
+
 @router.post("/extract-resume")
 async def extract_resume_file(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
     _: bool = Depends(require_permissions(["candidates:create"]))
 ):
-    """
-    Upload a resume file (PDF/DOCX/TXT), extract raw text, then send to Claude API
-    for structured parsing. Returns fully structured candidate fields including
-    complete education and experience arrays.
-    """
-    import io
+    """Upload a resume, extract text, parse with AI. Returns structured candidate fields."""
     import os
-
     ALLOWED = {".pdf", ".doc", ".docx", ".txt"}
     _, ext = os.path.splitext((file.filename or "").lower())
     if ext not in ALLOWED:
         raise HTTPException(status_code=400, detail="Only PDF, DOCX, DOC, or TXT files are supported.")
 
     content = await file.read()
-    raw_text = ""
     logger.info("extract_resume filename=%s size=%d ext=%s", file.filename, len(content), ext)
 
-    if ext == ".txt":
-        raw_text = content.decode("utf-8", errors="ignore")
+    # Cache hit: return instantly without AI call
+    ck = _cache_key(content)
+    cached = _cache_get(ck)
+    if cached:
+        logger.info("extract_resume cache_hit filename=%s", file.filename)
+        return cached
 
-    elif ext == ".docx":
-        try:
-            import zipfile
-            import xml.etree.ElementTree as ET
-            with zipfile.ZipFile(io.BytesIO(content)) as z:
-                with z.open("word/document.xml") as xml_file:
-                    tree = ET.parse(xml_file)
-                    ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-                    texts = [node.text for node in tree.iter(f"{ns}t") if node.text]
-                    raw_text = " ".join(texts)
-        except Exception as exc:
-            logger.warning("docx_extract_failed filename=%s error=%s", file.filename, exc)
-            raw_text = ""
-
-    elif ext == ".pdf":
-        try:
-            from pypdf import PdfReader
-            reader = PdfReader(io.BytesIO(content))
-            raw_text = "\n".join(page.extract_text() or "" for page in reader.pages)
-            logger.info("pdf_extract filename=%s chars=%d", file.filename, len(raw_text))
-        except ImportError:
-            logger.error("pypdf_not_installed: cannot extract PDF text")
-            raise HTTPException(status_code=503, detail="PDF parsing library is not installed on the server. Please contact support.")
-        except Exception as exc:
-            logger.error("pdf_extract_failed filename=%s error=%s", file.filename, exc)
-            raise HTTPException(status_code=422, detail="Could not read the PDF file. Ensure it is not password-protected or corrupted.")
-
-    elif ext == ".doc":
-        # Legacy binary .doc format — best-effort UTF-8 decode
-        raw_text = content.decode("utf-8", errors="ignore")
-
+    raw_text = _extract_text_from_content(content, ext, file.filename)
     if not raw_text.strip():
         raise HTTPException(status_code=422, detail="Could not extract text from the uploaded file.")
 
-    logger.info("resume_text_ready filename=%s chars=%d", file.filename, len(raw_text))
-    return await _ai_parse_resume(raw_text)
+    cleaned = _clean_resume_text(raw_text)
+    logger.info("extract_resume filename=%s raw=%d cleaned=%d chars", file.filename, len(raw_text), len(cleaned))
+
+    result = await _ai_parse_resume(cleaned)
+    _cache_set(ck, result)
+    return result
 
 
 async def _ai_parse_resume(raw_text: str) -> dict:
@@ -306,8 +440,9 @@ async def _ai_parse_resume(raw_text: str) -> dict:
     import re
     from app.services.ai_service import AIService
 
-    logger.info("ai_parse_resume text_chars=%d", len(raw_text))
-    parsed = await AIService.parse_resume(raw_text, get_master_db())
+    trimmed = _trim_resume_for_ai(raw_text, max_chars=5000)
+    logger.info("ai_parse_resume text_chars=%d trimmed_chars=%d", len(raw_text), len(trimmed))
+    parsed = await AIService.parse_resume(trimmed, get_master_db())
     logger.info("ai_parse_resume_done first_name=%r email=%r skills_count=%d",
                 parsed.get("first_name"), parsed.get("email"), len(parsed.get("skills") or []))
 
@@ -1125,60 +1260,50 @@ async def generate_candidate_form_link(
 
 # ── Public endpoints (no auth) ────────────────────────────────────────────────
 
+@public_router.post("/extract-resume-local")
+async def public_extract_resume_local(file: UploadFile = File(...)):
+    """Public fast contact extraction — no auth, no AI. Returns in <500ms."""
+    import os
+    ALLOWED = {".pdf", ".doc", ".docx", ".txt"}
+    _, ext = os.path.splitext((file.filename or "").lower())
+    if ext not in ALLOWED:
+        raise HTTPException(status_code=400, detail="Only PDF, DOCX, DOC, or TXT files are supported.")
+    content = await file.read()
+    raw_text = _extract_text_from_content(content, ext, file.filename)
+    cleaned = _clean_resume_text(raw_text)
+    fields = _extract_contact_fields(cleaned)
+    logger.info("public_extract_resume_local filename=%s email=%r mobile=%r", file.filename, fields['email'], bool(fields['mobile']))
+    return {"success": True, "data": fields}
+
+
 @public_router.post("/extract-resume")
 async def public_extract_resume_file(file: UploadFile = File(...)):
-    """
-    Public endpoint — no auth.
-    Upload a resume file, extract text, and return parsed candidate fields for form auto-fill.
-    Uses the same Claude-based parser as the authenticated endpoint.
-    """
-    import io
+    """Public AI resume parsing — no auth. Returns structured candidate fields."""
     import os
-
     ALLOWED = {".pdf", ".doc", ".docx", ".txt"}
     _, ext = os.path.splitext((file.filename or "").lower())
     if ext not in ALLOWED:
         raise HTTPException(status_code=400, detail="Only PDF, DOCX, DOC, or TXT files are supported.")
 
     content = await file.read()
-    raw_text = ""
     logger.info("public_extract_resume filename=%s size=%d ext=%s", file.filename, len(content), ext)
 
-    if ext == ".txt":
-        raw_text = content.decode("utf-8", errors="ignore")
-    elif ext == ".docx":
-        try:
-            import zipfile
-            import xml.etree.ElementTree as ET
-            with zipfile.ZipFile(io.BytesIO(content)) as z:
-                with z.open("word/document.xml") as xml_file:
-                    tree = ET.parse(xml_file)
-                    ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-                    texts = [node.text for node in tree.iter(f"{ns}t") if node.text]
-                    raw_text = " ".join(texts)
-        except Exception as exc:
-            logger.warning("public_docx_extract_failed filename=%s error=%s", file.filename, exc)
-            raw_text = ""
-    elif ext == ".pdf":
-        try:
-            from pypdf import PdfReader
-            reader = PdfReader(io.BytesIO(content))
-            raw_text = "\n".join(page.extract_text() or "" for page in reader.pages)
-            logger.info("public_pdf_extract filename=%s chars=%d", file.filename, len(raw_text))
-        except ImportError:
-            logger.error("pypdf_not_installed: cannot extract PDF text")
-            raise HTTPException(status_code=503, detail="PDF parsing library is not installed on the server. Please contact support.")
-        except Exception as exc:
-            logger.error("public_pdf_extract_failed filename=%s error=%s", file.filename, exc)
-            raise HTTPException(status_code=422, detail="Could not read the PDF file. Ensure it is not password-protected or corrupted.")
-    elif ext == ".doc":
-        raw_text = content.decode("utf-8", errors="ignore")
+    ck = _cache_key(content)
+    cached = _cache_get(ck)
+    if cached:
+        logger.info("public_extract_resume cache_hit filename=%s", file.filename)
+        return cached
 
+    raw_text = _extract_text_from_content(content, ext, file.filename)
     if not raw_text.strip():
         raise HTTPException(status_code=422, detail="Could not extract text from the uploaded file.")
 
-    logger.info("public_resume_text_ready filename=%s chars=%d", file.filename, len(raw_text))
-    return await _ai_parse_resume(raw_text)
+    cleaned = _clean_resume_text(raw_text)
+    logger.info("public_extract_resume filename=%s raw=%d cleaned=%d chars", file.filename, len(raw_text), len(cleaned))
+
+    result = await _ai_parse_resume(cleaned)
+    _cache_set(ck, result)
+    return result
 
 
 @public_router.get("/candidate-form/{token}")

@@ -100,6 +100,57 @@ Rules:
 Resume text:
 {resume_text}"""
 
+# Short prompt used with Gemini JSON schema mode — the schema drives structure so the prompt
+# can be minimal, reducing token usage and improving speed.
+_RESUME_PARSE_PROMPT_SHORT = """Extract structured data from the resume below.
+Be accurate; omit any field you cannot determine.
+
+{resume_text}"""
+
+# Gemini responseSchema for resume parsing (contact fields excluded — extracted locally by regex)
+_RESUME_PARSE_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "full_name":              {"type": "string"},
+        "email":                  {"type": "string"},
+        "phone":                  {"type": "string"},
+        "linkedin":               {"type": "string"},
+        "current_role":           {"type": "string"},
+        "location":               {"type": "string"},
+        "total_experience_years": {"type": "number"},
+        "skills":                 {"type": "array", "items": {"type": "string"}},
+        "education": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "degree":         {"type": "string"},
+                    "field_of_study": {"type": "string"},
+                    "institution":    {"type": "string"},
+                    "year_from":      {"type": "string"},
+                    "year_to":        {"type": "string"},
+                    "score":          {"type": "string"},
+                    "score_type":     {"type": "string"},
+                },
+            },
+        },
+        "experience": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "company_name": {"type": "string"},
+                    "job_title":    {"type": "string"},
+                    "start_date":   {"type": "string"},
+                    "end_date":     {"type": "string"},
+                    "is_current":   {"type": "boolean"},
+                    "description":  {"type": "string"},
+                },
+            },
+        },
+    },
+}
+
 _ATS_SCORE_PROMPT = """Analyze this resume against the job description and return a JSON ATS score report.
 Return ONLY the raw JSON — no explanation, no markdown, no code fences.
 
@@ -332,16 +383,23 @@ class GeminiAdapter(BaseAIAdapter):
             timeout, self._safe_key_prefix(api_key), len(prompt),
         )
 
-        payload: dict[str, Any] = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": float(config.get("temperature") or 0.3),
-                "maxOutputTokens": int(config.get("max_tokens") or 2048),
-            },
+        gen_cfg: dict[str, Any] = {
+            "temperature": float(config.get("temperature") or 0.3),
+            "maxOutputTokens": int(config.get("max_tokens") or 2048),
         }
         top_p = config.get("top_p")
         if top_p is not None:
-            payload["generationConfig"]["topP"] = float(top_p)
+            gen_cfg["topP"] = float(top_p)
+        # JSON schema mode: guarantees structured output and speeds up parsing
+        if config.get("response_mime_type"):
+            gen_cfg["responseMimeType"] = config["response_mime_type"]
+        if config.get("response_schema"):
+            gen_cfg["responseSchema"] = config["response_schema"]
+
+        payload: dict[str, Any] = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": gen_cfg,
+        }
 
         url = self._GENERATE_URL.format(model=model)
 
@@ -937,9 +995,20 @@ class AIService:
         start = time.monotonic()
         config = await cls.get_active_config(master_db)
         adapter = cls._adapter(config["provider"])
-        prompt = _RESUME_PARSE_PROMPT.format(resume_text=raw_text[:8000])
 
-        response_text = await cls._call_with_retry(adapter, prompt, config)
+        if config["provider"] == "gemini":
+            # JSON schema mode: shorter prompt + guaranteed-structured output → faster & reliable
+            call_config = {
+                **config,
+                "response_mime_type": "application/json",
+                "response_schema":    _RESUME_PARSE_SCHEMA,
+            }
+            prompt = _RESUME_PARSE_PROMPT_SHORT.format(resume_text=raw_text)
+        else:
+            call_config = config
+            prompt = _RESUME_PARSE_PROMPT.format(resume_text=raw_text[:8000])
+
+        response_text = await cls._call_with_retry(adapter, prompt, call_config)
 
         try:
             parsed = _parse_json(response_text)

@@ -103,6 +103,22 @@ const candidateService = {
     return response.data
   },
 
+  // Fast regex contact extraction — no AI, returns in <500ms (auth required)
+  extractResumeLocal: async (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const response = await api.post('/candidates/extract-resume-local', fd)
+    return response.data
+  },
+
+  // Fast regex contact extraction — no AI, returns in <500ms (public)
+  extractResumeLocalPublic: async (file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    const response = await api.post('/public/extract-resume-local', fd)
+    return response.data
+  },
+
   // Extract & parse a resume file for form auto-fill (auth required)
   parseResumeFile: async (file) => {
     const fd = new FormData()

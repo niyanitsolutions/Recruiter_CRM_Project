@@ -33,6 +33,7 @@ const CandidateForm = () => {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [parsing, setParsing] = useState(false)
+  const [parseStage, setParseStage] = useState('')
   const [resumeUploading, setResumeUploading] = useState(false)
   const [statuses, setStatuses] = useState([])
   const [sources, setSources] = useState([])
@@ -371,20 +372,45 @@ const CandidateForm = () => {
     if (!isEdit) {
       setPendingResumeFile(file)
       if (errors.resume) setErrors(prev => ({ ...prev, resume: '' }))
+      setParsing(true)
+      setParseStage('Extracting contact info…')
       try {
-        setParsing(true)
-        const res = await candidateService.parseResumeFile(file)
-        if (res.data) {
+        // Phase 1 (fast): local regex — fills email/mobile/linkedin in ~300ms, no AI needed.
+        // Phase 2 (slow): AI parse  — fills name, skills, education, experience (3–8s).
+        // Both start simultaneously; Phase 1 updates the form as soon as it finishes.
+        const localPromise = candidateService.extractResumeLocal(file)
+          .then(res => {
+            if (res?.data) {
+              const lp = res.data
+              setFormData(prev => ({
+                ...prev,
+                email:        lp.email        || prev.email,
+                mobile:       lp.mobile       || prev.mobile,
+                linkedin_url: lp.linkedin_url || prev.linkedin_url,
+              }))
+            }
+            setParseStage('Analysing with AI…')
+          })
+          .catch(() => { setParseStage('Analysing with AI…') })
+
+        const aiPromise = candidateService.parseResumeFile(file)
+
+        // Let Phase 1 run in background; await the AI result
+        const res = await aiPromise
+        await localPromise.catch(() => {})   // ensure Phase 1 errors are swallowed
+
+        if (res?.data) {
           const p = res.data
           // ── Basic fields ──────────────────────────────────────────────
           setFormData(prev => ({
             ...prev,
             first_name:    p.first_name    || prev.first_name,
             last_name:     p.last_name     || prev.last_name,
-            email:         p.email         || prev.email,
-            mobile:        p.mobile        || prev.mobile,
+            // Preserve Phase 1 contact values if already set
+            email:         prev.email        || p.email,
+            mobile:        prev.mobile       || p.mobile,
+            linkedin_url:  prev.linkedin_url || p.linkedin_url,
             current_city:  p.current_city  || prev.current_city,
-            linkedin_url:  p.linkedin_url  || prev.linkedin_url,
             skills: p.skills?.length ? p.skills : prev.skills,
             total_experience_years: p.total_experience_years != null && p.total_experience_years > 0
               ? (() => {
@@ -399,12 +425,12 @@ const CandidateForm = () => {
           // ── Education array ───────────────────────────────────────────
           if (p.education?.length) {
             setEducation(p.education.map(e => ({
-              degree:        e.degree        || '',
+              degree:         e.degree         || '',
               field_of_study: e.field_of_study || '',
-              institution:   e.institution   || '',
-              from_year:     e.from_year     || '',
-              to_year:       e.to_year       || '',
-              percentage:    e.percentage    || '',
+              institution:    e.institution    || '',
+              from_year:      e.from_year      || '',
+              to_year:        e.to_year        || '',
+              percentage:     e.percentage     || '',
             })))
           }
 
@@ -420,13 +446,14 @@ const CandidateForm = () => {
             setIsFresher(false)
           }
 
-          if (p.first_name || p.email) toast.success('Resume parsed — form auto-filled')
+          if (p.first_name || p.email || p.mobile) toast.success('Resume parsed — form auto-filled')
         }
       } catch (err) {
         const msg = err?.response?.data?.detail || 'Resume parsing failed. Please try again or fill the fields manually.'
         toast.error(msg)
       } finally {
         setParsing(false)
+        setParseStage('')
       }
       return
     }
@@ -962,7 +989,7 @@ const CandidateForm = () => {
               {parsing && (
                 <p className="text-xs text-accent-600 flex items-center gap-1">
                   <span className="animate-spin inline-block w-3 h-3 border border-accent-500 border-t-transparent rounded-full" />
-                  Parsing resume…
+                  {parseStage || 'Parsing resume…'}
                 </p>
               )}
               <input type="file" accept=".pdf,.doc,.docx" onChange={handleResumeUpload}
