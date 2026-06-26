@@ -330,6 +330,7 @@ class JobService:
                 priority=job.get("priority", "medium"), target_date=job.get("target_date"),
                 total_applications=job.get("total_applications", 0), shortlisted_count=job.get("shortlisted_count", 0),
                 status=job.get("status", "draft"), status_display=get_job_status_display(job.get("status", "draft")),
+                pipeline_id=job.get("pipeline_id"),
                 created_at=job["created_at"]
             ))
         

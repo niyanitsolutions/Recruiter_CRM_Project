@@ -161,6 +161,36 @@ class MatchingService:
         return {"percentage_status": "Below Minimum", "percentage_score": 0}
 
     @staticmethod
+    def _branch_score(job: dict, candidate: dict) -> dict:
+        """Branch / Specialization matching: hard pass/fail, no numeric weight.
+
+        If the job specifies required_branches, the candidate must have at least
+        one matching branch in their education records (checked via
+        branch_utils.candidate_qualifies_for_branches using fuzzy alias matching).
+        """
+        from app.core.branch_utils import (
+            candidate_qualifies_for_branches,
+            BRANCH_LABEL_MAP,
+        )
+
+        required = (job.get("eligibility") or {}).get("required_branches") or []
+        if not required:
+            return {"branch_status": "No Criteria", "branch_qualified": True, "branch_reason": ""}
+
+        education = candidate.get("education") or []
+        qualified = candidate_qualifies_for_branches(required, education)
+
+        if qualified:
+            return {"branch_status": "Qualified", "branch_qualified": True, "branch_reason": ""}
+
+        req_labels = [BRANCH_LABEL_MAP.get(r, r) for r in required]
+        return {
+            "branch_status": "Not Qualified",
+            "branch_qualified": False,
+            "branch_reason": f"Branch not in required list: {', '.join(req_labels)}",
+        }
+
+    @staticmethod
     def _notice_period_score(job: dict, candidate: dict) -> dict:
         """Notice period matching: candidate notice vs job max_notice_period_days."""
         eligibility = job.get("eligibility") or {}
@@ -197,6 +227,7 @@ class MatchingService:
         e = MatchingService._experience_score(job, candidate)
         p = MatchingService._percentage_score(job, candidate)
         n = MatchingService._notice_period_score(job, candidate)
+        b = MatchingService._branch_score(job, candidate)
 
         final_score = round(
             s["skill_score"] * 0.60
@@ -209,12 +240,20 @@ class MatchingService:
         minimum_match_score = int(job.get("minimum_match_score") or 70)
         is_eligible = final_score >= minimum_match_score
 
+        # Branch is a hard filter — does not affect the numeric score,
+        # but overrides eligibility when the candidate's specialization
+        # does not match any required branch.
+        if not b["branch_qualified"]:
+            is_eligible = False
+
         # Collect rejection reasons; threshold check is always first if score is low
         rejection_reasons: List[str] = []
-        if not is_eligible:
+        if final_score < minimum_match_score:
             rejection_reasons.append(
                 f"Match score {final_score}% below minimum threshold {minimum_match_score}%"
             )
+        if not b["branch_qualified"] and b.get("branch_reason"):
+            rejection_reasons.append(b["branch_reason"])
         if s["missing_skills"]:
             rejection_reasons.append(f"Missing skills: {', '.join(s['missing_skills'])}")
         if e["experience_status"] == "Below Minimum":
@@ -249,6 +288,8 @@ class MatchingService:
             "percentage_status": p["percentage_status"],
             "location_status": l["location_status"],
             "notice_status": n["notice_status"],
+            "branch_status": b["branch_status"],
+            "branch_qualified": b["branch_qualified"],
             # Skills detail
             "matched_skills": s["matched_skills"],
             "missing_skills": s["missing_skills"],

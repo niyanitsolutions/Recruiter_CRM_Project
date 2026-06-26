@@ -5,10 +5,12 @@ Handles job management with eligibility criteria and candidate matching
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from typing import Optional, List
 from datetime import date
+from pydantic import BaseModel as _BaseModel
 
 from app.models.company.job import (
     JobCreate, JobUpdate, JobResponse, JobListResponse,
-    JobSearchParams, JobStatus, JobType, WorkMode, Priority
+    JobSearchParams, JobStatus, JobType, WorkMode, Priority,
+    SalaryRange, ExperienceRange, EligibilityCriteria,
 )
 from app.services.job_service import JobService
 from app.services.notification_service import NotificationService
@@ -130,6 +132,13 @@ async def get_priorities(current_user: dict = Depends(get_current_user)):
     return {"success": True, "data": priorities}
 
 
+@router.get("/branches")
+async def get_branches(current_user: dict = Depends(get_current_user)):
+    """Return the list of supported branch / specialization options."""
+    from app.core.branch_utils import BRANCH_OPTIONS
+    return {"success": True, "data": BRANCH_OPTIONS}
+
+
 @router.post("/", status_code=201)
 async def create_job(
     job_data: JobCreate,
@@ -227,6 +236,27 @@ _JOBS_FIELD_MAP = {
     # notes / tags
     "notes": "internal_notes", "internal notes": "internal_notes",
     "tags": "tags",
+    # good to have / optional skills
+    "good to have skills": "optional_skills", "good_to_have_skills": "optional_skills",
+    "optional skills": "optional_skills", "optional_skills": "optional_skills",
+    "good to have": "optional_skills",
+    # max current CTC (separate from salary range)
+    "max current ctc": "max_current_ctc", "max_current_ctc": "max_current_ctc",
+    "maximum current ctc": "max_current_ctc", "max ctc": "max_current_ctc",
+    "current ctc max": "max_current_ctc",
+    # notice period → max_notice_period (stored as integer days)
+    "notice period": "max_notice_period", "max notice period": "max_notice_period",
+    "max_notice_period": "max_notice_period", "notice_period": "max_notice_period",
+    "maximum notice period": "max_notice_period",
+    # minimum match score
+    "minimum match score": "minimum_match_score", "min match score": "minimum_match_score",
+    "min_match_score": "minimum_match_score", "minimum_match_score": "minimum_match_score",
+    "match score": "minimum_match_score",
+    # branch / specialization
+    "branch": "required_branches", "branches": "required_branches",
+    "specialization": "required_branches", "specializations": "required_branches",
+    "required branches": "required_branches", "branch specialization": "required_branches",
+    "eligible branches": "required_branches",
 }
 
 
@@ -358,9 +388,12 @@ async def bulk_import_jobs(
     db = Depends(get_company_db),
     _: bool = Depends(require_permissions(["jobs:create"]))
 ):
-    """Bulk import jobs from Excel / CSV / PDF."""
-    import os, uuid as _uuid
-    from datetime import datetime, timezone
+    """Bulk import jobs from Excel / CSV / PDF.
+    Delegates to JobService.create_job so imported records are structurally
+    identical to manually created jobs (same _id format, job_code, company_id,
+    audit trail, etc.).
+    """
+    import os, re as _re
 
     _, ext = os.path.splitext((file.filename or "").lower())
     if ext not in {".xlsx", ".xls", ".csv", ".pdf"}:
@@ -369,24 +402,49 @@ async def bulk_import_jobs(
     content = await file.read()
     rows = _parse_jobs_file(content, ext)
 
-    # Build client lookup
+    # Build client lookup: normalised name → _id
     client_map: dict = {}
     cursor = db["clients"].find({"is_deleted": {"$ne": True}}, {"_id": 1, "name": 1})
     async for doc in cursor:
         if doc.get("name"):
             client_map[doc["name"].strip().lower()] = str(doc["_id"])
 
+    # ── per-row helpers ──────────────────────────────────────────────────────
+    def _to_float(v):
+        """Float conversion with regex fallback for values like '8 LPA'."""
+        if v is None: return None
+        s = str(v).strip()
+        if not s: return None
+        try: return float(s)
+        except (ValueError, TypeError):
+            m = _re.search(r'\d+(?:\.\d+)?', s)
+            return float(m.group()) if m else None
+
+    def _to_int(v):
+        if v is None: return None
+        s = str(v).strip()
+        if not s: return None
+        try: return int(float(s))
+        except (ValueError, TypeError):
+            m = _re.search(r'\d+', s)
+            return int(m.group()) if m else None
+
+    _NOTICE_MAP = {"immediate": 0, "15_days": 15, "30_days": 30, "60_days": 60, "90_days": 90}
+
+    def _parse_notice_period(v):
+        """Convert notice-period string to integer days (0, 15, 30, 60, 90 …)."""
+        if not v: return None
+        s = str(v).strip().lower().replace(" ", "_")
+        if s in _NOTICE_MAP: return _NOTICE_MAP[s]
+        m = _re.search(r'(\d+)', s)
+        return int(m.group(1)) if m else None
+
+    def _split_skills(raw):
+        return [s.strip().lower() for s in (raw or "").split(",") if s.strip()]
+
+    # ── row loop ─────────────────────────────────────────────────────────────
     inserted = 0
     failed = []
-    now = datetime.now(timezone.utc)
-
-    def _float(v):
-        try: return float(v) if v else None
-        except (ValueError, TypeError): return None
-
-    def _int(v):
-        try: return int(v) if v else None
-        except (ValueError, TypeError): return None
 
     for idx, raw_row in enumerate(rows, start=2):
         m = _map_jobs_row(raw_row)
@@ -399,74 +457,99 @@ async def bulk_import_jobs(
         client_name = m.get("client_name", "").strip()
         client_id = client_map.get(client_name.lower()) if client_name else None
         if not client_id:
-            failed.append({"row": idx, "title": title, "reason": f"Client '{client_name}' not found" if client_name else "Missing client name"})
+            failed.append({
+                "row": idx, "title": title,
+                "reason": f"Client '{client_name}' not found" if client_name else "Missing client name",
+            })
             continue
 
-        skills_raw = m.get("skills", "")
-        skills = [s.strip() for s in skills_raw.split(",") if s.strip()] if skills_raw else []
-        mandatory_raw = m.get("mandatory_skills", "")
-        mandatory = [s.strip() for s in mandatory_raw.split(",") if s.strip()] if mandatory_raw else []
+        # ── numeric conversions ──────────────────────────────────────────────
+        salary_min          = _to_float(m.get("salary_min"))
+        salary_max          = _to_float(m.get("salary_max"))
+        exp_min             = _to_float(m.get("experience_min")) or 0.0
+        exp_max             = _to_float(m.get("experience_max"))
+        max_current_ctc     = _to_float(m.get("max_current_ctc"))
+        max_notice_days     = _parse_notice_period(m.get("max_notice_period"))
+        total_positions     = _to_int(m.get("total_positions")) or 1
+        min_match_score     = _to_int(m.get("minimum_match_score")) or 70
 
-        tags_raw = m.get("tags", "")
-        tags = [t.strip() for t in tags_raw.split(",") if t.strip()] if tags_raw else []
+        # ── skills ───────────────────────────────────────────────────────────
+        mandatory_skills = _split_skills(m.get("mandatory_skills"))
+        optional_skills  = _split_skills(m.get("optional_skills"))
+        # "skills" column is a fallback source for mandatory skills
+        if not mandatory_skills:
+            mandatory_skills = _split_skills(m.get("skills"))
 
-        salary_min = _float(m.get("salary_min"))
-        salary_max = _float(m.get("salary_max"))
-        exp_min = _float(m.get("experience_min")) or 0.0
-        exp_max = _float(m.get("experience_max"))
-        total_positions = _int(m.get("total_positions")) or 1
+        tags = _split_skills(m.get("tags"))
 
-        job_type_val = m.get("job_type", "full_time").lower().replace(" ", "_")
-        work_mode_val = m.get("work_mode", "onsite").lower().replace(" ", "_")
-        priority_val = m.get("priority", "medium").lower()
-        status_val = m.get("status", "draft").lower().replace(" ", "_")
-        gender_val = m.get("gender_eligibility", "all").lower()
+        # Branch / Specialization — comma-separated slugs or display names
+        # find_canonical() resolves abbreviations / full names to canonical slugs
+        required_branches_raw = _split_skills(m.get("required_branches"))
+        if required_branches_raw:
+            from app.core.branch_utils import find_canonical as _fc
+            required_branches_val = [c for b in required_branches_raw if (c := _fc(b))]
+        else:
+            required_branches_val = []
 
-        doc = {
-            "_id": str(_uuid.uuid4()),
-            "title": title,
-            "client_id": client_id,
-            "client_name": client_name,
-            "description": m.get("description") or None,
-            "requirements": m.get("requirements") or None,
-            "responsibilities": m.get("responsibilities") or None,
-            "job_type": job_type_val,
-            "work_mode": work_mode_val,
-            "city": m.get("city") or None,
-            "state": m.get("state") or None,
-            "country": m.get("country") or "India",
-            "total_positions": total_positions,
-            "filled_positions": 0,
-            "salary": {"min_salary": salary_min, "max_salary": salary_max, "currency": m.get("currency") or "INR", "is_negotiable": True, "salary_type": "annual"} if (salary_min or salary_max) else None,
-            "experience": {"min_years": exp_min, "max_years": exp_max},
-            "skills_required": [{"skill_name": s, "is_mandatory": False} for s in skills],
-            "eligibility": {
-                "min_experience_years": exp_min,
-                "max_experience_years": exp_max,
-                "required_skills": skills,
-                "mandatory_skills": mandatory,
-                "preferred_locations": [m.get("city")] if m.get("city") else [],
-                "min_ctc": salary_min,
-                "max_ctc": salary_max,
-            },
-            "priority": priority_val,
-            "status": status_val,
-            "gender_eligibility": gender_val,
-            "internal_notes": m.get("internal_notes") or None,
-            "tags": tags,
-            "total_applications": 0,
-            "shortlisted_count": 0,
-            "interview_count": 0,
-            "offered_count": 0,
-            "rejected_count": 0,
-            "auto_match_enabled": False,
-            "created_by": current_user["id"],
-            "created_at": now,
-            "is_deleted": False,
-        }
+        # ── enum-like string normalisation ───────────────────────────────────
+        job_type_val  = (m.get("job_type")         or "full_time").lower().replace(" ", "_")
+        work_mode_val = (m.get("work_mode")         or "onsite").lower().replace(" ", "_")
+        priority_val  = (m.get("priority")          or "medium").lower()
+        status_val    = (m.get("status")            or "open").lower().replace(" ", "_")
+        gender_val    = (m.get("gender_eligibility") or "all").lower()
 
+        # ── build JobCreate — identical schema used by manual creation ───────
         try:
-            await db["jobs"].insert_one(doc)
+            job_data = JobCreate(
+                title=title,
+                client_id=client_id,
+                description=m.get("description") or None,
+                requirements=m.get("requirements") or None,
+                responsibilities=m.get("responsibilities") or None,
+                job_type=job_type_val,
+                work_mode=work_mode_val,
+                city=m.get("city") or None,
+                state=m.get("state") or None,
+                country=m.get("country") or "India",
+                total_positions=total_positions,
+                priority=priority_val,
+                status=status_val,
+                gender_eligibility=gender_val,
+                internal_notes=m.get("internal_notes") or None,
+                tags=tags,
+                visible_to_partners=True,
+                minimum_match_score=min_match_score,
+                salary=SalaryRange(
+                    min_salary=salary_min,
+                    max_salary=salary_max,
+                    currency=m.get("currency") or "INR",
+                ) if (salary_min is not None or salary_max is not None) else None,
+                experience=ExperienceRange(
+                    min_years=exp_min,
+                    max_years=exp_max,
+                ),
+                skills_required=[
+                    *[{"skill_name": s, "is_mandatory": True}  for s in mandatory_skills],
+                    *[{"skill_name": s, "is_mandatory": False} for s in optional_skills],
+                ],
+                eligibility=EligibilityCriteria(
+                    min_experience_years=exp_min,
+                    max_experience_years=exp_max,
+                    mandatory_skills=mandatory_skills,
+                    required_skills=optional_skills,
+                    max_ctc=max_current_ctc,
+                    max_notice_period_days=max_notice_days,
+                    preferred_locations=[m["city"]] if m.get("city") else [],
+                    required_branches=required_branches_val,
+                ),
+            )
+            await JobService.create_job(
+                db=db,
+                job_data=job_data,
+                created_by=current_user["id"],
+                company_id=current_user.get("company_id", ""),
+                user_name=current_user.get("full_name", ""),
+            )
             inserted += 1
         except Exception as e:
             failed.append({"row": idx, "title": title, "reason": str(e)})
@@ -564,6 +647,58 @@ async def delete_job(
         logger.warning("Notification skipped (job delete): %s", _ne)
 
     return {"success": True, "message": "Job deleted successfully"}
+
+
+class _BulkDeleteRequest(_BaseModel):
+    job_ids: List[str]
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_jobs(
+    body: _BulkDeleteRequest,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db),
+    _: bool = Depends(require_permissions(["jobs:delete"]))
+):
+    """
+    Soft-delete multiple jobs in one request.
+    Returns deleted_count, failed_count, and details for any failures.
+    Maximum 500 jobs per request.
+    """
+    from datetime import datetime, timezone
+
+    if not body.job_ids:
+        raise HTTPException(status_code=400, detail="job_ids must not be empty")
+    if len(body.job_ids) > 500:
+        raise HTTPException(status_code=400, detail="Maximum 500 jobs per bulk delete request")
+
+    now = datetime.now(timezone.utc)
+    deleted_by = current_user["id"]
+    deleted_count = 0
+    failed_ids: list = []
+
+    for jid in body.job_ids:
+        job = await db["jobs"].find_one({"_id": jid, "is_deleted": False})
+        if not job:
+            failed_ids.append({"id": jid, "reason": "Not found or already deleted"})
+            continue
+        try:
+            await db["jobs"].update_one(
+                {"_id": jid},
+                {"$set": {"is_deleted": True, "deleted_at": now, "deleted_by": deleted_by}},
+            )
+            deleted_count += 1
+        except Exception as exc:
+            failed_ids.append({"id": jid, "reason": str(exc)})
+
+    noun = "job" if deleted_count == 1 else "jobs"
+    return {
+        "success": True,
+        "deleted_count": deleted_count,
+        "failed_count": len(failed_ids),
+        "failed_ids": failed_ids,
+        "message": f"Successfully deleted {deleted_count} {noun}.",
+    }
 
 
 # ============== Eligibility & Matching ==============

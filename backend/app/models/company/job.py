@@ -100,6 +100,10 @@ class EligibilityCriteria(BaseModel):
     min_12th_percentage: Optional[float] = Field(None, ge=0, le=100)
     min_diploma_percentage: Optional[float] = Field(None, ge=0, le=100)
     min_degree_percentage: Optional[float] = Field(None, ge=0, le=100)
+    # Branch / Specialization requirement — list of canonical branch slugs.
+    # Empty = no restriction. ATS uses branch_utils.find_canonical() for
+    # fuzzy matching (abbreviations, degree prefixes, alternate spellings).
+    required_branches: List[str] = Field(default_factory=list)
 
 
 class CustomFieldValue(BaseModel):
@@ -394,7 +398,7 @@ class JobListResponse(BaseModel):
     title: str
     job_code: Optional[str]
     client_name: Optional[str]
-    
+
     job_type: str
     work_mode: str
     city: Optional[str]
@@ -404,22 +408,25 @@ class JobListResponse(BaseModel):
 
     total_positions: int
     filled_positions: int
-    
+
     salary_min: Optional[float] = None
     salary_max: Optional[float] = None
-    
+
     experience_min: Optional[float] = None
     experience_max: Optional[float] = None
-    
+
     priority: str
     target_date: Optional[date]
-    
+
     total_applications: int
     shortlisted_count: int
-    
+
     status: str
     status_display: str = ""
-    
+
+    # Pipeline status — needed to show Configured / Missing column in job list
+    pipeline_id: Optional[str] = None
+
     created_at: datetime
 
 

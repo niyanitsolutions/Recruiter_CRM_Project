@@ -112,6 +112,18 @@ const jobService = {
     })
     return response.data
   },
+
+  // Get branch / specialization options
+  getBranches: async () => {
+    const response = await api.get('/jobs/branches')
+    return response.data
+  },
+
+  // Bulk delete — soft-delete multiple jobs in one request
+  bulkDelete: async (jobIds) => {
+    const response = await api.post('/jobs/bulk-delete', { job_ids: jobIds })
+    return response.data
+  },
 }
 
 export default jobService

@@ -120,14 +120,21 @@ const JobDetails = () => {
   const [job, setJob] = useState(null)
   const [applications, setApplications] = useState([])
   const [activeTab, setActiveTab] = useState('overview')
+  const [branchLabelMap, setBranchLabelMap] = useState({})
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => { load() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = async () => {
     try {
       setLoading(true)
-      const jobRes = await jobService.getJob(id)
+      const [jobRes, branchRes] = await Promise.all([
+        jobService.getJob(id),
+        jobService.getBranches().catch(() => ({ data: [] })),
+      ])
       setJob(jobRes.data)
+      const map = {}
+      for (const b of (branchRes.data || [])) map[b.value] = b.label
+      setBranchLabelMap(map)
     } catch (err) {
       toast.error('Failed to load job')
       navigate('/jobs')
@@ -148,6 +155,13 @@ const JobDetails = () => {
       <p className="text-surface-500 font-medium">Job not found</p>
     </div>
   )
+
+  // Convert stored max_notice_period_days integer to a readable label
+  const formatNoticeDays = (days) => {
+    if (days == null) return null
+    if (days === 0) return 'Immediate'
+    return `${days} days`
+  }
 
   // Derived
   const jobStatus   = JOB_STATUS[job.status]   || JOB_STATUS.draft
@@ -231,22 +245,39 @@ const JobDetails = () => {
   const renderRequirements = () => (
     <div className="space-y-5">
       {/* Mandatory skills */}
-      {(job.eligibility_criteria?.mandatory_skills || []).length > 0 && (
+      {(job.eligibility?.mandatory_skills || []).length > 0 && (
         <SectionCard title="Mandatory Skills">
           <div className="flex flex-wrap gap-2">
-            {job.eligibility_criteria.mandatory_skills.map((s, i) => (
+            {job.eligibility.mandatory_skills.map((s, i) => (
               <SkillChip key={i} label={s} variant="primary" />
             ))}
           </div>
         </SectionCard>
       )}
 
-      {/* Optional skills */}
-      {(job.eligibility_criteria?.optional_skills || []).length > 0 && (
+      {/* Good to have skills */}
+      {(job.eligibility?.required_skills || []).length > 0 && (
         <SectionCard title="Good to Have">
           <div className="flex flex-wrap gap-2">
-            {job.eligibility_criteria.optional_skills.map((s, i) => (
+            {job.eligibility.required_skills.map((s, i) => (
               <SkillChip key={i} label={s} variant="secondary" />
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Branch / Specialization */}
+      {(job.eligibility?.required_branches || []).length > 0 && (
+        <SectionCard title="Branch / Specialization">
+          <div className="flex flex-wrap gap-2">
+            {job.eligibility.required_branches.map((slug, i) => (
+              <span
+                key={i}
+                className="px-3 py-1 rounded-full text-sm font-medium"
+                style={{ background: 'rgba(108,99,255,0.12)', color: 'var(--accent)' }}
+              >
+                {branchLabelMap[slug] || slug}
+              </span>
             ))}
           </div>
         </SectionCard>
@@ -256,8 +287,8 @@ const JobDetails = () => {
       <SectionCard title="Eligibility Criteria">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
           <InfoRow label="Experience"        value={`${job.experience?.min_years ?? 0}–${job.experience?.max_years ?? '?'} years`} />
-          <InfoRow label="Max Notice Period" value={job.eligibility_criteria?.notice_period_max?.replace(/_/g, ' ') || 'Any'} />
-          <InfoRow label="Max Current CTC"   value={job.eligibility_criteria?.ctc_max ? `₹${job.eligibility_criteria.ctc_max} LPA` : 'Any'} />
+          <InfoRow label="Max Notice Period" value={formatNoticeDays(job.eligibility?.max_notice_period_days) || 'Any'} />
+          <InfoRow label="Max Current CTC"   value={job.eligibility?.max_ctc ? `₹${job.eligibility.max_ctc} LPA` : 'Any'} />
           <InfoRow label="Salary Range"      value={`₹${job.salary?.min_salary ?? 0}–${job.salary?.max_salary ?? '?'} LPA`} />
         </div>
       </SectionCard>

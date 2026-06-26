@@ -26,6 +26,7 @@ const JobForm = () => {
   const [workModes, setWorkModes] = useState([])
   const [priorities, setPriorities] = useState([])
   const [pipelines, setPipelines] = useState([])
+  const [branchOptions, setBranchOptions] = useState([])
 
   const [formData, setFormData] = useState({
     title: '',
@@ -65,7 +66,8 @@ const JobForm = () => {
     min_10th_percentage: '',
     min_12th_percentage: '',
     min_diploma_percentage: '',
-    min_degree_percentage: ''
+    min_degree_percentage: '',
+    required_branches: []
   })
 
   const [locationInput, setLocationInput] = useState('')
@@ -93,13 +95,14 @@ const JobForm = () => {
 
   const loadDropdowns = async () => {
     try {
-      const [clientRes, statusRes, typeRes, modeRes, priorityRes, pipelineRes] = await Promise.all([
+      const [clientRes, statusRes, typeRes, modeRes, priorityRes, pipelineRes, branchRes] = await Promise.all([
         clientService.getClientsDropdown(),
         jobService.getStatuses(),
         jobService.getJobTypes(),
         jobService.getWorkModes(),
         jobService.getPriorities(),
-        pipelineService.getPipelines({ page_size: 100 })
+        pipelineService.getPipelines({ page_size: 100 }),
+        jobService.getBranches(),
       ])
       setClients(clientRes.data || [])
       setStatuses(statusRes.data || [])
@@ -107,6 +110,7 @@ const JobForm = () => {
       setWorkModes(modeRes.data || [])
       setPriorities(priorityRes.data || [])
       setPipelines(pipelineRes.data || [])
+      setBranchOptions(branchRes.data || [])
     } catch (error) {
       toast.error('Failed to load form options')
     }
@@ -160,7 +164,8 @@ const JobForm = () => {
           min_10th_percentage: job.eligibility?.min_10th_percentage ?? '',
           min_12th_percentage: job.eligibility?.min_12th_percentage ?? '',
           min_diploma_percentage: job.eligibility?.min_diploma_percentage ?? '',
-          min_degree_percentage: job.eligibility?.min_degree_percentage ?? ''
+          min_degree_percentage: job.eligibility?.min_degree_percentage ?? '',
+          required_branches: job.eligibility?.required_branches || []
         }))
       }
     } catch (error) {
@@ -337,7 +342,8 @@ const JobForm = () => {
           min_10th_percentage: formData.min_10th_percentage !== '' ? Number(formData.min_10th_percentage) : null,
           min_12th_percentage: formData.min_12th_percentage !== '' ? Number(formData.min_12th_percentage) : null,
           min_diploma_percentage: formData.min_diploma_percentage !== '' ? Number(formData.min_diploma_percentage) : null,
-          min_degree_percentage: formData.min_degree_percentage !== '' ? Number(formData.min_degree_percentage) : null
+          min_degree_percentage: formData.min_degree_percentage !== '' ? Number(formData.min_degree_percentage) : null,
+          required_branches: formData.required_branches || []
         },
         min_percentage: (formData.enable_academic_filtering && formData.min_percentage !== '') ? Number(formData.min_percentage) : null,
         minimum_match_score: Number(formData.minimum_match_score) || 70,
@@ -999,6 +1005,59 @@ const JobForm = () => {
                 <option value="female">Only Women</option>
               </select>
             </div>
+          </div>
+
+          {/* Branch / Specialization */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-surface-700 mb-1">
+              Branch / Specialization
+            </label>
+            <p className="text-xs text-surface-400 mb-2">
+              Select required branches. Leave empty to accept any branch.
+            </p>
+            <div className="relative">
+              <select
+                className="input w-full"
+                value=""
+                onChange={(e) => {
+                  const val = e.target.value
+                  if (val && !formData.required_branches.includes(val)) {
+                    setFormData(prev => ({ ...prev, required_branches: [...prev.required_branches, val] }))
+                  }
+                }}
+              >
+                <option value="">— Add a branch —</option>
+                {branchOptions
+                  .filter(b => !formData.required_branches.includes(b.value))
+                  .map(b => (
+                    <option key={b.value} value={b.value}>{b.label}</option>
+                  ))
+                }
+              </select>
+            </div>
+            {formData.required_branches.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {formData.required_branches.map(slug => {
+                  const opt = branchOptions.find(b => b.value === slug)
+                  return (
+                    <span
+                      key={slug}
+                      className="px-3 py-1 rounded-full text-sm flex items-center gap-1.5"
+                      style={{ background: 'rgba(108,99,255,0.12)', color: 'var(--accent)' }}
+                    >
+                      {opt?.label || slug}
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, required_branches: prev.required_branches.filter(b => b !== slug) }))}
+                        className="hover:opacity-70"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* Mandatory Skills */}
