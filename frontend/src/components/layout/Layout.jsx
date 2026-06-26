@@ -1,15 +1,23 @@
 import React, { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { clsx } from 'clsx'
+import { useSelector } from 'react-redux'
+import { selectIsSuperAdmin, selectIsSeller } from '../../store/authSlice'
 import SideNav from './SideNav'
 import TopBar from './TopBar'
 import GlobalSearch from '../common/GlobalSearch'
 import AnnouncementPopup from '../hrm/AnnouncementPopup'
+import SuperAnnouncementPopup from '../announcements/AnnouncementPopup'
+import AnnouncementMarquee from '../announcements/AnnouncementMarquee'
 
 const Layout = ({ title, subtitle, actions }) => {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const isSuperAdmin = useSelector(selectIsSuperAdmin)
+  const isSeller     = useSelector(selectIsSeller)
+  // Super-admin announcements only display for tenant company users
+  const isTenantUser = !isSuperAdmin && !isSeller
   // Global Ctrl+K / Cmd+K shortcut
   useEffect(() => {
     const handler = (e) => {
@@ -56,6 +64,9 @@ const Layout = ({ title, subtitle, actions }) => {
           onSearchOpen={() => setSearchOpen(true)}
         />
 
+        {/* Super-admin marquee ticker — only for tenant users */}
+        {isTenantUser && <AnnouncementMarquee />}
+
         {/* Page Content — starts immediately below the header (attendance now lives in TopBar) */}
         <main className="p-6">
           <Outlet />
@@ -65,8 +76,11 @@ const Layout = ({ title, subtitle, actions }) => {
       {/* Global Search overlay */}
       {searchOpen && <GlobalSearch onClose={() => setSearchOpen(false)} />}
 
-      {/* Announcement popup — shown once per session for unread announcements */}
+      {/* HRM announcement popup — shown once per session for unread HRM announcements */}
       <AnnouncementPopup />
+
+      {/* Super-admin broadcast popup — shown for active popup-type announcements (tenant users only) */}
+      {isTenantUser && <SuperAnnouncementPopup />}
     </div>
   )
 }

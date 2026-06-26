@@ -22,6 +22,7 @@ import candidateService from '../../services/candidateService'
 import hrmService from '../../services/hrmService'
 import subscriptionService from '../../services/subscriptionService'
 import SubscriptionBanner from '../../components/subscription/SubscriptionBanner'
+import DashboardBanner from '../../components/announcements/DashboardBanner'
 import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 import KpiCard from '../../components/dashboard/KpiCard'
 import HiringTrend from '../../components/dashboard/HiringTrend'
@@ -578,6 +579,9 @@ const AdminDashboard = () => {
 
   return (
     <div className="p-2 space-y-3 page-enter">
+
+      {/* ── Super-admin broadcast banners ────────────────────────────────────────── */}
+      <DashboardBanner />
 
       {/* ── Subscription Banner ─────────────────────────────────────────────────── */}
       {isAdminOrOwner && (

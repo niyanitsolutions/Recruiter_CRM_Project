@@ -60,6 +60,7 @@ from app.api.v1 import sellers, seller_portal
 
 # ============== Super Admin Extensions ==============
 from app.api.v1 import discounts, platform_settings, super_admin_ai
+from app.api.v1 import super_admin_payment_provider, super_admin_communication, tenant_communication
 
 # ============== Phase 2 - User Management ==============
 from app.api.v1 import users, partners, roles, departments, designations, audit_logs, admin_dashboard
@@ -376,6 +377,9 @@ API_V1_PREFIX = "/api/v1"
 app.include_router(auth.router, prefix=f"{API_V1_PREFIX}/auth", tags=["Authentication"])
 app.include_router(super_admin.router, prefix=f"{API_V1_PREFIX}/super-admin", tags=["Super Admin"])
 app.include_router(super_admin_ai.router, prefix=f"{API_V1_PREFIX}/super-admin", tags=["Super Admin - AI Provider"])
+app.include_router(super_admin_payment_provider.router, prefix=f"{API_V1_PREFIX}/super-admin", tags=["Super Admin - Payment Provider"])
+app.include_router(super_admin_communication.router, prefix=f"{API_V1_PREFIX}/super-admin", tags=["Super Admin - Communication Center"])
+app.include_router(tenant_communication.router, prefix=API_V1_PREFIX, tags=["Tenant - Announcements"])
 app.include_router(tenants.router, prefix=f"{API_V1_PREFIX}/tenants", tags=["Tenants"])
 app.include_router(plans.router, prefix=f"{API_V1_PREFIX}/plans", tags=["Plans"])
 app.include_router(payments.router, prefix=f"{API_V1_PREFIX}/payments", tags=["Payments"])
