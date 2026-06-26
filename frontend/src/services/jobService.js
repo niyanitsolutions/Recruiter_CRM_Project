@@ -103,12 +103,13 @@ const jobService = {
     return response.data
   },
 
-  // Bulk import — parse and insert valid rows
+  // Bulk import — parse and insert valid rows (long timeout: many DB ops per row)
   bulkImport: async (file) => {
     const fd = new FormData()
     fd.append('file', file)
     const response = await api.post('/jobs/bulk-import', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
     })
     return response.data
   },

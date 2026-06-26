@@ -452,7 +452,9 @@ async def bulk_import_jobs(
 
     # ── row loop ─────────────────────────────────────────────────────────────
     inserted = 0
+    duplicates: list = []
     failed = []
+    total_rows = len(rows)
 
     for idx, raw_row in enumerate(rows, start=2):
         m = _map_jobs_row(raw_row)
@@ -469,6 +471,19 @@ async def bulk_import_jobs(
                 "row": idx, "title": title,
                 "reason": f"Client '{client_name}' not found" if client_name else "Missing client name",
             })
+            continue
+
+        # ── duplicate check (title + client, case-insensitive, tenant-scoped) ──
+        existing = await db["jobs"].find_one(
+            {
+                "title": {"$regex": f"^{_re.escape(title)}$", "$options": "i"},
+                "client_id": client_id,
+                "is_deleted": False,
+            },
+            {"_id": 1},
+        )
+        if existing:
+            duplicates.append({"row": idx, "title": title, "reason": "Duplicate job (same title and client already exists)"})
             continue
 
         # ── numeric conversions ──────────────────────────────────────────────
@@ -565,9 +580,17 @@ async def bulk_import_jobs(
     return {
         "success": True,
         "inserted": inserted,
+        "duplicates": len(duplicates),
         "failed": len(failed),
+        "total_rows": total_rows,
         "failed_rows": failed,
-        "message": f"Import complete: {inserted} inserted, {len(failed)} failed.",
+        "duplicate_rows": duplicates,
+        "message": (
+            f"Import complete: {inserted} inserted"
+            + (f", {len(duplicates)} duplicate{'s' if len(duplicates) != 1 else ''} skipped" if duplicates else "")
+            + (f", {len(failed)} failed" if failed else "")
+            + "."
+        ),
     }
 
 

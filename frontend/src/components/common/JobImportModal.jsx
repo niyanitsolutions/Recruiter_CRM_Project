@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Upload, AlertCircle, CheckCircle, ChevronRight } from 'lucide-react'
+import { X, Upload, AlertCircle, CheckCircle, ChevronRight, SkipForward } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import jobService from '../../services/jobService'
 
@@ -47,18 +47,27 @@ const JobImportModal = ({ onClose, onImported }) => {
       const data = await jobService.bulkImport(file)
       setResults(data)
       setStep('results')
-      if (data.inserted > 0) onImported?.()
+      if (data.inserted > 0) {
+        toast.success(`Successfully imported ${data.inserted} job${data.inserted !== 1 ? 's' : ''}.`)
+        onImported?.()
+      } else if (data.duplicates > 0 && data.failed === 0) {
+        toast.success(`All ${data.duplicates} job${data.duplicates !== 1 ? 's' : ''} already exist — no duplicates created.`)
+      } else if (data.duplicates > 0) {
+        toast.success('Import complete.')
+      }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Import failed.')
+      const detail = err.response?.data?.detail
+      toast.error(
+        typeof detail === 'string' ? detail :
+        err.code === 'ECONNABORTED' ? 'Import timed out — the file may be too large. Try a smaller batch.' :
+        'Import failed. Please try again.'
+      )
     } finally {
       setLoading(false)
     }
   }
 
-  const rowBg = (row) => {
-    if (row.errors?.length) return 'bg-red-50'
-    return ''
-  }
+  const rowBg = (row) => row.errors?.length ? 'bg-red-50' : ''
 
   const rowBadge = (row) => {
     if (row.errors?.length)
@@ -70,6 +79,15 @@ const JobImportModal = ({ onClose, onImported }) => {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [])
+
+  // Determine summary icon / color based on results
+  const resultIcon = results
+    ? results.inserted > 0
+      ? <CheckCircle className="w-14 h-14 text-green-500" />
+      : results.failed > 0 && results.inserted === 0 && (results.duplicates ?? 0) === 0
+        ? <AlertCircle className="w-14 h-14 text-red-500" />
+        : <CheckCircle className="w-14 h-14 text-yellow-500" />
+    : null
 
   return createPortal(
     <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4">
@@ -191,25 +209,52 @@ const JobImportModal = ({ onClose, onImported }) => {
 
           {/* ── Step 3: Results ─────────────────────────────────────────── */}
           {step === 'results' && results && (
-            <div className="flex flex-col items-center justify-center py-10 gap-6">
-              <CheckCircle className="w-14 h-14 text-green-500" />
-              <p className="text-lg font-semibold text-surface-900">{results.message}</p>
-              <div className="grid grid-cols-2 gap-4 w-full max-w-xs">
+            <div className="flex flex-col items-center justify-center py-8 gap-5">
+              {resultIcon}
+
+              <p className="text-base font-semibold text-surface-900 text-center">{results.message}</p>
+
+              {/* 3-column summary */}
+              <div className="grid grid-cols-3 gap-3 w-full max-w-sm">
                 <div className="text-center p-4 bg-green-50 rounded-xl">
-                  <p className="text-2xl font-bold text-green-700">{results.inserted}</p>
-                  <p className="text-xs text-green-600 mt-1">Inserted</p>
+                  <p className="text-2xl font-bold text-green-700">{results.inserted ?? 0}</p>
+                  <p className="text-xs text-green-600 mt-1">Imported</p>
+                </div>
+                <div className="text-center p-4 bg-yellow-50 rounded-xl">
+                  <p className="text-2xl font-bold text-yellow-700">{results.duplicates ?? 0}</p>
+                  <p className="text-xs text-yellow-600 mt-1">Duplicates Skipped</p>
                 </div>
                 <div className="text-center p-4 bg-red-50 rounded-xl">
-                  <p className="text-2xl font-bold text-red-700">{results.failed}</p>
+                  <p className="text-2xl font-bold text-red-700">{results.failed ?? 0}</p>
                   <p className="text-xs text-red-600 mt-1">Failed</p>
                 </div>
               </div>
+
+              {/* Duplicate rows detail */}
+              {results.duplicate_rows?.length > 0 && (
+                <div className="w-full max-w-lg">
+                  <p className="text-sm font-medium text-surface-700 mb-2 flex items-center gap-1.5">
+                    <SkipForward className="w-4 h-4 text-yellow-600" />
+                    Skipped duplicates:
+                  </p>
+                  <ul className="text-sm text-yellow-800 space-y-1 max-h-28 overflow-y-auto bg-yellow-50 rounded-lg p-3 border border-yellow-200">
+                    {results.duplicate_rows.map((dr, i) => (
+                      <li key={i}>Row {dr.row}{dr.title ? ` — ${dr.title}` : ''}: {dr.reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Failed rows detail */}
               {results.failed_rows?.length > 0 && (
                 <div className="w-full max-w-lg">
-                  <p className="text-sm font-medium text-surface-700 mb-2">Failed rows:</p>
-                  <ul className="text-sm text-red-700 space-y-1 max-h-32 overflow-y-auto bg-red-50 rounded-lg p-3">
+                  <p className="text-sm font-medium text-surface-700 mb-2 flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4 text-red-500" />
+                    Failed rows:
+                  </p>
+                  <ul className="text-sm text-red-700 space-y-1 max-h-28 overflow-y-auto bg-red-50 rounded-lg p-3 border border-red-200">
                     {results.failed_rows.map((fr, i) => (
-                      <li key={i}>Row {fr.row}{fr.title ? ` (${fr.title})` : ''}: {fr.reason}</li>
+                      <li key={i}>Row {fr.row}{fr.title ? ` — ${fr.title}` : ''}: {fr.reason}</li>
                     ))}
                   </ul>
                 </div>
