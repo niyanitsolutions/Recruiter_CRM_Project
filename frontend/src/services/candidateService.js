@@ -107,8 +107,8 @@ const candidateService = {
   parseResumeFile: async (file) => {
     const fd = new FormData()
     fd.append('file', file)
-    // Do NOT set Content-Type manually — let browser set multipart/form-data with boundary
-    const response = await api.post('/candidates/extract-resume', fd)
+    // AI parsing can take 30-60 s — override the global 15 s axios timeout.
+    const response = await api.post('/candidates/extract-resume', fd, { timeout: 120000 })
     return response.data
   },
 
@@ -116,7 +116,7 @@ const candidateService = {
   parseResumeFilePublic: async (file) => {
     const fd = new FormData()
     fd.append('file', file)
-    const response = await api.post('/public/extract-resume', fd)
+    const response = await api.post('/public/extract-resume', fd, { timeout: 120000 })
     return response.data
   },
 
