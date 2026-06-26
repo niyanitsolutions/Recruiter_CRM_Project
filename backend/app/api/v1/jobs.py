@@ -209,11 +209,19 @@ _JOBS_FIELD_MAP = {
     # location
     "city": "city", "location": "city", "work location": "city",
     "state": "state", "country": "country",
-    # compensation
+    # compensation — offered salary range (LPA variants are common in Indian HR templates)
     "salary_min": "salary_min", "min salary": "salary_min", "minimum salary": "salary_min",
+    "min salary (lpa)": "salary_min", "minimum salary (lpa)": "salary_min",
+    "salary min (lpa)": "salary_min", "salary_min (lpa)": "salary_min",
+    "offered salary min": "salary_min", "offered salary min (lpa)": "salary_min",
+    "salary range min": "salary_min", "salary range min (lpa)": "salary_min",
     "salary_max": "salary_max", "max salary": "salary_max", "maximum salary": "salary_max",
+    "max salary (lpa)": "salary_max", "maximum salary (lpa)": "salary_max",
+    "salary max (lpa)": "salary_max", "salary_max (lpa)": "salary_max",
+    "offered salary max": "salary_max", "offered salary max (lpa)": "salary_max",
+    "salary range max": "salary_max", "salary range max (lpa)": "salary_max",
     "salary": "salary_max",
-    "currency": "currency", "salary currency": "currency",
+    "currency": "currency", "salary currency": "currency", "salary_currency": "currency",
     # experience
     "experience_min": "experience_min", "min experience": "experience_min",
     "min exp": "experience_min", "minimum experience": "experience_min",
