@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   Users, Plus, Search, Filter, Eye, Edit, Trash2,
   Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2, Send, Upload,
-  LayoutGrid, List, Clock, Building2,
+  LayoutGrid, List, Clock, Building2, CheckSquare, Square, AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -71,6 +71,11 @@ const Candidates = () => {
   const [formLinkModal, setFormLinkModal] = useState(false)
   const [formLinkEmail, setFormLinkEmail] = useState('')
   const [generatingLink, setGeneratingLink] = useState(false)
+
+  // ── Bulk selection state ──────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const copyToClipboard = async (text) => {
     try {
@@ -171,6 +176,8 @@ const Candidates = () => {
         total: response.pagination?.total || 0,
         totalPages: response.pagination?.total_pages || 0
       }))
+      // Clear selection when the page changes so stale IDs don't linger
+      if (!silent) setSelectedIds(new Set())
     } catch (error) {
       if (!silent) toast.error('Failed to load candidates')
     } finally {
@@ -222,9 +229,57 @@ const Candidates = () => {
     try {
       await candidateService.deleteCandidate(candidateId)
       toast.success('Candidate deleted successfully')
+      setSelectedIds(prev => { const n = new Set(prev); n.delete(candidateId); return n })
       loadCandidates()
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to delete candidate')
+    }
+  }
+
+  // ── Bulk selection helpers ────────────────────────────────────────────────
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const isAllSelected = candidates.length > 0 && candidates.every(c => selectedIds.has(c.id))
+  const isSomeSelected = candidates.some(c => selectedIds.has(c.id))
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        candidates.forEach(c => next.delete(c.id))
+        return next
+      })
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        candidates.forEach(c => next.add(c.id))
+        return next
+      })
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true)
+    try {
+      const ids = [...selectedIds]
+      const res = await candidateService.bulkDelete(ids)
+      toast.success(res.message || `Deleted ${res.deleted_count} candidate(s)`)
+      if (res.failed_count > 0) {
+        toast.error(`${res.failed_count} candidate(s) could not be deleted (active applications).`)
+      }
+      setSelectedIds(new Set())
+      setBulkDeleteConfirm(false)
+      loadCandidates()
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Bulk delete failed')
+    } finally {
+      setBulkDeleting(false)
     }
   }
 
@@ -555,6 +610,39 @@ const Candidates = () => {
         )}
       </div>
 
+      {/* Bulk action toolbar — shown when items are selected */}
+      {selectedIds.size > 0 && (
+        <div
+          className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl mb-4"
+          style={{ background: 'var(--accent-light)', border: '1px solid var(--accent)', color: 'var(--accent)' }}
+        >
+          <div className="flex items-center gap-3">
+            <CheckSquare className="w-5 h-5" />
+            <span className="font-semibold text-sm">
+              {selectedIds.size} candidate{selectedIds.size !== 1 ? 's' : ''} selected
+            </span>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-xs underline opacity-70 hover:opacity-100"
+            >
+              Clear selection
+            </button>
+          </div>
+          {has('candidates:delete') && (
+            <button
+              onClick={() => setBulkDeleteConfirm(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-opacity"
+              style={{ background: 'rgba(255,71,87,0.15)', color: '#FF4757' }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Selected
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Loading state — skeleton instead of blocking spinner */}
       {loading && viewMode === 'table' && <SkeletonTableRows rows={10} cols={8} />}
       {loading && viewMode === 'card'  && <SkeletonCards count={6} />}
@@ -743,6 +831,21 @@ const Candidates = () => {
           <table className="w-full">
             <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '2px solid var(--border)' }}>
               <tr>
+                <th className="px-4 py-3" style={{ width: '40px' }}>
+                  <button
+                    onClick={toggleSelectAll}
+                    className="flex items-center justify-center w-5 h-5 rounded transition-colors"
+                    style={{ color: isAllSelected ? 'var(--accent)' : isSomeSelected ? 'var(--accent)' : 'var(--text-disabled)' }}
+                    title={isAllSelected ? 'Deselect all' : 'Select all'}
+                  >
+                    {isAllSelected
+                      ? <CheckSquare className="w-4 h-4" />
+                      : isSomeSelected
+                        ? <Square className="w-4 h-4" style={{ opacity: 0.6 }} />
+                        : <Square className="w-4 h-4" />
+                    }
+                  </button>
+                </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '22%' }}>Candidate</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '11%' }}>Experience</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '14%' }}>Skills</th>
@@ -758,10 +861,27 @@ const Candidates = () => {
                 <tr
                   key={candidate.id}
                   className="transition-colors"
-                  style={{ borderBottom: '1px solid var(--border-subtle)' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                  onMouseLeave={e => e.currentTarget.style.background = ''}
+                  style={{
+                    borderBottom: '1px solid var(--border-subtle)',
+                    background: selectedIds.has(candidate.id) ? 'var(--bg-active)' : undefined,
+                  }}
+                  onMouseEnter={e => { if (!selectedIds.has(candidate.id)) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseLeave={e => { if (!selectedIds.has(candidate.id)) e.currentTarget.style.background = '' }}
                 >
+                  {/* Checkbox */}
+                  <td className="px-4 py-3.5">
+                    <button
+                      onClick={() => toggleSelect(candidate.id)}
+                      className="flex items-center justify-center w-5 h-5 rounded transition-colors"
+                      style={{ color: selectedIds.has(candidate.id) ? 'var(--accent)' : 'var(--text-disabled)' }}
+                    >
+                      {selectedIds.has(candidate.id)
+                        ? <CheckSquare className="w-4 h-4" />
+                        : <Square className="w-4 h-4" />
+                      }
+                    </button>
+                  </td>
+
                   {/* Candidate */}
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-3">
@@ -1152,6 +1272,52 @@ const Candidates = () => {
                 </table>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      </ModalPortal>
+
+      {/* Bulk Delete Confirmation Modal */}
+      <ModalPortal isOpen={bulkDeleteConfirm}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => !bulkDeleting && setBulkDeleteConfirm(false)}>
+          <div
+            className="rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6"
+            style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,71,87,0.12)' }}>
+                <AlertTriangle className="w-5 h-5" style={{ color: '#FF4757' }} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
+                  Delete {selectedIds.size} Candidate{selectedIds.size !== 1 ? 's' : ''}?
+                </h3>
+                <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-sm mb-5" style={{ color: 'var(--text-secondary)' }}>
+              Candidates with active applications will be skipped and not deleted.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setBulkDeleteConfirm(false)}
+                disabled={bulkDeleting}
+                className="flex-1 btn-secondary text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="flex-1 flex items-center justify-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
+                style={{ background: '#FF4757', color: '#fff' }}
+              >
+                {bulkDeleting
+                  ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Deleting…</>
+                  : <><Trash2 className="w-4 h-4" /> Delete</>
+                }
+              </button>
             </div>
           </div>
         </div>

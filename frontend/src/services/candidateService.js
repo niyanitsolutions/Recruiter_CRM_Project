@@ -198,6 +198,12 @@ const candidateService = {
     })
     return response.data
   },
+
+  // Bulk delete — soft-delete multiple candidates in one request
+  bulkDelete: async (candidateIds) => {
+    const response = await api.post('/candidates/bulk-delete', { candidate_ids: candidateIds })
+    return response.data
+  },
 }
 
 export default candidateService

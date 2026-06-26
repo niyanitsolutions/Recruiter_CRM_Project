@@ -1017,10 +1017,13 @@ async def bulk_import_candidates(
 ):
     """
     Bulk import candidates from Excel (.xlsx/.xls), CSV, or PDF.
+    Produces documents structurally identical to manually created candidates.
     Returns inserted count, skipped duplicates, and failed rows with reasons.
     """
     import os
+    import re as _re
     from datetime import datetime, timezone
+    from bson import ObjectId as _ObjectId
 
     _, ext = os.path.splitext((file.filename or "").lower())
     if ext not in {".xlsx", ".xls", ".csv", ".pdf"}:
@@ -1029,11 +1032,44 @@ async def bulk_import_candidates(
     content = await file.read()
     rows = _parse_import_file(content, ext)
 
+    # ── Helpers ──────────────────────────────────────────────────────────────
+
+    def _to_float(v):
+        """Convert any value to float, handling text like '3 Yrs', '3.5 years'."""
+        if v is None:
+            return None
+        s = str(v).strip()
+        if not s:
+            return None
+        try:
+            return float(s)
+        except (ValueError, TypeError):
+            # Extract first numeric substring (handles "3 Yrs", "3.5 years", "~5", etc.)
+            m = _re.search(r'\d+(?:\.\d+)?', s)
+            return float(m.group()) if m else None
+
+    def _clean_mobile(v):
+        """Strip all non-digit characters; keep last 10 if >10 digits (Indian norm)."""
+        if not v:
+            return None
+        digits = _re.sub(r'[^0-9]', '', str(v))
+        if len(digits) < 7:
+            return None
+        return digits[-10:] if len(digits) > 10 else digits
+
+    def _valid_source(raw: str) -> str:
+        """Return raw source if it matches a known CandidateSource, else 'excel_import'."""
+        from app.models.company.candidate import CandidateSource
+        known = {s.value for s in CandidateSource}
+        val = (raw or "").strip().lower()
+        return val if val in known else "excel_import"
+
     # ── Insert rows ──────────────────────────────────────────────────────────
     inserted = 0
     skipped_duplicates = []
     failed = []
     now = datetime.now(timezone.utc)
+    company_id = current_user.get("company_id", "")
     partner_id = current_user["id"] if current_user.get("role") == "partner" else None
 
     for idx, raw_row in enumerate(rows, start=2):  # start=2 → data begins at row 2
@@ -1045,46 +1081,60 @@ async def bulk_import_candidates(
             continue
 
         email = m["email"].strip().lower()
+        mobile = _clean_mobile(m.get("mobile"))
+        if not mobile:
+            failed.append({"row": idx, "reason": "Invalid mobile number"})
+            continue
 
-        # Duplicate check
+        # Duplicate check (by email)
         existing = await db["candidates"].find_one({"email": email, "is_deleted": False})
         if existing:
             skipped_duplicates.append(email)
             continue
 
-        # Build name
+        # Build name — exactly as CandidateService.create_candidate does
         if m.get("full_name") and not m.get("first_name"):
             parts = m["full_name"].split(None, 1)
-            first_name = parts[0]
-            last_name = parts[1] if len(parts) > 1 else None
+            first_name = parts[0].strip()
+            last_name = parts[1].strip() if len(parts) > 1 else None
         else:
-            first_name = m.get("first_name", "").strip() or email.split("@")[0]
-            last_name = m.get("last_name") or None
+            first_name = (m.get("first_name") or "").strip() or email.split("@")[0]
+            last_name = (m.get("last_name") or "").strip() or None
 
-        # Skills
+        full_name = f"{first_name} {last_name}".strip() if last_name else first_name
+
+        # Skills — identical to create_candidate: skill_tags = lowercased names
         raw_skills = m.get("skill_tags", "")
-        skill_tags = [s.strip() for s in raw_skills.split(",") if s.strip()] if raw_skills else []
+        skill_tags_raw = [s.strip() for s in raw_skills.split(",") if s.strip()] if raw_skills else []
+        skill_tags = [s.lower() for s in skill_tags_raw]
+        skills = [{"name": s, "proficiency": None, "years": None} for s in skill_tags_raw]
 
         # Education
         education = []
         if m.get("edu_degree"):
-            edu = {"degree": m["edu_degree"], "institution": m.get("edu_institution", "")}
-            if m.get("edu_field"): edu["field_of_study"] = m["edu_field"]
+            edu = {
+                "degree": str(m["edu_degree"]).strip(),
+                "institution": str(m.get("edu_institution") or "").strip(),
+            }
+            if m.get("edu_field"):
+                edu["field_of_study"] = str(m["edu_field"]).strip()
             if m.get("edu_from_year"):
-                try: edu["from_year"] = int(m["edu_from_year"])
-                except ValueError: pass
+                try:
+                    edu["from_year"] = int(float(str(m["edu_from_year"]).strip()))
+                except (ValueError, TypeError):
+                    pass
             if m.get("edu_to_year"):
-                try: edu["to_year"] = int(m["edu_to_year"]); edu["year_of_passing"] = edu["to_year"]
-                except ValueError: pass
+                try:
+                    yr = int(float(str(m["edu_to_year"]).strip()))
+                    edu["to_year"] = yr
+                    edu["year_of_passing"] = yr
+                except (ValueError, TypeError):
+                    pass
             if m.get("edu_percentage"):
-                try: edu["percentage"] = float(m["edu_percentage"])
-                except ValueError: pass
+                pct = _to_float(m["edu_percentage"])
+                if pct is not None:
+                    edu["percentage"] = pct
             education.append(edu)
-
-        # Numeric coercions
-        def _float(v):
-            try: return float(v) if v else None
-            except (ValueError, TypeError): return None
 
         # Preferred locations
         raw_locs = m.get("preferred_locations", "")
@@ -1094,42 +1144,83 @@ async def bulk_import_candidates(
         wtr_raw = str(m.get("willing_to_relocate", "")).lower()
         willing_to_relocate = wtr_raw in ("yes", "true", "1", "y")
 
-        import uuid as _uuid
+        # Source — default to excel_import when not specified or unknown
+        source = _valid_source(m.get("source", ""))
+        if partner_id:
+            source = "partner"
+
+        # Build document — identical structure to CandidateService.create_candidate
         doc = {
-            "_id": str(_uuid.uuid4()),
+            "_id": str(_ObjectId()),          # Same format as manual creation
             "first_name": first_name,
             "last_name": last_name,
-            "full_name": f"{first_name} {last_name}".strip() if last_name else first_name,
+            "full_name": full_name,
             "email": email,
-            "mobile": m.get("mobile", "").strip(),
-            "alternate_mobile": m.get("alternate_mobile") or None,
-            "date_of_birth": m.get("date_of_birth") or None,
-            "gender": m.get("gender") or None,
+            "mobile": mobile,                 # Cleaned digits, same as create_candidate
+            "alternate_mobile": _clean_mobile(m.get("alternate_mobile")),
+            "date_of_birth": None,            # Not imported (requires careful date parsing)
+            "gender": (m.get("gender") or "").strip().lower() or None,
+            "marital_status": None,
+            "nationality": "Indian",
             "current_city": m.get("current_city") or None,
             "current_state": m.get("current_state") or None,
             "current_country": m.get("current_country") or "India",
-            "total_experience_years": _float(m.get("total_experience_years")),
+            "current_address": None,
+            "permanent_address": None,
+            "total_experience_years": _to_float(m.get("total_experience_years")),
+            "total_experience_months": None,
             "current_company": m.get("current_company") or None,
             "current_designation": m.get("current_designation") or None,
-            "current_ctc": _float(m.get("current_ctc")),
-            "expected_ctc": _float(m.get("expected_ctc")),
+            "current_ctc": _to_float(m.get("current_ctc")),
+            "expected_ctc": _to_float(m.get("expected_ctc")),
+            "ctc_currency": "INR",
             "notice_period": m.get("notice_period") or None,
+            "available_from": None,
+            "skills": skills,
             "skill_tags": skill_tags,
-            "skills": [{"name": s} for s in skill_tags],
             "education": education,
+            "highest_qualification": None,
             "work_experience": [],
-            "source": m.get("source") or "direct",
+            "certifications": [],
+            "languages": [],
+            "documents": [],
+            "resume_url": None,
+            "photo_url": None,
             "linkedin_url": m.get("linkedin_url") or None,
-            "notes": m.get("notes") or None,
-            "preferred_locations": preferred_locations,
-            "willing_to_relocate": willing_to_relocate,
-            "status": "active",
+            "portfolio_url": None,
+            "percentage": None,
+            "resume_parsed": False,
+            "resume_parsed_at": None,
+            "parsed_data": None,
+            "parse_confidence": None,
+            "source": source,
+            "source_details": None,
+            "referred_by": None,
             "partner_id": partner_id,
-            "created_by": current_user["id"],
-            "created_at": now,
-            "is_deleted": False,
+            "status": "active",
+            "status_changed_at": None,
+            "status_changed_by": None,
+            "assigned_to": None,
+            "assigned_at": None,
+            "current_job_id": None,
+            "current_job_title": None,
+            "current_stage": None,
             "total_applications": 0,
             "total_interviews": 0,
+            "custom_fields": [],
+            "notes": m.get("notes") or None,
+            "tags": [],
+            "preferred_locations": preferred_locations,
+            "willing_to_relocate": willing_to_relocate,
+            "preferred_job_types": [],
+            "company_id": company_id,         # Required for visibility scoping
+            "created_by": current_user["id"],
+            "created_at": now,
+            "updated_by": None,
+            "updated_at": now,
+            "is_deleted": False,
+            "deleted_at": None,
+            "deleted_by": None,
         }
 
         try:
@@ -1146,6 +1237,72 @@ async def bulk_import_candidates(
         "failed": len(failed),
         "failed_rows": failed,
         "message": f"Import complete: {inserted} inserted, {len(skipped_duplicates)} duplicates skipped, {len(failed)} failed.",
+    }
+
+
+class BulkDeleteRequest(BaseModel):
+    candidate_ids: list[str]
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_candidates(
+    body: BulkDeleteRequest,
+    current_user: dict = Depends(get_current_user),
+    db = Depends(get_company_db),
+    _: bool = Depends(require_permissions(["candidates:delete"]))
+):
+    """
+    Soft-delete multiple candidates in one request.
+    Skips candidates with active applications rather than failing the entire batch.
+    Returns deleted_count, failed_count, and details for any failures.
+    """
+    from datetime import datetime, timezone
+
+    if not body.candidate_ids:
+        raise HTTPException(status_code=400, detail="candidate_ids must not be empty")
+    if len(body.candidate_ids) > 500:
+        raise HTTPException(status_code=400, detail="Maximum 500 candidates per bulk delete request")
+
+    now = datetime.now(timezone.utc)
+    deleted_by = current_user["id"]
+
+    deleted_count = 0
+    failed_ids: list[dict] = []
+
+    for cid in body.candidate_ids:
+        # Verify the candidate exists and belongs to this tenant DB
+        existing = await db["candidates"].find_one({"_id": cid, "is_deleted": False})
+        if not existing:
+            failed_ids.append({"id": cid, "reason": "Not found or already deleted"})
+            continue
+
+        # Block deletion when active applications exist
+        active_apps = await db["applications"].count_documents({
+            "candidate_id": cid,
+            "status": {"$in": ["applied", "screening", "shortlisted", "interview", "offered"]},
+            "is_deleted": False,
+        })
+        if active_apps > 0:
+            failed_ids.append({"id": cid, "reason": f"Has {active_apps} active application(s)"})
+            continue
+
+        await db["candidates"].update_one(
+            {"_id": cid},
+            {"$set": {
+                "is_deleted": True,
+                "deleted_at": now,
+                "deleted_by": deleted_by,
+            }},
+        )
+        deleted_count += 1
+
+    return {
+        "success": True,
+        "deleted_count": deleted_count,
+        "failed_count": len(failed_ids),
+        "failed_ids": failed_ids,
+        "message": f"Deleted {deleted_count} candidate(s)."
+            + (f" {len(failed_ids)} could not be deleted." if failed_ids else ""),
     }
 
 

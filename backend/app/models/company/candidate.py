@@ -25,6 +25,7 @@ class CandidateSource(str, Enum):
     WALK_IN = "walk_in"
     CAMPUS = "campus"
     SOCIAL_MEDIA = "social_media"
+    EXCEL_IMPORT = "excel_import"  # Bulk imported via Excel/CSV
     OTHER = "other"
 
 
@@ -550,6 +551,7 @@ CANDIDATE_SOURCE_DISPLAY = {
     CandidateSource.WALK_IN.value: "Walk-in",
     CandidateSource.CAMPUS.value: "Campus",
     CandidateSource.SOCIAL_MEDIA.value: "Social Media",
+    CandidateSource.EXCEL_IMPORT.value: "Excel Import",
     CandidateSource.OTHER.value: "Other"
 }
 
