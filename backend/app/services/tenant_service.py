@@ -446,9 +446,16 @@ class TenantService:
             await master_db.pending_registrations.insert_one(pending_doc)
             logger.info("[TRIAL-SETUP LOG-7] pending_registrations insert OK")
 
-            # ── 5. Resolve trial_days for email copy ──────────────────────────────
+            # ── 5. Resolve trial_days: plan DB → platform settings → default ─────
             trial_plan = await master_db.plans.find_one({"is_trial_plan": True, "is_active": {"$ne": False}})
-            trial_days = trial_plan.get("trial_days", 14) if trial_plan else 14
+            if trial_plan and trial_plan.get("trial_days"):
+                trial_days = trial_plan["trial_days"]
+            else:
+                try:
+                    from app.services.platform_settings_service import get_trial_days
+                    trial_days = await get_trial_days()
+                except Exception:
+                    trial_days = 14
             logger.info("[TRIAL-SETUP LOG-8] trial_days resolved | trial_days=%s plan_found=%s", trial_days, bool(trial_plan))
 
             # ── 6. Send verification email ────────────────────────────────────────
@@ -1569,6 +1576,16 @@ class TenantService:
             if getattr(data, "seller_id", None):
                 seller = await master_db.sellers.find_one({"_id": data.seller_id, "is_deleted": False})
                 if seller:
+                    # Check max_tenants_per_seller limit from platform settings
+                    try:
+                        from app.services.platform_settings_service import get_max_tenants_per_seller
+                        _max_seller_tenants = await get_max_tenants_per_seller()
+                        _current_seller_tenants = seller.get("total_tenants", 0) or 0
+                        if _current_seller_tenants >= _max_seller_tenants:
+                            return None, f"Seller has reached the maximum tenant limit of {_max_seller_tenants}."
+                    except Exception:
+                        pass  # platform settings unavailable — allow creation
+
                     from app.core.config import settings as _settings
                     seller_margin = seller.get("margin_percentage") or _settings.DEFAULT_SELLER_MARGIN
                     seller_commission = int(amount_paise * seller_margin / 100)

@@ -68,6 +68,7 @@ from app.api.v1 import users, partners, roles, departments, designations, audit_
 # ============== Phase 3 - Recruitment Core ==============
 from app.api.v1 import clients, candidates, jobs, applications, interviews, pipelines
 from app.api.v1 import settings as settings_router
+from app.api.v1 import public_forms
 
 # ============== Phase 4 - Onboarding & Partner Payout ==============
 from app.api.v1 import onboards, payouts, notifications
@@ -405,6 +406,8 @@ app.include_router(admin_dashboard.router, prefix=API_V1_PREFIX, tags=["Admin Da
 app.include_router(clients.router, prefix=API_V1_PREFIX, tags=["Clients"])
 app.include_router(candidates.router, prefix=API_V1_PREFIX, tags=["Candidates"])
 app.include_router(candidates.public_router, prefix=API_V1_PREFIX, tags=["Public Forms"])
+app.include_router(public_forms.router, prefix=API_V1_PREFIX, tags=["Public Forms (Permanent)"])
+app.include_router(public_forms.public_router, prefix=API_V1_PREFIX, tags=["Public Apply"])
 app.include_router(jobs.router, prefix=API_V1_PREFIX, tags=["Jobs"])
 app.include_router(applications.router, prefix=API_V1_PREFIX, tags=["Applications"])
 app.include_router(interviews.router, prefix=API_V1_PREFIX, tags=["Interviews"])

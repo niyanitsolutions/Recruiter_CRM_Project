@@ -59,6 +59,8 @@ const PERMISSION_NAV_MAP = [
   // Recruitment — Candidates → Jobs → Interviews → Applications → Clients → Onboarding
   { permissions: ['candidates:view'],
     path: '/candidates',   icon: Users2,          label: 'Candidates',        section: 'Recruitment' },
+  { permissions: ['candidates:view'],
+    path: '/candidates/public-forms', icon: Link2, label: 'Public Forms',     section: 'Recruitment' },
   { permissions: ['jobs:view'],
     path: '/jobs',         icon: Briefcase,       label: 'Jobs',              section: 'Recruitment' },
   { permissions: ['interviews:view'],

@@ -3,12 +3,13 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   Briefcase, Plus, Search, Filter, Eye, Edit, Trash2,
   Building2, MapPin, Users, Clock, AlertCircle, Download, Upload,
-  List, LayoutGrid, RefreshCw, CheckSquare, Square, GitBranch,
+  List, LayoutGrid, RefreshCw, CheckSquare, Square, GitBranch, Link2,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
 import jobService from '../../services/jobService'
 import pipelineService from '../../services/pipelineService'
+import publicFormService from '../../services/publicFormService'
 import usePermissions from '../../hooks/usePermissions'
 import ExportModal from '../../components/common/ExportModal'
 import { useLivePolling } from '../../hooks/useLivePolling'
@@ -121,6 +122,26 @@ const Jobs = () => {
       }
       setPipelineMap(map)
     } catch { /* non-critical — pipeline column degrades gracefully */ }
+  }
+
+  const handleCreatePublicForm = async (job, e) => {
+    e.stopPropagation()
+    try {
+      const res = await publicFormService.createForm(job.id)
+      const slug = res.data?.slug
+      if (slug) {
+        const url = `${window.location.origin}/apply/public/${slug}`
+        navigator.clipboard.writeText(url).catch(() => {})
+        toast.success('Public form created! Link copied to clipboard.')
+      }
+    } catch (err) {
+      if (err.response?.status === 409) {
+        toast('A public form for this job already exists. Visit the management page to manage it.', { icon: 'ℹ️' })
+        navigate('/candidates/public-forms')
+      } else {
+        toast.error(err.response?.data?.detail || 'Failed to create public form')
+      }
+    }
   }
 
   const loadJobs = async (silent = false) => {
@@ -465,6 +486,7 @@ const Jobs = () => {
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => navigate(`/jobs/view/${job.id}`)}  className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="View"><Eye className="w-4 h-4" /></button>
                         {has('jobs:edit')   && <button onClick={() => navigate(`/jobs/edit/${job.id}`)} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="Edit"><Edit className="w-4 h-4" /></button>}
+                        {has('candidates:create') && <button onClick={e => handleCreatePublicForm(job, e)} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="Create Public Form"><Link2 className="w-4 h-4" /></button>}
                         {has('jobs:delete') && <button onClick={() => handleDelete(job.id, job.title)} className="p-2 rounded-lg transition-colors" style={{ color: '#FF4757' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,71,87,0.10)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="Delete"><Trash2 className="w-4 h-4" /></button>}
                       </div>
                     </td>
@@ -582,6 +604,7 @@ const Jobs = () => {
               <div className="flex items-center justify-end gap-1 mt-3 pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
                 <button onClick={() => { if (!job.id) return; navigate(`/jobs/view/${job.id}`) }} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="View Job"><Eye className="w-4 h-4" /></button>
                 {has('jobs:edit') && <button onClick={() => { if (!job.id) return; navigate(`/jobs/edit/${job.id}`) }} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="Edit Job"><Edit className="w-4 h-4" /></button>}
+                {has('candidates:create') && <button onClick={e => handleCreatePublicForm(job, e)} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'} onMouseLeave={e => e.currentTarget.style.background = ''} title="Create Public Form"><Link2 className="w-4 h-4" /></button>}
                 {userType !== 'partner' && (
                   <button onClick={() => { if (!job.id) return; navigate(`/jobs/${job.id}/matching`) }} className="px-3 py-1.5 text-xs font-medium rounded-lg transition-colors" style={{ color: 'var(--accent)', border: '1px solid rgba(108,99,255,0.35)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-light)'} onMouseLeave={e => e.currentTarget.style.background = ''}>Find Matching</button>
                 )}

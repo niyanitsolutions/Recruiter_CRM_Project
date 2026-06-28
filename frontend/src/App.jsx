@@ -96,6 +96,8 @@ const Candidates            = lazy(() => import('./pages/recruitment').then(m =>
 const CandidateForm         = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidateForm })))
 const CandidateDetails      = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidateDetails })))
 const CandidatePublicForm   = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidatePublicForm })))
+const PublicApplyForm       = lazy(() => import('./pages/recruitment').then(m => ({ default: m.PublicApplyForm })))
+const PublicFormManagement  = lazy(() => import('./pages/recruitment').then(m => ({ default: m.PublicFormManagement })))
 const EmployeeOnboardForm   = lazy(() => import('./pages/hrm/EmployeeOnboardForm'))
 const Jobs                  = lazy(() => import('./pages/recruitment').then(m => ({ default: m.Jobs })))
 const JobForm               = lazy(() => import('./pages/recruitment').then(m => ({ default: m.JobForm })))
@@ -1194,6 +1196,9 @@ function App() {
       {/* Upgrade plan — public, accessible to expired owners who can't log in */}
       <Route path="/upgrade-plan" element={<UpgradePlan />} />
 
+      {/* Permanent public application form — must be BEFORE /apply/:token to avoid token matching "public" */}
+      <Route path="/apply/public/:slug" element={<PublicApplyForm />} />
+
       {/* Candidate self-registration via form link — public, no auth */}
       <Route path="/apply/:token" element={<CandidatePublicForm />} />
 
@@ -1299,6 +1304,8 @@ function App() {
           element={<PermissionRoute permission="candidates:view"><CandidateDetails /></PermissionRoute>} />
         <Route path="/candidates/:id/edit"
           element={<PermissionRoute permission="candidates:edit"><CandidateForm /></PermissionRoute>} />
+        <Route path="/candidates/public-forms"
+          element={<PermissionRoute permission="candidates:view"><PublicFormManagement /></PermissionRoute>} />
 
         <Route path="/jobs"
           element={<PermissionRoute permission="jobs:view"><Jobs /></PermissionRoute>} />

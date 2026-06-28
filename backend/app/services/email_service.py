@@ -59,6 +59,20 @@ def _credentials_ok(cfg: dict) -> bool:
     return bool(cfg.get("username")) and bool(cfg.get("password"))
 
 
+async def _get_platform_smtp_cfg() -> dict | None:
+    """
+    Load SMTP config from the platform settings DB record.
+    Returns None when platform SMTP is not configured.
+    Used as a fallback when env-based SMTP credentials are absent.
+    """
+    try:
+        from app.services.platform_settings_service import get_db_smtp_config
+        return await get_db_smtp_config()
+    except Exception as exc:
+        logger.debug("[EMAIL] Platform SMTP load failed: %s", exc)
+        return None
+
+
 # ── Fernet encryption (tenant SMTP passwords) ─────────────────────────────────
 
 def _fernet():
@@ -267,6 +281,10 @@ async def send_email(
       force_system=True  → system SMTP only  (auth emails)
       company_id set     → try tenant SMTP → fallback to system SMTP
       neither            → system SMTP only
+
+    System SMTP priority:
+      1. Env-based SMTP (SMTP_USERNAME/SMTP_PASSWORD in .env)
+      2. Platform Settings DB SMTP (set via Super Admin Settings page)
     """
     # ── Guard: recipient must be present ─────────────────────────────────────
     to = (to or "").strip()
@@ -291,16 +309,21 @@ async def send_email(
 
     sys_cfg = _smtp_cfg_from_settings()
 
-    # ── Guard: credentials configured ────────────────────────────────────────
+    # ── If env SMTP not configured, try platform settings DB SMTP ────────────
     if not _credentials_ok(sys_cfg):
-        logger.error(
-            "[EMAIL ERROR] System SMTP credentials not configured. "
-            "Set SMTP_USERNAME and SMTP_PASSWORD in .env. "
-            "event=%s to=%s", event_type, to
-        )
-        await _log_email(to, subject, event_type, "none", False,
-                         "SMTP credentials not configured", company_id)
-        return False
+        db_smtp = await _get_platform_smtp_cfg()
+        if db_smtp and _credentials_ok(db_smtp):
+            logger.info("[EMAIL] Env SMTP not configured — using Platform Settings SMTP. event=%s to=%s", event_type, to)
+            sys_cfg = db_smtp
+        else:
+            logger.error(
+                "[EMAIL ERROR] System SMTP credentials not configured. "
+                "Set SMTP_USERNAME/SMTP_PASSWORD in .env or configure SMTP in Super Admin Settings. "
+                "event=%s to=%s", event_type, to
+            )
+            await _log_email(to, subject, event_type, "none", False,
+                             "SMTP credentials not configured", company_id)
+            return False
 
     # ── Try tenant SMTP (business emails only) ────────────────────────────────
     if company_id and not force_system:
@@ -482,11 +505,20 @@ def test_smtp_connection(cfg: dict) -> tuple[bool, str]:
 #  HTML template helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-_BRAND = settings.SMTP_FROM_NAME or "CRM Platform"
+# _BRAND is intentionally NOT module-level so it always reflects the current
+# platform name from the DB rather than the startup value from settings.
+def _get_brand() -> str:
+    """Return the platform name: from settings.SMTP_FROM_NAME or fallback."""
+    return settings.SMTP_FROM_NAME or "HireFlow"
+
+
+# Keep _BRAND as a backward-compat alias for any inline template strings
+_BRAND = settings.SMTP_FROM_NAME or "HireFlow"
 
 
 def _wrap(body_html: str) -> str:
     """Wrap an HTML snippet in a consistent branded shell."""
+    brand = _get_brand()
     return f"""<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -494,14 +526,14 @@ def _wrap(body_html: str) -> str:
 <div style="max-width:600px;margin:32px auto;background:#fff;border-radius:12px;
             box-shadow:0 2px 8px rgba(0,0,0,.08);overflow:hidden">
   <div style="background:#4F46E5;padding:24px 32px">
-    <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700">{_BRAND}</h1>
+    <h1 style="margin:0;color:#fff;font-size:20px;font-weight:700">{brand}</h1>
   </div>
   <div style="padding:32px;color:#374151;font-size:14px;line-height:1.6">
     {body_html}
   </div>
   <div style="background:#F9FAFB;padding:16px 32px;border-top:1px solid #E5E7EB;
               font-size:12px;color:#9CA3AF;text-align:center">
-    This email was sent by {_BRAND}. Do not reply to this message.
+    This email was sent by {brand}. Do not reply to this message.
   </div>
 </div>
 </body>

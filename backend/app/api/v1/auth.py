@@ -68,6 +68,37 @@ async def login(data: LoginRequest, request: Request):
     Any existing active session for the user is automatically terminated
     and replaced by the new session (new device always wins).
     """
+    # ── Maintenance mode check ────────────────────────────────────────────────
+    from app.services.platform_settings_service import get_maintenance_settings
+    _maint = await get_maintenance_settings()
+    if _maint.get("maintenance_mode"):
+        # Super admins can still log in when allow_super_admin_access is True.
+        # We check the identity against super_admins before blocking.
+        _allow_sa = _maint.get("allow_super_admin_access", True)
+        _is_sa_login = False
+        _maint_master_db = get_master_db()
+        if _allow_sa:
+            _ident_lower_maint = data.identifier.strip().lower()
+            _sa_doc = await _maint_master_db.super_admins.find_one({
+                "$or": [
+                    {"username": _ident_lower_maint},
+                    {"email": _ident_lower_maint},
+                ],
+                "is_deleted": False,
+            })
+            _is_sa_login = bool(_sa_doc)
+        if not _is_sa_login:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "maintenance_mode": True,
+                    "message": _maint.get(
+                        "maintenance_message",
+                        "The platform is currently under maintenance. Please try again later.",
+                    ),
+                },
+            )
+
     # Block unverified trial registrants before attempting login
     _master_db = get_master_db()
     _ident = data.identifier.strip()
@@ -250,11 +281,27 @@ async def trial_setup(request: TrialSetupRequest):
     Validations enforced:
     - designation must be "Owner" or "Admin" (rejects "Select", empty, null)
     - password == confirm_password
-    - password meets complexity rules (uppercase, lowercase, digit, ≥8 chars)
+    - password meets complexity rules (uppercase, lowercase, digit, ≥ configured min length)
     - contact_number must be a valid 10-digit Indian mobile
     - company_name, email, username, contact_number must be unique
     - no_website=true → website stored as null
     """
+    # ── Platform controls: self-registration ─────────────────────────────────
+    from app.services.platform_settings_service import is_self_registration_allowed, get_password_min_length
+    if not await is_self_registration_allowed():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Self-registration is currently disabled. Please contact the platform administrator.",
+        )
+
+    # ── Password min length from platform settings ────────────────────────────
+    _pw_min = await get_password_min_length()
+    if len(request.password) < _pw_min:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Password must be at least {_pw_min} characters long.",
+        )
+
     logger.info(
         "[TRIAL-SETUP ENDPOINT] Payload received | email=%s username=%s company=%s designation=%s",
         request.email, request.username, request.company_name, request.designation,
@@ -308,6 +355,20 @@ async def register(_http_request: Request, request: CompleteRegistration):
 
     For paid plans, returns Razorpay order details
     """
+    # ── Platform controls: self-registration ─────────────────────────────────
+    from app.services.platform_settings_service import is_self_registration_allowed as _is_reg_allowed, get_password_min_length as _get_pw_min
+    if not await _is_reg_allowed():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Self-registration is currently disabled. Please contact the platform administrator.",
+        )
+    _reg_pw_min = await _get_pw_min()
+    if len(request.owner_password) < _reg_pw_min:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Password must be at least {_reg_pw_min} characters long.",
+        )
+
     result, error = await tenant_service.register_company(
         # Company details
         company_name=request.company_name,

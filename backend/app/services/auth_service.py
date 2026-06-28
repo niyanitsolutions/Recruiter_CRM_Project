@@ -248,11 +248,12 @@ class AuthService:
 
             if not _pw_ok:
                 # ── FIX 4: apply lockout after threshold (global-users path) ──
+                _gu_threshold, _gu_lockout_min = await AuthService._get_lockout_settings()
                 _gu_new_count = (global_user.get("failed_login_attempts", 0) or 0) + 1
                 _gu_upd: dict = {"$inc": {"failed_login_attempts": 1}}
-                if _gu_new_count >= AuthService._LOCKOUT_THRESHOLD:
+                if _gu_new_count >= _gu_threshold:
                     _gu_upd["$set"] = {
-                        "lockout_until": datetime.now(timezone.utc) + timedelta(minutes=AuthService._LOCKOUT_MINUTES)
+                        "lockout_until": datetime.now(timezone.utc) + timedelta(minutes=_gu_lockout_min)
                     }
                 await master_db.global_users.update_one({"_id": global_user["_id"]}, _gu_upd)
                 logger.warning("Login failed (wrong password, global path) | identifier=%s", identifier)
@@ -824,11 +825,12 @@ class AuthService:
 
         if not verify_password(password, super_admin.get("password_hash", "")):
             # Increment failed attempts and apply lockout after threshold
+            _sa_threshold, _sa_lockout_min = await AuthService._get_lockout_settings()
             _sa_new_count = (super_admin.get("failed_login_attempts", 0) or 0) + 1
             _sa_upd: dict = {"$inc": {"failed_login_attempts": 1}}
-            if _sa_new_count >= AuthService._LOCKOUT_THRESHOLD:
+            if _sa_new_count >= _sa_threshold:
                 _sa_upd["$set"] = {
-                    "lockout_until": datetime.now(timezone.utc) + timedelta(minutes=AuthService._LOCKOUT_MINUTES)
+                    "lockout_until": datetime.now(timezone.utc) + timedelta(minutes=_sa_lockout_min)
                 }
             await master_db.super_admins.update_one({"_id": super_admin["_id"]}, _sa_upd)
             return None, ""
@@ -905,11 +907,12 @@ class AuthService:
             return None, _sl_lo_err
 
         if not verify_password(password, seller.get("password_hash", "")):
+            _sl_threshold, _sl_lockout_min = await AuthService._get_lockout_settings()
             _sl_new_count = (seller.get("failed_login_attempts", 0) or 0) + 1
             _sl_upd: dict = {"$inc": {"failed_login_attempts": 1}}
-            if _sl_new_count >= AuthService._LOCKOUT_THRESHOLD:
+            if _sl_new_count >= _sl_threshold:
                 _sl_upd["$set"] = {
-                    "lockout_until": datetime.now(timezone.utc) + timedelta(minutes=AuthService._LOCKOUT_MINUTES)
+                    "lockout_until": datetime.now(timezone.utc) + timedelta(minutes=_sl_lockout_min)
                 }
             await master_db.sellers.update_one({"_id": seller["_id"]}, _sl_upd)
             return None, ""
@@ -982,8 +985,20 @@ class AuthService:
             "is_trial": seller.get("is_trial", True),
         }, ""
 
+    # Default values — overridden at runtime by platform settings
     _LOCKOUT_THRESHOLD = 5
     _LOCKOUT_MINUTES   = 15
+
+    @staticmethod
+    async def _get_lockout_settings() -> tuple[int, int]:
+        """Return (max_login_attempts, lockout_duration_minutes) from platform settings."""
+        try:
+            from app.services.platform_settings_service import get_max_login_attempts, get_lockout_duration_minutes
+            threshold = await get_max_login_attempts()
+            minutes   = await get_lockout_duration_minutes()
+            return threshold, minutes
+        except Exception:
+            return AuthService._LOCKOUT_THRESHOLD, AuthService._LOCKOUT_MINUTES
 
     @staticmethod
     def _get_lockout_error(doc: dict) -> str:
@@ -1009,8 +1024,9 @@ class AuthService:
     @staticmethod
     async def _increment_failed_attempts(company_id: str, user_id: str, is_owner: bool):
         """Increment failed login attempts and apply a temporary lockout after threshold."""
+        threshold, lockout_minutes = await AuthService._get_lockout_settings()
         now = datetime.now(timezone.utc)
-        lockout_until = now + timedelta(minutes=AuthService._LOCKOUT_MINUTES)
+        lockout_until = now + timedelta(minutes=lockout_minutes)
 
         if is_owner:
             master_db = get_master_db()
@@ -1022,7 +1038,7 @@ class AuthService:
                 {"company_id": company_id},
                 {"owner.failed_login_attempts": 1},
             )
-            if doc and doc.get("owner", {}).get("failed_login_attempts", 0) >= AuthService._LOCKOUT_THRESHOLD:
+            if doc and doc.get("owner", {}).get("failed_login_attempts", 0) >= threshold:
                 await master_db.tenants.update_one(
                     {"company_id": company_id},
                     {"$set": {"owner.lockout_until": lockout_until}},
@@ -1037,7 +1053,7 @@ class AuthService:
                 {"_id": user_id},
                 {"failed_login_attempts": 1},
             )
-            if doc and doc.get("failed_login_attempts", 0) >= AuthService._LOCKOUT_THRESHOLD:
+            if doc and doc.get("failed_login_attempts", 0) >= threshold:
                 await company_db.users.update_one(
                     {"_id": user_id},
                     {"$set": {"lockout_until": lockout_until}},
