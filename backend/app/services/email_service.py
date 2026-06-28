@@ -219,31 +219,40 @@ async def _get_tenant_smtp(company_id: str) -> Optional[dict]:
     try:
         db = get_company_db(company_id)
 
-        # ── Source 1: smtp_config collection ────────────────────────────────────
+        # ── Source 1: smtp_config collection (company_settings.py path) ────────
+        # Accepts is_active=True (new verification flow) OR legacy enabled=True.
         doc = await db.smtp_config.find_one({"_id": "smtp"})
-        if doc and doc.get("enabled"):
-            pwd = decrypt_password(doc.get("password", ""))
-            if doc.get("username") and pwd:
-                return {
-                    "host": doc["host"],
-                    "port": int(doc.get("port", 587)),
-                    "username": doc["username"],
-                    "password": pwd,
-                    "from_email": doc.get("from_email") or doc["username"],
-                    "from_name": doc.get("from_name", ""),
-                    "timeout": settings.SMTP_TIMEOUT,
-                }
+        if doc:
+            is_usable = (
+                doc.get("is_active") and doc.get("is_verified")  # new verification flow
+                or (doc.get("enabled") and not doc.get("is_verified"))  # legacy (no is_verified field)
+            )
+            if is_usable:
+                pwd = decrypt_password(doc.get("password", ""))
+                if doc.get("username") and pwd:
+                    return {
+                        "host": doc["host"],
+                        "port": int(doc.get("port", 587)),
+                        "username": doc["username"],
+                        "password": pwd,
+                        "from_email": doc.get("from_email") or doc["username"],
+                        "from_name": doc.get("from_name", ""),
+                        "timeout": settings.SMTP_TIMEOUT,
+                    }
 
         # ── Source 2: tenant_settings collection (key="email_config") ───────────
+        # Requires is_active=True (set only after successful verification + explicit activation).
+        # Passwords stored encrypted since the verification-flow update.
         ts_doc = await db.tenant_settings.find_one(
             {"company_id": company_id, "key": "email_config"}
         )
-        if ts_doc and ts_doc.get("is_enabled"):
+        if ts_doc and ts_doc.get("is_active"):
             host = ts_doc.get("smtp_host")
             username = ts_doc.get("smtp_username")
-            password = ts_doc.get("smtp_password")
-            if host and username and password:
-                pwd = decrypt_password(password)
+            stored_pwd = ts_doc.get("smtp_password")
+            if host and username and stored_pwd:
+                # Gracefully handle both encrypted (new) and plain-text (legacy) passwords
+                pwd = decrypt_password(stored_pwd)
                 return {
                     "host": host,
                     "port": int(ts_doc.get("smtp_port", 587)),

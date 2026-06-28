@@ -990,8 +990,20 @@ class AuthService:
     _LOCKOUT_MINUTES   = 15
 
     @staticmethod
-    async def _get_lockout_settings() -> tuple[int, int]:
-        """Return (max_login_attempts, lockout_duration_minutes) from platform settings."""
+    async def _get_lockout_settings(company_id: str = "") -> tuple[int, int]:
+        """
+        Return (max_login_attempts, lockout_duration_minutes).
+
+        When company_id is provided the config_resolution_service is consulted:
+        if the tenant has enable_custom_security=True their values are used,
+        otherwise falls through to platform settings.  Super-admin, seller, and
+        global-user login paths pass company_id="" and always use platform settings.
+        """
+        try:
+            from app.services.config_resolution_service import get_effective_lockout_settings
+            return await get_effective_lockout_settings(company_id)
+        except Exception:
+            pass
         try:
             from app.services.platform_settings_service import get_max_login_attempts, get_lockout_duration_minutes
             threshold = await get_max_login_attempts()
@@ -1024,7 +1036,7 @@ class AuthService:
     @staticmethod
     async def _increment_failed_attempts(company_id: str, user_id: str, is_owner: bool):
         """Increment failed login attempts and apply a temporary lockout after threshold."""
-        threshold, lockout_minutes = await AuthService._get_lockout_settings()
+        threshold, lockout_minutes = await AuthService._get_lockout_settings(company_id)
         now = datetime.now(timezone.utc)
         lockout_until = now + timedelta(minutes=lockout_minutes)
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Lock, Plus, Trash2, ShieldCheck } from 'lucide-react'
+import { Lock, Plus, Trash2, ShieldCheck, Info } from 'lucide-react'
 import toast from 'react-hot-toast'
 import tenantSettingsService from '../../services/tenantSettingsService'
 import {
@@ -24,6 +24,7 @@ const SYSTEM_DEFAULTS = {
 
 const SecuritySettingsPage = () => {
   const [data, setData]         = useState(SYSTEM_DEFAULTS)
+  const [platformDefaults, setPlatformDefaults] = useState(null)
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
   const [newIP, setNewIP]       = useState('')
@@ -31,11 +32,17 @@ const SecuritySettingsPage = () => {
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await tenantSettingsService.getSecuritySettings()
-      if (res.data && Object.keys(res.data).length > 0) {
-        setData({ ...SYSTEM_DEFAULTS, ...res.data })
+      const [secRes, platformRes] = await Promise.allSettled([
+        tenantSettingsService.getSecuritySettings(),
+        tenantSettingsService.getSecurityDefaults(),
+      ])
+      if (secRes.status === 'fulfilled' && secRes.value?.data && Object.keys(secRes.value.data).length > 0) {
+        setData({ ...SYSTEM_DEFAULTS, ...secRes.value.data })
       } else {
         setData(SYSTEM_DEFAULTS)
+      }
+      if (platformRes.status === 'fulfilled' && platformRes.value?.platform_defaults) {
+        setPlatformDefaults(platformRes.value.platform_defaults)
       }
     } catch {
       toast.error('Failed to load security settings')
@@ -79,6 +86,31 @@ const SecuritySettingsPage = () => {
       <Breadcrumb page="Security" />
       <PageHeader title="Security Settings" description="Configure password policies, login restrictions, and session controls." />
 
+      {/* Config source indicator */}
+      <div className={`flex items-start gap-3 p-4 rounded-xl border text-sm ${
+        customEnabled
+          ? 'bg-success-50 border-success-200 text-success-800'
+          : 'bg-blue-50 border-blue-200 text-blue-800'
+      }`}>
+        <Info className="w-4 h-4 mt-0.5 shrink-0" />
+        <div>
+          {customEnabled
+            ? 'Using Tenant Configuration — your custom security policies are active.'
+            : <>
+                Using Platform Configuration
+                {platformDefaults && (
+                  <span className="block text-xs mt-0.5 opacity-75">
+                    Platform defaults: {platformDefaults.max_login_attempts} login attempts,
+                    {' '}{platformDefaults.lockout_duration_minutes} min lockout,
+                    {' '}{platformDefaults.session_timeout_hours}h session timeout,
+                    {' '}{platformDefaults.password_min_length} char min password
+                  </span>
+                )}
+              </>
+          }
+        </div>
+      </div>
+
       {/* Master override toggle */}
       <SectionCard title="Custom Security Override" icon={ShieldCheck}>
         <div className="border border-surface-100 rounded-xl px-4">
@@ -87,15 +119,15 @@ const SecuritySettingsPage = () => {
             onChange={v => set('enable_custom_security', v)}
             label="Enable Custom Security Settings"
             description={
-              data.enable_custom_security
-                ? 'Tenant custom settings are ACTIVE — system defaults are overridden.'
-                : 'Using system defaults. Enable to customise security policies for this tenant.'
+              customEnabled
+                ? 'Tenant custom settings are ACTIVE — platform defaults are overridden.'
+                : 'Using platform defaults. Enable to customise security policies for this tenant.'
             }
           />
         </div>
         {!customEnabled && (
           <p className="mt-3 text-xs text-surface-400 bg-surface-50 rounded-lg px-4 py-3">
-            The settings below show current values but will not be enforced until custom security is enabled.
+            The settings below are editable but will not be enforced until custom security is enabled.
           </p>
         )}
       </SectionCard>
@@ -121,7 +153,7 @@ const SecuritySettingsPage = () => {
             <Toggle checked={data.require_lowercase} onChange={v => set('require_lowercase', v)} label="Require Lowercase" description="At least one lowercase letter (a-z)" disabled={!customEnabled} />
             <Toggle checked={data.require_numbers}   onChange={v => set('require_numbers', v)}   label="Require Numbers"   description="At least one digit (0-9)"         disabled={!customEnabled} />
             <Toggle checked={data.require_symbols}   onChange={v => set('require_symbols', v)}   label="Require Symbols"   description="At least one special character (!@#$...)" disabled={!customEnabled} />
-            <Toggle checked={data.force_password_change} onChange={v => set('force_password_change', v)} label="Force Password Change on First Login" description="New users must change their password when they first log in" disabled={!customEnabled} />
+            <Toggle checked={data.force_password_change} onChange={v => set('force_password_change', v)} label="Force Password Change on First Login" description="New users must change their password on first login" disabled={!customEnabled} />
           </div>
 
           <Field label="Password Expiry" hint="Set to 0 to disable expiry">
@@ -186,7 +218,9 @@ const SecuritySettingsPage = () => {
               className="w-28"
               disabled={!customEnabled}
             />
-            <span className="text-sm text-surface-500">minutes ({Math.round(data.session_timeout_minutes / 60)} hours)</span>
+            <span className="text-sm text-surface-500">
+              minutes ({Math.round(data.session_timeout_minutes / 60)} hours)
+            </span>
           </div>
         </Field>
       </SectionCard>

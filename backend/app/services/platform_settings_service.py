@@ -68,6 +68,11 @@ DEFAULT_SETTINGS: dict = {
         "smtp_use_tls": True,
         "from_name": "HireFlow",
         "from_email": "",
+        "smtp_reply_to_email": "",
+        "smtp_provider": "",
+        # smtp_is_active: True = use this DB config; False = use .env only.
+        # Defaults True so existing DB-configured SMTP keeps working without action.
+        "smtp_is_active": True,
     },
     "storage": {
         "max_resume_size_mb": 10,
@@ -288,11 +293,20 @@ async def is_notification_enabled(event: str) -> bool:
 async def get_db_smtp_config() -> dict | None:
     """
     Return an SMTP config dict built from the platform settings DB record,
-    or None if SMTP is not configured there.
+    or None when:
+      - SMTP is not configured (missing host / user / password), OR
+      - smtp_is_active is explicitly False (admin disabled platform DB SMTP,
+        forcing fallback to .env credentials).
 
-    The password is decrypted via Fernet if a key is configured.
+    The password is decrypted via Fernet when a key is configured.
     """
     em = await get_email_settings()
+
+    # Respect the active toggle — False means "use .env only"
+    if not em.get("smtp_is_active", True):
+        logger.debug("[PlatformSettings] Platform DB SMTP is disabled (smtp_is_active=False)")
+        return None
+
     host = (em.get("smtp_host") or "").strip()
     user = (em.get("smtp_user") or "").strip()
     raw_password = (em.get("smtp_password") or "").strip()
@@ -309,9 +323,10 @@ async def get_db_smtp_config() -> dict | None:
 
     from_email = (em.get("from_email") or "").strip() or user
     from_name = (em.get("from_name") or "").strip() or "HireFlow"
+    reply_to = (em.get("smtp_reply_to_email") or "").strip()
 
     from app.core.config import settings as _cfg
-    return {
+    cfg: dict = {
         "host": host,
         "port": int(em.get("smtp_port") or 587),
         "username": user,
@@ -320,3 +335,6 @@ async def get_db_smtp_config() -> dict | None:
         "from_name": from_name,
         "timeout": _cfg.SMTP_TIMEOUT,
     }
+    if reply_to:
+        cfg["reply_to"] = reply_to
+    return cfg

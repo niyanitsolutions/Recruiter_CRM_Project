@@ -86,8 +86,23 @@ const tenantSettingsService = {
   updateCandidateSource: (id, data) => api.put(`${BASE}/candidate-sources/${id}`, data).then(r => r.data),
   deleteCandidateSource: (id) => api.delete(`${BASE}/candidate-sources/${id}`).then(r => r.data),
 
-  // Email Config Test
+  // Email Config — verification flow
+  // Step 1: save (always, resets is_verified/is_active on credential change)
+  // Step 2: verifyEmailConfig — live SMTP test, sets is_verified=true on success
+  // Step 3: toggleEmailConfig — activate/deactivate (requires is_verified=true)
+  verifyEmailConfig: () => api.post(`${BASE}/email-config/verify`).then(r => r.data),
+  toggleEmailConfig: (isActive) => api.put(`${BASE}/email-config/toggle`, { is_active: isActive }).then(r => r.data),
   testEmailConfig: (to) => api.post(`${BASE}/email-config/test`, { to }).then(r => r.data),
+
+  // SMTP source status (no secrets — returns effective_source, tenant_smtp_active, etc.)
+  getSmtpStatus: () => api.get(`${BASE}/smtp-status`).then(r => r.data),
+
+  // Security defaults (platform-level values for the "Using Platform Configuration" indicator)
+  getSecurityDefaults: () => api.get(`${BASE}/security-defaults`).then(r => r.data),
+
+  // Storage override
+  getStorageSettings: () => api.get(`${BASE}/storage-settings`).then(r => r.data),
+  saveStorageSettings: (data) => api.put(`${BASE}/storage-settings`, data).then(r => r.data),
 }
 
 export default tenantSettingsService

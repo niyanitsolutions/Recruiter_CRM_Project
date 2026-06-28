@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import {
   Globe, Bell, Shield, Settings, CreditCard, Mail, HardDrive, AlertTriangle, Save, RefreshCw,
+  CheckCircle, XCircle, Loader2,
 } from 'lucide-react'
 import { Card, Button } from '../../components/common'
 import platformSettingsService from '../../services/platformSettingsService'
@@ -93,7 +94,13 @@ const DEFAULTS = {
   security: { session_timeout_hours: 24, max_login_attempts: 5, lockout_duration_minutes: 30, require_2fa_super_admin: false, password_min_length: 8 },
   platform_controls: { allow_self_registration: true, trial_days: 14, max_tenants_per_seller: 50, maintenance_mode: false },
   billing: { currency: 'INR', tax_rate_percent: 18, invoice_prefix: 'INV', invoice_due_days: 15 },
-  email: { smtp_host: '', smtp_port: 587, smtp_user: '', smtp_use_tls: true, from_name: 'HireFlow', from_email: 'noreply@hireflow.com' },
+  email: {
+    smtp_host: '', smtp_port: 587, smtp_user: '', smtp_use_tls: true,
+    from_name: 'HireFlow', from_email: 'noreply@hireflow.com',
+    smtp_reply_to_email: '', smtp_provider: '',
+    smtp_is_active: true,   // true = use this DB SMTP; false = use .env only
+    // smtp_password: never stored in state; always sent separately
+  },
   storage: { max_resume_size_mb: 10, allowed_resume_types: 'pdf,doc,docx', max_storage_per_tenant_gb: 5 },
   maintenance: { maintenance_mode: false, maintenance_message: 'We are performing scheduled maintenance. Please try again later.', allow_super_admin_access: true },
 }
@@ -103,6 +110,9 @@ const SuperAdminSettings = () => {
   const [settings, setSettings] = useState(DEFAULTS)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [smtpPassword, setSmtpPassword] = useState('')
+  const [smtpTesting, setSmtpTesting] = useState(false)
+  const [smtpTestResult, setSmtpTestResult] = useState(null)  // null | 'ok' | 'fail'
 
   useEffect(() => {
     const load = async () => {
@@ -124,12 +134,47 @@ const SuperAdminSettings = () => {
   const handleSave = async () => {
     setIsSaving(true)
     try {
-      await platformSettingsService.updateSettings(settings)
+      const payload = { ...settings }
+      // Include SMTP password only if user typed one
+      if (smtpPassword.trim()) {
+        payload.email = { ...payload.email, smtp_password: smtpPassword.trim() }
+      }
+      await platformSettingsService.updateSettings(payload)
+      setSmtpPassword('')
       toast.success('Settings saved successfully')
     } catch {
       toast.error('Failed to save settings')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const testSmtpConnection = async () => {
+    const em = settings.email
+    if (!em.smtp_host || !em.smtp_user) {
+      toast.error('Enter SMTP host and username before testing')
+      return
+    }
+    if (!smtpPassword.trim()) {
+      toast.error('Enter the SMTP password to test the connection (passwords are never stored client-side)')
+      return
+    }
+    setSmtpTesting(true)
+    setSmtpTestResult(null)
+    try {
+      await platformSettingsService.testSmtp({
+        smtp_host: em.smtp_host,
+        smtp_port: em.smtp_port,
+        smtp_user: em.smtp_user,
+        smtp_password: smtpPassword.trim(),
+      })
+      setSmtpTestResult('ok')
+      toast.success('SMTP connection verified!')
+    } catch (e) {
+      setSmtpTestResult('fail')
+      toast.error(e.response?.data?.detail || 'SMTP test failed')
+    } finally {
+      setSmtpTesting(false)
     }
   }
 
@@ -267,25 +312,82 @@ const SuperAdminSettings = () => {
       </Section>
 
       {/* 6. Email / SMTP */}
-      <Section icon={Mail} title="Email / SMTP" desc="Outbound email delivery configuration">
-        <Field label="SMTP Host" desc="Mail server hostname">
-          <TextInput value={em.smtp_host} onChange={sem('smtp_host')} placeholder="smtp.example.com" />
+      <Section icon={Mail} title="Email / SMTP" desc="Platform system SMTP for auth, billing, and notification emails">
+
+        {/* Active toggle — disabling forces fallback to .env */}
+        <Field
+          label="Use Platform DB SMTP"
+          desc={em.smtp_is_active
+            ? 'Entire platform uses this SMTP. Disable to use .env credentials only.'
+            : 'Platform SMTP disabled — falling back to .env SMTP credentials.'}
+        >
+          <Toggle checked={em.smtp_is_active} onChange={sem('smtp_is_active')} />
         </Field>
-        <Field label="SMTP Port">
-          <NumberInput value={em.smtp_port} onChange={sem('smtp_port')} min={25} max={65535} />
-        </Field>
-        <Field label="SMTP Username">
-          <TextInput value={em.smtp_user} onChange={sem('smtp_user')} placeholder="user@example.com" />
-        </Field>
-        <Field label="Use TLS" desc="Enable TLS encryption for outbound mail">
-          <Toggle checked={em.smtp_use_tls} onChange={sem('smtp_use_tls')} />
-        </Field>
-        <Field label="From Name" desc="Sender name displayed in emails">
-          <TextInput value={em.from_name} onChange={sem('from_name')} placeholder="HireFlow" />
-        </Field>
-        <Field label="From Email" desc="Reply-to / from email address">
-          <TextInput type="email" value={em.from_email} onChange={sem('from_email')} placeholder="noreply@crm.com" />
-        </Field>
+
+        <div className={em.smtp_is_active ? '' : 'opacity-50 pointer-events-none'}>
+          <Field label="SMTP Provider" desc="e.g. Gmail, Zoho, SendGrid (informational)">
+            <TextInput value={em.smtp_provider} onChange={sem('smtp_provider')} placeholder="Gmail" />
+          </Field>
+          <Field label="SMTP Host" desc="Mail server hostname">
+            <TextInput value={em.smtp_host} onChange={sem('smtp_host')} placeholder="smtp.example.com" />
+          </Field>
+          <Field label="SMTP Port">
+            <NumberInput value={em.smtp_port} onChange={sem('smtp_port')} min={25} max={65535} />
+          </Field>
+          <Field label="SMTP Username">
+            <TextInput value={em.smtp_user} onChange={sem('smtp_user')} placeholder="user@example.com" />
+          </Field>
+          <Field label="SMTP Password" desc={em.has_smtp_password ? 'Leave blank to keep existing' : 'Required'}>
+            <input
+              type="password"
+              value={smtpPassword}
+              onChange={e => setSmtpPassword(e.target.value)}
+              placeholder={em.has_smtp_password ? '(unchanged)' : 'Enter password'}
+              autoComplete="new-password"
+              className="input w-48 text-sm"
+            />
+          </Field>
+          <Field label="Use TLS" desc="Enable TLS encryption for outbound mail">
+            <Toggle checked={em.smtp_use_tls} onChange={sem('smtp_use_tls')} />
+          </Field>
+          <Field label="From Name" desc="Sender name in system emails">
+            <TextInput value={em.from_name} onChange={sem('from_name')} placeholder="HireFlow" />
+          </Field>
+          <Field label="From Email" desc="Sender address for system emails">
+            <TextInput type="email" value={em.from_email} onChange={sem('from_email')} placeholder="noreply@crm.com" />
+          </Field>
+          <Field label="Reply-To Email" desc="Leave blank to use From Email">
+            <TextInput type="email" value={em.smtp_reply_to_email} onChange={sem('smtp_reply_to_email')} placeholder="support@crm.com" />
+          </Field>
+
+          {/* Test Connection */}
+          <div className="pt-3 mt-1 border-t border-surface-100">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={testSmtpConnection}
+                disabled={smtpTesting}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border border-surface-300 bg-surface-50 hover:bg-surface-100 disabled:opacity-50 transition-colors"
+              >
+                {smtpTesting
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Testing…</>
+                  : 'Test Connection'}
+              </button>
+              {smtpTestResult === 'ok' && (
+                <span className="flex items-center gap-1.5 text-sm text-success-600">
+                  <CheckCircle className="w-4 h-4" /> Connection successful
+                </span>
+              )}
+              {smtpTestResult === 'fail' && (
+                <span className="flex items-center gap-1.5 text-sm text-danger-600">
+                  <XCircle className="w-4 h-4" /> Connection failed
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-surface-400 mt-2">
+              Note: Test uses the current form values. Save first if you want to persist the configuration.
+            </p>
+          </div>
+        </div>
       </Section>
 
       {/* 7. Storage */}

@@ -44,6 +44,9 @@ class AuditAction(str, Enum):
     BULK_DELETE = "bulk_delete"
     IMPORT = "import"
 
+    # Configuration
+    CONFIG_CHANGE = "config_change"
+
 
 class EntityType(str, Enum):
     """Types of entities that can be audited"""

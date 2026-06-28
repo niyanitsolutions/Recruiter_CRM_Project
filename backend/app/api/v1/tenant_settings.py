@@ -3,20 +3,44 @@ Tenant Settings API - Phase 6
 Complete settings module for tenant admins covering:
   Teams, Branches, Pipeline Stages, Job Categories, Skills,
   Invoice Settings, Commission Rules, Currency/Localization,
-  Email Config, Notification Matrix, Security, Data Management,
-  Branding, SLA Config, Document Templates, Resume Parsing Rules,
-  Interview Settings (extended)
+  Email Config (with SMTP verification flow), Notification Matrix, Security,
+  Data Management, Branding, SLA Config, Document Templates, Resume Parsing Rules,
+  Interview Settings (extended), Storage Settings
 """
+import asyncio
 import re
 from datetime import datetime, timezone
 from typing import List, Optional, Any, Dict
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Body
 from pydantic import BaseModel, Field
 from bson import ObjectId
 
 from app.core.dependencies import get_current_user, get_company_db, require_permissions
 
 router = APIRouter(prefix="/tenant-settings", tags=["Tenant Settings"])
+
+
+# ── Audit helper ──────────────────────────────────────────────────────────────
+
+async def _audit(db, current_user: dict, action: str, entity: str, description: str,
+                 old_value: Optional[dict] = None, new_value: Optional[dict] = None) -> None:
+    """Fire-and-forget config change audit record."""
+    try:
+        from app.services.audit_service import AuditService
+        await AuditService(db).log(
+            action=action,
+            entity_type="settings",
+            entity_id=entity,
+            entity_name=entity,
+            user_id=current_user.get("id", ""),
+            user_name=current_user.get("full_name", current_user.get("username", "")),
+            user_role=current_user.get("role", ""),
+            description=description,
+            old_value=old_value,
+            new_value=new_value,
+        )
+    except Exception:
+        pass
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -763,7 +787,44 @@ async def save_localization(
     return {"success": True, "data": saved, "message": "Localization settings saved"}
 
 
-# ── Email Configuration ───────────────────────────────────────────────────────
+# ── Email Configuration (with SMTP verification flow) ─────────────────────────
+#
+# Required workflow:
+#   1. PUT  /email-config        — Save credentials (resets is_verified=False, is_active=False)
+#   2. POST /email-config/verify — Live SMTP test; sets is_verified=True on success
+#   3. PUT  /email-config/toggle — Activate (requires is_verified=True) or deactivate
+#
+# Passwords are stored encrypted (Fernet) and never returned in plain text.
+# The email_service reads is_active to decide whether to use this config.
+
+_SMTP_PASS_PLACEHOLDER = "••••••••"
+
+
+def _encrypt_smtp_pwd(plain: str) -> str:
+    try:
+        from app.services.email_service import encrypt_password
+        return encrypt_password(plain)
+    except Exception:
+        return plain
+
+
+def _decrypt_smtp_pwd(stored: str) -> str:
+    try:
+        from app.services.email_service import decrypt_password
+        return decrypt_password(stored)
+    except Exception:
+        return stored
+
+
+def _mask_email_config(data: dict) -> dict:
+    d = dict(data)
+    if d.get("smtp_password"):
+        d["smtp_password"] = _SMTP_PASS_PLACEHOLDER
+        d["has_smtp_password"] = True
+    else:
+        d["has_smtp_password"] = False
+    return d
+
 
 class EmailConfigRequest(BaseModel):
     smtp_host: Optional[str] = None
@@ -774,7 +835,7 @@ class EmailConfigRequest(BaseModel):
     from_name: Optional[str] = None
     from_email: Optional[str] = None
     reply_to: Optional[str] = None
-    is_enabled: bool = False
+    is_enabled: bool = False   # kept for backward compat; use is_active internally
 
 
 @router.get("/email-config")
@@ -782,12 +843,10 @@ async def get_email_config(
     current_user: dict = Depends(require_permissions(["crm_settings:view"])),
     db=Depends(get_company_db),
 ):
+    """Return saved email config. Password is masked; is_verified and is_active are exposed."""
     company_id = current_user["company_id"]
     data = await _get_setting(db, company_id, "email_config")
-    # Mask password in response
-    if data.get("smtp_password"):
-        data["smtp_password"] = "••••••••"
-    return {"success": True, "data": data}
+    return {"success": True, "data": _mask_email_config(data)}
 
 
 @router.put("/email-config")
@@ -796,16 +855,146 @@ async def save_email_config(
     current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
     db=Depends(get_company_db),
 ):
+    """
+    Save SMTP credentials to DB.
+
+    - Password is encrypted before storage.
+    - If the placeholder is sent (unchanged), the existing encrypted password is kept.
+    - Saving credentials resets is_verified=False and is_active=False.
+      The user must re-verify and then activate.
+    """
     company_id = current_user["company_id"]
     payload = data.model_dump()
-    # Don't overwrite password if masked placeholder was sent
-    if payload.get("smtp_password") == "••••••••":
-        existing = await _get_setting(db, company_id, "email_config")
-        payload["smtp_password"] = existing.get("smtp_password")
+    existing = await _get_setting(db, company_id, "email_config")
+
+    # Handle password: encrypt new, keep existing when placeholder sent
+    raw_pwd = (payload.get("smtp_password") or "").strip()
+    if raw_pwd == _SMTP_PASS_PLACEHOLDER or raw_pwd == "":
+        payload["smtp_password"] = existing.get("smtp_password", "")
+        credentials_changed = False
+    else:
+        payload["smtp_password"] = _encrypt_smtp_pwd(raw_pwd)
+        credentials_changed = True
+
+    # Detect any credential field change (host / port / user)
+    if not credentials_changed:
+        for field in ("smtp_host", "smtp_port", "smtp_username"):
+            if payload.get(field) != existing.get(field):
+                credentials_changed = True
+                break
+
+    # Reset verification when credentials change
+    if credentials_changed:
+        payload["is_verified"] = False
+        payload["is_active"] = False
+    else:
+        # Preserve current verification state
+        payload["is_verified"] = existing.get("is_verified", False)
+        payload["is_active"] = existing.get("is_active", False)
+
     saved = await _save_setting(db, company_id, "email_config", payload, current_user["id"])
-    if saved.get("smtp_password"):
-        saved["smtp_password"] = "••••••••"
-    return {"success": True, "data": saved, "message": "Email configuration saved"}
+    await _audit(db, current_user, "config_change", "email_config",
+                 "Email SMTP configuration saved" + (" (credentials changed — re-verification required)" if credentials_changed else ""))
+    return {"success": True, "data": _mask_email_config(saved),
+            "message": "Configuration saved. Please verify the connection before activating."}
+
+
+@router.post("/email-config/verify")
+async def verify_email_config(
+    current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
+    db=Depends(get_company_db),
+):
+    """
+    Live SMTP connection test using the saved credentials.
+
+    On success: marks is_verified=True in DB.
+    On failure: is_verified stays False; returns 400 with the error message.
+
+    The form must NOT become active automatically — the user must explicitly
+    toggle it on after verification.
+    """
+    from app.services.email_service import test_smtp_connection
+
+    company_id = current_user["company_id"]
+    cfg_doc = await _get_setting(db, company_id, "email_config")
+
+    host = (cfg_doc.get("smtp_host") or "").strip()
+    port = int(cfg_doc.get("smtp_port") or 587)
+    username = (cfg_doc.get("smtp_username") or "").strip()
+    stored_pwd = (cfg_doc.get("smtp_password") or "").strip()
+
+    if not host or not username or not stored_pwd:
+        raise HTTPException(400, "Save SMTP credentials first before verifying.")
+
+    password = _decrypt_smtp_pwd(stored_pwd)
+    cfg = {"host": host, "port": port, "username": username, "password": password}
+
+    ok, msg = await asyncio.to_thread(test_smtp_connection, cfg)
+    if not ok:
+        # Mark as NOT verified on failure
+        await db.tenant_settings.update_one(
+            {"company_id": company_id, "key": "email_config"},
+            {"$set": {"is_verified": False, "is_active": False, "updated_at": _now(),
+                      "updated_by": current_user["id"]}}
+        )
+        await _audit(db, current_user, "config_change", "email_config",
+                     f"SMTP verification FAILED: {msg}")
+        raise HTTPException(400, detail=f"SMTP verification failed: {msg}")
+
+    # Mark verified (not yet active — user must explicitly activate)
+    await db.tenant_settings.update_one(
+        {"company_id": company_id, "key": "email_config"},
+        {"$set": {"is_verified": True, "updated_at": _now(), "updated_by": current_user["id"]}}
+    )
+    await _audit(db, current_user, "config_change", "email_config",
+                 f"SMTP connection verified successfully (host={host}:{port})")
+    return {"success": True, "message": f"SMTP connection verified. You can now activate it."}
+
+
+@router.put("/email-config/toggle")
+async def toggle_email_config(
+    payload: dict,
+    current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
+    db=Depends(get_company_db),
+):
+    """
+    Activate or deactivate the tenant SMTP.
+
+    payload: {"is_active": true | false}
+
+    Activation requires is_verified=True. Deactivation always allowed.
+    When deactivated, business emails fall back to the system SMTP automatically.
+    """
+    company_id = current_user["company_id"]
+    want_active = bool(payload.get("is_active", False))
+
+    cfg_doc = await _get_setting(db, company_id, "email_config")
+    if not cfg_doc:
+        raise HTTPException(404, "No email configuration found. Save credentials first.")
+
+    if want_active and not cfg_doc.get("is_verified"):
+        raise HTTPException(
+            400,
+            "Cannot activate: SMTP connection has not been verified. "
+            "Use POST /email-config/verify first."
+        )
+
+    await db.tenant_settings.update_one(
+        {"company_id": company_id, "key": "email_config"},
+        {"$set": {"is_active": want_active, "updated_at": _now(), "updated_by": current_user["id"]}}
+    )
+    action = "activated" if want_active else "deactivated"
+    await _audit(db, current_user, "config_change", "email_config",
+                 f"Tenant SMTP {action}")
+
+    # Invalidate config resolution cache for this tenant
+    try:
+        from app.services.config_resolution_service import invalidate_tenant_config
+        invalidate_tenant_config(company_id, "smtp")
+    except Exception:
+        pass
+
+    return {"success": True, "message": f"Custom SMTP {action}."}
 
 
 # ── Notification Matrix ───────────────────────────────────────────────────────
@@ -871,7 +1060,20 @@ async def save_security_settings(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    saved = await _save_setting(db, company_id, "security_settings", data.model_dump(), current_user["id"])
+    payload = data.model_dump()
+    saved = await _save_setting(db, company_id, "security_settings", payload, current_user["id"])
+
+    override_state = "ENABLED" if payload.get("enable_custom_security") else "DISABLED"
+    await _audit(db, current_user, "config_change", "security_settings",
+                 f"Security settings saved (tenant override {override_state})")
+
+    # Invalidate config resolution cache for this tenant
+    try:
+        from app.services.config_resolution_service import invalidate_tenant_config
+        invalidate_tenant_config(company_id, "security")
+    except Exception:
+        pass
+
     return {"success": True, "data": saved, "message": "Security settings saved"}
 
 
@@ -1024,6 +1226,15 @@ async def save_branding(
 ):
     company_id = current_user["company_id"]
     saved = await _save_setting(db, company_id, "branding", data.model_dump(), current_user["id"])
+    await _audit(db, current_user, "config_change", "branding", "Branding settings saved")
+
+    # Invalidate branding cache for this tenant
+    try:
+        from app.services.config_resolution_service import invalidate_tenant_config
+        invalidate_tenant_config(company_id, "branding")
+    except Exception:
+        pass
+
     return {"success": True, "data": saved, "message": "Branding settings saved"}
 
 
@@ -1148,6 +1359,71 @@ async def save_data_management(
     company_id = current_user["company_id"]
     saved = await _save_setting(db, company_id, "data_management", data.model_dump(), current_user["id"])
     return {"success": True, "data": saved, "message": "Data management settings saved"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STORAGE SETTINGS (tenant override)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# When enable_storage_override=True the tenant's limits are used instead of
+# the platform-wide defaults.  The config_resolution_service handles runtime
+# resolution — this endpoint only persists the tenant preference.
+
+class StorageSettingsRequest(BaseModel):
+    enable_storage_override: bool = False
+    max_resume_size_mb: int = 10
+    allowed_resume_types: str = "pdf,doc,docx"
+
+
+@router.get("/storage-settings")
+async def get_storage_settings(
+    current_user: dict = Depends(require_permissions(["crm_settings:view"])),
+    db=Depends(get_company_db),
+):
+    """
+    Return the tenant's storage override settings together with the platform
+    defaults so the UI can show which values are in effect.
+    """
+    company_id = current_user["company_id"]
+    tenant_cfg = await _get_setting(db, company_id, "storage_settings")
+
+    # Also surface the platform defaults so the frontend can show them
+    try:
+        from app.services.config_resolution_service import resolve_storage_config
+        resolved = await resolve_storage_config(company_id)
+    except Exception:
+        resolved = {}
+
+    return {
+        "success": True,
+        "data": tenant_cfg,
+        "platform_defaults": {
+            "max_resume_size_mb": resolved.get("max_resume_size_mb", 10),
+            "allowed_resume_types": resolved.get("allowed_resume_types", "pdf,doc,docx"),
+        },
+        "config_source": resolved.get("config_source", "platform"),
+    }
+
+
+@router.put("/storage-settings")
+async def save_storage_settings(
+    data: StorageSettingsRequest,
+    current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
+    db=Depends(get_company_db),
+):
+    company_id = current_user["company_id"]
+    payload = data.model_dump()
+    saved = await _save_setting(db, company_id, "storage_settings", payload, current_user["id"])
+    await _audit(db, current_user, "config_change", "storage_settings",
+                 f"Storage override {'ENABLED' if payload.get('enable_storage_override') else 'DISABLED'}")
+
+    try:
+        from app.services.config_resolution_service import invalidate_tenant_config
+        invalidate_tenant_config(company_id, "storage")
+    except Exception:
+        pass
+
+    return {"success": True, "data": saved, "message": "Storage settings saved"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1285,7 +1561,10 @@ async def test_email_config(
     current_user: dict = Depends(get_current_user),
     db=Depends(get_company_db),
 ):
-    """Send a test email using the tenant's saved SMTP config."""
+    """
+    Send a test email using the tenant's active SMTP config.
+    The config must be verified AND active to use this endpoint.
+    """
     import smtplib
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
@@ -1293,19 +1572,23 @@ async def test_email_config(
     company_id = current_user["company_id"]
     cfg_doc = await _get_setting(db, company_id, "email_config")
 
-    if not cfg_doc or not cfg_doc.get("is_enabled"):
-        raise HTTPException(400, "Email configuration is disabled. Enable it first.")
+    if not cfg_doc:
+        raise HTTPException(400, "No email configuration found. Save credentials first.")
+
+    if not cfg_doc.get("is_active"):
+        raise HTTPException(400, "Custom SMTP is not active. Verify and activate it first.")
 
     host = cfg_doc.get("smtp_host", "")
     port = int(cfg_doc.get("smtp_port", 587))
     username = cfg_doc.get("smtp_username", "")
-    password = cfg_doc.get("smtp_password", "")
-    use_tls = cfg_doc.get("smtp_use_tls", True)
+    stored_pwd = cfg_doc.get("smtp_password", "")
     from_name = cfg_doc.get("from_name", "CRM")
     from_email = cfg_doc.get("from_email", username)
 
-    if not host or not username or not password:
+    if not host or not username or not stored_pwd:
         raise HTTPException(400, "SMTP host, username, and password are required.")
+
+    password = _decrypt_smtp_pwd(stored_pwd)
 
     try:
         msg = MIMEMultipart("alternative")
@@ -1318,12 +1601,19 @@ async def test_email_config(
             "html"
         ))
 
-        with smtplib.SMTP(host, port, timeout=10) as server:
-            server.ehlo()
-            if use_tls:
+        port_int = int(port)
+        use_ssl = (port_int == 465)
+        if use_ssl:
+            with smtplib.SMTP_SSL(host, port_int, timeout=10) as server:
+                server.login(username, password)
+                server.sendmail(from_email, data.to, msg.as_string())
+        else:
+            with smtplib.SMTP(host, port_int, timeout=10) as server:
+                server.ehlo()
                 server.starttls()
-            server.login(username, password)
-            server.sendmail(from_email, data.to, msg.as_string())
+                server.ehlo()
+                server.login(username, password)
+                server.sendmail(from_email, data.to, msg.as_string())
 
         return {"success": True, "message": f"Test email sent to {data.to}"}
 
@@ -1333,3 +1623,55 @@ async def test_email_config(
         raise HTTPException(400, f"Cannot connect to {host}:{port}. Check host and port.")
     except Exception as exc:
         raise HTTPException(400, f"Email delivery failed: {str(exc)}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SMTP STATUS  (config source info — no secrets)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/smtp-status")
+async def get_smtp_status(
+    current_user: dict = Depends(require_permissions(["crm_settings:view"])),
+):
+    """
+    Return current SMTP resolution status for display in the UI.
+    No secrets are returned — only metadata about which source is in use.
+    """
+    try:
+        from app.services.config_resolution_service import get_smtp_status
+        data = await get_smtp_status(current_user.get("company_id", ""))
+        return {"success": True, "data": data}
+    except Exception as exc:
+        return {"success": False, "data": {"system_source": "unknown", "effective_source": "unknown"}}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECURITY DEFAULTS  (platform-level values for the settings UI)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/security-defaults")
+async def get_security_defaults(
+    current_user: dict = Depends(require_permissions(["crm_settings:view"])),
+):
+    """
+    Return the platform-level security defaults so the UI can show
+    'Using Platform Configuration: X attempts, Y min lockout, …'
+    when tenant override is disabled.
+    """
+    try:
+        from app.services.platform_settings_service import get_security_settings
+        sec = await get_security_settings()
+        return {
+            "success": True,
+            "platform_defaults": {
+                "max_login_attempts": sec.get("max_login_attempts", 5),
+                "lockout_duration_minutes": sec.get("lockout_duration_minutes", 15),
+                "session_timeout_hours": sec.get("session_timeout_hours", 24),
+                "password_min_length": sec.get("password_min_length", 8),
+            },
+        }
+    except Exception:
+        return {"success": True, "platform_defaults": {
+            "max_login_attempts": 5, "lockout_duration_minutes": 15,
+            "session_timeout_hours": 24, "password_min_length": 8,
+        }}
