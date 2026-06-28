@@ -5,16 +5,23 @@ import { toast } from 'react-hot-toast'
 import api from '../../services/api'
 import candidateService from '../../services/candidateService'
 import ImageCropModal from '../../components/common/ImageCropModal'
+import { publicApplyService } from '../../services/publicFormService'
 
 const EMPTY_EDU = () => ({ degree: '', field_of_study: '', institution: '', from_year: '', to_year: '', percentage: '' })
 const EMPTY_EXP = () => ({ company_name: '', designation: '', start_date: '', end_date: '', is_current: false })
 
 /**
- * Public candidate self-registration form (opened via /apply/:token).
- * No auth required. Validates token on mount, submits to backend.
+ * Public candidate self-registration form.
+ * - Token mode  (/apply/:token)       — one-time token, existing flow unchanged
+ * - Slug mode   (/apply/public/:slug) — permanent per-user form, no token
+ *
+ * Props:
+ *   slug?: string — when provided, uses slug-based endpoints instead of token
  */
-const CandidatePublicForm = () => {
-  const { token } = useParams()
+const CandidatePublicForm = ({ slug: slugProp } = {}) => {
+  const params = useParams()
+  const token = slugProp ? null : params.token
+  const slug = slugProp || null
   const [status, setStatus] = useState('loading') // loading | valid | invalid | submitted
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -24,6 +31,7 @@ const CandidatePublicForm = () => {
   const [isFresher, setIsFresher] = useState(false)
   const [errors, setErrors] = useState({})
   const [resumeFile, setResumeFile] = useState(null)
+  const openTrackedRef = useRef(false)  // fire trackOpen only once per visit
 
   // Photo upload state
   const [cropFile, setCropFile] = useState(null)
@@ -67,13 +75,31 @@ const CandidatePublicForm = () => {
   })
 
   useEffect(() => {
-    api.get(`/public/candidate-form/${token}`)
-      .then(() => setStatus('valid'))
-      .catch(err => {
-        setStatus('invalid')
-        setError(err.response?.data?.detail || 'Invalid or expired link.')
-      })
-  }, [token])
+    if (slug) {
+      // Slug mode: validate via public apply endpoint
+      publicApplyService.getFormMeta(slug)
+        .then(res => {
+          if (res.disabled) {
+            setStatus('invalid')
+            setError(res.message || 'This application form is currently unavailable.')
+          } else {
+            setStatus('valid')
+          }
+        })
+        .catch(() => {
+          setStatus('invalid')
+          setError('This form link is invalid or no longer available.')
+        })
+    } else {
+      // Token mode: existing flow unchanged
+      api.get(`/public/candidate-form/${token}`)
+        .then(() => setStatus('valid'))
+        .catch(err => {
+          setStatus('invalid')
+          setError(err.response?.data?.detail || 'Invalid or expired link.')
+        })
+    }
+  }, [token, slug])
 
   const set = (field, value) => {
     setForm(f => ({ ...f, [field]: value }))
@@ -357,21 +383,34 @@ const CandidatePublicForm = () => {
         source: 'form_link',
       }
 
-      const submitRes = await api.post(`/public/candidate-form/${token}`, payload)
-      const candidateId = submitRes.data?.candidate_id
+      // Route to slug or token endpoint
+      let submitRes
+      if (slug) {
+        const slugPayload = { ...payload, source: 'public_form' }
+        submitRes = await publicApplyService.submit(slug, slugPayload)
+      } else {
+        submitRes = await api.post(`/public/candidate-form/${token}`, payload)
+      }
+      const candidateId = submitRes?.candidate_id || submitRes?.data?.candidate_id
 
       if (croppedBlob && candidateId) {
         try {
-          await candidateService.uploadPhotoPublic(token, candidateId, croppedBlob)
+          if (slug) {
+            await publicApplyService.uploadPhoto(slug, candidateId, croppedBlob)
+          } else {
+            await candidateService.uploadPhotoPublic(token, candidateId, croppedBlob)
+          }
         } catch { /* non-fatal */ }
       }
 
       if (resumeFile && candidateId) {
         try {
-          await candidateService.uploadResumePublic(token, candidateId, resumeFile)
-        } catch {
-          // Resume upload failure is non-fatal
-        }
+          if (slug) {
+            await publicApplyService.uploadResume(slug, candidateId, resumeFile)
+          } else {
+            await candidateService.uploadResumePublic(token, candidateId, resumeFile)
+          }
+        } catch { /* non-fatal — resume upload failure doesn't block submission */ }
       }
 
       setStatus('submitted')
@@ -416,7 +455,15 @@ const CandidatePublicForm = () => {
   )
 
   return (
-    <div className="min-h-screen bg-surface-50 py-10 px-4">
+    <div
+      className="min-h-screen bg-surface-50 py-10 px-4"
+      onFocus={slug ? (() => {
+        if (!openTrackedRef.current) {
+          openTrackedRef.current = true
+          publicApplyService.trackOpen(slug)
+        }
+      }) : undefined}
+    >
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-surface-900">Candidate Registration</h1>

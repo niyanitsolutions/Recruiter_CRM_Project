@@ -14,7 +14,6 @@ export { default as CandidateForm } from './CandidateForm'
 export { default as CandidateDetails } from './CandidateDetails'
 export { default as CandidatePublicForm } from './CandidatePublicForm'
 export { default as PublicApplyForm } from './PublicApplyForm'
-export { default as PublicFormManagement } from './PublicFormManagement'
 
 // Jobs
 export { default as Jobs } from './Jobs'

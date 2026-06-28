@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Users, Plus, Search, Filter, Eye, Edit, Trash2,
-  Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2, Send, Upload,
+  Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2, Send, Upload, QrCode,
   LayoutGrid, List, Clock, Building2, CheckSquare, Square, AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -20,6 +20,7 @@ import { getToken } from '../../utils/token'
 import TableScroll from '../../components/common/TableScroll'
 import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 import ActionMenu, { ActionMenuItem } from '../../components/common/ActionMenu'
+import PublicFormModal from '../../components/recruitment/PublicFormModal'
 
 // Module-level cache — survives navigation, resets only on hard reload.
 // Dropdown options (statuses, sources, notice periods) are static reference
@@ -71,6 +72,7 @@ const Candidates = () => {
   const [formLinkModal, setFormLinkModal] = useState(false)
   const [formLinkEmail, setFormLinkEmail] = useState('')
   const [generatingLink, setGeneratingLink] = useState(false)
+  const [publicFormOpen, setPublicFormOpen] = useState(false)
 
   // ── Bulk selection state ──────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState(new Set())
@@ -409,6 +411,12 @@ const Candidates = () => {
             <button onClick={() => setFormLinkModal(true)} className="btn-secondary flex items-center gap-2">
               <Link2 className="w-4 h-4" />
               Send Form Link
+            </button>
+          )}
+          {has('candidates:create') && (
+            <button onClick={() => setPublicFormOpen(true)} className="btn-secondary flex items-center gap-2">
+              <QrCode className="w-4 h-4" />
+              Public Form
             </button>
           )}
           {has('candidates:create') && (
@@ -1373,6 +1381,9 @@ const Candidates = () => {
           </div>
         </div>
       </ModalPortal>
+
+      {/* Public Form Modal */}
+      <PublicFormModal isOpen={publicFormOpen} onClose={() => setPublicFormOpen(false)} />
 
       {/* Import Modal */}
       {importOpen && (

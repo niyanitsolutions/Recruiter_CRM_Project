@@ -1,48 +1,44 @@
 """
-Public Forms API — Permanent slug-based candidate application forms.
+Public Forms API — Permanent per-user slug-based candidate application forms.
 
-Separate from the one-time token forms in candidates.py (which must remain unchanged).
-Each public form:
-  - Has a unique slug generated from secrets
-  - Belongs to a job in a company
-  - Accepts unlimited submissions, each creating a new Candidate
-  - Tracks views, opens, and submissions
-  - Can be enabled/disabled and given an optional expiry date
-  - Can generate a QR code
+Each authenticated user can generate ONE permanent public URL.
+The URL accepts unlimited candidate submissions, each assigned to the form owner.
+Completely separate from one-time token forms in candidates.py (which are unchanged).
 """
-from fastapi import APIRouter, Depends, HTTPException, File, Form, UploadFile, status as http_status
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, status as http_status
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 import uuid
 import secrets
 import logging
+import os
 
 from app.core.dependencies import get_current_user, get_company_db, require_permissions
 from app.core.database import get_master_db, get_company_db as _get_cdb
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/candidates/public-forms", tags=["Public Forms"])
+router = APIRouter(prefix="/candidates/my-public-form", tags=["Public Forms"])
 public_router = APIRouter(prefix="/public", tags=["Public Apply"])
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _generate_slug() -> str:
-    """Generate a 12-char URL-safe random slug."""
-    return secrets.token_urlsafe(9)  # 9 bytes → 12 base64url chars
+    """16-char URL-safe random slug — doesn't expose any internal ID."""
+    return secrets.token_urlsafe(12)  # 12 bytes → 16 base64url chars
 
 
-async def _find_form_by_slug(slug: str) -> tuple[Optional[dict], Optional[str]]:
+async def _find_form_by_slug(slug: str):
     """
-    Find a public form document by slug, searching across all company DBs.
-    Returns (form_doc, company_id) or (None, None).
+    Locate the public_form document and its company_id by slug.
+    Returns (form_doc, company_id, company_db) or raises 404.
     """
     master_db = get_master_db()
     tenants = await master_db.tenants.find(
         {"status": "active"},
         {"company_id": 1},
-    ).to_list(length=1000)
+    ).to_list(length=2000)
     for t in tenants:
         cid = t.get("company_id")
         if not cid:
@@ -50,173 +46,134 @@ async def _find_form_by_slug(slug: str) -> tuple[Optional[dict], Optional[str]]:
         company_db = _get_cdb(cid)
         doc = await company_db.public_forms.find_one({"slug": slug, "is_deleted": False})
         if doc:
-            return doc, cid
-    return None, None
+            return doc, cid, company_db
+    raise HTTPException(status_code=404, detail="Form not found.")
 
 
-# ── Authenticated CRUD ─────────────────────────────────────────────────────────
-
-class CreatePublicFormRequest(BaseModel):
-    job_id: str
-    expiry_date: Optional[str] = None  # ISO date string or null
-
-
-class UpdatePublicFormRequest(BaseModel):
-    is_enabled: Optional[bool] = None
-    expiry_date: Optional[str] = None
+def _serialize(doc: dict) -> dict:
+    result = {}
+    for k, v in doc.items():
+        if isinstance(v, datetime):
+            result[k] = v.isoformat()
+        else:
+            result[k] = v
+    return result
 
 
-@router.post("")
-async def create_public_form(
-    body: CreatePublicFormRequest,
+# ── Authenticated: per-user form management ────────────────────────────────────
+
+@router.get("")
+async def get_my_public_form(
     current_user: dict = Depends(get_current_user),
     db=Depends(get_company_db),
     _perms=Depends(require_permissions("candidates:create")),
 ):
-    """Create a new permanent public application form for a job."""
-    # Verify the job exists and belongs to this company
-    job = await db.jobs.find_one({"_id": body.job_id, "is_deleted": {"$ne": True}})
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found.")
+    """Return the current user's public form, or null if they haven't generated one yet."""
+    user_id = current_user.get("id")
+    doc = await db.public_forms.find_one({"owner_id": user_id, "is_deleted": False})
+    if not doc:
+        return {"success": True, "data": None}
+    doc.pop("is_deleted", None)
+    return {"success": True, "data": _serialize(doc)}
 
-    # Check if a public form for this job already exists
-    existing = await db.public_forms.find_one({"job_id": body.job_id, "is_deleted": False})
+
+@router.post("")
+async def generate_my_public_form(
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_company_db),
+    _perms=Depends(require_permissions("candidates:create")),
+):
+    """Generate (or return existing) the current user's permanent public form URL."""
+    user_id = current_user.get("id")
+
+    # Idempotent: return existing form if already generated
+    existing = await db.public_forms.find_one({"owner_id": user_id, "is_deleted": False})
     if existing:
-        raise HTTPException(
-            status_code=409,
-            detail="A public form for this job already exists. Disable or delete it first.",
-        )
+        existing.pop("is_deleted", None)
+        return {"success": True, "data": _serialize(existing), "already_existed": True}
 
-    # Generate a unique slug (retry on collision)
-    for _ in range(5):
+    # Generate a globally unique slug (retry on collision)
+    for _ in range(10):
         slug = _generate_slug()
-        collision = await db.public_forms.find_one({"slug": slug})
+        master_db = get_master_db()
+        tenants = await master_db.tenants.find({"status": "active"}, {"company_id": 1}).to_list(1000)
+        collision = False
+        for t in tenants:
+            cid = t.get("company_id")
+            if not cid:
+                continue
+            cdb = _get_cdb(cid)
+            if await cdb.public_forms.find_one({"slug": slug}):
+                collision = True
+                break
         if not collision:
             break
     else:
         raise HTTPException(status_code=500, detail="Could not generate a unique form slug.")
 
-    expiry_date = None
-    if body.expiry_date:
-        try:
-            expiry_date = datetime.fromisoformat(body.expiry_date.replace("Z", "+00:00"))
-        except ValueError:
-            raise HTTPException(status_code=422, detail="Invalid expiry_date format.")
-
     now = datetime.now(timezone.utc)
-    company_id = current_user.get("company_id")
+    owner_name = (
+        current_user.get("full_name")
+        or current_user.get("username")
+        or ""
+    )
     form_doc = {
         "_id": uuid.uuid4().hex,
         "slug": slug,
-        "job_id": body.job_id,
-        "job_title": job.get("title") or "",
-        "company_id": company_id,
+        "owner_id": user_id,
+        "owner_name": owner_name,
+        "company_id": current_user.get("company_id"),
         "is_enabled": True,
-        "expiry_date": expiry_date,
         "total_views": 0,
         "total_opens": 0,
         "total_submissions": 0,
         "last_submission_at": None,
-        "created_by": current_user.get("id"),
-        "created_by_name": current_user.get("full_name") or current_user.get("username") or "",
         "created_at": now,
         "updated_at": now,
         "is_deleted": False,
     }
     await db.public_forms.insert_one(form_doc)
     form_doc.pop("is_deleted", None)
-    return {"success": True, "data": _serialize(form_doc)}
+    return {"success": True, "data": _serialize(form_doc), "already_existed": False}
 
 
-@router.get("")
-async def list_public_forms(
-    current_user: dict = Depends(get_current_user),
-    db=Depends(get_company_db),
-    _perms=Depends(require_permissions("candidates:view")),
-):
-    """List all public forms for this company."""
-    docs = await db.public_forms.find({"is_deleted": False}).sort("created_at", -1).to_list(length=500)
-    for d in docs:
-        d.pop("is_deleted", None)
-    return {"success": True, "data": [_serialize(d) for d in docs]}
+class UpdateFormRequest(BaseModel):
+    is_enabled: bool
 
 
-@router.get("/{form_id}")
-async def get_public_form(
-    form_id: str,
-    current_user: dict = Depends(get_current_user),
-    db=Depends(get_company_db),
-    _perms=Depends(require_permissions("candidates:view")),
-):
-    """Get a single public form by its internal ID."""
-    doc = await db.public_forms.find_one({"_id": form_id, "is_deleted": False})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Public form not found.")
-    doc.pop("is_deleted", None)
-    return {"success": True, "data": _serialize(doc)}
-
-
-@router.put("/{form_id}")
-async def update_public_form(
-    form_id: str,
-    body: UpdatePublicFormRequest,
+@router.put("")
+async def update_my_public_form(
+    body: UpdateFormRequest,
     current_user: dict = Depends(get_current_user),
     db=Depends(get_company_db),
     _perms=Depends(require_permissions("candidates:create")),
 ):
-    """Update enabled status or expiry of a public form."""
-    doc = await db.public_forms.find_one({"_id": form_id, "is_deleted": False})
+    """Activate or deactivate the current user's public form."""
+    user_id = current_user.get("id")
+    doc = await db.public_forms.find_one({"owner_id": user_id, "is_deleted": False})
     if not doc:
-        raise HTTPException(status_code=404, detail="Public form not found.")
-
-    updates: dict = {"updated_at": datetime.now(timezone.utc)}
-    if body.is_enabled is not None:
-        updates["is_enabled"] = body.is_enabled
-    if body.expiry_date is not None:
-        if body.expiry_date == "":
-            updates["expiry_date"] = None
-        else:
-            try:
-                updates["expiry_date"] = datetime.fromisoformat(body.expiry_date.replace("Z", "+00:00"))
-            except ValueError:
-                raise HTTPException(status_code=422, detail="Invalid expiry_date format.")
-
-    await db.public_forms.update_one({"_id": form_id}, {"$set": updates})
-    updated = await db.public_forms.find_one({"_id": form_id})
+        raise HTTPException(status_code=404, detail="No public form found. Generate one first.")
+    await db.public_forms.update_one(
+        {"owner_id": user_id},
+        {"$set": {"is_enabled": body.is_enabled, "updated_at": datetime.now(timezone.utc)}},
+    )
+    updated = await db.public_forms.find_one({"owner_id": user_id})
     updated.pop("is_deleted", None)
     return {"success": True, "data": _serialize(updated)}
 
 
-@router.delete("/{form_id}")
-async def delete_public_form(
-    form_id: str,
+@router.get("/qr")
+async def get_my_qr_code(
+    frontend_base_url: str = "https://app.hireflow.in",
     current_user: dict = Depends(get_current_user),
     db=Depends(get_company_db),
     _perms=Depends(require_permissions("candidates:create")),
 ):
-    """Soft-delete a public form."""
-    doc = await db.public_forms.find_one({"_id": form_id, "is_deleted": False})
+    """Generate and return a QR code PNG for the current user's public form URL."""
+    user_id = current_user.get("id")
+    doc = await db.public_forms.find_one({"owner_id": user_id, "is_deleted": False})
     if not doc:
-        raise HTTPException(status_code=404, detail="Public form not found.")
-    await db.public_forms.update_one(
-        {"_id": form_id},
-        {"$set": {"is_deleted": True, "updated_at": datetime.now(timezone.utc)}},
-    )
-    return {"success": True, "message": "Public form deleted."}
-
-
-@router.get("/{form_id}/qr")
-async def get_qr_code(
-    form_id: str,
-    frontend_base_url: str = "https://app.hireflow.in",
-    current_user: dict = Depends(get_current_user),
-    db=Depends(get_company_db),
-    _perms=Depends(require_permissions("candidates:view")),
-):
-    """Generate and return a QR code PNG for the public form URL."""
-    doc = await db.public_forms.find_one({"_id": form_id, "is_deleted": False})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Public form not found.")
+        raise HTTPException(status_code=404, detail="No public form found. Generate one first.")
 
     slug = doc["slug"]
     form_url = f"{frontend_base_url.rstrip('/')}/apply/public/{slug}"
@@ -226,7 +183,12 @@ async def get_qr_code(
         import io
         from fastapi.responses import Response
 
-        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_H, box_size=8, border=4)
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=10,
+            border=4,
+        )
         qr.add_data(form_url)
         qr.make(fit=True)
         img = qr.make_image(fill_color="black", back_color="white")
@@ -236,7 +198,7 @@ async def get_qr_code(
         return Response(
             content=buf.read(),
             media_type="image/png",
-            headers={"Content-Disposition": f'attachment; filename="form-qr-{slug}.png"'},
+            headers={"Content-Disposition": f'attachment; filename="public-form-qr.png"'},
         )
     except ImportError:
         raise HTTPException(
@@ -251,42 +213,20 @@ async def get_qr_code(
 async def get_apply_form_meta(slug: str):
     """
     Public endpoint — no auth.
-    Returns form metadata (job title, company name, enabled/expiry status)
-    for the apply page to render. Also increments view counter.
+    Returns form status for the apply page to render, plus increments view counter.
     """
-    form_doc, company_id = await _find_form_by_slug(slug)
-    if not form_doc:
-        raise HTTPException(status_code=404, detail="Form not found.")
+    form_doc, company_id, company_db = await _find_form_by_slug(slug)
 
-    # Increment view counter (fire-and-forget style)
-    company_db = _get_cdb(company_id)
-    await company_db.public_forms.update_one(
-        {"slug": slug},
-        {"$inc": {"total_views": 1}},
-    )
-
-    # Check expiry
-    expiry = form_doc.get("expiry_date")
-    if expiry:
-        if expiry.tzinfo is None:
-            expiry = expiry.replace(tzinfo=timezone.utc)
-        if datetime.now(timezone.utc) > expiry:
-            return {
-                "success": False,
-                "expired": True,
-                "message": "This application form has expired.",
-                "job_title": form_doc.get("job_title", ""),
-            }
+    # Increment view counter
+    await company_db.public_forms.update_one({"slug": slug}, {"$inc": {"total_views": 1}})
 
     if not form_doc.get("is_enabled", True):
         return {
             "success": False,
             "disabled": True,
-            "message": "This application form is currently disabled.",
-            "job_title": form_doc.get("job_title", ""),
+            "message": "This application form is currently unavailable.",
         }
 
-    # Get company name for display
     master_db = get_master_db()
     tenant = await master_db.tenants.find_one({"company_id": company_id}, {"company_name": 1})
     company_name = tenant.get("company_name", "") if tenant else ""
@@ -295,7 +235,6 @@ async def get_apply_form_meta(slug: str):
         "success": True,
         "form": {
             "slug": slug,
-            "job_title": form_doc.get("job_title", ""),
             "company_name": company_name,
             "is_enabled": True,
         },
@@ -304,15 +243,9 @@ async def get_apply_form_meta(slug: str):
 
 @public_router.post("/apply/{slug}/open")
 async def track_form_open(slug: str):
-    """Increment the 'opens' counter when a candidate starts filling the form."""
-    form_doc, company_id = await _find_form_by_slug(slug)
-    if not form_doc:
-        raise HTTPException(status_code=404, detail="Form not found.")
-    company_db = _get_cdb(company_id)
-    await company_db.public_forms.update_one(
-        {"slug": slug},
-        {"$inc": {"total_opens": 1}},
-    )
+    """Increment the opens counter when a candidate starts filling the form."""
+    form_doc, company_id, company_db = await _find_form_by_slug(slug)
+    await company_db.public_forms.update_one({"slug": slug}, {"$inc": {"total_opens": 1}})
     return {"success": True}
 
 
@@ -320,38 +253,40 @@ async def track_form_open(slug: str):
 async def submit_apply_form(slug: str, data: dict):
     """
     Public endpoint — no auth.
-    Accepts candidate details and creates a new Candidate record.
-    Allows multiple submissions (each creates a new candidate unless email already exists).
+    Accepts candidate submission, creates a Candidate assigned to the form owner.
+    Unlimited submissions. Each creates a new candidate.
     """
-    form_doc, company_id = await _find_form_by_slug(slug)
-    if not form_doc:
-        raise HTTPException(status_code=404, detail="Form not found.")
+    form_doc, company_id, company_db = await _find_form_by_slug(slug)
 
-    # Guard: disabled or expired
     if not form_doc.get("is_enabled", True):
-        raise HTTPException(status_code=403, detail="This application form is currently disabled.")
-    expiry = form_doc.get("expiry_date")
-    if expiry:
-        if expiry.tzinfo is None:
-            expiry = expiry.replace(tzinfo=timezone.utc)
-        if datetime.now(timezone.utc) > expiry:
-            raise HTTPException(status_code=410, detail="This application form has expired.")
+        raise HTTPException(
+            status_code=403,
+            detail="This application form is currently unavailable.",
+        )
 
-    company_db = _get_cdb(company_id)
-
-    # Validate required fields
     first_name = (data.get("first_name") or "").strip()
     email = (data.get("email") or "").strip().lower()
     if not first_name or not email:
         raise HTTPException(status_code=422, detail="first_name and email are required.")
 
-    # Check duplicate email
     existing = await company_db.candidates.find_one({"email": email, "is_deleted": False})
     if existing:
-        raise HTTPException(status_code=409, detail="A candidate with this email already exists.")
+        raise HTTPException(
+            status_code=409,
+            detail="A candidate with this email already exists.",
+        )
 
     now = datetime.now(timezone.utc)
     candidate_id = uuid.uuid4().hex
+    owner_id = form_doc.get("owner_id")
+
+    # Build experience/education from payload (mirrors existing token-form logic)
+    work_experience = data.get("work_experience", [])
+    current_exp = None
+    if work_experience:
+        current_exp = next((e for e in work_experience if e.get("is_current")), None)
+        if not current_exp and work_experience:
+            current_exp = work_experience[-1]
 
     candidate = {
         "_id": candidate_id,
@@ -365,8 +300,8 @@ async def submit_apply_form(slug: str, data: dict):
         "current_city": data.get("current_city") or None,
         "current_state": data.get("current_state") or None,
         "total_experience_years": data.get("total_experience_years"),
-        "current_company": data.get("current_company") or None,
-        "current_designation": data.get("current_designation") or None,
+        "current_company": (current_exp.get("company_name") if current_exp else None) or data.get("current_company") or None,
+        "current_designation": (current_exp.get("designation") if current_exp else None) or data.get("current_designation") or None,
         "current_ctc": data.get("current_ctc"),
         "expected_ctc": data.get("expected_ctc"),
         "notice_period": data.get("notice_period") or None,
@@ -375,18 +310,20 @@ async def submit_apply_form(slug: str, data: dict):
             s.get("name", s) if isinstance(s, dict) else s for s in data.get("skills", [])
         ],
         "education": data.get("education", []),
-        "percentage": data.get("percentage"),
+        "work_experience": work_experience,
         "preferred_locations": data.get("preferred_locations", []),
         "willing_to_relocate": bool(data.get("willing_to_relocate", False)),
         "linkedin_url": data.get("linkedin_url") or None,
         "portfolio_url": data.get("portfolio_url") or None,
-        "notes": data.get("summary") or None,
+        "summary": data.get("summary") or None,
+        # Ownership — assigned to form owner, not anonymous
         "source": "public_form",
         "public_form_slug": slug,
-        "job_id": form_doc.get("job_id"),
+        "public_form_id": form_doc.get("_id"),
         "status": "active",
         "is_deleted": False,
-        "created_by": None,
+        "created_by": owner_id,        # assigned to form owner
+        "added_by_name": form_doc.get("owner_name", ""),
         "created_at": now,
         "updated_at": now,
     }
@@ -406,28 +343,56 @@ async def submit_apply_form(slug: str, data: dict):
     }
 
 
+@public_router.post("/apply/{slug}/photo")
+async def public_upload_photo(
+    slug: str,
+    candidate_id: str,
+    file: UploadFile = File(...),
+):
+    """Upload a profile photo for a candidate submitted via public form."""
+    form_doc, company_id, company_db = await _find_form_by_slug(slug)
+    candidate = await company_db.candidates.find_one({"_id": candidate_id, "is_deleted": False})
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+
+    allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+    if file.content_type not in allowed:
+        raise HTTPException(status_code=422, detail="Only JPEG, PNG, or WEBP images are allowed.")
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Photo must be smaller than 5 MB.")
+
+    from app.core.config import settings as _cfg
+    filename = file.filename or "photo.jpg"
+    ext = os.path.splitext(filename)[1].lower() or ".jpg"
+    upload_dir = os.path.join(_cfg.UPLOAD_DIR, company_id, "photos")
+    os.makedirs(upload_dir, exist_ok=True)
+    safe_name = f"{candidate_id}_photo{ext}"
+    file_path = os.path.join(upload_dir, safe_name)
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    photo_url = f"/uploads/{company_id}/photos/{safe_name}"
+    await company_db.candidates.update_one(
+        {"_id": candidate_id},
+        {"$set": {"photo_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
+    )
+    return {"success": True, "photo_url": photo_url}
+
+
 @public_router.post("/apply/{slug}/resume")
 async def public_upload_resume(
     slug: str,
     candidate_id: str,
     file: UploadFile = File(...),
 ):
-    """
-    Public endpoint — no auth.
-    Upload a resume for a candidate created via the public form.
-    """
-    import os
-
-    form_doc, company_id = await _find_form_by_slug(slug)
-    if not form_doc:
-        raise HTTPException(status_code=404, detail="Form not found.")
-
-    company_db = _get_cdb(company_id)
+    """Upload a resume for a candidate submitted via public form."""
+    form_doc, company_id, company_db = await _find_form_by_slug(slug)
     candidate = await company_db.candidates.find_one({"_id": candidate_id, "is_deleted": False})
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found.")
 
-    # File type + size validation
     filename = file.filename or ""
     ext = os.path.splitext(filename)[1].lower()
 
@@ -449,7 +414,6 @@ async def public_upload_resume(
     if len(content) > max_size_mb * 1024 * 1024:
         raise HTTPException(status_code=413, detail=f"File exceeds maximum size of {max_size_mb} MB.")
 
-    # Save to uploads directory
     from app.core.config import settings as _cfg
     upload_dir = os.path.join(_cfg.UPLOAD_DIR, company_id, "resumes")
     os.makedirs(upload_dir, exist_ok=True)
@@ -464,16 +428,3 @@ async def public_upload_resume(
         {"$set": {"resume_url": resume_url, "resume_filename": filename, "updated_at": datetime.now(timezone.utc)}},
     )
     return {"success": True, "resume_url": resume_url}
-
-
-# ── Serialization helper ───────────────────────────────────────────────────────
-
-def _serialize(doc: dict) -> dict:
-    """Convert MongoDB document to JSON-serializable dict."""
-    result = {}
-    for k, v in doc.items():
-        if isinstance(v, datetime):
-            result[k] = v.isoformat()
-        else:
-            result[k] = v
-    return result

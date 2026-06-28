@@ -97,7 +97,6 @@ const CandidateForm         = lazy(() => import('./pages/recruitment').then(m =>
 const CandidateDetails      = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidateDetails })))
 const CandidatePublicForm   = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidatePublicForm })))
 const PublicApplyForm       = lazy(() => import('./pages/recruitment').then(m => ({ default: m.PublicApplyForm })))
-const PublicFormManagement  = lazy(() => import('./pages/recruitment').then(m => ({ default: m.PublicFormManagement })))
 const EmployeeOnboardForm   = lazy(() => import('./pages/hrm/EmployeeOnboardForm'))
 const Jobs                  = lazy(() => import('./pages/recruitment').then(m => ({ default: m.Jobs })))
 const JobForm               = lazy(() => import('./pages/recruitment').then(m => ({ default: m.JobForm })))
@@ -1304,8 +1303,6 @@ function App() {
           element={<PermissionRoute permission="candidates:view"><CandidateDetails /></PermissionRoute>} />
         <Route path="/candidates/:id/edit"
           element={<PermissionRoute permission="candidates:edit"><CandidateForm /></PermissionRoute>} />
-        <Route path="/candidates/public-forms"
-          element={<PermissionRoute permission="candidates:view"><PublicFormManagement /></PermissionRoute>} />
 
         <Route path="/jobs"
           element={<PermissionRoute permission="jobs:view"><Jobs /></PermissionRoute>} />

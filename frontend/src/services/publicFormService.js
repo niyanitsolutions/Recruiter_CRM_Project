@@ -1,75 +1,57 @@
 import api from './api'
 import axios from 'axios'
 
-// Authenticated endpoints (require login)
+// ── Authenticated endpoints (require login) ────────────────────────────────────
 const publicFormService = {
-  createForm: async (jobId, expiryDate = null) => {
-    const response = await api.post('/candidates/public-forms', {
-      job_id: jobId,
-      expiry_date: expiryDate,
-    })
-    return response.data
-  },
+  /** Get current user's public form (null if not generated yet). */
+  getMyForm: () => api.get('/candidates/my-public-form').then(r => r.data),
 
-  listForms: async () => {
-    const response = await api.get('/candidates/public-forms')
-    return response.data
-  },
+  /** Generate a permanent public form for the current user (idempotent). */
+  generate: () => api.post('/candidates/my-public-form').then(r => r.data),
 
-  getForm: async (formId) => {
-    const response = await api.get(`/candidates/public-forms/${formId}`)
-    return response.data
-  },
+  /** Activate or deactivate the current user's public form. */
+  setEnabled: (isEnabled) =>
+    api.put('/candidates/my-public-form', { is_enabled: isEnabled }).then(r => r.data),
 
-  updateForm: async (formId, updates) => {
-    const response = await api.put(`/candidates/public-forms/${formId}`, updates)
-    return response.data
-  },
-
-  deleteForm: async (formId) => {
-    const response = await api.delete(`/candidates/public-forms/${formId}`)
-    return response.data
-  },
-
-  getQrCodeUrl: (formId, frontendBaseUrl) => {
+  /** URL for the QR code PNG — fetched via authenticated request. */
+  qrImageUrl: (frontendBaseUrl) => {
     const base = import.meta.env.VITE_API_BASE_URL || ''
-    return `${base}/api/v1/candidates/public-forms/${formId}/qr?frontend_base_url=${encodeURIComponent(frontendBaseUrl)}`
+    return `${base}/api/v1/candidates/my-public-form/qr?frontend_base_url=${encodeURIComponent(frontendBaseUrl)}`
   },
 }
 
-// Public endpoints (no auth — use plain axios)
-const _publicBaseURL = (import.meta.env.VITE_API_BASE_URL || '') + '/api/v1'
+// ── Public submission endpoints (no auth — plain axios) ───────────────────────
+const _publicBase = (import.meta.env.VITE_API_BASE_URL || '') + '/api/v1'
 
-const publicApplyService = {
-  getFormMeta: async (slug) => {
-    const response = await axios.get(`${_publicBaseURL}/public/apply/${slug}`)
-    return response.data
+export const publicApplyService = {
+  getFormMeta: (slug) =>
+    axios.get(`${_publicBase}/public/apply/${slug}`).then(r => r.data),
+
+  trackOpen: (slug) =>
+    axios.post(`${_publicBase}/public/apply/${slug}/open`).catch(() => {}),
+
+  submit: (slug, data) =>
+    axios.post(`${_publicBase}/public/apply/${slug}`, data).then(r => r.data),
+
+  uploadResume: (slug, candidateId, file) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return axios
+      .post(`${_publicBase}/public/apply/${slug}/resume?candidate_id=${candidateId}`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then(r => r.data)
   },
 
-  trackOpen: async (slug) => {
-    try {
-      await axios.post(`${_publicBaseURL}/public/apply/${slug}/open`)
-    } catch (_e) {
-      // non-critical
-    }
-  },
-
-  submitForm: async (slug, data) => {
-    const response = await axios.post(`${_publicBaseURL}/public/apply/${slug}`, data)
-    return response.data
-  },
-
-  uploadResume: async (slug, candidateId, file) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    const response = await axios.post(
-      `${_publicBaseURL}/public/apply/${slug}/resume?candidate_id=${candidateId}`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
-    )
-    return response.data
+  uploadPhoto: (slug, candidateId, blob) => {
+    const fd = new FormData()
+    fd.append('file', blob, 'photo.jpg')
+    return axios
+      .post(`${_publicBase}/public/apply/${slug}/photo?candidate_id=${candidateId}`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then(r => r.data)
   },
 }
 
-export { publicFormService, publicApplyService }
 export default publicFormService

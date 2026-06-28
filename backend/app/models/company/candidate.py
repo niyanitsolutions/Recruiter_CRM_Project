@@ -26,6 +26,8 @@ class CandidateSource(str, Enum):
     CAMPUS = "campus"
     SOCIAL_MEDIA = "social_media"
     EXCEL_IMPORT = "excel_import"  # Bulk imported via Excel/CSV
+    FORM_LINK = "form_link"        # One-time token form (Send Form Link)
+    PUBLIC_FORM = "public_form"    # Permanent per-user public apply form
     OTHER = "other"
 
 
@@ -552,6 +554,8 @@ CANDIDATE_SOURCE_DISPLAY = {
     CandidateSource.CAMPUS.value: "Campus",
     CandidateSource.SOCIAL_MEDIA.value: "Social Media",
     CandidateSource.EXCEL_IMPORT.value: "Excel Import",
+    CandidateSource.FORM_LINK.value: "Form Link",
+    CandidateSource.PUBLIC_FORM.value: "Public Application",
     CandidateSource.OTHER.value: "Other"
 }
 
