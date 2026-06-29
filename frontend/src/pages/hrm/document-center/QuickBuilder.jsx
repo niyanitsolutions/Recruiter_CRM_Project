@@ -863,6 +863,7 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   const paginationTimer = useRef(null)
   const rAFHandle       = useRef(null)
   const spacerTimerRef  = useRef(null)
+  const spacerRAFRef    = useRef(null)
 
   // Master editor page count (used to size the absolute-positioned page backgrounds)
   const [masterPageCount, setMasterPageCount] = useState(1)
@@ -1040,31 +1041,36 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
 
     let usedH = 0
     let pageNum = 1
+    let firstOnPage = true       // first block on current page has margin-top reset by CSS
     const children = [...el.children]
 
     for (const child of children) {
       if (child.dataset.qbSpacer) continue
-      const bh = Math.max(child.offsetHeight, 1)
+
+      // offsetHeight excludes margins; getComputedStyle gives the true margin values.
+      // The CSS rule "[data-qb-spacer] + * { margin-top: 0 }" resets margin-top for the
+      // first block on every new page, so we skip marginT for firstOnPage blocks.
+      const cs      = window.getComputedStyle(child)
+      const marginT = firstOnPage ? 0 : Math.max(parseInt(cs.marginTop)    || 0, 0)
+      const marginB =                   Math.max(parseInt(cs.marginBottom) || 0, 0)
+      const bh      = Math.max(marginT + child.offsetHeight + marginB, 1)
 
       if (usedH > 0 && usedH + bh > usableH) {
-        // Insert spacer between pages
-        const remaining  = usableH - usedH
-        const totalSpH   = remaining + spacerH
-        const spacer     = document.createElement('div')
+        // Insert page-break spacer before this child
+        const remaining = Math.max(usableH - usedH, 0)
+        const totalSpH  = remaining + spacerH
+        const spacer    = document.createElement('div')
         spacer.setAttribute('data-qb-spacer', String(pageNum))
         spacer.setAttribute('contenteditable', 'false')
-        spacer.style.cssText = [
-          `height:${totalSpH}px`,
-          'display:block',
-          'user-select:none',
-          'pointer-events:none',
-          'background:transparent',
-        ].join(';')
+        spacer.style.cssText = `height:${totalSpH}px;display:block;user-select:none;pointer-events:none;background:transparent;`
         child.before(spacer)
-        usedH = bh
+        // This child is now the first on the new page — CSS resets its margin-top
+        usedH = Math.max(child.offsetHeight + marginB, 1)
         pageNum++
+        firstOnPage = false   // subsequent blocks on this new page are NOT first
       } else {
         usedH += bh
+        firstOnPage = false
       }
     }
     setMasterPageCount(pageNum)
@@ -1093,16 +1099,17 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
     }
   }
 
-  // Master editor input → strip spacers → propagate pure bodyHtml → re-inject spacers
+  // Master editor input → strip spacers → propagate pure bodyHtml → re-inject spacers on next frame.
+  // RAF (not setTimeout) so spacers are in place before the browser paints the next frame —
+  // this closes the "cursor in footer" window to imperceptible < 16 ms.
   const handleMasterInput = useCallback(() => {
     const el = masterEditorRef.current
     if (!el) return
     const clone = el.cloneNode(true)
     clone.querySelectorAll('[data-qb-spacer]').forEach(s => s.remove())
     onBodyChangeRef.current?.(clone.innerHTML)
-    // Debounce spacer re-injection (60 ms during fast typing)
-    clearTimeout(spacerTimerRef.current)
-    spacerTimerRef.current = setTimeout(() => injectMasterSpacers(el), 60)
+    cancelAnimationFrame(spacerRAFRef.current)
+    spacerRAFRef.current = requestAnimationFrame(() => injectMasterSpacers(el))
   }, [injectMasterSpacers])
 
   // ── Cross-page keyboard navigation ───────────────────────────────────────
@@ -1289,52 +1296,48 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
 
 
   // ──────────────────────────────────────────────────────────────────────────
-  // EDITABLE MODE — single master contentEditable with spacer-based page breaks
-  // Page backgrounds are absolutely positioned A4 boxes; the master editor floats
-  // above them all as one continuous editing surface (true Word-style).
+  // EDITABLE MODE — three-layer stack:
+  //   Layer 0 (z:0)  — white A4 page background boxes + watermarks
+  //   Layer 1 (z:1)  — single master contentEditable (the whole document)
+  //   Layer 2 (z:2)  — header + footer overlays with solid backgrounds
+  //
+  // Layer 2 sits on top of the master editor so any content that briefly
+  // overflows into the header/footer area during the RAF window is hidden.
+  // RAF-based spacer injection (≤16 ms) then moves the content to the correct
+  // page before the browser renders the next frame.
   // ──────────────────────────────────────────────────────────────────────────
   if (onBodyChange) {
     const containerH = masterPageCount * ph + (masterPageCount - 1) * PAGE_GAP
+    // Height of the "masked" zone at the bottom of each page body:
+    // covers the bottom-margin gap + footer so no overflow is ever visible.
+    const bottomMaskH = mb + footerH
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingBottom: 32 }}>
-        {/* Position:relative wrapper — page backgrounds are absolute inside it */}
         <div style={{ position: 'relative', width: pw, minHeight: containerH }}>
 
-          {/* ── A4 page background boxes (purely decorative, pointer-events:none) ── */}
+          {/* ── LAYER 0: white page backgrounds + watermarks ── */}
           {Array.from({ length: masterPageCount }).map((_, i) => (
             <div
-              key={i}
+              key={`bg-${i}`}
               data-qb-page
               style={{
                 position: 'absolute',
-                top: i * (ph + PAGE_GAP),
-                left: 0, width: pw, height: ph,
+                top: i * (ph + PAGE_GAP), left: 0, width: pw, height: ph,
                 background: 'white',
                 boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.10), 0 12px 40px rgba(0,0,0,0.08)',
-                borderRadius: 2,
-                overflow: 'hidden',
-                pointerEvents: 'none',
-                zIndex: 0,
+                borderRadius: 2, overflow: 'hidden', pointerEvents: 'none', zIndex: 0,
               }}
             >
-              {/* Watermark */}
               {watermark.enabled && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72, opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af', fontWeight: 'bold', userSelect: 'none', zIndex: 0 }}>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72, opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af', fontWeight: 'bold', userSelect: 'none' }}>
                   {watermark.text || 'CONFIDENTIAL'}
                 </div>
               )}
-              {/* Header */}
-              {headerVisible && renderDocHeader()}
-              {/* Footer */}
-              {footer.show && renderDocFooter(i + 1)}
-              {/* Page label (above each page background) */}
-              <div style={{ position: 'absolute', top: -22, left: 0, right: 0, textAlign: 'center', fontSize: 10, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                Page {i + 1}{masterPageCount > 1 ? ` / ${masterPageCount}` : ''}
-              </div>
             </div>
           ))}
 
-          {/* ── Single master editor — spans across all page backgrounds ── */}
+          {/* ── LAYER 1: single master contentEditable — spans all pages ── */}
           <div style={{
             position: 'absolute',
             top: headerH + headerSpacing,
@@ -1342,7 +1345,6 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
             zIndex: 1,
             fontSize: '12pt', lineHeight: 1.7, color: '#1f2937', fontFamily: 'Arial, sans-serif',
           }}>
-            {/* Title (non-editable block above the editable body) */}
             {docTitle?.text && (
               <div
                 contentEditable={false}
@@ -1351,8 +1353,6 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
                 style={{ pointerEvents: 'none', userSelect: 'none' }}
               />
             )}
-
-            {/* THE SINGLE MASTER EDITOR — one contentEditable for the whole document */}
             <div
               ref={masterEditorRef}
               contentEditable
@@ -1361,7 +1361,7 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
               onFocus={() => { anyFocused.current = true }}
               onBlur={() => {
                 anyFocused.current = false
-                clearTimeout(spacerTimerRef.current)
+                cancelAnimationFrame(spacerRAFRef.current)
                 injectMasterSpacers(masterEditorRef.current)
               }}
               onKeyDown={handleMasterKeyDown}
@@ -1369,8 +1369,6 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
               style={{ outline: 'none', cursor: 'text', minHeight: usableH }}
               data-placeholder={!bodyHtml?.trim() ? 'Click to start typing your document…' : undefined}
             />
-
-            {/* Signature block (non-editable) */}
             {sigCfg?.enabled && (
               <div
                 contentEditable={false}
@@ -1380,6 +1378,35 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
               />
             )}
           </div>
+
+          {/* ── LAYER 2: header + footer overlays (mask any editor overflow) ── */}
+          {Array.from({ length: masterPageCount }).map((_, i) => {
+            const pageTop = i * (ph + PAGE_GAP)
+            return (
+              <React.Fragment key={`overlay-${i}`}>
+                {/* Page label above each page */}
+                <div style={{ position: 'absolute', top: pageTop - 22, left: 0, right: 0, textAlign: 'center', fontSize: 10, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.08em', textTransform: 'uppercase', pointerEvents: 'none', zIndex: 2 }}>
+                  Page {i + 1}{masterPageCount > 1 ? ` / ${masterPageCount}` : ''}
+                </div>
+
+                {/* Header overlay — white bg + header content; covers any editor overflow into header zone */}
+                {headerVisible && (
+                  <div style={{ position: 'absolute', top: pageTop, left: 0, right: 0, height: headerH, background: 'white', zIndex: 2, pointerEvents: 'none', overflow: 'hidden' }}>
+                    {renderDocHeader()}
+                  </div>
+                )}
+
+                {/* Footer + bottom-margin overlay — covers usableH → page bottom */}
+                <div style={{ position: 'absolute', top: pageTop + headerH + headerSpacing + usableH, left: 0, right: 0, height: bottomMaskH, background: 'white', zIndex: 2, pointerEvents: 'none' }}>
+                  {footer.show && (
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: footerH }}>
+                      {renderDocFooter(i + 1)}
+                    </div>
+                  )}
+                </div>
+              </React.Fragment>
+            )
+          })}
         </div>
       </div>
     )
@@ -2625,6 +2652,11 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
         }
         [data-qb-master]::-webkit-scrollbar { display: none; }
         [data-qb-master] { scrollbar-width: none; -ms-overflow-style: none; }
+        /* Kill margin-top on the first block of every new page (the block that follows a spacer).
+           Without this, h1/h2/p elements with natural top margins create a blank gap at page tops. */
+        [data-qb-spacer] + * { margin-top: 0 !important; }
+        /* The spacer itself must never be selectable or show a cursor */
+        [data-qb-spacer] { cursor: default !important; }
       `}</style>
     </div>
   )
