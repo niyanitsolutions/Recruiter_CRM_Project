@@ -1059,7 +1059,6 @@ const SessionManager = () => {
 
     setWarnOpen(false)
     setLoginReqOpen(false)
-    setLockOpen(false)
     if (!expiryReasonLockedRef.current) {
       expiryReasonLockedRef.current = true
       setExpiryReason(e?.detail?.reason || 'idle')

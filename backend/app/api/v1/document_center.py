@@ -2,9 +2,12 @@
 Document Center API - v1
 REST endpoints for the HR Document Management System.
 """
+import logging
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import Response
+
+logger = logging.getLogger(__name__)
 
 from app.core.dependencies import get_current_user, get_company_db, require_permissions, require_any_permission
 from app.models.company.document_center import (
@@ -126,12 +129,16 @@ async def create_template(
     db   = Depends(get_company_db),
     user = Depends(PERM_CREATE),
 ):
-    doc = await document_center_service.create_template(
-        db, data,
-        user["_id"],
-        user.get("full_name", user.get("username", "")),
-    )
-    return {"success": True, "message": "Template created", "data": doc}
+    try:
+        doc = await document_center_service.create_template(
+            db, data,
+            user["_id"],
+            user.get("full_name", user.get("username", "")),
+        )
+        return {"success": True, "message": "Template created", "data": doc}
+    except Exception as exc:
+        logger.error("create_template failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create template: {exc}")
 
 
 @router.put("/templates/{template_id}")
@@ -141,14 +148,20 @@ async def update_template(
     db   = Depends(get_company_db),
     user = Depends(PERM_CREATE),
 ):
-    ok, msg = await document_center_service.update_template(
-        db, template_id, data,
-        user["_id"],
-        user.get("full_name", user.get("username", "")),
-    )
-    if not ok:
-        raise HTTPException(status_code=404, detail=msg)
-    return {"success": True, "message": msg}
+    try:
+        ok, msg = await document_center_service.update_template(
+            db, template_id, data,
+            user["_id"],
+            user.get("full_name", user.get("username", "")),
+        )
+        if not ok:
+            raise HTTPException(status_code=404, detail=msg)
+        return {"success": True, "message": msg}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("update_template(%s) failed: %s", template_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update template: {exc}")
 
 
 @router.delete("/templates/{template_id}")

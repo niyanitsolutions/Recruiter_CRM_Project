@@ -703,6 +703,52 @@ function tryBlockSplitInDOM(blockHtml, qbType, remainingH, contentW) {
   return result
 }
 
+// ─── Cross-page cursor helpers ────────────────────────────────────────────────
+
+function isCaretAtStart(el) {
+  const sel = window.getSelection()
+  if (!sel?.rangeCount || !range_collapsed(sel)) return false
+  const range = sel.getRangeAt(0)
+  const r2 = document.createRange()
+  r2.selectNodeContents(el)
+  r2.collapse(true)
+  return range.compareBoundaryPoints(Range.START_TO_START, r2) <= 0
+}
+
+function isCaretAtEnd(el) {
+  const sel = window.getSelection()
+  if (!sel?.rangeCount || !range_collapsed(sel)) return false
+  const range = sel.getRangeAt(0)
+  const r2 = document.createRange()
+  r2.selectNodeContents(el)
+  r2.collapse(false)
+  return range.compareBoundaryPoints(Range.END_TO_END, r2) >= 0
+}
+
+function range_collapsed(sel) { return sel.getRangeAt(0).collapsed }
+
+function placeCursorAtStart(el) {
+  const range = document.createRange()
+  range.selectNodeContents(el)
+  range.collapse(true)
+  const sel = window.getSelection()
+  sel.removeAllRanges()
+  sel.addRange(range)
+  el.focus({ preventScroll: true })
+  el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+}
+
+function placeCursorAtEnd(el) {
+  const range = document.createRange()
+  range.selectNodeContents(el)
+  range.collapse(false)
+  const sel = window.getSelection()
+  sel.removeAllRanges()
+  sel.addRange(range)
+  el.focus({ preventScroll: true })
+  el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+}
+
 // Shared block distribution logic used by both the pagination effect and the blur flush.
 // Tries to split paragraphs at page boundaries rather than always pushing whole blocks.
 function distributeBlocksToPages(blocks, usableH, contentW) {
@@ -809,12 +855,17 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   // qbType values: 'title' | 'body' | 'sig' — derived from data-qb-type attribute in HTML
   const [pageBlocks, setPageBlocks] = useState([[]])
 
-  // Refs — editable body divs, focus state, latest-value mirrors for stale-closure safety
+  // Refs — editable body divs (read-only mode), master editor (editable mode)
   const editableRefs    = useRef([])
+  const masterEditorRef = useRef(null)
   const anyFocused      = useRef(false)
   const onBodyChangeRef = useRef(onBodyChange)
   const paginationTimer = useRef(null)
   const rAFHandle       = useRef(null)
+  const spacerTimerRef  = useRef(null)
+
+  // Master editor page count (used to size the absolute-positioned page backgrounds)
+  const [masterPageCount, setMasterPageCount] = useState(1)
 
   useEffect(() => { onBodyChangeRef.current = onBodyChange })
 
@@ -921,7 +972,9 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageBlocks])
 
-  const pageCount = Math.max(1, pageBlocks.length)
+  // In editable mode the single master editor drives pageCount via spacer injection.
+  // In read-only mode pageBlocks.length is authoritative.
+  const pageCount = onBodyChange ? Math.max(1, masterPageCount) : Math.max(1, pageBlocks.length)
 
   // ── Container-level focus/blur ──
   const handleContainerFocus = () => { anyFocused.current = true }
@@ -968,6 +1021,116 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
           setPageBlocks(distributeBlocksToPages(blocks, usableH, contentW))
         })
       }, 0)
+    }
+  }
+
+  // ── Master editor: spacer injection + sync ──────────────────────────────
+  // The page gap height that spacers must fill:
+  //   = footer + bottom-margin + 32px page gap + header + header-spacing
+  const PAGE_GAP   = 32
+  const spacerH    = footerH + mb + PAGE_GAP + headerH + headerSpacing  // == ph - usableH + PAGE_GAP
+
+  // Inject non-editable spacer elements between block children of the master editor
+  // so that content aligns with the A4 page background boxes behind it.
+  // Called after each debounced input and after external bodyHtml updates.
+  const injectMasterSpacers = useCallback((el) => {
+    if (!el) return
+    // Strip stale spacers first
+    el.querySelectorAll('[data-qb-spacer]').forEach(s => s.remove())
+
+    let usedH = 0
+    let pageNum = 1
+    const children = [...el.children]
+
+    for (const child of children) {
+      if (child.dataset.qbSpacer) continue
+      const bh = Math.max(child.offsetHeight, 1)
+
+      if (usedH > 0 && usedH + bh > usableH) {
+        // Insert spacer between pages
+        const remaining  = usableH - usedH
+        const totalSpH   = remaining + spacerH
+        const spacer     = document.createElement('div')
+        spacer.setAttribute('data-qb-spacer', String(pageNum))
+        spacer.setAttribute('contenteditable', 'false')
+        spacer.style.cssText = [
+          `height:${totalSpH}px`,
+          'display:block',
+          'user-select:none',
+          'pointer-events:none',
+          'background:transparent',
+        ].join(';')
+        child.before(spacer)
+        usedH = bh
+        pageNum++
+      } else {
+        usedH += bh
+      }
+    }
+    setMasterPageCount(pageNum)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usableH, spacerH])
+
+  // Load initial / externally-changed bodyHtml into the master editor (without clobbering live edits)
+  useEffect(() => {
+    if (!onBodyChange) return           // read-only mode — master editor not used
+    const el = masterEditorRef.current
+    if (!el || anyFocused.current) return
+    // Strip spacers from master editor, compare pure HTML
+    const clone = el.cloneNode(true)
+    clone.querySelectorAll('[data-qb-spacer]').forEach(s => s.remove())
+    if (clone.innerHTML === (bodyHtml || '')) return  // already in sync
+    el.innerHTML = bodyHtml || ''
+    requestAnimationFrame(() => injectMasterSpacers(el))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bodyHtml, onBodyChange])
+
+  // Tab-key handler for master editor (prevents focus loss, inserts spaces instead)
+  const handleMasterKeyDown = (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      document.execCommand('insertText', false, '    ')
+    }
+  }
+
+  // Master editor input → strip spacers → propagate pure bodyHtml → re-inject spacers
+  const handleMasterInput = useCallback(() => {
+    const el = masterEditorRef.current
+    if (!el) return
+    const clone = el.cloneNode(true)
+    clone.querySelectorAll('[data-qb-spacer]').forEach(s => s.remove())
+    onBodyChangeRef.current?.(clone.innerHTML)
+    // Debounce spacer re-injection (60 ms during fast typing)
+    clearTimeout(spacerTimerRef.current)
+    spacerTimerRef.current = setTimeout(() => injectMasterSpacers(el), 60)
+  }, [injectMasterSpacers])
+
+  // ── Cross-page keyboard navigation ───────────────────────────────────────
+  // Makes cursor flow Word-style: ArrowDown/Right at page bottom → next page top,
+  // ArrowUp/Left at page top → previous page bottom, Backspace at page top → prev page end,
+  // Tab → insert spaces instead of losing focus.
+  const handlePageKeyDown = (e, pageIdx) => {
+    const el = editableRefs.current[pageIdx]
+    if (!el) return
+    const sel = window.getSelection()
+    if (!sel?.rangeCount || !sel.getRangeAt(0).collapsed) return // ignore when selection active
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      const nextEl = editableRefs.current[pageIdx + 1]
+      if (nextEl && isCaretAtEnd(el)) { e.preventDefault(); placeCursorAtStart(nextEl) }
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      const prevEl = editableRefs.current[pageIdx - 1]
+      if (prevEl && isCaretAtStart(el)) { e.preventDefault(); placeCursorAtEnd(prevEl) }
+    } else if (e.key === 'Backspace' && pageIdx > 0) {
+      const prevEl = editableRefs.current[pageIdx - 1]
+      if (prevEl && isCaretAtStart(el)) {
+        // Move cursor to end of previous page; user's next Backspace deletes there naturally
+        e.preventDefault()
+        placeCursorAtEnd(prevEl)
+      }
+    } else if (e.key === 'Tab') {
+      e.preventDefault()
+      document.execCommand('insertText', false, '    ')
     }
   }
 
@@ -1124,109 +1287,144 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
     </div>
   )
 
-  // Shared style for the content zone (flex column: title → body → sig)
-  const contentZoneStyle = {
-    position: 'absolute',
-    top: headerH + headerSpacing,
-    left: ml, right: mr,
-    height: usableH,
-    display: 'flex', flexDirection: 'column',
-    overflow: 'hidden',
-    zIndex: 2,
-    fontSize: '12pt', lineHeight: 1.7,
-    color: '#1f2937', fontFamily: 'Arial, sans-serif',
-    boxSizing: 'border-box',
-  }
 
-  return (
-    <div
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, paddingBottom: 32 }}
-      onFocus={onBodyChange ? handleContainerFocus : undefined}
-      onBlur={onBodyChange  ? handleContainerBlur  : undefined}
-    >
-      {pageBlocks.map((blocks, i) => {
-        const titleBlocks = blocks.filter(b => b.qbType === 'title')
-        const sigBlocks   = blocks.filter(b => b.qbType === 'sig')
+  // ──────────────────────────────────────────────────────────────────────────
+  // EDITABLE MODE — single master contentEditable with spacer-based page breaks
+  // Page backgrounds are absolutely positioned A4 boxes; the master editor floats
+  // above them all as one continuous editing surface (true Word-style).
+  // ──────────────────────────────────────────────────────────────────────────
+  if (onBodyChange) {
+    const containerH = masterPageCount * ph + (masterPageCount - 1) * PAGE_GAP
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingBottom: 32 }}>
+        {/* Position:relative wrapper — page backgrounds are absolute inside it */}
+        <div style={{ position: 'relative', width: pw, minHeight: containerH }}>
 
-        return (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            {/* Page label */}
-            <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 6, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Page {i + 1}{pageCount > 1 ? ` / ${pageCount}` : ''}
-            </div>
-
-            {/* Page box */}
-            <div data-qb-page style={{ width: pw, height: ph, background: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.10), 0 12px 40px rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0 }}>
-
+          {/* ── A4 page background boxes (purely decorative, pointer-events:none) ── */}
+          {Array.from({ length: masterPageCount }).map((_, i) => (
+            <div
+              key={i}
+              data-qb-page
+              style={{
+                position: 'absolute',
+                top: i * (ph + PAGE_GAP),
+                left: 0, width: pw, height: ph,
+                background: 'white',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.10), 0 12px 40px rgba(0,0,0,0.08)',
+                borderRadius: 2,
+                overflow: 'hidden',
+                pointerEvents: 'none',
+                zIndex: 0,
+              }}
+            >
               {/* Watermark */}
               {watermark.enabled && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72, opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af', fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1 }}>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72, opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af', fontWeight: 'bold', userSelect: 'none', zIndex: 0 }}>
                   {watermark.text || 'CONFIDENTIAL'}
                 </div>
               )}
-
-              {/* Header — non-editable, position:absolute overlay */}
+              {/* Header */}
               {headerVisible && renderDocHeader()}
-
-              {/* ── Content Zone ── */}
-              {onBodyChange ? (
-                /* EDITABLE MODE: flex column — title (static) → body (editable) → sig (static)
-                   Body div ONLY ever holds qbType==='body' blocks, so onInput reads back
-                   pure bodyHtml with no title/sig duplication. */
-                <div style={contentZoneStyle}>
-                  {titleBlocks.length > 0 && (
-                    <div
-                      style={{ flexShrink: 0, pointerEvents: 'none', userSelect: 'none' }}
-                      dangerouslySetInnerHTML={{ __html: titleBlocks.map(b => b.html).join('') }}
-                    />
-                  )}
-                  <div
-                    ref={el => { editableRefs.current[i] = el }}
-                    contentEditable
-                    suppressContentEditableWarning
-                    data-qb-editable
-                    onInput={() => {
-                      // Read body-only content from all page editable divs; strip any stray qb-type nodes
-                      const html = editableRefs.current.filter(Boolean).map(el => {
-                        const clone = el.cloneNode(true)
-                        clone.querySelectorAll('[data-qb-type]').forEach(n => n.remove())
-                        return clone.innerHTML
-                      }).join('')
-                      onBodyChangeRef.current?.(html)
-                    }}
-                    style={{ flex: 1, minHeight: 0, overflow: 'hidden', outline: 'none', cursor: 'text' }}
-                    data-placeholder={i === 0 && !bodyHtml?.trim() ? 'Click to start typing…' : undefined}
-                  />
-                  {sigBlocks.length > 0 && (
-                    <div
-                      style={{ flexShrink: 0, pointerEvents: 'none', userSelect: 'none' }}
-                      dangerouslySetInnerHTML={{ __html: sigBlocks.map(b => b.html).join('') }}
-                    />
-                  )}
-                </div>
-              ) : (
-                /* READ-ONLY MODE: static blocks, existing behavior unchanged */
-                <div style={{ position: 'absolute', top: headerH + headerSpacing, left: ml, right: mr, height: usableH, overflow: 'hidden', zIndex: 2, fontSize: '12pt', lineHeight: 1.7, color: '#1f2937', fontFamily: 'Arial, sans-serif' }}>
-                  {blocks.length > 0 ? (
-                    blocks.map((block, bi) => (
-                      <div key={bi} dangerouslySetInnerHTML={{ __html: block.html }} />
-                    ))
-                  ) : (
-                    i === 0 && !fullBodyHtml.trim() && (
-                      <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '11pt', textAlign: 'center', paddingTop: 40 }}>
-                        Fill in the form on the left — your document preview will appear here.
-                      </div>
-                    )
-                  )}
-                </div>
-              )}
-
-              {/* Footer — non-editable, position:absolute overlay */}
+              {/* Footer */}
               {footer.show && renderDocFooter(i + 1)}
+              {/* Page label (above each page background) */}
+              <div style={{ position: 'absolute', top: -22, left: 0, right: 0, textAlign: 'center', fontSize: 10, fontWeight: 600, color: '#9ca3af', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                Page {i + 1}{masterPageCount > 1 ? ` / ${masterPageCount}` : ''}
+              </div>
             </div>
+          ))}
+
+          {/* ── Single master editor — spans across all page backgrounds ── */}
+          <div style={{
+            position: 'absolute',
+            top: headerH + headerSpacing,
+            left: ml, right: mr,
+            zIndex: 1,
+            fontSize: '12pt', lineHeight: 1.7, color: '#1f2937', fontFamily: 'Arial, sans-serif',
+          }}>
+            {/* Title (non-editable block above the editable body) */}
+            {docTitle?.text && (
+              <div
+                contentEditable={false}
+                suppressContentEditableWarning
+                dangerouslySetInnerHTML={{ __html: buildTitleHtml(docTitle) }}
+                style={{ pointerEvents: 'none', userSelect: 'none' }}
+              />
+            )}
+
+            {/* THE SINGLE MASTER EDITOR — one contentEditable for the whole document */}
+            <div
+              ref={masterEditorRef}
+              contentEditable
+              suppressContentEditableWarning
+              data-qb-master
+              onFocus={() => { anyFocused.current = true }}
+              onBlur={() => {
+                anyFocused.current = false
+                clearTimeout(spacerTimerRef.current)
+                injectMasterSpacers(masterEditorRef.current)
+              }}
+              onKeyDown={handleMasterKeyDown}
+              onInput={handleMasterInput}
+              style={{ outline: 'none', cursor: 'text', minHeight: usableH }}
+              data-placeholder={!bodyHtml?.trim() ? 'Click to start typing your document…' : undefined}
+            />
+
+            {/* Signature block (non-editable) */}
+            {sigCfg?.enabled && (
+              <div
+                contentEditable={false}
+                suppressContentEditableWarning
+                dangerouslySetInnerHTML={{ __html: buildSigHtml(sigCfg) }}
+                style={{ pointerEvents: 'none', userSelect: 'none' }}
+              />
+            )}
           </div>
-        )
-      })}
+        </div>
+      </div>
+    )
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // READ-ONLY MODE — paginated A4 boxes, unchanged (used by Preview Modal)
+  // ──────────────────────────────────────────────────────────────────────────
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, paddingBottom: 32 }}>
+      {pageBlocks.map((blocks, i) => (
+        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {/* Page label */}
+          <div style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', marginBottom: 6, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            Page {i + 1}{pageCount > 1 ? ` / ${pageCount}` : ''}
+          </div>
+          {/* Page box */}
+          <div data-qb-page style={{ width: pw, height: ph, background: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.10), 0 12px 40px rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0 }}>
+            {/* Watermark */}
+            {watermark.enabled && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `rotate(${watermark.rotation ?? -45}deg)`, fontSize: watermark.size || 72, opacity: Math.min(watermark.opacity || 0.12, 1), color: watermark.color || '#9ca3af', fontWeight: 'bold', userSelect: 'none', pointerEvents: 'none', zIndex: 1 }}>
+                {watermark.text || 'CONFIDENTIAL'}
+              </div>
+            )}
+            {/* Header */}
+            {headerVisible && renderDocHeader()}
+            {/* Content */}
+            <div style={{ position: 'absolute', top: headerH + headerSpacing, left: ml, right: mr, height: usableH, overflow: 'hidden', zIndex: 2, fontSize: '12pt', lineHeight: 1.7, color: '#1f2937', fontFamily: 'Arial, sans-serif' }}>
+              {blocks.length > 0 ? (
+                blocks.map((block, bi) => (
+                  <div key={bi} dangerouslySetInnerHTML={{ __html: block.html }} />
+                ))
+              ) : (
+                i === 0 && !fullBodyHtml.trim() && (
+                  <div style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '11pt', textAlign: 'center', paddingTop: 40 }}>
+                    Fill in the form on the left — your document preview will appear here.
+                  </div>
+                )
+              )}
+            </div>
+            {/* Footer */}
+            {footer.show && renderDocFooter(i + 1)}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -2421,8 +2619,12 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
           content: attr(data-placeholder);
           color: #9ca3af; pointer-events: none; font-style: italic;
         }
-        [data-qb-editable]::-webkit-scrollbar { display: none; }
-        [data-qb-editable] { scrollbar-width: none; -ms-overflow-style: none; }
+        [data-qb-master]:empty::before {
+          content: attr(data-placeholder);
+          color: #9ca3af; pointer-events: none; font-style: italic;
+        }
+        [data-qb-master]::-webkit-scrollbar { display: none; }
+        [data-qb-master] { scrollbar-width: none; -ms-overflow-style: none; }
       `}</style>
     </div>
   )
