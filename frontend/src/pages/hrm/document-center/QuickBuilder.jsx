@@ -415,7 +415,7 @@ function BodyEditor({ editorRef, onInput, initialHtml }) {
       <div ref={editorRef} contentEditable suppressContentEditableWarning
         onInput={onInput} onMouseUp={saveSel} onKeyUp={saveSel}
         className="focus:outline-none px-4 py-3"
-        style={{ minHeight: 220, maxHeight: 360, overflowY: 'auto', fontSize: '12pt', lineHeight: 1.7, color: '#1f2937', fontFamily: 'Arial, sans-serif' }}
+        style={{ minHeight: 300, overflowY: 'visible', fontSize: '12pt', lineHeight: 1.7, color: '#1f2937', fontFamily: 'Arial, sans-serif' }}
         data-placeholder="Type your document body content here…" />
 
       {/* Image resize toolbar (appears when an image is selected in editor) */}
@@ -562,6 +562,214 @@ function buildSigHtml(sigCfg) {
   </tr></table>`
 }
 
+// ─── Cursor helpers (global char-offset across all editable page divs) ────────
+function getGlobalTextOffset(editableEls, sel) {
+  if (!sel?.rangeCount) return null
+  const range = sel.getRangeAt(0)
+  let total = 0
+  for (const el of editableEls) {
+    if (!el) continue
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    let node
+    while ((node = walker.nextNode())) {
+      if (node === range.startContainer) return total + range.startOffset
+      total += node.length
+    }
+    total++ // page boundary separator
+  }
+  return null
+}
+
+function setGlobalTextOffset(editableEls, targetOffset) {
+  let remaining = targetOffset
+  for (const el of editableEls) {
+    if (!el) continue
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    let node
+    while ((node = walker.nextNode())) {
+      if (remaining <= node.length) {
+        try {
+          const range = document.createRange()
+          range.setStart(node, remaining)
+          range.collapse(true)
+          const sel = window.getSelection()
+          sel.removeAllRanges()
+          sel.addRange(range)
+          el.focus({ preventScroll: true })
+          // Scroll the containing page-box into view so the caret is visible
+          // after large pastes or cross-page content redistribution.
+          const pageBox = el.closest('[data-qb-page]') || el.parentElement
+          if (pageBox) pageBox.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+        } catch (_) {}
+        return true
+      }
+      remaining -= node.length
+    }
+    remaining-- // page boundary
+  }
+  return false
+}
+
+// ─── Paragraph splitter: line-estimation split + Range-based HTML extraction ──
+
+// Split containerEl's DOM at the given text node + character offset.
+// Returns { part1: htmlString, part2: htmlString } or null on failure.
+function splitDomAtPoint(containerEl, splitNode, splitOffset) {
+  const tag  = containerEl.tagName.toLowerCase()
+  const attrs = [...containerEl.attributes].map(a => `${a.name}="${a.value}"`).join(' ')
+  const open  = `<${tag}${attrs ? ' ' + attrs : ''}>`
+  const close = `</${tag}>`
+  try {
+    const r1 = document.createRange()
+    r1.setStart(containerEl, 0)
+    r1.setEnd(splitNode, splitOffset)
+    const d1 = document.createElement('div')
+    d1.appendChild(r1.cloneContents())
+
+    const r2 = document.createRange()
+    r2.setStart(splitNode, splitOffset)
+    r2.setEnd(containerEl, containerEl.childNodes.length)
+    const d2 = document.createElement('div')
+    d2.appendChild(r2.cloneContents())
+
+    const h1 = d1.innerHTML.trim()
+    const h2 = d2.innerHTML.trim()
+    if (!h1 || !h2) return null
+    return { part1: open + h1 + close, part2: open + h2 + close }
+  } catch (_) { return null }
+}
+
+// Walk text nodes in containerEl and split at the given global character position.
+function splitAtChar(containerEl, charPos) {
+  let remaining = charPos
+  const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT)
+  let node
+  while ((node = walker.nextNode())) {
+    if (remaining <= node.length) return splitDomAtPoint(containerEl, node, remaining)
+    remaining -= node.length
+  }
+  return null
+}
+
+// Attempt to split a block at `remainingH` pixels from its top using line-height
+// estimation and Range-based HTML extraction.  Returns null if splitting is not
+// possible or would produce a trivially small first part.
+function tryBlockSplitInDOM(blockHtml, qbType, remainingH, contentW) {
+  const SPLITTABLE = new Set(['P','H1','H2','H3','H4','H5','H6','DIV','BLOCKQUOTE','LI'])
+  const tmp = document.createElement('div')
+  Object.assign(tmp.style, {
+    position: 'absolute', top: '-99999px', left: '-99999px',
+    width: `${contentW}px`, fontSize: '12pt', lineHeight: '1.7',
+    fontFamily: 'Arial, sans-serif', color: '#1f2937',
+    visibility: 'hidden', pointerEvents: 'none',
+  })
+  tmp.innerHTML = blockHtml
+  document.body.appendChild(tmp)
+  let result = null
+  try {
+    const el = tmp.firstElementChild
+    if (!el || !SPLITTABLE.has(el.tagName)) return null
+
+    const cs     = window.getComputedStyle(el)
+    const lineH  = parseFloat(cs.lineHeight) || 28
+    if (!isFinite(lineH) || lineH < 4) return null
+
+    const totalH     = el.offsetHeight
+    const linesTotal = Math.max(1, Math.round(totalH / lineH))
+    const linesFit   = Math.floor(remainingH / lineH)
+    if (linesFit < 1 || linesFit >= linesTotal) return null
+
+    const fullText    = el.textContent || ''
+    const rawSplit    = Math.round(fullText.length * linesFit / linesTotal)
+    const wordBound   = fullText.lastIndexOf(' ', rawSplit)
+    if (wordBound <= 0) return null
+
+    const split = splitAtChar(el, wordBound + 1) // split right after the space
+    if (!split) return null
+
+    // Measure heights of the two resulting parts
+    tmp.innerHTML = split.part1 + split.part2
+    const [e1, e2] = tmp.children
+    const h1 = e1 ? (e1.offsetHeight || remainingH)        : remainingH
+    const h2 = e2 ? (e2.offsetHeight || totalH - remainingH) : (totalH - remainingH)
+
+    result = {
+      part1: { html: split.part1, height: h1, qbType },
+      part2: { html: split.part2, height: h2, qbType },
+    }
+  } finally {
+    if (document.body.contains(tmp)) document.body.removeChild(tmp)
+  }
+  return result
+}
+
+// Shared block distribution logic used by both the pagination effect and the blur flush.
+// Tries to split paragraphs at page boundaries rather than always pushing whole blocks.
+function distributeBlocksToPages(blocks, usableH, contentW) {
+  const pages = [[]]
+  let usedH = 0
+  for (const block of blocks) {
+    const bh = Math.max(block.height, 4)
+    if (usedH === 0 || usedH + bh <= usableH) {
+      pages[pages.length - 1].push(block)
+      usedH += bh
+    } else {
+      const remainingH = usableH - usedH
+      // Try to split the block at the page boundary if meaningful space remains
+      if (remainingH > 60) {
+        const split = tryBlockSplitInDOM(block.html, block.qbType, remainingH, contentW)
+        if (split) {
+          pages[pages.length - 1].push(split.part1)
+          pages.push([split.part2])
+          usedH = Math.max(split.part2.height, 4)
+          continue
+        }
+      }
+      // No split — start fresh page, always place at least one block
+      pages.push([block])
+      usedH = bh
+    }
+  }
+  return pages
+}
+
+// ─── Table splitter: distributes rows across page-height chunks ───────────────
+function splitTableByRows(tableEl, usableH, qbType) {
+  const allRows = Array.from(tableEl.querySelectorAll('tr'))
+  if (allRows.length === 0) {
+    return [{ html: tableEl.outerHTML, height: tableEl.offsetHeight || 40, qbType }]
+  }
+
+  const border  = tableEl.getAttribute('border')  || ''
+  const style   = tableEl.getAttribute('style')   || ''
+  const cls     = tableEl.getAttribute('class')   || ''
+  const openTag = `<table${border ? ` border="${border}"` : ''}${style ? ` style="${style}"` : ''}${cls ? ` class="${cls}"` : ''}>`
+
+  const headerHtml = allRows[0].outerHTML
+  const headerH    = (allRows[0].offsetHeight || 30) + 2
+
+  const chunks   = []
+  let chunkRows  = [allRows[0]]
+  let chunkH     = headerH
+
+  for (let i = 1; i < allRows.length; i++) {
+    const rh = (allRows[i].offsetHeight || 28) + 1
+    if (chunkRows.length > 1 && chunkH + rh > usableH * 0.9) {
+      chunks.push({ html: openTag + chunkRows.map(r => r.outerHTML).join('') + '</table>', height: chunkH })
+      chunkRows = [allRows[0], allRows[i]] // repeat header on continuation
+      chunkH    = headerH + rh
+    } else {
+      chunkRows.push(allRows[i])
+      chunkH += rh
+    }
+  }
+  if (chunkRows.length > 0) {
+    chunks.push({ html: openTag + chunkRows.map(r => r.outerHTML).join('') + '</table>', height: chunkH })
+  }
+
+  return chunks.map(c => ({ html: c.html, height: c.height, qbType }))
+}
+
 // ─── Paginated Doc Preview ────────────────────────────────────────────────────
 // MS Word-style: header area → [top margin] → text area → [bottom margin] → footer area
 // Each page is exactly ph px tall. Content is windowed per page via overflow:hidden + negative margin.
@@ -610,8 +818,9 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
 
   useEffect(() => { onBodyChangeRef.current = onBodyChange })
 
-  // ── Pagination: measures fullBodyHtml in a hidden div, tags each block with qbType ──
-  // Debounced 350 ms during active editing to prevent constant reflow while typing.
+  // ── Pagination: measures fullBodyHtml in a hidden div, distributes to pages ──
+  // Runs at ≤60 ms delay during editing (fast enough to feel live), immediate otherwise.
+  // Tables are split row-by-row with header repetition on continuation pages.
   useEffect(() => {
     clearTimeout(paginationTimer.current)
     cancelAnimationFrame(rAFHandle.current)
@@ -633,36 +842,37 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
 
       rAFHandle.current = requestAnimationFrame(() => {
         const children = Array.from(container.children)
-        let blocks
+        let blocks = []
+
         if (children.length === 0) {
           blocks = [{ html: fullBodyHtml, height: container.scrollHeight || 40, qbType: 'body' }]
         } else {
-          blocks = children.map(el => {
+          for (const el of children) {
             const qbType = el.getAttribute('data-qb-type') || 'body'
             const cs     = window.getComputedStyle(el)
             const extra  = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
-            return { html: el.outerHTML, height: (el.offsetHeight || 20) + extra, qbType }
-          })
+
+            if (el.tagName === 'TABLE') {
+              // Split table rows across pages with header repetition
+              const tableChunks = splitTableByRows(el, usableH, qbType)
+              blocks.push(...tableChunks)
+            } else {
+              const blockH = (el.offsetHeight || 20) + extra
+              blocks.push({ html: el.outerHTML, height: blockH, qbType })
+            }
+          }
         }
+
         if (document.body.contains(container)) document.body.removeChild(container)
 
-        // Distribute blocks across pages; never split a single block
-        const pages = [[]]
-        let usedH = 0, pi = 0
-        for (const block of blocks) {
-          const bh = Math.max(block.height, 4)
-          if (usedH + bh > usableH && usedH > 0) {
-            pages.push([]); pi++; usedH = 0
-          }
-          pages[pi].push(block)
-          usedH += bh
-        }
-        setPageBlocks(pages)
+        // Distribute blocks across pages with paragraph-level splitting
+        setPageBlocks(distributeBlocksToPages(blocks, usableH, contentW))
       })
     }
 
-    // Debounce while user is actively editing; run immediately otherwise
-    paginationTimer.current = setTimeout(run, anyFocused.current ? 350 : 0)
+    // During active editing use a short delay to batch rapid keystrokes;
+    // run immediately when content changes from outside (template load, preset apply, etc.)
+    paginationTimer.current = setTimeout(run, anyFocused.current ? 60 : 0)
 
     return () => {
       clearTimeout(paginationTimer.current)
@@ -672,58 +882,93 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   }, [fullBodyHtml, contentW, usableH])
 
   // ── Sync: write ONLY body blocks into editable divs ──
-  // Title and sig blocks are rendered as non-editable static nodes alongside the editable div.
-  // This prevents the duplication cycle: sync → onInput reads back title/sig → bodyHtml grows.
+  // When the user is actively editing we save and restore the cursor position so
+  // real-time repagination doesn't lose the caret.
   useEffect(() => {
     if (!onBodyChangeRef.current) return
-    if (anyFocused.current) return
+
+    // Save cursor as a global text-character offset across all page divs
+    const sel = window.getSelection()
+    const savedOffset = anyFocused.current ? getGlobalTextOffset(editableRefs.current, sel) : null
+
     pageBlocks.forEach((blocks, i) => {
       const el = editableRefs.current[i]
-      if (el) el.innerHTML = blocks.filter(b => b.qbType === 'body').map(b => b.html).join('')
+      if (!el) return
+      const newHtml = blocks.filter(b => b.qbType === 'body').map(b => b.html).join('')
+      // Skip DOM write if content is identical (avoids caret flicker when nothing moved)
+      if (el.innerHTML !== newHtml) el.innerHTML = newHtml
     })
+
+    // Restore cursor after the DOM settles
+    if (savedOffset !== null) {
+      requestAnimationFrame(() => {
+        const restored = setGlobalTextOffset(editableRefs.current, savedOffset)
+        if (!restored) {
+          // Fallback: place cursor at end of last page div
+          const lastEl = [...editableRefs.current].filter(Boolean).pop()
+          if (lastEl) {
+            const range = document.createRange()
+            range.selectNodeContents(lastEl)
+            range.collapse(false)
+            const s = window.getSelection()
+            s.removeAllRanges()
+            s.addRange(range)
+            lastEl.focus({ preventScroll: true })
+          }
+        }
+      })
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageBlocks])
 
   const pageCount = Math.max(1, pageBlocks.length)
 
-  // ── Container-level focus/blur (avoids per-page race conditions) ──
+  // ── Container-level focus/blur ──
   const handleContainerFocus = () => { anyFocused.current = true }
   const handleContainerBlur  = (e) => {
-    if (e.currentTarget.contains(e.relatedTarget)) return // focus moved between pages, not outside
+    if (e.currentTarget.contains(e.relatedTarget)) return // focus stayed within the editor
     anyFocused.current = false
-    // Run pagination immediately after the user stops editing (skip remaining debounce)
-    clearTimeout(paginationTimer.current)
-    cancelAnimationFrame(rAFHandle.current)
-    if (!fullBodyHtml.trim()) { setPageBlocks([[]]); return }
-    const container = document.createElement('div')
-    Object.assign(container.style, {
-      position: 'absolute', top: '-99999px', left: '-99999px',
-      width: `${contentW}px`, fontSize: '12pt', lineHeight: '1.7',
-      fontFamily: 'Arial, sans-serif', color: '#1f2937',
-      visibility: 'hidden', pointerEvents: 'none',
-    })
-    container.innerHTML = fullBodyHtml
-    document.body.appendChild(container)
-    rAFHandle.current = requestAnimationFrame(() => {
-      const children = Array.from(container.children)
-      const blocks = children.length === 0
-        ? [{ html: fullBodyHtml, height: container.scrollHeight || 40, qbType: 'body' }]
-        : children.map(el => {
-            const qbType = el.getAttribute('data-qb-type') || 'body'
-            const cs = window.getComputedStyle(el)
-            const extra = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
-            return { html: el.outerHTML, height: (el.offsetHeight || 20) + extra, qbType }
-          })
-      if (document.body.contains(container)) document.body.removeChild(container)
-      const pages = [[]]
-      let usedH = 0, pi = 0
-      for (const block of blocks) {
-        const bh = Math.max(block.height, 4)
-        if (usedH + bh > usableH && usedH > 0) { pages.push([]); pi++; usedH = 0 }
-        pages[pi].push(block); usedH += bh
-      }
-      setPageBlocks(pages)
-    })
+    // Flush any pending debounced pagination immediately on blur so the final
+    // state is accurate before the user sees the result.
+    if (paginationTimer.current) {
+      clearTimeout(paginationTimer.current)
+      paginationTimer.current = null
+      // Re-schedule with zero delay; anyFocused is now false so it fires instantly.
+      paginationTimer.current = setTimeout(() => {
+        cancelAnimationFrame(rAFHandle.current)
+        if (!fullBodyHtml.trim()) { setPageBlocks([[]]); return }
+        const container = document.createElement('div')
+        container.setAttribute('aria-hidden', 'true')
+        Object.assign(container.style, {
+          position: 'absolute', top: '-99999px', left: '-99999px',
+          width: `${contentW}px`, fontSize: '12pt', lineHeight: '1.7',
+          fontFamily: 'Arial, sans-serif', color: '#1f2937',
+          visibility: 'hidden', pointerEvents: 'none',
+        })
+        container.innerHTML = fullBodyHtml
+        document.body.appendChild(container)
+        rAFHandle.current = requestAnimationFrame(() => {
+          const children = Array.from(container.children)
+          const blocks = []
+          if (children.length === 0) {
+            blocks.push({ html: fullBodyHtml, height: container.scrollHeight || 40, qbType: 'body' })
+          } else {
+            for (const el of children) {
+              const qbType = el.getAttribute('data-qb-type') || 'body'
+              const cs     = window.getComputedStyle(el)
+              const extra  = (parseInt(cs.marginTop) || 0) + (parseInt(cs.marginBottom) || 0)
+              if (el.tagName === 'TABLE') {
+                blocks.push(...splitTableByRows(el, usableH, qbType))
+              } else {
+                blocks.push({ html: el.outerHTML, height: (el.offsetHeight || 20) + extra, qbType })
+              }
+            }
+          }
+          if (document.body.contains(container)) document.body.removeChild(container)
+          setPageBlocks(distributeBlocksToPages(blocks, usableH, contentW))
+        })
+      }, 0)
+    }
   }
 
   // ── Reusable header renderer ──────────────────────────────────────────────
@@ -911,7 +1156,7 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
             </div>
 
             {/* Page box */}
-            <div style={{ width: pw, height: ph, background: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.10), 0 12px 40px rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0 }}>
+            <div data-qb-page style={{ width: pw, height: ph, background: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.10), 0 12px 40px rgba(0,0,0,0.08)', borderRadius: 2, overflow: 'hidden', position: 'relative', flexShrink: 0 }}>
 
               {/* Watermark */}
               {watermark.enabled && (
@@ -949,7 +1194,7 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
                       }).join('')
                       onBodyChangeRef.current?.(html)
                     }}
-                    style={{ flex: 1, minHeight: 0, overflow: 'auto', outline: 'none', cursor: 'text' }}
+                    style={{ flex: 1, minHeight: 0, overflow: 'hidden', outline: 'none', cursor: 'text' }}
                     data-placeholder={i === 0 && !bodyHtml?.trim() ? 'Click to start typing…' : undefined}
                   />
                   {sigBlocks.length > 0 && (

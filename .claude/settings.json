@@ -4,7 +4,8 @@
       "Bash(npm run *)",
       "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\\\\components\\\\dashboard\" -Force)",
       "Bash(Get-ChildItem -Path \"d:\\\\crm-project\\\\frontend\\\\src\" -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(npx tsc *)"
     ]
   }
 }
