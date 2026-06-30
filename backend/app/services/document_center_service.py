@@ -689,11 +689,16 @@ class DocumentCenterService:
             created_by_name=user_name,
             updated_by=user_id,
         )
+        # Extract ID from the model object directly — avoids relying on Pydantic v2
+        # alias serialization behaviour (model_dump(by_alias=True) sometimes returns
+        # "id" not "_id" depending on the pydantic version / config combo in use).
+        template_id = tmpl.id
         doc = tmpl.model_dump(by_alias=True)
+        doc["_id"] = template_id          # guarantee _id is always present for MongoDB
         await db.doc_templates.insert_one(doc)
 
         # Save initial version
-        await self._save_version(db, doc["_id"], 1, data.name, content, data.change_summary, user_id, user_name)
+        await self._save_version(db, template_id, 1, data.name, content, data.change_summary, user_id, user_name)
         return doc
 
     async def update_template(
@@ -754,10 +759,12 @@ class DocumentCenterService:
             created_by_name=user_name,
             updated_by=user_id,
         )
+        new_template_id = tmpl.id
         doc = tmpl.model_dump(by_alias=True)
+        doc["_id"] = new_template_id      # guarantee _id is present (same fix as create_template)
         await db.doc_templates.insert_one(doc)
         await self._save_version(
-            db, doc["_id"], 1, doc["name"], content_obj,
+            db, new_template_id, 1, doc.get("name", tmpl.name), content_obj,
             f"Duplicated from {existing['name']}", user_id, user_name,
         )
         return True, "Template duplicated", doc
