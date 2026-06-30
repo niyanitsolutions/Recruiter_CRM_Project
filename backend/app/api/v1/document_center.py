@@ -48,7 +48,7 @@ async def create_category(
     db   = Depends(get_company_db),
     user = Depends(PERM_CREATE),
 ):
-    cat = await document_center_service.create_category(db, data, user["_id"])
+    cat = await document_center_service.create_category(db, data, user["id"])
     return {"success": True, "message": "Category created", "data": cat}
 
 
@@ -132,7 +132,7 @@ async def create_template(
     try:
         doc = await document_center_service.create_template(
             db, data,
-            user["_id"],
+            user["id"],
             user.get("full_name", user.get("username", "")),
         )
         return {"success": True, "message": "Template created", "data": doc}
@@ -151,7 +151,7 @@ async def update_template(
     try:
         ok, msg = await document_center_service.update_template(
             db, template_id, data,
-            user["_id"],
+            user["id"],
             user.get("full_name", user.get("username", "")),
         )
         if not ok:
@@ -184,7 +184,7 @@ async def duplicate_template(
 ):
     ok, msg, doc = await document_center_service.duplicate_template(
         db, template_id,
-        user["_id"],
+        user["id"],
         user.get("full_name", user.get("username", "")),
     )
     if not ok:
@@ -225,7 +225,7 @@ async def restore_version(
 ):
     ok, msg = await document_center_service.restore_version(
         db, template_id, version_id,
-        user["_id"], user.get("full_name", ""),
+        user["id"], user.get("full_name", ""),
     )
     if not ok:
         raise HTTPException(status_code=404, detail=msg)
@@ -257,7 +257,7 @@ async def generate_document(
 ):
     ok, msg, doc = await document_center_service.generate_document(
         db, req,
-        user["_id"],
+        user["id"],
         user.get("full_name", user.get("username", "")),
     )
     if not ok:
@@ -388,7 +388,7 @@ async def request_approval(
     user = Depends(PERM_CREATE),
 ):
     ok, msg, doc = await document_center_service.request_approval(
-        db, data, user["_id"], user.get("full_name", ""),
+        db, data, user["id"], user.get("full_name", ""),
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
@@ -404,7 +404,7 @@ async def list_approvals(
     db   = Depends(get_company_db),
     user = Depends(PERM_VIEW),
 ):
-    user_filter = user["_id"] if mine else None
+    user_filter = user["id"] if mine else None
     docs, total = await document_center_service.list_approvals(
         db, status=status, user_id=user_filter, skip=skip, limit=limit,
     )
@@ -419,7 +419,7 @@ async def review_approval(
     user = Depends(PERM_APPROVE),
 ):
     ok, msg = await document_center_service.review_approval(
-        db, approval_id, data, user["_id"], user.get("full_name", ""),
+        db, approval_id, data, user["id"], user.get("full_name", ""),
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
@@ -462,7 +462,7 @@ async def import_document(
         description=description,
         category_id=category_id or None,
         tags=tag_list,
-        user_id=user["_id"],
+        user_id=user["id"],
         user_name=user.get("full_name", ""),
     )
     if not ok:
@@ -509,7 +509,7 @@ async def create_from_library(
     user = Depends(PERM_CREATE),
 ):
     ok, msg, doc = await document_center_service.create_from_library(
-        db, key, user["_id"], user.get("full_name", ""), category_id=category_id,
+        db, key, user["id"], user.get("full_name", ""), category_id=category_id,
     )
     if not ok:
         raise HTTPException(status_code=404, detail=msg)
