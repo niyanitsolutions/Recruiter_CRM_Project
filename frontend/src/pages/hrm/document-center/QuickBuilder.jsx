@@ -151,8 +151,16 @@ const TB = ({ icon: Icon, label, onClick }) => (
 
 // ─── Table Dialog ─────────────────────────────────────────────────────────────
 function TableDialog({ onInsert, onClose }) {
-  const [rows, setCols_r] = useState(3)
-  const [cols, setCols_c] = useState(3)
+  // Store raw string so backspace/delete/paste all work freely; clamp only on blur or insert
+  const [rowsInput, setRowsInput] = useState('3')
+  const [colsInput, setColsInput] = useState('3')
+
+  const clampRows = (s) => Math.max(1, Math.min(20, parseInt(s, 10) || 1))
+  const clampCols = (s) => Math.max(1, Math.min(10, parseInt(s, 10) || 1))
+
+  // Derived values used for preview and insert — always valid
+  const rows = clampRows(rowsInput)
+  const cols = clampCols(colsInput)
 
   const buildHtml = (r, c) => {
     const headerCells = Array.from({ length: c }, (_, i) =>
@@ -160,14 +168,25 @@ function TableDialog({ onInsert, onClose }) {
     ).join('')
     const bodyRows = Array.from({ length: r - 1 }, (_, ri) =>
       `<tr>${Array.from({ length: c }, (_, ci) =>
-        `<td style="padding:8px 10px;border:1px solid #e5e7eb;background:${ri % 2 === 0 ? 'white' : '#f9fafb'};">Cell ${ri + 1}.${ci + 1}</td>`
+        `<td style="padding:8px 10px;border:1px solid #e5e7eb;background:white;">Cell ${ri + 1}.${ci + 1}</td>`
       ).join('')}</tr>`
     ).join('')
-    return `<table border="1" style="border-collapse:collapse;width:100%;margin:8px 0;"><tr>${headerCells}</tr>${bodyRows}</table>`
+    return `<table border="1" style="border-collapse:collapse;width:100%;margin:8px 0;background:white;"><tr>${headerCells}</tr>${bodyRows}</table>`
   }
 
   const previewR = Math.min(rows, 4)
   const previewC = Math.min(cols, 5)
+  const inputClass = "w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-violet-500"
+  const inputStyle = { background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }
+
+  const handleKey = (e) => {
+    // Allow: digits, backspace, delete, tab, arrows, home/end, ctrl+a/c/v/x
+    const allowed = ['Backspace','Delete','Tab','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End']
+    if (allowed.includes(e.key)) return
+    if ((e.ctrlKey || e.metaKey) && ['a','c','v','x'].includes(e.key.toLowerCase())) return
+    if (e.key >= '0' && e.key <= '9') return
+    e.preventDefault()
+  }
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.55)' }}>
@@ -176,17 +195,25 @@ function TableDialog({ onInsert, onClose }) {
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Rows (1–20)</p>
-            <input type="number" min={1} max={20} value={rows}
-              onChange={e => setCols_r(Math.max(1, Math.min(20, +e.target.value || 1)))}
-              className="w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-violet-500"
-              style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
+            <input
+              type="number" min={1} max={20}
+              value={rowsInput}
+              onChange={e => setRowsInput(e.target.value)}
+              onBlur={e => setRowsInput(String(clampRows(e.target.value)))}
+              onKeyDown={handleKey}
+              className={inputClass} style={inputStyle}
+            />
           </div>
           <div>
             <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Columns (1–10)</p>
-            <input type="number" min={1} max={10} value={cols}
-              onChange={e => setCols_c(Math.max(1, Math.min(10, +e.target.value || 1)))}
-              className="w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-violet-500"
-              style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
+            <input
+              type="number" min={1} max={10}
+              value={colsInput}
+              onChange={e => setColsInput(e.target.value)}
+              onBlur={e => setColsInput(String(clampCols(e.target.value)))}
+              onKeyDown={handleKey}
+              className={inputClass} style={inputStyle}
+            />
           </div>
         </div>
 
@@ -199,7 +226,7 @@ function TableDialog({ onInsert, onClose }) {
                   {Array.from({ length: previewC }, (_, ci) => (
                     <td key={ci} style={{
                       border: '1px solid #e5e7eb', padding: '3px 6px',
-                      background: ri === 0 ? '#7c3aed' : ri % 2 ? '#f9fafb' : 'white',
+                      background: ri === 0 ? '#7c3aed' : 'white',
                       color: ri === 0 ? 'white' : '#374151',
                     }}>
                       {ri === 0 ? `H${ci + 1}` : `${ri}.${ci + 1}`}
@@ -313,24 +340,55 @@ function BodyEditor({ editorRef, onInput, initialHtml }) {
     return () => el.removeEventListener('click', handler)
   }, [editorRef])
 
-  const saveSel = () => {
+  // Track selection globally — saves the last selection from ANY contenteditable
+  // so toolbar buttons work whether the user was editing in this panel or the
+  // live-preview master editor on the right.
+  const saveSel = useCallback(() => {
     const sel = window.getSelection()
-    if (sel?.rangeCount > 0) savedSel.current = sel.getRangeAt(0).cloneRange()
-  }
+    if (!sel?.rangeCount) return
+    const range = sel.getRangeAt(0)
+    const node  = range.commonAncestorContainer
+    const el    = node.nodeType === 3 ? node.parentElement : node
+    if (el?.closest?.('[contenteditable="true"]')) {
+      savedSel.current = range.cloneRange()
+    }
+  }, [])
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', saveSel)
+    return () => document.removeEventListener('selectionchange', saveSel)
+  }, [saveSel])
+
   const restoreSel = () => {
     if (!savedSel.current) return
-    const sel = window.getSelection()
-    sel?.removeAllRanges()
-    sel?.addRange(savedSel.current)
+    try {
+      const sel = window.getSelection()
+      sel?.removeAllRanges()
+      sel?.addRange(savedSel.current)
+    } catch (_) {}
   }
-  const exec = (cmd, val = null) => {
+
+  // Find and focus whichever contenteditable holds the saved selection,
+  // or fall back to the left-panel editor.
+  const focusForSel = () => {
+    if (savedSel.current) {
+      const node = savedSel.current.commonAncestorContainer
+      const el   = (node.nodeType === 3 ? node.parentElement : node)
+        ?.closest?.('[contenteditable="true"]')
+      if (el) { el.focus({ preventScroll: true }); return true }
+    }
     editorRef.current?.focus()
+    return false
+  }
+
+  const exec = (cmd, val = null) => {
+    focusForSel()
     restoreSel()
     document.execCommand(cmd, false, val)
     onInput?.()
   }
   const insertHtml = (html) => {
-    editorRef.current?.focus()
+    focusForSel()
     restoreSel()
     document.execCommand('insertHTML', false, html)
     onInput?.()
@@ -397,14 +455,17 @@ function BodyEditor({ editorRef, onInput, initialHtml }) {
         }} />
         <TB icon={TableIcon}  label="Insert Table"      onClick={() => { saveSel(); setShowTableDialog(true) }} />
         <TB icon={Scissors}   label="Insert Page Break" onClick={insertPageBreak} />
-        <label title="Insert Image" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600">
+        <label title="Insert Image" className="p-1.5 rounded cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600"
+          onMouseDown={saveSel}>
           <ImageIcon className="w-3.5 h-3.5" style={{ color: 'var(--text-body)' }} />
           <input type="file" accept="image/*" className="sr-only"
             onChange={e => {
               const file = e.target.files[0]
               if (!file) return
               const reader = new FileReader()
-              reader.onload = ev => insertHtml(`<img src="${ev.target.result}" style="max-width:100%;height:auto;" />`)
+              reader.onload = ev => {
+                insertHtml(`<img src="${ev.target.result}" style="max-width:100%;height:auto;display:block;" />`)
+              }
               reader.readAsDataURL(file)
               e.target.value = ''
             }} />
@@ -413,7 +474,7 @@ function BodyEditor({ editorRef, onInput, initialHtml }) {
 
       {/* Editable area */}
       <div ref={editorRef} contentEditable suppressContentEditableWarning
-        onInput={onInput} onMouseUp={saveSel} onKeyUp={saveSel}
+        onInput={onInput}
         className="focus:outline-none px-4 py-3"
         style={{ minHeight: 300, overflowY: 'visible', fontSize: '12pt', lineHeight: 1.7, color: '#1f2937', fontFamily: 'Arial, sans-serif' }}
         data-placeholder="Type your document body content here…" />
@@ -1062,7 +1123,9 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
         const spacer    = document.createElement('div')
         spacer.setAttribute('data-qb-spacer', String(pageNum))
         spacer.setAttribute('contenteditable', 'false')
-        spacer.style.cssText = `height:${totalSpH}px;display:block;user-select:none;pointer-events:none;background:transparent;`
+        spacer.setAttribute('tabindex', '-1')
+        spacer.setAttribute('aria-hidden', 'true')
+        spacer.style.cssText = `height:${totalSpH}px;display:block;user-select:none;-webkit-user-select:none;pointer-events:none;background:transparent;caret-color:transparent;`
         child.before(spacer)
         // This child is now the first on the new page — CSS resets its margin-top
         usedH = Math.max(child.offsetHeight + marginB, 1)
@@ -1091,17 +1154,27 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bodyHtml, onBodyChange])
 
-  // Tab-key handler for master editor (prevents focus loss, inserts spaces instead)
+  // Master editor key handler: Tab → spaces; Enter at page-end → flows to next page naturally
+  // via spacer reflow. Ctrl+B/I/U/Z/Y shortcuts are handled natively by the browser but
+  // we intercept Tab and suppress default for Escape (prevent form focus-trap issues).
   const handleMasterKeyDown = (e) => {
     if (e.key === 'Tab') {
       e.preventDefault()
-      document.execCommand('insertText', false, '    ')
+      document.execCommand('insertText', false, '    ')
+      return
     }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      e.currentTarget.blur()
+      return
+    }
+    // Ctrl/Cmd+A — let browser handle (select all within contenteditable is correct)
+    // Ctrl/Cmd+B/I/U — let browser handle natively; input event fires and spacers update
   }
 
   // Master editor input → strip spacers → propagate pure bodyHtml → re-inject spacers on next frame.
-  // RAF (not setTimeout) so spacers are in place before the browser paints the next frame —
-  // this closes the "cursor in footer" window to imperceptible < 16 ms.
+  // Called both by the React onInput event AND imperatively from toolbar exec (for the case where
+  // execCommand targets the master editor via the global selection tracking in BodyEditor).
   const handleMasterInput = useCallback(() => {
     const el = masterEditorRef.current
     if (!el) return
@@ -1111,6 +1184,7 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
     cancelAnimationFrame(spacerRAFRef.current)
     spacerRAFRef.current = requestAnimationFrame(() => injectMasterSpacers(el))
   }, [injectMasterSpacers])
+
 
   // ── Cross-page keyboard navigation ───────────────────────────────────────
   // Makes cursor flow Word-style: ArrowDown/Right at page bottom → next page top,
@@ -1694,7 +1768,7 @@ export default function QuickBuilder() {
   // Build payload
   const buildPayload = useCallback((summary) => {
     const s = latestRef.current
-    const html = editorRef.current?.innerHTML ?? bodyHtml ?? ''
+    const html = editorRef.current?.innerHTML || bodyHtml || ''
     return {
       name:           s.name,
       description:    s.description,
@@ -2652,11 +2726,43 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
         }
         [data-qb-master]::-webkit-scrollbar { display: none; }
         [data-qb-master] { scrollbar-width: none; -ms-overflow-style: none; }
-        /* Kill margin-top on the first block of every new page (the block that follows a spacer).
-           Without this, h1/h2/p elements with natural top margins create a blank gap at page tops. */
+
+        /* Spacer = gap + header zone between pages.
+           Must never receive focus, pointer events, or cursor. */
+        [data-qb-spacer] {
+          cursor: default !important;
+          user-select: none !important;
+          -webkit-user-select: none !important;
+          pointer-events: none !important;
+          outline: none !important;
+          caret-color: transparent !important;
+        }
+
+        /* Kill margin-top on the first content block of each new page so elements
+           with natural block margins (h1, p, etc.) don't create a blank gap at page tops. */
         [data-qb-spacer] + * { margin-top: 0 !important; }
-        /* The spacer itself must never be selectable or show a cursor */
-        [data-qb-spacer] { cursor: default !important; }
+
+        /* Tables in the document editor */
+        [data-qb-master] table {
+          border-collapse: collapse;
+          width: 100%;
+          background: white;
+        }
+        [data-qb-master] td,
+        [data-qb-master] th {
+          border: 1px solid #e5e7eb;
+          padding: 6px 10px;
+          min-width: 40px;
+        }
+        [data-qb-master] th {
+          background: #7c3aed;
+          color: white;
+        }
+
+        /* Inline HR-field variables */
+        [data-qb-master] span[style*="ede9fe"] {
+          white-space: nowrap;
+        }
       `}</style>
     </div>
   )
