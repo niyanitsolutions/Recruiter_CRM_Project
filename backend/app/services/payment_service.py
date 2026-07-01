@@ -277,7 +277,17 @@ class PaymentService:
             )
             razorpay_order_id = _rzp_order["id"]
         except Exception as _rzp_exc:
-            logger.error(f"Razorpay order creation failed: {_rzp_exc}")
+            logger.exception(
+                "Razorpay order creation failed | "
+                "exception_type=%s | "
+                "payload: amount=%s currency=%s receipt=rcpt_%s payment_capture=1 | "
+                "key_id_prefix=%s",
+                type(_rzp_exc).__name__,
+                total_amount,
+                provider_config.get("currency", "INR"),
+                payment_id[:12],
+                (key_id[:8] + "…") if key_id else "MISSING",
+            )
             return None, "Payment gateway error. Please try again or contact support."
 
         payment_data = {

@@ -32,6 +32,9 @@ email-validator==2.1.0
 httpx==0.26.0
 
 # Razorpay SDK
+# setuptools is required by razorpay==1.4.1 (imports pkg_resources at module load)
+# Not included in python:3.12-slim or Python 3.12 by default
+setuptools>=68.0.0
 razorpay==1.4.1
 
 # Utilities
