@@ -5,13 +5,18 @@ Handles Razorpay integration and payment processing
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple, List
+import asyncio
+import hashlib
+import hmac
 import logging
 import uuid
 
+from pymongo.errors import DuplicateKeyError
+
 from app.core.database import get_master_db
-from app.core.config import settings
 from app.models.master.payment import PaymentStatus, PaymentMethod
 from app.models.master.tenant import TenantStatus
+from app.services.payment_provider_service import PaymentProviderService
 from app.services.tenant_service import tenant_service
 
 logger = logging.getLogger(__name__)
@@ -29,6 +34,82 @@ class PaymentService:
     """
     
     @staticmethod
+    async def _get_active_provider_config() -> Tuple[Optional[dict], str]:
+        """
+        Return the active payment provider's decrypted credentials from DB.
+        All payment operations call this first — never reads env vars for credentials.
+        """
+        master_db = get_master_db()
+        config = await PaymentProviderService.get_active_config(master_db)
+        if not config:
+            return None, (
+                "Payments are disabled or not configured. "
+                "Contact Super Admin to enable a payment provider."
+            )
+        return config, ""
+
+    @staticmethod
+    def _event_key(provider: str, event: str, entity_id: str) -> str:
+        """Build a stable deduplication key for a webhook delivery."""
+        return f"{provider}:{event}:{entity_id}"
+
+    @staticmethod
+    async def _record_webhook_event(
+        event_key: str,
+        *,
+        provider: str,
+        event: str,
+        entity_id: str,
+        razorpay_order_id: str = "",
+        razorpay_payment_id: str = "",
+        internal_payment_id: str = "",
+        tenant_id: str = "",
+        company_id: str = "",
+        webhook_amount: int = 0,
+        db_amount: int = 0,
+    ) -> bool:
+        """
+        Insert a webhook_events record keyed by event_key (_id).
+        Returns False on duplicate key — caller should skip processing.
+        """
+        master_db = get_master_db()
+        now = datetime.now(timezone.utc)
+        try:
+            await master_db.webhook_events.insert_one({
+                "_id": event_key,
+                "provider": provider,
+                "event": event,
+                "entity_id": entity_id,
+                "razorpay_order_id": razorpay_order_id,
+                "razorpay_payment_id": razorpay_payment_id,
+                "internal_payment_id": internal_payment_id,
+                "tenant_id": tenant_id,
+                "company_id": company_id,
+                "webhook_amount": webhook_amount,
+                "db_amount": db_amount,
+                "amount_matched": (webhook_amount == db_amount) if (webhook_amount and db_amount) else None,
+                "status": "processing",
+                "result": "",
+                "received_at": now,
+                "processed_at": None,
+            })
+            return True  # First time seeing this event
+        except DuplicateKeyError:
+            return False  # Already seen this event — idempotent skip
+        except Exception:
+            logger.error(f"Failed to record webhook event {event_key}", exc_info=True)
+            raise  # Propagate — webhook handler returns 500 so Razorpay retries
+
+    @staticmethod
+    async def _update_webhook_event(event_key: str, *, status: str, result: str) -> None:
+        """Update processing status of a stored webhook event."""
+        master_db = get_master_db()
+        await master_db.webhook_events.update_one(
+            {"_id": event_key},
+            {"$set": {"status": status, "result": result, "processed_at": datetime.now(timezone.utc)}},
+        )
+
+    @staticmethod
     async def create_razorpay_order(
         tenant_id: str,
         plan_id: str,
@@ -42,6 +123,7 @@ class PaymentService:
         #   extend_duration     — extend expiry only, PRESERVES current seats
         #   seat_upgrade_extend — add seats AND extend expiry together
         extend_months: int = 0,  # used for extend_duration and seat_upgrade_extend
+        company_id_guard: str = "",  # when set, verified against tenant.company_id (auth check)
     ) -> Tuple[Optional[dict], str]:
         """
         Create a Razorpay order for subscription payment.
@@ -52,13 +134,67 @@ class PaymentService:
         """
         master_db = get_master_db()
 
+        # Load active payment provider credentials from centralised DB config (Super Admin)
+        provider_config, provider_err = await PaymentService._get_active_provider_config()
+        if provider_err:
+            return None, provider_err
+
+        provider = provider_config.get("provider", "razorpay")
+        if provider != "razorpay":
+            return None, f"Active payment provider '{provider}' does not support this subscription flow yet."
+
+        key_id = provider_config.get("key_id", "")
+        key_secret = provider_config.get("key_secret", "")
+        if not key_id or not key_secret:
+            return None, (
+                "Razorpay Key ID and Key Secret are not configured. "
+                "Go to Super Admin → Payment Provider → Razorpay and enter your credentials."
+            )
+
         tenant = await master_db.tenants.find_one({"_id": tenant_id})
         if not tenant:
             return None, "Company not found"
 
+        if company_id_guard and tenant.get("company_id") != company_id_guard:
+            logger.warning(
+                f"Unauthorized order attempt: company_id_guard={company_id_guard} "
+                f"does not match tenant.company_id={tenant.get('company_id')}"
+            )
+            return None, "You are not authorized to create payment orders for this company"
+
         plan = await master_db.plans.find_one({"_id": plan_id})
         if not plan:
             return None, "Plan not found"
+
+        # Guard against double-click / retry storms creating duplicate pending orders.
+        # If a PENDING order for the same intent was created within the last 15 min, reuse it.
+        recent_pending = await master_db.payments.find_one({
+            "tenant_id": tenant_id,
+            "plan_id": plan_id,
+            "payment_type": payment_type,
+            "status": PaymentStatus.PENDING,
+            "created_at": {"$gte": datetime.now(timezone.utc) - timedelta(minutes=15)},
+        })
+        if recent_pending:
+            logger.info(
+                f"Duplicate-order guard: returning existing pending order "
+                f"{recent_pending.get('razorpay_order_id')} for tenant {tenant_id}"
+            )
+            return {
+                "success": True,
+                "order_id": recent_pending["_id"],
+                "razorpay_order_id": recent_pending.get("razorpay_order_id", ""),
+                "razorpay_key_id": key_id,
+                "amount": recent_pending.get("total_amount", 0),
+                "currency": recent_pending.get("currency", "INR"),
+                "company_name": recent_pending.get("company_name"),
+                "plan_name": recent_pending.get("plan_display_name") or recent_pending.get("plan_name"),
+                "plan_display_name": recent_pending.get("plan_display_name"),
+                "billing_cycle": recent_pending.get("billing_cycle"),
+                "user_count": recent_pending.get("user_count"),
+                "price_per_user": recent_pending.get("price_per_user"),
+                "reseller_discount_percent": recent_pending.get("reseller_discount_percent", 0),
+            }, ""
 
         price_per_user = plan.get("price_per_user_monthly", plan.get("price_monthly", 0))
         existing_seats = int(tenant.get("max_users", 1))
@@ -124,11 +260,29 @@ class PaymentService:
         subscription_end = datetime.now(timezone.utc) + timedelta(days=days)
 
         payment_id = str(uuid.uuid4())
-        razorpay_order_id = f"order_{payment_id[:16]}"
+
+        # Create a real Razorpay order via the API
+        # razorpay SDK is synchronous — run in a thread pool to avoid blocking the event loop
+        try:
+            import razorpay as _rzp_sdk
+            _rzp_client = _rzp_sdk.Client(auth=(key_id, key_secret))
+            _rzp_order = await asyncio.to_thread(
+                _rzp_client.order.create,
+                {
+                    "amount": total_amount,
+                    "currency": provider_config.get("currency", "INR"),
+                    "receipt": f"rcpt_{payment_id[:12]}",
+                    "payment_capture": 1,
+                }
+            )
+            razorpay_order_id = _rzp_order["id"]
+        except Exception as _rzp_exc:
+            logger.error(f"Razorpay order creation failed: {_rzp_exc}")
+            return None, "Payment gateway error. Please try again or contact support."
 
         payment_data = {
             "_id": payment_id,
-            "transaction_id": f"TXN{datetime.now().strftime('%Y%m%d%H%M%S')}{str(uuid.uuid4())[:4].upper()}",
+            "transaction_id": f"TXN{datetime.now().strftime('%Y%m%d%H%M%S')}{str(uuid.uuid4()).replace('-', '')[:8].upper()}",
             "tenant_id": tenant_id,
             "company_id": tenant.get("company_id"),
             "company_name": tenant.get("company_name"),
@@ -164,7 +318,7 @@ class PaymentService:
             "success": True,
             "order_id": payment_id,
             "razorpay_order_id": razorpay_order_id,
-            "razorpay_key_id": settings.RAZORPAY_KEY_ID or "rzp_test_xxxxx",
+            "razorpay_key_id": key_id,
             "amount": total_amount,
             "currency": "INR",
             "company_name": tenant.get("company_name"),
@@ -190,27 +344,57 @@ class PaymentService:
         """
         master_db = get_master_db()
         
-        # Find payment by order ID
+        # Find payment by order ID — PENDING only for the normal path
         payment = await master_db.payments.find_one({
             "razorpay_order_id": razorpay_order_id,
             "status": PaymentStatus.PENDING
         })
-        
+
         if not payment:
+            # Webhook may have processed this while the frontend was redirecting back.
+            # Return success so the user sees the correct outcome.
+            completed = await master_db.payments.find_one({
+                "razorpay_order_id": razorpay_order_id,
+                "status": PaymentStatus.COMPLETED,
+            })
+            if completed:
+                logger.info(f"verify_payment: already activated by webhook for order {razorpay_order_id}")
+                _expiry = completed.get("subscription_end")
+                return {
+                    "success": True,
+                    "message": "Payment verified successfully",
+                    "transaction_id": completed.get("transaction_id"),
+                    "invoice_number": completed.get("invoice_number"),
+                    "plan_activated": True,
+                    "plan_expiry": _expiry.isoformat() if _expiry else None,
+                }, ""
             return None, "Payment not found or already processed"
         
-        # Verify signature (in production)
-        # In production:
-        # expected_signature = hmac.new(
-        #     settings.RAZORPAY_KEY_SECRET.encode(),
-        #     f"{razorpay_order_id}|{razorpay_payment_id}".encode(),
-        #     hashlib.sha256
-        # ).hexdigest()
-        # if expected_signature != razorpay_signature:
-        #     return None, "Payment verification failed"
-        
-        # For development, accept any signature
-        # Recalculate subscription_end from actual payment time (not order creation time)
+        # Verify Razorpay payment signature using key_secret from centralised provider config
+        prov_cfg, _ = await PaymentService._get_active_provider_config()
+        key_secret = (prov_cfg or {}).get("key_secret", "")
+        if key_secret:
+            expected_sig = hmac.new(
+                key_secret.encode("utf-8"),
+                f"{razorpay_order_id}|{razorpay_payment_id}".encode("utf-8"),
+                hashlib.sha256
+            ).hexdigest()
+            if not hmac.compare_digest(expected_sig, razorpay_signature):
+                logger.warning(f"Payment signature mismatch for order {razorpay_order_id}")
+                return None, "Payment verification failed — invalid signature"
+        else:
+            logger.warning("key_secret not configured in payment provider — signature check skipped")
+
+        return await PaymentService._activate_payment(payment, razorpay_payment_id, razorpay_signature)
+
+    @staticmethod
+    async def _activate_payment(
+        payment: dict,
+        razorpay_payment_id: str,
+        razorpay_signature: str = ""
+    ) -> Tuple[Optional[dict], str]:
+        """Core subscription activation — shared by verify_payment() and webhook handlers."""
+        master_db = get_master_db()
         payment_time = datetime.now(timezone.utc)
         billing_cycle = payment.get("billing_cycle", "monthly")
         payment_type  = payment.get("payment_type", "renewal")
@@ -256,9 +440,12 @@ class PaymentService:
             new_subscription_end = payment_time + timedelta(days=renewal_days)
             new_total_seats = max(newly_purchased, 1)
 
-        # ── Update payment record with actual timestamps ───────────────────────
-        await master_db.payments.update_one(
-            {"_id": payment["_id"]},
+        # ── Atomically transition PENDING → COMPLETED ─────────────────────────
+        # The status: PENDING guard in the filter is the race-condition lock.
+        # If webhook + verify_payment arrive concurrently, only ONE update wins
+        # (modified_count == 1). The loser returns an idempotent success response.
+        _update_result = await master_db.payments.update_one(
+            {"_id": payment["_id"], "status": PaymentStatus.PENDING},
             {
                 "$set": {
                     "razorpay_payment_id": razorpay_payment_id,
@@ -271,77 +458,116 @@ class PaymentService:
                 }
             }
         )
+        if _update_result.modified_count == 0:
+            # Another concurrent call (webhook or verify_payment) already activated this payment.
+            logger.info(f"Payment {payment['_id']} already activated by concurrent request — skipping")
+            _already = await master_db.payments.find_one({"_id": payment["_id"]})
+            _expiry = (_already or {}).get("subscription_end")
+            return {
+                "success": True,
+                "message": "Payment verified successfully",
+                "transaction_id": (_already or payment).get("transaction_id"),
+                "invoice_number": (_already or payment).get("invoice_number"),
+                "plan_activated": True,
+                "plan_expiry": _expiry.isoformat() if _expiry else None,
+                "idempotent": True,
+            }, ""
 
-        # ── Activate tenant subscription ──────────────────────────────────────
-        if payment_type != "seat_upgrade":
-            # Only call activate_tenant when expiry actually changes
-            success, error = await tenant_service.activate_tenant(
-                payment["tenant_id"],
-                new_subscription_end
+        # ── Secondary operations: tenant activation + commission ──────────────
+        # The payment record is already marked COMPLETED above.
+        # These secondary writes are wrapped in try/except so a transient failure
+        # does NOT roll back the COMPLETED status — the payment was captured by
+        # the gateway and is real money. Instead we flag the payment for manual
+        # reconciliation and log the error so ops can fix it.
+        _secondary_error: str = ""
+        try:
+            # Activate tenant subscription (updates expiry in tenants collection)
+            if payment_type != "seat_upgrade":
+                success, error = await tenant_service.activate_tenant(
+                    payment["tenant_id"],
+                    new_subscription_end
+                )
+                if not success:
+                    logger.error(f"activate_tenant failed: {error}")
+
+            # Build and apply tenant update payload
+            tenant_update: dict = {
+                "max_users": new_total_seats,
+                "is_trial": False,
+                "status": TenantStatus.ACTIVE,
+                "updated_at": payment_time,
+                "reminder_sent": False,
+            }
+
+            if payment_type in ("renewal", "new_subscription"):
+                tenant_update["plan_id"] = payment["plan_id"]
+                tenant_update["plan_name"] = payment["plan_name"]
+                tenant_update["plan_display_name"] = payment.get("plan_display_name", payment["plan_name"])
+                tenant_update["billing_cycle"] = billing_cycle
+                tenant_update["plan_start_date"] = payment_time
+                tenant_update["plan_expiry"] = new_subscription_end
+            elif payment_type == "extend_duration":
+                tenant_update["plan_expiry"] = new_subscription_end
+            elif payment_type == "seat_upgrade_extend":
+                tenant_update["plan_expiry"] = new_subscription_end
+
+            await master_db.tenants.update_one(
+                {"_id": payment["tenant_id"]},
+                {"$set": tenant_update}
             )
-            if not success:
-                logger.error(f"Failed to activate tenant: {error}")
 
-        # ── Build tenant update payload ────────────────────────────────────────
-        tenant_update: dict = {
-            "max_users": new_total_seats,
-            "is_trial": False,
-            "status": TenantStatus.ACTIVE,
-            "updated_at": payment_time,
-            "reminder_sent": False,
-        }
+            # Commission record for reseller tenants
+            seller_id = payment.get("seller_id")
+            reseller_discount = int(payment.get("reseller_discount_percent", 0))
+            if seller_id and reseller_discount > 0:
+                base_amount = int(payment.get("base_amount", payment.get("amount", 0)))
+                paid_amount = int(payment.get("amount", 0))
+                commission_amount = base_amount - paid_amount
+                if commission_amount > 0:
+                    seller = await master_db.sellers.find_one({"_id": seller_id})
+                    await master_db.commissions.insert_one({
+                        "_id": str(uuid.uuid4()),
+                        "seller_id": seller_id,
+                        "seller_name": payment.get("seller_name") or (seller.get("seller_name") if seller else ""),
+                        "tenant_id": payment["tenant_id"],
+                        "tenant_name": payment.get("company_name", ""),
+                        "payment_id": payment["_id"],
+                        "plan_id": payment["plan_id"],
+                        "plan_name": payment.get("plan_name", ""),
+                        "billing_cycle": payment.get("billing_cycle", "monthly"),
+                        "base_amount": base_amount,
+                        "reseller_amount": paid_amount,
+                        "commission_amount": commission_amount,
+                        "reseller_discount_percent": reseller_discount,
+                        "status": "pending",
+                        "created_at": datetime.now(timezone.utc),
+                        "updated_at": datetime.now(timezone.utc),
+                    })
+                    logger.info(f"Commission created: seller={seller_id}, amount={commission_amount}")
 
-        if payment_type in ("renewal", "new_subscription"):
-            # Full renewal / new subscription: replace plan meta, seats, and expiry
-            tenant_update["plan_id"] = payment["plan_id"]
-            tenant_update["plan_name"] = payment["plan_name"]
-            tenant_update["plan_display_name"] = payment.get("plan_display_name", payment["plan_name"])
-            tenant_update["billing_cycle"] = billing_cycle
-            tenant_update["plan_start_date"] = payment_time
-            tenant_update["plan_expiry"] = new_subscription_end
-        elif payment_type == "extend_duration":
-            # Extend expiry only — plan and seats stay as-is, only update expiry
-            tenant_update["plan_expiry"] = new_subscription_end
-        elif payment_type == "seat_upgrade_extend":
-            # Add seats + extend expiry — plan stays as-is
-            tenant_update["plan_expiry"] = new_subscription_end
-        # seat_upgrade: max_users already set above, everything else preserved
+        except Exception as _sec_exc:
+            _secondary_error = str(_sec_exc)
+            logger.error(
+                f"Secondary activation failed for payment {payment['_id']} "
+                f"(payment is COMPLETED but tenant/commission may need manual fix): {_sec_exc}",
+                exc_info=True,
+            )
+            # Flag for reconciliation — ops can query {activation_status: "needs_reconciliation"}
+            try:
+                await master_db.payments.update_one(
+                    {"_id": payment["_id"]},
+                    {"$set": {
+                        "activation_status": "needs_reconciliation",
+                        "activation_error": _secondary_error,
+                        "updated_at": datetime.now(timezone.utc),
+                    }},
+                )
+            except Exception:
+                pass  # best-effort flag
 
-        await master_db.tenants.update_one(
-            {"_id": payment["tenant_id"]},
-            {"$set": tenant_update}
-        )
-
-        # Create commission record if this tenant belongs to a seller
-        seller_id = payment.get("seller_id")
-        reseller_discount = int(payment.get("reseller_discount_percent", 0))
-        if seller_id and reseller_discount > 0:
-            base_amount = int(payment.get("base_amount", payment.get("amount", 0)))
-            paid_amount = int(payment.get("amount", 0))
-            commission_amount = base_amount - paid_amount
-            if commission_amount > 0:
-                seller = await master_db.sellers.find_one({"_id": seller_id})
-                await master_db.commissions.insert_one({
-                    "_id": str(uuid.uuid4()),
-                    "seller_id": seller_id,
-                    "seller_name": payment.get("seller_name") or (seller.get("seller_name") if seller else ""),
-                    "tenant_id": payment["tenant_id"],
-                    "tenant_name": payment.get("company_name", ""),
-                    "payment_id": payment["_id"],
-                    "plan_id": payment["plan_id"],
-                    "plan_name": payment.get("plan_name", ""),
-                    "billing_cycle": payment.get("billing_cycle", "monthly"),
-                    "base_amount": base_amount,
-                    "reseller_amount": paid_amount,
-                    "commission_amount": commission_amount,
-                    "reseller_discount_percent": reseller_discount,
-                    "status": "pending",
-                    "created_at": datetime.now(timezone.utc),
-                    "updated_at": datetime.now(timezone.utc),
-                })
-                logger.info(f"✅ Commission created: seller={seller_id}, amount={commission_amount}")
-
-        logger.info(f"✅ Payment verified: {payment['transaction_id']}")
+        logger.info(f"Payment activated: {payment['transaction_id']}" + (
+            f" (reconciliation needed: {_secondary_error})" if _secondary_error else ""
+        ))
 
         return {
             "success": True,
@@ -349,9 +575,271 @@ class PaymentService:
             "transaction_id": payment["transaction_id"],
             "invoice_number": payment["invoice_number"],
             "plan_activated": True,
-            "plan_expiry": new_subscription_end.isoformat()
+            "plan_expiry": new_subscription_end.isoformat() if new_subscription_end else None,
         }, ""
-    
+
+    @staticmethod
+    async def handle_webhook_captured(
+        razorpay_order_id: str,
+        razorpay_payment_id: str,
+        amount: int = 0,
+        currency: str = "INR",
+        event_key: str = "",
+        event: str = "payment.captured",
+    ) -> Tuple[Optional[dict], str]:
+        """
+        Process payment.captured / order.paid webhook event.
+
+        Idempotency is two-layered:
+          1. webhook_events._id dedup — blocks duplicate Razorpay deliveries at event level
+          2. payment.status == COMPLETED check — blocks reprocessing at payment level
+
+        Security: validates webhook amount/currency against our DB record before activating.
+        """
+        master_db = get_master_db()
+
+        # ── Fetch payment record (single round-trip used for both dedup log and processing) ──
+        payment = await master_db.payments.find_one({"razorpay_order_id": razorpay_order_id})
+
+        # ── Layer 1: event-level idempotency ─────────────────────────────────
+        if event_key:
+            is_new = await PaymentService._record_webhook_event(
+                event_key,
+                provider="razorpay",
+                event=event,
+                entity_id=razorpay_payment_id or razorpay_order_id,
+                razorpay_order_id=razorpay_order_id,
+                razorpay_payment_id=razorpay_payment_id,
+                internal_payment_id=(payment or {}).get("_id", ""),
+                tenant_id=(payment or {}).get("tenant_id", ""),
+                company_id=(payment or {}).get("company_id", ""),
+                webhook_amount=amount,
+                db_amount=(payment or {}).get("total_amount", 0),
+            )
+            if not is_new:
+                logger.info(f"Webhook duplicate delivery ignored — event_key={event_key}")
+                return {"idempotent": True, "event_key": event_key}, ""
+        if not payment:
+            msg = f"Payment not found for order: {razorpay_order_id}"
+            if event_key:
+                await PaymentService._update_webhook_event(event_key, status="ignored", result=msg)
+            return None, msg
+
+        # ── Layer 2: payment-level idempotency ────────────────────────────────
+        if payment.get("status") == PaymentStatus.COMPLETED:
+            msg = "Payment already completed"
+            logger.info(f"Webhook idempotent — order={razorpay_order_id} {msg}")
+            if event_key:
+                await PaymentService._update_webhook_event(event_key, status="duplicate", result=msg)
+            return {"idempotent": True, "transaction_id": payment.get("transaction_id")}, ""
+
+        if payment.get("status") != PaymentStatus.PENDING:
+            msg = f"Payment in unexpected state: {payment.get('status')}"
+            if event_key:
+                await PaymentService._update_webhook_event(event_key, status="ignored", result=msg)
+            return None, msg
+
+        # ── Security: validate amount and currency against our DB record ───────
+        db_amount = int(payment.get("total_amount", 0))
+        db_currency = payment.get("currency", "INR").upper()
+
+        if amount and amount != db_amount:
+            logger.warning(
+                f"Webhook amount mismatch order={razorpay_order_id} "
+                f"webhook={amount} db={db_amount}"
+            )
+        if currency and currency.upper() != db_currency:
+            logger.warning(
+                f"Webhook currency mismatch order={razorpay_order_id} "
+                f"webhook={currency} db={db_currency}"
+            )
+        # Hard reject if Razorpay captured significantly less than our order (> ₹1 shortfall)
+        if amount and db_amount and amount < db_amount - 100:
+            msg = (
+                f"Security reject: webhook amount {amount} is less than expected {db_amount} "
+                f"for order {razorpay_order_id}"
+            )
+            logger.error(msg)
+            if event_key:
+                await PaymentService._update_webhook_event(event_key, status="failed", result=msg)
+            return None, msg
+
+        logger.info(
+            f"Webhook captured: order={razorpay_order_id} payment={razorpay_payment_id} "
+            f"amount={amount}/{db_amount} currency={currency}"
+        )
+
+        result, error = await PaymentService._activate_payment(payment, razorpay_payment_id)
+
+        if event_key:
+            if error:
+                await PaymentService._update_webhook_event(event_key, status="failed", result=error)
+            else:
+                await PaymentService._update_webhook_event(
+                    event_key, status="processed", result="Payment activated"
+                )
+
+        return result, error
+
+    @staticmethod
+    async def handle_webhook_failed(
+        razorpay_order_id: str,
+        error_code: str = "",
+        error_description: str = "",
+        event_key: str = "",
+        razorpay_payment_id: str = "",
+    ) -> Tuple[bool, str]:
+        """Process payment.failed webhook event with event-level idempotency and structured logging."""
+        master_db = get_master_db()
+
+        # ── Event-level idempotency ────────────────────────────────────────────
+        if event_key:
+            _pmt_log = await master_db.payments.find_one(
+                {"razorpay_order_id": razorpay_order_id},
+                {"_id": 1, "tenant_id": 1, "company_id": 1},
+            )
+            is_new = await PaymentService._record_webhook_event(
+                event_key,
+                provider="razorpay",
+                event="payment.failed",
+                entity_id=razorpay_payment_id or razorpay_order_id,
+                razorpay_order_id=razorpay_order_id,
+                razorpay_payment_id=razorpay_payment_id,
+                internal_payment_id=(_pmt_log or {}).get("_id", ""),
+                tenant_id=(_pmt_log or {}).get("tenant_id", ""),
+                company_id=(_pmt_log or {}).get("company_id", ""),
+            )
+            if not is_new:
+                logger.info(f"Webhook duplicate delivery ignored — event_key={event_key}")
+                return True, "Duplicate event — already processed"
+
+        payment = await master_db.payments.find_one({"razorpay_order_id": razorpay_order_id})
+        if not payment:
+            msg = f"Payment not found for order: {razorpay_order_id}"
+            if event_key:
+                await PaymentService._update_webhook_event(event_key, status="ignored", result=msg)
+            return False, msg
+
+        if payment.get("status") == PaymentStatus.FAILED:
+            msg = "Already marked as failed"
+            if event_key:
+                await PaymentService._update_webhook_event(event_key, status="duplicate", result=msg)
+            return True, msg
+
+        if payment.get("status") == PaymentStatus.COMPLETED:
+            msg = "Payment already completed — ignoring failure event"
+            logger.warning(f"Webhook payment.failed for completed order {razorpay_order_id}")
+            if event_key:
+                await PaymentService._update_webhook_event(event_key, status="ignored", result=msg)
+            return True, msg
+
+        failure_reason = f"{error_code}: {error_description}".strip(": ")
+        await master_db.payments.update_one(
+            {"_id": payment["_id"]},
+            {
+                "$set": {
+                    "status": PaymentStatus.FAILED,
+                    "failure_reason": failure_reason,
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            },
+        )
+        result_msg = f"Marked as failed: {failure_reason}"
+        logger.warning(f"Payment marked failed: {payment.get('transaction_id')} — {failure_reason}")
+        if event_key:
+            await PaymentService._update_webhook_event(event_key, status="processed", result=result_msg)
+        return True, "Payment marked as failed"
+
+    @staticmethod
+    async def handle_webhook_refund(
+        razorpay_payment_id: str,
+        refund_id: str,
+        amount: int,
+        event: str,
+        event_key: str = "",
+    ) -> Tuple[bool, str]:
+        """Process refund.created / refund.processed webhook events with idempotency and logging."""
+        master_db = get_master_db()
+
+        # ── Event-level idempotency ────────────────────────────────────────────
+        if event_key:
+            _pmt_log = await master_db.payments.find_one(
+                {"razorpay_payment_id": razorpay_payment_id},
+                {"_id": 1, "tenant_id": 1, "company_id": 1},
+            )
+            is_new = await PaymentService._record_webhook_event(
+                event_key,
+                provider="razorpay",
+                event=event,
+                entity_id=refund_id,
+                razorpay_payment_id=razorpay_payment_id,
+                internal_payment_id=(_pmt_log or {}).get("_id", ""),
+                tenant_id=(_pmt_log or {}).get("tenant_id", ""),
+                company_id=(_pmt_log or {}).get("company_id", ""),
+                webhook_amount=amount,
+            )
+            if not is_new:
+                logger.info(f"Webhook duplicate delivery ignored — event_key={event_key}")
+                return True, "Duplicate event — already processed"
+
+        payment = await master_db.payments.find_one({"razorpay_payment_id": razorpay_payment_id})
+        if not payment:
+            msg = f"Payment not found for razorpay_payment_id: {razorpay_payment_id}"
+            if event_key:
+                await PaymentService._update_webhook_event(event_key, status="ignored", result=msg)
+            return False, msg
+
+        # ── Refund validation ──────────────────────────────────────────────────
+        db_total = int(payment.get("total_amount", 0))
+        already_refunded = int(payment.get("refund_amount", 0))
+        cumulative_refund = already_refunded + amount
+
+        if db_total > 0 and amount > db_total:
+            msg = (
+                f"Security reject: refund amount {amount} exceeds original payment "
+                f"{db_total} for razorpay_payment_id={razorpay_payment_id}"
+            )
+            logger.error(msg)
+            if event_key:
+                await PaymentService._update_webhook_event(event_key, status="failed", result=msg)
+            return False, msg
+
+        if db_total > 0 and cumulative_refund > db_total:
+            msg = (
+                f"Security reject: cumulative refund {cumulative_refund} exceeds original "
+                f"payment {db_total} for razorpay_payment_id={razorpay_payment_id}"
+            )
+            logger.error(msg)
+            if event_key:
+                await PaymentService._update_webhook_event(event_key, status="failed", result=msg)
+            return False, msg
+
+        # Full refund if cumulative equals total; otherwise partial
+        new_status = (
+            PaymentStatus.REFUNDED
+            if (db_total == 0 or cumulative_refund >= db_total)
+            else PaymentStatus.PARTIALLY_REFUNDED
+        )
+
+        await master_db.payments.update_one(
+            {"_id": payment["_id"]},
+            {
+                "$set": {
+                    "status": new_status,
+                    "refund_id": refund_id,
+                    "refund_amount": cumulative_refund,
+                    "last_refund_amount": amount,
+                    "refund_event": event,
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            },
+        )
+        result_msg = f"Refund recorded ({new_status}): refund_id={refund_id} amount={amount} cumulative={cumulative_refund}"
+        logger.info(f"Refund: payment={payment.get('transaction_id')} refund_id={refund_id} amount={amount} status={new_status}")
+        if event_key:
+            await PaymentService._update_webhook_event(event_key, status="processed", result=result_msg)
+        return True, "Refund recorded"
+
     @staticmethod
     async def get_payment_history(
         tenant_id: str = None,
@@ -392,51 +880,42 @@ class PaymentService:
     async def get_revenue_stats() -> dict:
         """Get revenue statistics for SuperAdmin dashboard"""
         master_db = get_master_db()
-        
-        # Total completed payments
-        pipeline = [
-            {"$match": {"status": PaymentStatus.COMPLETED}},
-            {"$group": {
-                "_id": None,
-                "total_revenue": {"$sum": "$total_amount"},
-                "transaction_count": {"$sum": 1}
-            }}
-        ]
-        
-        result = await master_db.payments.aggregate(pipeline).to_list(1)
-        
-        total_revenue = result[0]["total_revenue"] if result else 0
-        transaction_count = result[0]["transaction_count"] if result else 0
-        
-        # Monthly revenue (current month)
+
         now = datetime.now(timezone.utc)
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        
+
+        # All four queries are independent — run them concurrently.
+        # success_rate denominator uses COMPLETED+FAILED (attempted) not all records.
+        totals_pipeline = [
+            {"$match": {"status": PaymentStatus.COMPLETED}},
+            {"$group": {"_id": None, "total_revenue": {"$sum": "$total_amount"}, "transaction_count": {"$sum": 1}}}
+        ]
         monthly_pipeline = [
-            {
-                "$match": {
-                    "status": PaymentStatus.COMPLETED,
-                    "payment_date": {"$gte": month_start}
-                }
-            },
+            {"$match": {"status": PaymentStatus.COMPLETED, "payment_date": {"$gte": month_start}}},
             {"$group": {"_id": None, "amount": {"$sum": "$total_amount"}}}
         ]
-        
-        monthly_result = await master_db.payments.aggregate(monthly_pipeline).to_list(1)
-        monthly_revenue = monthly_result[0]["amount"] if monthly_result else 0
-        
-        # Pending payments
         pending_pipeline = [
             {"$match": {"status": PaymentStatus.PENDING}},
             {"$group": {"_id": None, "amount": {"$sum": "$total_amount"}}}
         ]
-        pending_result = await master_db.payments.aggregate(pending_pipeline).to_list(1)
-        pending_amount = pending_result[0]["amount"] if pending_result else 0
-        
-        # Success rate
-        total_transactions = await master_db.payments.count_documents({})
-        success_rate = (transaction_count / total_transactions * 100) if total_transactions > 0 else 0
-        
+
+        totals_coro   = master_db.payments.aggregate(totals_pipeline).to_list(1)
+        monthly_coro  = master_db.payments.aggregate(monthly_pipeline).to_list(1)
+        pending_coro  = master_db.payments.aggregate(pending_pipeline).to_list(1)
+        attempted_coro = master_db.payments.count_documents(
+            {"status": {"$in": [PaymentStatus.COMPLETED, PaymentStatus.FAILED]}}
+        )
+
+        totals_result, monthly_result, pending_result, attempted_count = await asyncio.gather(
+            totals_coro, monthly_coro, pending_coro, attempted_coro
+        )
+
+        total_revenue    = totals_result[0]["total_revenue"]    if totals_result else 0
+        transaction_count = totals_result[0]["transaction_count"] if totals_result else 0
+        monthly_revenue  = monthly_result[0]["amount"]           if monthly_result else 0
+        pending_amount   = pending_result[0]["amount"]           if pending_result else 0
+        success_rate     = (transaction_count / attempted_count * 100) if attempted_count > 0 else 0
+
         return {
             "total_revenue": total_revenue,
             "monthly_revenue": monthly_revenue,

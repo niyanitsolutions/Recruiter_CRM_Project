@@ -4,15 +4,15 @@ Razorpay integration schemas
 """
 
 from datetime import datetime
-from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field
+from typing import Literal, Optional
+from pydantic import BaseModel
 
 
 class CreateOrderRequest(BaseModel):
     """Request to create Razorpay order"""
     tenant_id: str
     plan_id: str
-    billing_cycle: str = "monthly"
+    billing_cycle: Literal["monthly", "quarterly", "yearly"] = "monthly"
 
 
 class CreateOrderResponse(BaseModel):

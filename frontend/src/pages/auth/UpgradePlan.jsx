@@ -258,15 +258,44 @@ const UpgradePlan = () => {
 
       const order = orderRes.data
 
-      // Razorpay payment (simulated in dev — replace with real Razorpay SDK call)
-      const dummyPaymentId = `pay_${Date.now()}`
-      const dummySignature = 'simulated_signature'
-
       const { default: api } = await import('../../services/api')
+
+      // ── Load Razorpay checkout.js if not already present ───────────────────
+      if (!window.Razorpay) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script')
+          s.src = 'https://checkout.razorpay.com/v1/checkout.js'
+          s.onload = resolve
+          s.onerror = () => reject(new Error('Failed to load payment gateway. Check your internet connection.'))
+          document.head.appendChild(s)
+        })
+      }
+
+      // ── Open Razorpay payment modal and wait for user to complete payment ──
+      const rzpResponse = await new Promise((resolve, reject) => {
+        const rzp = new window.Razorpay({
+          key:         order.razorpay_key_id,
+          amount:      order.amount,
+          currency:    order.currency || 'INR',
+          name:        'HireFlow',
+          description: `${order.plan_display_name || order.plan_name || 'Plan'} Subscription`,
+          order_id:    order.razorpay_order_id,
+          handler:     resolve,
+          prefill:     { name: order.company_name || '' },
+          theme:       { color: '#4F46E5' },
+          modal:       { ondismiss: () => reject(new Error('Payment cancelled')) },
+        })
+        rzp.on('payment.failed', (resp) =>
+          reject(new Error(resp.error?.description || 'Payment failed'))
+        )
+        rzp.open()
+      })
+
+      // ── Verify the completed payment on the backend ─────────────────────────
       const verifyRes = await api.post('/auth/renew/verify-payment', {
-        razorpay_order_id:   order.razorpay_order_id,
-        razorpay_payment_id: dummyPaymentId,
-        razorpay_signature:  dummySignature,
+        razorpay_order_id:   rzpResponse.razorpay_order_id,
+        razorpay_payment_id: rzpResponse.razorpay_payment_id,
+        razorpay_signature:  rzpResponse.razorpay_signature,
       })
 
       const newSeatTotal =
@@ -284,7 +313,12 @@ const UpgradePlan = () => {
         newSeats:    newSeatTotal,
       })
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Payment failed. Please try again.')
+      const msg = err.response?.data?.detail || err.message || 'Payment failed. Please try again.'
+      if (msg === 'Payment cancelled') {
+        toast.error('Payment was cancelled.')
+      } else {
+        toast.error(msg)
+      }
     } finally {
       setIsLoading(false)
     }

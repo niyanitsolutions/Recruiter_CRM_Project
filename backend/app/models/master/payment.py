@@ -14,9 +14,11 @@ class PaymentStatus(str, Enum):
     """Payment status"""
     PENDING = "pending"
     PROCESSING = "processing"
+    AUTHORIZED = "authorized"        # Gateway authorized, not yet captured
     COMPLETED = "completed"
     FAILED = "failed"
-    REFUNDED = "refunded"
+    REFUNDED = "refunded"            # Fully refunded
+    PARTIALLY_REFUNDED = "partially_refunded"
     CANCELLED = "cancelled"
 
 

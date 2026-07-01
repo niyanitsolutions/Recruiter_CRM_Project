@@ -532,6 +532,21 @@ class PaymentProviderService:
         return PaymentProviderService._decrypt_config(provider, provider_cfg)
 
     @staticmethod
+    async def get_provider_config(provider: str, master_db) -> Optional[dict]:
+        """
+        Return a specific provider's decrypted credentials regardless of which is active.
+        Used by provider-specific webhook endpoints to look up their own webhook_secret
+        even when that provider is no longer the active one (e.g., after switching gateways).
+        """
+        doc = await master_db[_COLLECTION].find_one({"_id": _DOC_ID})
+        if not doc:
+            return None
+        raw = (doc.get("providers") or {}).get(provider, {})
+        if not raw:
+            return None
+        return PaymentProviderService._decrypt_config(provider, raw)
+
+    @staticmethod
     def _decrypt_config(provider: str, cfg: dict) -> dict:
         from app.services.email_service import decrypt_password
         result = dict(cfg)

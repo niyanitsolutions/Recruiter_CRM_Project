@@ -203,7 +203,42 @@ async def ensure_master_indexes(master_db) -> None:
     await master_db["payments"].create_indexes([
         IndexModel([("tenant_id", ASCENDING), ("status", ASCENDING)],
                    name="payment_tenant_status"),
-        IndexModel([("transaction_id", ASCENDING)], name="payment_txn", unique=True, sparse=True),
+        IndexModel([("company_id", ASCENDING), ("created_at", DESCENDING)],
+                   name="payment_company_date"),
+        IndexModel([("transaction_id", ASCENDING)],
+                   name="payment_txn", unique=True, sparse=True),
+        # Webhook lookup paths — every webhook event hits these two fields
+        IndexModel([("razorpay_order_id", ASCENDING)],
+                   name="payment_rzp_order", sparse=True),
+        IndexModel([("razorpay_payment_id", ASCENDING)],
+                   name="payment_rzp_payment", sparse=True),
+        # Compound index used by duplicate-order guard in create_razorpay_order()
+        # Query: {tenant_id, plan_id, payment_type, status, created_at: {$gte: ...}}
+        IndexModel(
+            [("tenant_id", ASCENDING), ("plan_id", ASCENDING),
+             ("payment_type", ASCENDING), ("status", ASCENDING), ("created_at", DESCENDING)],
+            name="payment_dedup_guard",
+        ),
+        # Used by get_revenue_stats() monthly aggregation filter
+        IndexModel([("payment_date", DESCENDING)], name="payment_date_desc", sparse=True),
+    ])
+
+    # ── webhook_events ─────────────────────────────────────────────────────────
+    # _id is already a unique index (it holds the event_key used for dedup).
+    # The additional indexes below support audit queries and support lookups.
+    await master_db["webhook_events"].create_indexes([
+        IndexModel([("provider", ASCENDING), ("event", ASCENDING), ("received_at", DESCENDING)],
+                   name="wh_provider_event_date"),
+        IndexModel([("tenant_id", ASCENDING), ("received_at", DESCENDING)],
+                   name="wh_tenant_date"),
+        IndexModel([("razorpay_payment_id", ASCENDING)],
+                   name="wh_rzp_payment", sparse=True),
+        IndexModel([("razorpay_order_id", ASCENDING)],
+                   name="wh_rzp_order", sparse=True),
+        IndexModel([("status", ASCENDING), ("received_at", DESCENDING)],
+                   name="wh_status_date"),
+        # TTL: auto-expire events after 90 days — prevents unbounded collection growth
+        IndexModel([("received_at", ASCENDING)], name="wh_ttl", expireAfterSeconds=90 * 24 * 3600),
     ])
 
     # ── sellers ────────────────────────────────────────────────────────────────
