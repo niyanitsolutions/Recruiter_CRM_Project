@@ -1210,6 +1210,75 @@ async def send_job_opened_email(
     return any(results)
 
 
+async def send_bulk_import_summary_email(
+    to_emails: list,
+    import_type: str,
+    total: int,
+    inserted: int,
+    failed: int,
+    imported_by: str,
+    imported_at: str,
+    records: list,
+    company_id: str = "",
+) -> bool:
+    """Send one summary email after a bulk import completes."""
+    if not to_emails:
+        return False
+
+    skipped = total - inserted - failed
+    subject = f"Bulk Import Summary — {import_type} ({inserted} imported)"
+
+    records_html = ""
+    if records:
+        items_html = "".join(
+            f'<li style="padding:3px 0;color:#374151">{r}</li>'
+            for r in records[:200]
+        )
+        extra = f'<p style="color:#6B7280;font-size:12px">…and {len(records)-200} more</p>' if len(records) > 200 else ""
+        records_html = f"""
+      <h3 style="color:#374151;margin:20px 0 8px">Imported Records</h3>
+      <ul style="margin:0;padding-left:20px;font-size:14px">{items_html}</ul>
+      {extra}"""
+
+    status_color = "#059669" if failed == 0 else "#D97706"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Bulk Import Summary</h2>
+      <p>A <strong>{import_type}</strong> bulk import was completed by
+         <strong>{imported_by}</strong> on <strong>{imported_at}</strong>.</p>
+      <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <table style="width:100%;border-collapse:collapse">
+          <tr>
+            <td style="padding:6px 0;color:#6B7280;width:50%">Total Records</td>
+            <td style="padding:6px 0;font-weight:700;color:#111827">{total}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#6B7280">Successful</td>
+            <td style="padding:6px 0;font-weight:700;color:#059669">{inserted}</td>
+          </tr>
+          {"" if skipped == 0 else f'<tr><td style="padding:6px 0;color:#6B7280">Duplicates Skipped</td><td style="padding:6px 0;font-weight:700;color:#6B7280">{skipped}</td></tr>'}
+          <tr>
+            <td style="padding:6px 0;color:#6B7280">Failed</td>
+            <td style="padding:6px 0;font-weight:700;color:{status_color}">{failed}</td>
+          </tr>
+        </table>
+      </div>
+      {records_html}""")
+
+    text = (
+        f"Bulk Import Summary — {import_type}\n"
+        f"Imported By: {imported_by}\n"
+        f"Date: {imported_at}\n"
+        f"Total: {total} | Successful: {inserted} | Failed: {failed}\n"
+        + (f"\nImported Records:\n" + "\n".join(f"- {r}" for r in records[:200]) if records else "")
+    )
+    results = [
+        await send_email(addr, subject, html, text, "bulk_import_summary", company_id=company_id)
+        for addr in to_emails
+    ]
+    return any(results)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  System emails — password change notifications  (force_system=True)
 # ─────────────────────────────────────────────────────────────────────────────

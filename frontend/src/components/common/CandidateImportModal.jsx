@@ -1,10 +1,29 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Upload, AlertCircle, CheckCircle, SkipForward, ChevronRight } from 'lucide-react'
+import { X, FileUp, FileDown, AlertCircle, CheckCircle, SkipForward, ChevronRight } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import candidateService from '../../services/candidateService'
 
 const ACCEPTED = '.csv,.xlsx,.xls,.pdf'
+
+const CANDIDATE_CSV_HEADERS = [
+  'email', 'mobile', 'full_name', 'first_name', 'last_name',
+  'current_company', 'current_designation', 'total_experience_years',
+  'current_city', 'current_ctc', 'expected_ctc', 'notice_period',
+  'skill_tags', 'source', 'gender',
+  'edu_degree', 'edu_institution', 'edu_field',
+  'linkedin_url', 'portfolio_url',
+].join(',')
+
+const downloadCandidateSample = () => {
+  const blob = new Blob(['﻿' + CANDIDATE_CSV_HEADERS + '\n'], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'Candidate_Sample.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 // step: 'select' | 'preview' | 'results'
 
@@ -105,7 +124,7 @@ const CandidateImportModal = ({ onClose, onImported }) => {
                 onClick={() => fileRef.current?.click()}
                 className="w-full max-w-md border-2 border-dashed border-surface-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition-colors"
               >
-                <Upload className="w-10 h-10 text-surface-400 mx-auto mb-3" />
+                <FileUp className="w-10 h-10 text-surface-400 mx-auto mb-3" />
                 <p className="text-surface-700 font-medium">Click to select a file</p>
                 <p className="text-surface-400 text-sm mt-1">CSV, Excel (.xlsx / .xls), or PDF</p>
                 {file && (
@@ -123,6 +142,13 @@ const CandidateImportModal = ({ onClose, onImported }) => {
                 <p className="font-medium text-surface-700 mb-1">Required columns: email, mobile</p>
                 <p>Optional: name, company, designation, experience, city, skills, source, notice period, and more.</p>
               </div>
+              <button
+                onClick={downloadCandidateSample}
+                className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium underline underline-offset-2"
+              >
+                <FileDown className="w-4 h-4" />
+                Download Sample CSV
+              </button>
             </div>
           )}
 

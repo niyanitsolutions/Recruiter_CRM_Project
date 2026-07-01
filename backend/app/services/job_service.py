@@ -59,6 +59,7 @@ class JobService:
         company_name: str = "",
         created_by_name: str = "",
         user_name: str = "",
+        skip_email: bool = False,
     ) -> JobResponse:
         """Create a new job"""
         logger.info(
@@ -159,35 +160,36 @@ class JobService:
             pass
 
         # Notify recruiting team (candidate_coordinators + hr) about the new job (best-effort)
-        try:
-            from app.services.email_service import send_job_opened_email
-            # Fetch all active candidate_coordinators and HR users who have an email
-            team_cursor = db["users"].find(
-                {
-                    "role": {"$in": ["candidate_coordinator", "hr", "admin"]},
-                    "status": "active",
-                    "is_deleted": False,
-                    "email": {"$exists": True, "$ne": ""},
-                },
-                {"email": 1}
-            )
-            team_emails = [u["email"] async for u in team_cursor if u.get("email")]
-            if team_emails:
-                from app.services.email_service import _fire_email
-                _fire_email(send_job_opened_email(
-                    to_emails=team_emails,
-                    job_title=job_data.title,
-                    client_name=job_dict.get("client_name", ""),
-                    job_code=job_dict.get("job_code", ""),
-                    location=getattr(job_data, "location", "") or getattr(job_data, "work_location", "") or "",
-                    openings=getattr(job_data, "openings", 1) or getattr(job_data, "number_of_positions", 1) or 1,
-                    company_name=company_name or company_id or "the company",
-                    created_by_name=created_by_name,
-                    company_id=company_id,
-                ))
-        except Exception as _e:
-            import logging as _log
-            _log.getLogger(__name__).warning("Job opened email scheduling failed: %s", _e)
+        if not skip_email:
+            try:
+                from app.services.email_service import send_job_opened_email
+                # Fetch all active candidate_coordinators and HR users who have an email
+                team_cursor = db["users"].find(
+                    {
+                        "role": {"$in": ["candidate_coordinator", "hr", "admin"]},
+                        "status": "active",
+                        "is_deleted": False,
+                        "email": {"$exists": True, "$ne": ""},
+                    },
+                    {"email": 1}
+                )
+                team_emails = [u["email"] async for u in team_cursor if u.get("email")]
+                if team_emails:
+                    from app.services.email_service import _fire_email
+                    _fire_email(send_job_opened_email(
+                        to_emails=team_emails,
+                        job_title=job_data.title,
+                        client_name=job_dict.get("client_name", ""),
+                        job_code=job_dict.get("job_code", ""),
+                        location=getattr(job_data, "location", "") or getattr(job_data, "work_location", "") or "",
+                        openings=getattr(job_data, "openings", 1) or getattr(job_data, "number_of_positions", 1) or 1,
+                        company_name=company_name or company_id or "the company",
+                        created_by_name=created_by_name,
+                        company_id=company_id,
+                    ))
+            except Exception as _e:
+                import logging as _log
+                _log.getLogger(__name__).warning("Job opened email scheduling failed: %s", _e)
 
         return await JobService.get_job(db, job_dict["_id"])
     

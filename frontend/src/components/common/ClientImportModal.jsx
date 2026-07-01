@@ -1,10 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Upload, AlertCircle, CheckCircle, SkipForward, ChevronRight } from 'lucide-react'
+import { X, FileUp, FileDown, AlertCircle, CheckCircle, SkipForward, ChevronRight } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import clientService from '../../services/clientService'
 
 const ACCEPTED = '.csv,.xlsx,.xls,.pdf'
+
+const CLIENT_CSV_HEADERS = [
+  'name', 'client_type', 'industry', 'website', 'code',
+  'address', 'city', 'state', 'country', 'zip',
+  'email', 'phone', 'gstin', 'pan',
+  'contact_name', 'contact_designation', 'contact_email', 'contact_mobile',
+  'commission_percentage', 'payment_terms',
+  'agreement_start_date', 'agreement_end_date',
+  'status', 'notes',
+].join(',')
+
+const downloadClientSample = () => {
+  const blob = new Blob(['﻿' + CLIENT_CSV_HEADERS + '\n'], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'Client_Sample.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 // step: 'select' | 'preview' | 'results'
 
@@ -105,7 +125,7 @@ const ClientImportModal = ({ onClose, onImported }) => {
                 onClick={() => fileRef.current?.click()}
                 className="w-full max-w-md border-2 border-dashed border-surface-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition-colors"
               >
-                <Upload className="w-10 h-10 text-surface-400 mx-auto mb-3" />
+                <FileUp className="w-10 h-10 text-surface-400 mx-auto mb-3" />
                 <p className="text-surface-700 font-medium">Click to select a file</p>
                 <p className="text-surface-400 text-sm mt-1">CSV, Excel (.xlsx / .xls), or PDF</p>
                 {file && (
@@ -147,6 +167,13 @@ const ClientImportModal = ({ onClose, onImported }) => {
                   </div>
                 </div>
               </div>
+              <button
+                onClick={downloadClientSample}
+                className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium underline underline-offset-2"
+              >
+                <FileDown className="w-4 h-4" />
+                Download Sample CSV
+              </button>
             </div>
           )}
 

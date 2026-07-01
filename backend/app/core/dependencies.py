@@ -279,14 +279,14 @@ def require_super_admin() -> Callable:
     """Dependency to require super admin access"""
     async def check_super_admin(
         current_user: dict = Depends(get_current_user)
-    ) -> bool:
+    ) -> dict:
         if not current_user.get("is_super_admin"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Super admin access required"
             )
-        return True
-    
+        return current_user
+
     return check_super_admin
 
 

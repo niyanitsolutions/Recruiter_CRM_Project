@@ -1,10 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Upload, AlertCircle, CheckCircle, ChevronRight, SkipForward } from 'lucide-react'
+import { X, FileUp, FileDown, AlertCircle, CheckCircle, ChevronRight, SkipForward } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import jobService from '../../services/jobService'
 
 const ACCEPTED = '.csv,.xlsx,.xls,.pdf'
+
+const JOB_CSV_HEADERS = [
+  'title', 'client_name', 'description', 'requirements', 'responsibilities',
+  'job_type', 'work_mode', 'city', 'state', 'country',
+  'salary_min', 'salary_max', 'currency',
+  'experience_min', 'experience_max', 'total_positions',
+  'priority', 'status', 'mandatory_skills', 'optional_skills', 'tags',
+  'internal_notes', 'minimum_match_score', 'gender_eligibility',
+  'max_current_ctc', 'max_notice_period',
+].join(',')
+
+const downloadJobSample = () => {
+  const blob = new Blob(['﻿' + JOB_CSV_HEADERS + '\n'], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'Job_Sample.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 const JobImportModal = ({ onClose, onImported }) => {
   const fileRef = useRef(null)
@@ -118,7 +138,7 @@ const JobImportModal = ({ onClose, onImported }) => {
                 onClick={() => fileRef.current?.click()}
                 className="w-full max-w-md border-2 border-dashed border-surface-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition-colors"
               >
-                <Upload className="w-10 h-10 text-surface-400 mx-auto mb-3" />
+                <FileUp className="w-10 h-10 text-surface-400 mx-auto mb-3" />
                 <p className="text-surface-700 font-medium">Click to select a file</p>
                 <p className="text-surface-400 text-sm mt-1">CSV, Excel (.xlsx / .xls), or PDF</p>
                 {file && (
@@ -136,6 +156,13 @@ const JobImportModal = ({ onClose, onImported }) => {
                 <p className="font-medium text-surface-700 mb-1">Required columns: title, client name</p>
                 <p>Client name must match an existing client in the system. Optional: job type, work mode, city, salary, experience, skills, priority, status, and more.</p>
               </div>
+              <button
+                onClick={downloadJobSample}
+                className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium underline underline-offset-2"
+              >
+                <FileDown className="w-4 h-4" />
+                Download Sample CSV
+              </button>
             </div>
           )}
 

@@ -455,6 +455,7 @@ async def bulk_import_jobs(
     duplicates: list = []
     failed = []
     total_rows = len(rows)
+    inserted_titles: list = []
 
     for idx, raw_row in enumerate(rows, start=2):
         m = _map_jobs_row(raw_row)
@@ -572,10 +573,37 @@ async def bulk_import_jobs(
                 created_by=current_user["id"],
                 company_id=current_user.get("company_id", ""),
                 user_name=current_user.get("full_name", ""),
+                skip_email=True,
             )
+            inserted_titles.append(title)
             inserted += 1
         except Exception as e:
             failed.append({"row": idx, "title": title, "reason": str(e)})
+
+    # Send one summary email for the entire bulk import
+    try:
+        from datetime import datetime, timezone
+        from app.services.email_service import send_bulk_import_summary_email, _fire_email
+        team_cursor = db["users"].find(
+            {"role": {"$in": ["candidate_coordinator", "hr", "admin"]}, "status": "active",
+             "is_deleted": False, "email": {"$exists": True, "$ne": ""}},
+            {"email": 1},
+        )
+        team_emails = [u["email"] async for u in team_cursor if u.get("email")]
+        if team_emails and inserted > 0:
+            _fire_email(send_bulk_import_summary_email(
+                to_emails=team_emails,
+                import_type="Job",
+                total=total_rows,
+                inserted=inserted,
+                failed=len(failed),
+                imported_by=current_user.get("full_name", current_user.get("username", "Unknown")),
+                imported_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                records=inserted_titles,
+                company_id=current_user.get("company_id", ""),
+            ))
+    except Exception:
+        pass
 
     return {
         "success": True,

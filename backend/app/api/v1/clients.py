@@ -478,6 +478,7 @@ async def bulk_import_clients(
     inserted = 0
     skipped_duplicates = []
     failed = []
+    inserted_names: list = []
     now = datetime.now(timezone.utc)
 
     def _safe_float(v):
@@ -579,9 +580,34 @@ async def bulk_import_clients(
 
         try:
             await db["clients"].insert_one(doc)
+            inserted_names.append(name)
             inserted += 1
         except Exception as e:
             failed.append({"row": idx, "name": name, "reason": str(e)})
+
+    # Send one summary email for the entire bulk import
+    try:
+        from app.services.email_service import send_bulk_import_summary_email, _fire_email
+        team_cursor = db["users"].find(
+            {"role": {"$in": ["candidate_coordinator", "hr", "admin"]}, "status": "active",
+             "is_deleted": False, "email": {"$exists": True, "$ne": ""}},
+            {"email": 1},
+        )
+        team_emails = [u["email"] async for u in team_cursor if u.get("email")]
+        if team_emails and inserted > 0:
+            _fire_email(send_bulk_import_summary_email(
+                to_emails=team_emails,
+                import_type="Client",
+                total=len(rows),
+                inserted=inserted,
+                failed=len(failed),
+                imported_by=current_user.get("full_name", current_user.get("username", "Unknown")),
+                imported_at=now.strftime("%Y-%m-%d %H:%M UTC"),
+                records=inserted_names,
+                company_id=current_user.get("company_id", ""),
+            ))
+    except Exception:
+        pass
 
     return {
         "success": True,

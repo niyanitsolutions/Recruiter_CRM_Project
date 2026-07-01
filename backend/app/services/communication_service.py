@@ -143,6 +143,8 @@ class CommunicationService:
         if "status" in updates:
             if updates["status"] == "draft":
                 updates["is_active"] = False
+            elif updates["status"] == "published":
+                updates.setdefault("is_active", True)
         if "is_active" in updates and updates.get("status", "published") == "draft":
             updates["is_active"] = False
 
