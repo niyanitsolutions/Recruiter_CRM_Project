@@ -372,11 +372,12 @@ async def test_payment_provider(
         else:
             runtime[k] = v
 
-    # Override with values from the request (non-empty values only)
+    # Override with values from the request (non-empty values only).
+    # Preserve numeric types (timeout, retry_count) — do not coerce to str.
     incoming = body.config.model_dump(exclude_none=True)
     for k, v in incoming.items():
-        val = str(v).strip() if v else ""
-        if val:
+        val = v.strip() if isinstance(v, str) else v
+        if val not in (None, ""):
             runtime[k] = val
 
     try:
