@@ -155,8 +155,8 @@ function TableDialog({ onInsert, onClose }) {
   const [rowsInput, setRowsInput] = useState('3')
   const [colsInput, setColsInput] = useState('3')
 
-  const clampRows = (s) => Math.max(1, Math.min(20, parseInt(s, 10) || 1))
-  const clampCols = (s) => Math.max(1, Math.min(10, parseInt(s, 10) || 1))
+  const clampRows = (s) => Math.max(1, Math.min(100, parseInt(s, 10) || 1))
+  const clampCols = (s) => Math.max(1, Math.min(20,  parseInt(s, 10) || 1))
 
   // Derived values used for preview and insert — always valid
   const rows = clampRows(rowsInput)
@@ -194,9 +194,9 @@ function TableDialog({ onInsert, onClose }) {
         <h3 className="text-sm font-bold mb-4" style={{ color: 'var(--text-heading)' }}>Insert Custom Table</h3>
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Rows (1–20)</p>
+            <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Rows (1–100)</p>
             <input
-              type="number" min={1} max={20}
+              type="number" min={1} max={100}
               value={rowsInput}
               onChange={e => setRowsInput(e.target.value)}
               onBlur={e => setRowsInput(String(clampRows(e.target.value)))}
@@ -205,9 +205,9 @@ function TableDialog({ onInsert, onClose }) {
             />
           </div>
           <div>
-            <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Columns (1–10)</p>
+            <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Columns (1–20)</p>
             <input
-              type="number" min={1} max={10}
+              type="number" min={1} max={20}
               value={colsInput}
               onChange={e => setColsInput(e.target.value)}
               onBlur={e => setColsInput(String(clampCols(e.target.value)))}
@@ -311,6 +311,109 @@ function ImageResizeToolbar({ img, onClose }) {
         ✕
       </button>
     </div>
+  )
+}
+
+// ─── Image Resize Handles Overlay ────────────────────────────────────────────
+// 8-point drag handles using position:fixed so they sit above all document layers.
+// Tracks the selected image's viewport rect via rAF loop.
+function ImageResizeHandlesOverlay({ img, onInput }) {
+  const [rect, setRect] = useState(null)
+  const dragRef         = useRef(null)
+
+  // Continuously sync rect with the image's current viewport position
+  useEffect(() => {
+    if (!img) return
+    let raf
+    const tick = () => {
+      const r = img.getBoundingClientRect()
+      setRect({ left: r.left, top: r.top, width: r.width, height: r.height })
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [img])
+
+  const onHandlePointerDown = (e, dir) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startY = e.clientY
+    const startW = img.offsetWidth  || img.naturalWidth  || 100
+    const startH = img.offsetHeight || img.naturalHeight || 100
+    const ratio  = startW / (startH || 1)
+    dragRef.current = { startX, startY, startW, startH, ratio, dir }
+
+    const onMove = (mv) => {
+      const { startX, startY, startW, startH, ratio, dir } = dragRef.current
+      const dx = mv.clientX - startX
+      const dy = mv.clientY - startY
+      let nw = startW, nh = startH
+
+      if (dir.includes('e')) nw = Math.max(40, startW + dx)
+      if (dir.includes('w')) nw = Math.max(40, startW - dx)
+      if (dir.includes('s')) nh = Math.max(20, startH + dy)
+      if (dir.includes('n')) nh = Math.max(20, startH - dy)
+
+      // Corner handles maintain aspect ratio
+      if (dir.length === 2) {
+        if (dir.includes('e') || dir.includes('w')) nh = Math.round(nw / ratio)
+        else nw = Math.round(nh * ratio)
+      }
+
+      img.style.width    = nw + 'px'
+      img.style.height   = nh + 'px'
+      img.style.maxWidth = '100%'
+      onInput?.()
+    }
+
+    const onUp = () => {
+      dragRef.current = null
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup',   onUp)
+      onInput?.()
+    }
+
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup',   onUp)
+  }
+
+  if (!rect) return null
+
+  const s = 8  // handle square px
+  const handles = [
+    { dir: 'nw', t: rect.top - s / 2,                    l: rect.left - s / 2,                      c: 'nw-resize' },
+    { dir: 'n',  t: rect.top - s / 2,                    l: rect.left + rect.width / 2 - s / 2,     c: 'n-resize'  },
+    { dir: 'ne', t: rect.top - s / 2,                    l: rect.left + rect.width - s / 2,         c: 'ne-resize' },
+    { dir: 'w',  t: rect.top + rect.height / 2 - s / 2,  l: rect.left - s / 2,                      c: 'w-resize'  },
+    { dir: 'e',  t: rect.top + rect.height / 2 - s / 2,  l: rect.left + rect.width - s / 2,        c: 'e-resize'  },
+    { dir: 'sw', t: rect.top + rect.height - s / 2,       l: rect.left - s / 2,                     c: 'sw-resize' },
+    { dir: 's',  t: rect.top + rect.height - s / 2,       l: rect.left + rect.width / 2 - s / 2,   c: 's-resize'  },
+    { dir: 'se', t: rect.top + rect.height - s / 2,       l: rect.left + rect.width - s / 2,       c: 'se-resize' },
+  ]
+
+  return (
+    <>
+      {/* Selection border */}
+      <div style={{
+        position: 'fixed', top: rect.top, left: rect.left,
+        width: rect.width, height: rect.height,
+        outline: '2px solid #7c3aed',
+        pointerEvents: 'none', zIndex: 9998, boxSizing: 'border-box',
+      }} />
+      {/* Eight drag handles */}
+      {handles.map(({ dir, t, l, c }) => (
+        <div key={dir}
+          onPointerDown={e => onHandlePointerDown(e, dir)}
+          style={{
+            position: 'fixed', top: t, left: l,
+            width: s, height: s,
+            background: '#7c3aed', border: '1.5px solid white', borderRadius: 1,
+            cursor: c, zIndex: 9999, boxSizing: 'border-box',
+          }}
+        />
+      ))}
+    </>
   )
 }
 
@@ -929,7 +1032,34 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   // Master editor page count (used to size the absolute-positioned page backgrounds)
   const [masterPageCount, setMasterPageCount] = useState(1)
 
+  // Selected image in master editor — drives the 8-point resize handles overlay
+  const [selectedMasterImg, setSelectedMasterImg] = useState(null)
+
   useEffect(() => { onBodyChangeRef.current = onBodyChange })
+
+  // Detect image clicks in master editor; clear selection on non-image clicks
+  useEffect(() => {
+    if (!onBodyChange) return
+    const el = masterEditorRef.current
+    if (!el) return
+    const onClick = (e) => {
+      if (e.target.tagName === 'IMG') setSelectedMasterImg(e.target)
+      else setSelectedMasterImg(null)
+    }
+    el.addEventListener('click', onClick)
+    return () => el.removeEventListener('click', onClick)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onBodyChange])
+
+  // Deselect image when the user clicks outside the master editor
+  useEffect(() => {
+    if (!selectedMasterImg) return
+    const onDocClick = (e) => {
+      if (!masterEditorRef.current?.contains(e.target)) setSelectedMasterImg(null)
+    }
+    document.addEventListener('click', onDocClick)
+    return () => document.removeEventListener('click', onDocClick)
+  }, [selectedMasterImg])
 
   // ── Pagination: measures fullBodyHtml in a hidden div, distributes to pages ──
   // Runs at ≤60 ms delay during editing (fast enough to feel live), immediate otherwise.
@@ -1172,9 +1302,9 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
     // Ctrl/Cmd+B/I/U — let browser handle natively; input event fires and spacers update
   }
 
-  // Master editor input → strip spacers → propagate pure bodyHtml → re-inject spacers on next frame.
-  // Called both by the React onInput event AND imperatively from toolbar exec (for the case where
-  // execCommand targets the master editor via the global selection tracking in BodyEditor).
+  // Master editor input → strip spacers → propagate pure bodyHtml → re-inject spacers synchronously.
+  // Synchronous injection means spacers are always in place BEFORE the browser paints, so text
+  // can never appear in the footer zone and Enter at page-end lands the cursor on the next page.
   const handleMasterInput = useCallback(() => {
     const el = masterEditorRef.current
     if (!el) return
@@ -1182,7 +1312,7 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
     clone.querySelectorAll('[data-qb-spacer]').forEach(s => s.remove())
     onBodyChangeRef.current?.(clone.innerHTML)
     cancelAnimationFrame(spacerRAFRef.current)
-    spacerRAFRef.current = requestAnimationFrame(() => injectMasterSpacers(el))
+    injectMasterSpacers(el)
   }, [injectMasterSpacers])
 
 
@@ -1375,10 +1505,10 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
   //   Layer 1 (z:1)  — single master contentEditable (the whole document)
   //   Layer 2 (z:2)  — header + footer overlays with solid backgrounds
   //
-  // Layer 2 sits on top of the master editor so any content that briefly
-  // overflows into the header/footer area during the RAF window is hidden.
-  // RAF-based spacer injection (≤16 ms) then moves the content to the correct
-  // page before the browser renders the next frame.
+  // Layer 2 sits on top of the master editor so any content that overflows
+  // the usable body zone is masked by the header/footer overlays.
+  // Spacer injection is synchronous, so page breaks are always in place
+  // before the browser paints — no text ever reaches the footer zone.
   // ──────────────────────────────────────────────────────────────────────────
   if (onBodyChange) {
     const containerH = masterPageCount * ph + (masterPageCount - 1) * PAGE_GAP
@@ -1482,6 +1612,14 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
             )
           })}
         </div>
+
+        {/* Image resize handles overlay — uses position:fixed, sits above all layers */}
+        {selectedMasterImg && (
+          <ImageResizeHandlesOverlay
+            img={selectedMasterImg}
+            onInput={handleMasterInput}
+          />
+        )}
       </div>
     )
   }
@@ -2741,6 +2879,12 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
         /* Kill margin-top on the first content block of each new page so elements
            with natural block margins (h1, p, etc.) don't create a blank gap at page tops. */
         [data-qb-spacer] + * { margin-top: 0 !important; }
+
+        /* Also kill margin-top on the very first block on page 1 */
+        [data-qb-master] > *:first-child { margin-top: 0 !important; }
+
+        /* Images in the master editor get a pointer cursor so click-to-select is discoverable */
+        [data-qb-master] img { cursor: pointer; }
 
         /* Tables in the document editor */
         [data-qb-master] table {
