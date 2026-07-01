@@ -1,23 +1,80 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, FileUp, FileDown, AlertCircle, CheckCircle, ChevronRight, SkipForward } from 'lucide-react'
+import { X, ArrowDownToLine, FileDown, AlertCircle, CheckCircle, ChevronRight, SkipForward } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import jobService from '../../services/jobService'
 
-const ACCEPTED = '.csv,.xlsx,.xls,.pdf'
+const ACCEPTED = '.csv,.xlsx,.xls'
 
-const JOB_CSV_HEADERS = [
-  'title', 'client_name', 'description', 'requirements', 'responsibilities',
-  'job_type', 'work_mode', 'city', 'state', 'country',
-  'salary_min', 'salary_max', 'currency',
-  'experience_min', 'experience_max', 'total_positions',
-  'priority', 'status', 'mandatory_skills', 'optional_skills', 'tags',
-  'internal_notes', 'minimum_match_score', 'gender_eligibility',
-  'max_current_ctc', 'max_notice_period',
-].join(',')
+// ── Sample CSV template ───────────────────────────────────────────────────────
+
+const JOB_HEADERS = [
+  'title',
+  'client_name (Must Match Existing Client)',
+  'job_type (full_time / part_time / contract / internship)',
+  'work_mode (onsite / remote / hybrid)',
+  'status (draft / open / on_hold / filled / closed)',
+  'priority (low / medium / high / critical)',
+  'city',
+  'state',
+  'country',
+  'salary_min (Annual ₹ - Number Only)',
+  'salary_max (Annual ₹ - Number Only)',
+  'currency (INR / USD / EUR)',
+  'experience_min (Years - Number Only)',
+  'experience_max (Years - Number Only)',
+  'total_positions (Number Only)',
+  'mandatory_skills (Comma Separated)',
+  'optional_skills (Comma Separated)',
+  'gender_eligibility (all / male / female)',
+  'max_current_ctc (Annual ₹ - Number Only)',
+  'max_notice_period (Days - Number Only)',
+  'minimum_match_score (0-100 - Number Only)',
+  'tags (Comma Separated)',
+  'description',
+  'requirements',
+  'internal_notes',
+]
+
+const JOB_SAMPLE_ROW = [
+  'Software Engineer',
+  'Acme Corp',
+  'full_time',
+  'hybrid',
+  'open',
+  'high',
+  'Mumbai',
+  'Maharashtra',
+  'India',
+  '800000',
+  '1500000',
+  'INR',
+  '3',
+  '8',
+  '2',
+  'Python, Django',
+  'React, Docker',
+  'all',
+  '2000000',
+  '30',
+  '70',
+  'senior, backend',
+  'Looking for a skilled software engineer with strong backend experience',
+  '',
+  'Immediate joiners preferred',
+]
+
+const toCsvRow = (fields) =>
+  fields.map((f) => {
+    const s = String(f ?? '')
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"`
+      : s
+  }).join(',')
 
 const downloadJobSample = () => {
-  const blob = new Blob(['﻿' + JOB_CSV_HEADERS + '\n'], { type: 'text/csv;charset=utf-8;' })
+  const csv = '﻿' + toCsvRow(JOB_HEADERS) + '\n' + toCsvRow(JOB_SAMPLE_ROW) + '\n'
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -26,6 +83,8 @@ const downloadJobSample = () => {
   URL.revokeObjectURL(url)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 const JobImportModal = ({ onClose, onImported }) => {
   const fileRef = useRef(null)
   const [step, setStep] = useState('select')
@@ -33,13 +92,21 @@ const JobImportModal = ({ onClose, onImported }) => {
   const [loading, setLoading] = useState(false)
   const [preview, setPreview] = useState(null)
   const [results, setResults] = useState(null)
+  const [elapsed, setElapsed] = useState(0)
+
+  // Elapsed-time counter while import is running
+  useEffect(() => {
+    if (!loading) { setElapsed(0); return }
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [loading])
 
   const handleFileChange = (e) => {
     const f = e.target.files?.[0]
     if (!f) return
     const ext = f.name.split('.').pop().toLowerCase()
-    if (!['csv', 'xlsx', 'xls', 'pdf'].includes(ext)) {
-      toast.error('Only .csv, .xlsx, .xls, or .pdf files are supported.')
+    if (!['csv', 'xlsx', 'xls'].includes(ext)) {
+      toast.error('Only .csv, .xlsx, or .xls files are supported.')
       e.target.value = ''
       return
     }
@@ -100,7 +167,6 @@ const JobImportModal = ({ onClose, onImported }) => {
     return () => { document.body.style.overflow = '' }
   }, [])
 
-  // Determine summary icon / color based on results
   const resultIcon = results
     ? results.inserted > 0
       ? <CheckCircle className="w-14 h-14 text-green-500" />
@@ -118,7 +184,7 @@ const JobImportModal = ({ onClose, onImported }) => {
           <div>
             <h3 className="text-lg font-semibold text-surface-900">Import Jobs</h3>
             <p className="text-sm text-surface-500 mt-0.5">
-              {step === 'select' && 'Upload a .csv, .xlsx, .xls, or .pdf file'}
+              {step === 'select' && 'Upload a .csv, .xlsx, or .xls file'}
               {step === 'preview' && `${preview?.total ?? 0} rows parsed — ${preview?.valid ?? 0} valid`}
               {step === 'results' && 'Import complete'}
             </p>
@@ -133,14 +199,14 @@ const JobImportModal = ({ onClose, onImported }) => {
 
           {/* ── Step 1: File select ─────────────────────────────────────── */}
           {step === 'select' && (
-            <div className="flex flex-col items-center justify-center py-12 gap-4">
+            <div className="flex flex-col items-center justify-center py-10 gap-4">
               <div
                 onClick={() => fileRef.current?.click()}
                 className="w-full max-w-md border-2 border-dashed border-surface-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition-colors"
               >
-                <FileUp className="w-10 h-10 text-surface-400 mx-auto mb-3" />
+                <ArrowDownToLine className="w-10 h-10 text-surface-400 mx-auto mb-3" />
                 <p className="text-surface-700 font-medium">Click to select a file</p>
-                <p className="text-surface-400 text-sm mt-1">CSV, Excel (.xlsx / .xls), or PDF</p>
+                <p className="text-surface-400 text-sm mt-1">CSV (.csv) or Excel (.xlsx, .xls)</p>
                 {file && (
                   <p className="mt-3 text-sm font-medium text-primary-600">{file.name}</p>
                 )}
@@ -152,16 +218,20 @@ const JobImportModal = ({ onClose, onImported }) => {
                 className="hidden"
                 onChange={handleFileChange}
               />
-              <div className="text-sm text-surface-500 max-w-md text-center">
-                <p className="font-medium text-surface-700 mb-1">Required columns: title, client name</p>
-                <p>Client name must match an existing client in the system. Optional: job type, work mode, city, salary, experience, skills, priority, status, and more.</p>
+
+              <div className="text-sm text-surface-500 max-w-md text-center space-y-1">
+                <p className="font-medium text-surface-700">Supported formats:</p>
+                <p>CSV (.csv) · Excel (.xlsx, .xls)</p>
+                <p className="text-surface-400">Required columns: <span className="font-medium text-surface-600">title</span>, <span className="font-medium text-surface-600">client_name</span></p>
+                <p className="text-surface-400">Download the sample template and fill it using the provided formats before importing.</p>
               </div>
+
               <button
                 onClick={downloadJobSample}
                 className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium underline underline-offset-2"
               >
                 <FileDown className="w-4 h-4" />
-                Download Sample CSV
+                Download Sample Template (Job_Sample.csv)
               </button>
             </div>
           )}
@@ -257,7 +327,6 @@ const JobImportModal = ({ onClose, onImported }) => {
                 </div>
               </div>
 
-              {/* Duplicate rows detail */}
               {results.duplicate_rows?.length > 0 && (
                 <div className="w-full max-w-lg">
                   <p className="text-sm font-medium text-surface-700 mb-2 flex items-center gap-1.5">
@@ -272,7 +341,6 @@ const JobImportModal = ({ onClose, onImported }) => {
                 </div>
               )}
 
-              {/* Failed rows detail */}
               {results.failed_rows?.length > 0 && (
                 <div className="w-full max-w-lg">
                   <p className="text-sm font-medium text-surface-700 mb-2 flex items-center gap-1.5">
@@ -311,14 +379,17 @@ const JobImportModal = ({ onClose, onImported }) => {
 
           {step === 'preview' && (
             <>
-              <button onClick={() => setStep('select')} className="btn-secondary">Back</button>
+              <button onClick={() => setStep('select')} className="btn-secondary" disabled={loading}>Back</button>
               <button
                 onClick={handleImport}
                 disabled={loading || preview?.valid === 0}
                 className="btn-primary flex items-center gap-2 disabled:opacity-50"
               >
                 {loading ? (
-                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Importing…</>
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Importing…{elapsed > 0 ? ` (${elapsed}s)` : ''}
+                  </>
                 ) : (
                   <>Import {preview?.valid ?? 0} valid job{preview?.valid !== 1 ? 's' : ''}</>
                 )}
@@ -330,6 +401,15 @@ const JobImportModal = ({ onClose, onImported }) => {
             <button onClick={onClose} className="btn-primary">Done</button>
           )}
         </div>
+
+        {/* Large-import notice shown while importing */}
+        {loading && step === 'preview' && (
+          <div className="px-5 pb-4 shrink-0">
+            <p className="text-xs text-center text-surface-400">
+              Processing all records — please keep this window open until import completes.
+            </p>
+          </div>
+        )}
       </div>
     </div>,
     document.body

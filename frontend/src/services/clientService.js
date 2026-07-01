@@ -55,16 +55,18 @@ const clientService = {
     form.append('file', file)
     const response = await api.post('/clients/bulk-import/preview', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
     })
     return response.data
   },
 
-  // Bulk import — insert valid rows into the database
+  // Bulk import — insert valid rows into the database (long timeout: many DB ops per row)
   bulkImport: async (file) => {
     const form = new FormData()
     form.append('file', file)
     const response = await api.post('/clients/bulk-import', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000,
     })
     return response.data
   },

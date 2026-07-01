@@ -109,7 +109,7 @@ const jobService = {
     fd.append('file', file)
     const response = await api.post('/jobs/bulk-import', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120000,
+      timeout: 300000,
     })
     return response.data
   },

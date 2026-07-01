@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Briefcase, Plus, Search, Filter, Eye, Edit, Trash2,
-  Building2, MapPin, Users, Clock, AlertCircle, FileDown, FileUp,
+  Building2, MapPin, Users, Clock, AlertCircle, ArrowUpFromLine, ArrowDownToLine,
   List, LayoutGrid, RefreshCw, CheckSquare, Square, GitBranch,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -240,13 +240,13 @@ const loadJobs = async (silent = false) => {
         <div className="flex flex-wrap items-center gap-2">
           {has('exports:create') && (
             <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
-              <FileDown className="w-4 h-4" />
+              <ArrowUpFromLine className="w-4 h-4" />
               Export
             </button>
           )}
           {has('jobs:create') && (
             <button onClick={() => setImportOpen(true)} className="btn-secondary flex items-center gap-2">
-              <FileUp className="w-4 h-4" />
+              <ArrowDownToLine className="w-4 h-4" />
               Import
             </button>
           )}

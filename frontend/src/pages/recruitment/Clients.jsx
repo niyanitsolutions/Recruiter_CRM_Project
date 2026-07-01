@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Building2, Plus, Search, Filter,
-  Edit, Trash2, Eye, Phone, Mail, MapPin, Briefcase, FileDown, FileUp,
+  Edit, Trash2, Eye, Phone, Mail, MapPin, Briefcase, ArrowUpFromLine, ArrowDownToLine,
   List, LayoutGrid
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -127,13 +127,13 @@ const Clients = () => {
         <div className="flex flex-wrap items-center gap-2">
           {has('exports:create') && (
             <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
-              <FileDown className="w-4 h-4" />
+              <ArrowUpFromLine className="w-4 h-4" />
               Export
             </button>
           )}
           {has('clients:create') && (
             <button onClick={() => setImportOpen(true)} className="btn-secondary flex items-center gap-2">
-              <FileUp className="w-4 h-4" />
+              <ArrowDownToLine className="w-4 h-4" />
               Import
             </button>
           )}

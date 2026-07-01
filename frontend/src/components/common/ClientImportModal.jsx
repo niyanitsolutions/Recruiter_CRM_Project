@@ -1,23 +1,78 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, FileUp, FileDown, AlertCircle, CheckCircle, SkipForward, ChevronRight } from 'lucide-react'
+import { X, ArrowDownToLine, FileDown, AlertCircle, CheckCircle, SkipForward, ChevronRight } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import clientService from '../../services/clientService'
 
-const ACCEPTED = '.csv,.xlsx,.xls,.pdf'
+const ACCEPTED = '.csv,.xlsx,.xls'
 
-const CLIENT_CSV_HEADERS = [
-  'name', 'client_type', 'industry', 'website', 'code',
-  'address', 'city', 'state', 'country', 'zip',
-  'email', 'phone', 'gstin', 'pan',
-  'contact_name', 'contact_designation', 'contact_email', 'contact_mobile',
-  'commission_percentage', 'payment_terms',
-  'agreement_start_date', 'agreement_end_date',
-  'status', 'notes',
-].join(',')
+// ── Sample CSV template ───────────────────────────────────────────────────────
+
+const CLIENT_HEADERS = [
+  'name (Company Name - Required)',
+  'client_type (corporate / startup / mnc / government / ngo)',
+  'industry',
+  'website',
+  'code (Short Client Code - 2-5 Letters)',
+  'address',
+  'city',
+  'state',
+  'country',
+  'zip',
+  'email (Valid Email)',
+  'phone (10 Digits - Numbers Only)',
+  'gstin',
+  'pan',
+  'contact_name',
+  'contact_designation',
+  'contact_email (Valid Email)',
+  'contact_mobile (10 Digits - Numbers Only)',
+  'commission_percentage (Number Only - e.g. 8.5)',
+  'payment_terms (Days - Number Only)',
+  'agreement_start_date (DD/MM/YYYY)',
+  'agreement_end_date (DD/MM/YYYY)',
+  'status (active / inactive)',
+  'notes',
+]
+
+const CLIENT_SAMPLE_ROW = [
+  'Acme Corporation',
+  'corporate',
+  'Technology',
+  'https://acme.com',
+  'ACME',
+  '123 Business Park, Andheri',
+  'Mumbai',
+  'Maharashtra',
+  'India',
+  '400001',
+  'hr@acme.com',
+  '9876543210',
+  '22AAAAA0000A1Z5',
+  'AAAAA0000A',
+  'Ravi Kumar',
+  'HR Manager',
+  'ravi@acme.com',
+  '9876543211',
+  '8.5',
+  '30',
+  '01/01/2024',
+  '31/12/2024',
+  'active',
+  'Key client - priority support',
+]
+
+const toCsvRow = (fields) =>
+  fields.map((f) => {
+    const s = String(f ?? '')
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"`
+      : s
+  }).join(',')
 
 const downloadClientSample = () => {
-  const blob = new Blob(['﻿' + CLIENT_CSV_HEADERS + '\n'], { type: 'text/csv;charset=utf-8;' })
+  const csv = '﻿' + toCsvRow(CLIENT_HEADERS) + '\n' + toCsvRow(CLIENT_SAMPLE_ROW) + '\n'
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -25,6 +80,8 @@ const downloadClientSample = () => {
   a.click()
   URL.revokeObjectURL(url)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // step: 'select' | 'preview' | 'results'
 
@@ -35,13 +92,21 @@ const ClientImportModal = ({ onClose, onImported }) => {
   const [loading, setLoading] = useState(false)
   const [preview, setPreview] = useState(null)   // { total, valid, rows }
   const [results, setResults] = useState(null)   // { inserted, skipped_duplicates, failed, failed_rows, message }
+  const [elapsed, setElapsed] = useState(0)
+
+  // Elapsed-time counter while import is running
+  useEffect(() => {
+    if (!loading) { setElapsed(0); return }
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [loading])
 
   const handleFileChange = (e) => {
     const f = e.target.files?.[0]
     if (!f) return
     const ext = f.name.split('.').pop().toLowerCase()
-    if (!['csv', 'xlsx', 'xls', 'pdf'].includes(ext)) {
-      toast.error('Only .csv, .xlsx, .xls, or .pdf files are supported.')
+    if (!['csv', 'xlsx', 'xls'].includes(ext)) {
+      toast.error('Only .csv, .xlsx, or .xls files are supported.')
       e.target.value = ''
       return
     }
@@ -71,7 +136,7 @@ const ClientImportModal = ({ onClose, onImported }) => {
       setStep('results')
       if (data.inserted > 0) onImported?.()
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Import failed.')
+      toast.error(err.response?.data?.detail || 'Import failed. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -105,7 +170,7 @@ const ClientImportModal = ({ onClose, onImported }) => {
           <div>
             <h3 className="text-lg font-semibold text-surface-900">Import Clients</h3>
             <p className="text-sm text-surface-500 mt-0.5">
-              {step === 'select' && 'Upload a .csv, .xlsx, .xls, or .pdf file'}
+              {step === 'select' && 'Upload a .csv, .xlsx, or .xls file'}
               {step === 'preview' && `${preview?.total ?? 0} rows parsed — ${preview?.valid ?? 0} valid`}
               {step === 'results' && 'Import complete'}
             </p>
@@ -120,14 +185,14 @@ const ClientImportModal = ({ onClose, onImported }) => {
 
           {/* ── Step 1: File select ─────────────────────────────────────── */}
           {step === 'select' && (
-            <div className="flex flex-col items-center justify-center py-12 gap-4">
+            <div className="flex flex-col items-center justify-center py-10 gap-4">
               <div
                 onClick={() => fileRef.current?.click()}
                 className="w-full max-w-md border-2 border-dashed border-surface-300 rounded-xl p-8 text-center cursor-pointer hover:border-primary-400 hover:bg-primary-50 transition-colors"
               >
-                <FileUp className="w-10 h-10 text-surface-400 mx-auto mb-3" />
+                <ArrowDownToLine className="w-10 h-10 text-surface-400 mx-auto mb-3" />
                 <p className="text-surface-700 font-medium">Click to select a file</p>
-                <p className="text-surface-400 text-sm mt-1">CSV, Excel (.xlsx / .xls), or PDF</p>
+                <p className="text-surface-400 text-sm mt-1">CSV (.csv) or Excel (.xlsx, .xls)</p>
                 {file && (
                   <p className="mt-3 text-sm font-medium text-primary-600">{file.name}</p>
                 )}
@@ -140,39 +205,19 @@ const ClientImportModal = ({ onClose, onImported }) => {
                 onChange={handleFileChange}
               />
 
-              {/* Column guide */}
-              <div className="w-full max-w-2xl text-sm text-surface-500">
-                <p className="font-medium text-surface-700 mb-2">Supported columns</p>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-                  <div>
-                    <p className="font-medium text-surface-600 mb-1">Required</p>
-                    <p>• Company Name / Name / Client Name</p>
-                  </div>
-                  <div>
-                    <p className="font-medium text-surface-600 mb-1">Company Info</p>
-                    <p>• Client Type, Industry, Website, Code</p>
-                    <p>• Address, City, State, Country, Zip</p>
-                    <p>• Email, Phone, GSTIN, PAN</p>
-                  </div>
-                  <div className="mt-2">
-                    <p className="font-medium text-surface-600 mb-1">Primary Contact</p>
-                    <p>• Contact Name / POC / SPOC</p>
-                    <p>• Contact Designation, Email, Mobile</p>
-                  </div>
-                  <div className="mt-2">
-                    <p className="font-medium text-surface-600 mb-1">Commercial</p>
-                    <p>• Commission %, Payment Terms (days)</p>
-                    <p>• Agreement Start / End Date</p>
-                    <p>• Status, Notes</p>
-                  </div>
-                </div>
+              <div className="text-sm text-surface-500 max-w-md text-center space-y-1">
+                <p className="font-medium text-surface-700">Supported formats:</p>
+                <p>CSV (.csv) · Excel (.xlsx, .xls)</p>
+                <p className="text-surface-400">Required column: <span className="font-medium text-surface-600">name</span> (Company Name)</p>
+                <p className="text-surface-400">Download the sample template and fill it using the provided formats before importing.</p>
               </div>
+
               <button
                 onClick={downloadClientSample}
                 className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 font-medium underline underline-offset-2"
               >
                 <FileDown className="w-4 h-4" />
-                Download Sample CSV
+                Download Sample Template (Client_Sample.csv)
               </button>
             </div>
           )}
@@ -310,14 +355,17 @@ const ClientImportModal = ({ onClose, onImported }) => {
 
           {step === 'preview' && (
             <>
-              <button onClick={() => setStep('select')} className="btn-secondary">Back</button>
+              <button onClick={() => setStep('select')} className="btn-secondary" disabled={loading}>Back</button>
               <button
                 onClick={handleImport}
                 disabled={loading || preview?.valid === 0}
                 className="btn-primary flex items-center gap-2 disabled:opacity-50"
               >
                 {loading ? (
-                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Importing…</>
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Importing…{elapsed > 0 ? ` (${elapsed}s)` : ''}
+                  </>
                 ) : (
                   <>Import {preview?.valid ?? 0} valid row{preview?.valid !== 1 ? 's' : ''}</>
                 )}
@@ -329,6 +377,15 @@ const ClientImportModal = ({ onClose, onImported }) => {
             <button onClick={onClose} className="btn-primary">Done</button>
           )}
         </div>
+
+        {/* Large-import notice shown while importing */}
+        {loading && step === 'preview' && (
+          <div className="px-5 pb-4 shrink-0">
+            <p className="text-xs text-center text-surface-400">
+              Processing all records — please keep this window open until import completes.
+            </p>
+          </div>
+        )}
       </div>
     </div>,
     document.body
