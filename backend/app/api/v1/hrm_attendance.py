@@ -299,7 +299,10 @@ async def start_break(
     db=Depends(get_company_db),
 ):
     emp_id = await _resolve_emp_id(cu, data.employee_id, db)
-    rec = await AttendanceService(db).start_break(emp_id, cu["company_id"], data.reason or "")
+    try:
+        rec = await AttendanceService(db).start_break(emp_id, cu["company_id"], data.reason or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if not rec:
         raise HTTPException(status_code=400, detail="Cannot start break — check in first")
     return rec

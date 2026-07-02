@@ -242,6 +242,9 @@ class ApplicationResponse(BaseModel):
     assigned_to: Optional[str]
     assigned_to_name: Optional[str]
 
+    partner_id: Optional[str] = None
+    created_by: Optional[str] = None
+
     eligibility_score: Optional[float]
     eligibility_reason: Optional[str] = None
     matching_breakdown: Optional[dict] = None
@@ -311,6 +314,61 @@ REJECTION_REASON_DISPLAY = {
     RejectionReason.DUPLICATE.value: "Duplicate Application",
     RejectionReason.OTHER.value: "Other"
 }
+
+
+# Statuses that mean an application is still live in the pipeline.
+# Single source of truth for "does this candidate have active applications?" checks.
+ACTIVE_APPLICATION_STATUSES = [
+    ApplicationStatus.APPLIED.value,
+    ApplicationStatus.ELIGIBLE.value,
+    ApplicationStatus.SCREENING.value,
+    ApplicationStatus.SHORTLISTED.value,
+    ApplicationStatus.INTERVIEW.value,
+    ApplicationStatus.NEXT_ROUND.value,
+    ApplicationStatus.SELECTED.value,
+    ApplicationStatus.OFFERED.value,
+    ApplicationStatus.OFFER_ACCEPTED.value,
+    ApplicationStatus.ON_HOLD.value,
+]
+
+# Transition guard: statuses a concluded application may NOT jump to directly.
+# "joined" is fully terminal; rejected/withdrawn/offer_declined applications must
+# re-enter the pipeline (via an active status) before reaching a hiring outcome.
+TERMINAL_TRANSITION_BLOCKS = {
+    ApplicationStatus.JOINED.value: {s.value for s in ApplicationStatus} - {ApplicationStatus.JOINED.value},
+    ApplicationStatus.REJECTED.value: {
+        ApplicationStatus.SELECTED.value, ApplicationStatus.OFFERED.value,
+        ApplicationStatus.OFFER_ACCEPTED.value, ApplicationStatus.JOINED.value,
+        ApplicationStatus.WITHDRAWN.value,
+    },
+    ApplicationStatus.WITHDRAWN.value: {
+        ApplicationStatus.SELECTED.value, ApplicationStatus.OFFERED.value,
+        ApplicationStatus.OFFER_ACCEPTED.value, ApplicationStatus.JOINED.value,
+        ApplicationStatus.REJECTED.value,
+    },
+    ApplicationStatus.OFFER_DECLINED.value: {
+        ApplicationStatus.OFFER_ACCEPTED.value, ApplicationStatus.JOINED.value,
+        ApplicationStatus.SELECTED.value,
+    },
+}
+
+
+def is_valid_status_transition(old_status: str, new_status: str) -> tuple[bool, str]:
+    """Validate an application status transition. Returns (ok, error_message)."""
+    valid_values = {s.value for s in ApplicationStatus}
+    if new_status not in valid_values:
+        return False, f"Invalid application status '{new_status}'"
+    if old_status == new_status:
+        return True, ""
+    blocked = TERMINAL_TRANSITION_BLOCKS.get(old_status)
+    if blocked and new_status in blocked:
+        if old_status == ApplicationStatus.JOINED.value:
+            return False, "Application is already marked as joined and cannot be changed."
+        return False, (
+            f"Cannot move application from '{old_status}' to '{new_status}'. "
+            "It must re-enter the pipeline through an active stage first."
+        )
+    return True, ""
 
 
 def get_application_status_display(status: str) -> str:

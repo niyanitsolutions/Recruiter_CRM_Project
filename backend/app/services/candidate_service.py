@@ -687,9 +687,10 @@ class CandidateService:
         
         # Check for active applications
         applications_collection = db["applications"]
+        from app.models.company.application import ACTIVE_APPLICATION_STATUSES
         active_applications = await applications_collection.count_documents({
             "candidate_id": candidate_id,
-            "status": {"$in": ["applied", "screening", "shortlisted", "interview", "offered"]},
+            "status": {"$in": ACTIVE_APPLICATION_STATUSES},
             "is_deleted": False
         })
         

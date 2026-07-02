@@ -80,9 +80,14 @@ class OnboardService:
         
         await self.collection.insert_one(onboard_data)
         
-        # Update application status to "offered"
+        # Update application status to "offered" — but never downgrade an
+        # application that has already progressed (offer_accepted / joined) or
+        # concluded (rejected / withdrawn / offer_declined).
         await self.db.applications.update_one(
-            {"_id": data.application_id},
+            {
+                "_id": data.application_id,
+                "status": {"$nin": ["offered", "offer_accepted", "offer_declined", "joined", "rejected", "withdrawn"]},
+            },
             {"$set": {"status": "offered", "updated_at": datetime.now(timezone.utc)}}
         )
         
@@ -207,7 +212,12 @@ class OnboardService:
         
         if not onboard:
             return None
-        
+
+        # Idempotency guard: re-submitting the same status must not duplicate
+        # history entries or side effects (e.g. partner payout creation on JOINED)
+        if onboard.get("status") == data.status.value:
+            return OnboardResponse(**onboard)
+
         # Create status history entry
         status_history = StatusHistory(
             from_status=onboard.get("status"),
@@ -245,7 +255,28 @@ class OnboardService:
         # If joined, create partner payout record
         if data.status == OnboardStatus.JOINED and onboard.get("partner_id"):
             await self._create_partner_payout(result)
-        
+
+        # Keep the ATS application in sync when the candidate joins
+        if data.status == OnboardStatus.JOINED and onboard.get("application_id"):
+            try:
+                from app.services.application_service import ApplicationService
+                from app.models.company.application import ApplicationStatusUpdate
+                joining_dt = (
+                    datetime.combine(data.actual_doj, datetime.min.time())
+                    if data.actual_doj else None
+                )
+                await ApplicationService.update_application_status(
+                    self.db, onboard["application_id"],
+                    ApplicationStatusUpdate(
+                        status="joined",
+                        actual_joining_date=joining_dt,
+                        remarks="Candidate joined (onboarding)",
+                    ),
+                    updated_by,
+                )
+            except Exception:
+                pass  # Application may already be concluded — onboard update stands
+
         return OnboardResponse(**result) if result else None
     
     async def release_offer(
@@ -668,7 +699,15 @@ class OnboardService:
         from app.models.company.partner_payout import (
             PartnerCommissionRule, PayoutCalculation, PayoutStatus
         )
-        
+
+        # One payout per onboard — guard against duplicate creation
+        existing_payout = await self.db.partner_payouts.find_one({
+            "onboard_id": onboard["id"],
+            "is_deleted": False,
+        })
+        if existing_payout:
+            return
+
         # Get commission rule from settings
         settings = await self.db.company_settings.find_one({"company_id": onboard["company_id"]})
         commission_config = settings.get("partner_commission", {}) if settings else {}

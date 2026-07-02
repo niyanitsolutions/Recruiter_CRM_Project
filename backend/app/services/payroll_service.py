@@ -150,10 +150,18 @@ class PayrollService:
 
     @staticmethod
     def _calc_present_days(att_records: List[dict]) -> float:
-        """Count present days from attendance documents (half_day = 0.5)."""
+        """Count present days from attendance documents (half_day = 0.5).
+
+        "holiday" status records exist both for employees who WORKED on a
+        holiday (check_in set) and as auto-marked placeholders for everyone
+        else (check_in None). Only the former counts as a present day —
+        counting placeholders inflated payable days and masked real absences.
+        """
         total = 0.0
         for rec in att_records:
             status = rec.get("status", "")
+            if status == "holiday" and not rec.get("check_in"):
+                continue
             total += _PRESENT_STATUSES.get(status, 0.0)
         return total
 
@@ -163,11 +171,20 @@ class PayrollService:
         year: int,
         month: int,
         holiday_date_strings: Set[str],
+        working_day_nums: Optional[Set[int]] = None,
+        present_date_strings: Optional[Set[str]] = None,
     ) -> float:
         """
         Count approved paid leave days that fall within the given month,
-        excluding Sundays and company holidays.
+        excluding tenant non-working days and company holidays (must use the
+        same working-day set as _calc_working_days or payable days get inflated).
+
+        present_date_strings: days the employee actually attended — excluded so a
+        day cannot count as BOTH present and paid leave (double payable credit).
         """
+        if not working_day_nums:
+            working_day_nums = {0, 1, 2, 3, 4}
+        present_date_strings = present_date_strings or set()
         _, last_day = _cal.monthrange(year, month)
         month_start = date(year, month, 1)
         month_end = date(year, month, last_day)
@@ -193,7 +210,10 @@ class PayrollService:
 
             current = overlap_start
             while current <= overlap_end:
-                if current.weekday() != 6 and current.strftime("%Y-%m-%d") not in holiday_date_strings:
+                day_str = current.strftime("%Y-%m-%d")
+                if (current.weekday() in working_day_nums
+                        and day_str not in holiday_date_strings
+                        and day_str not in present_date_strings):
                     total += multiplier
                 current += timedelta(days=1)
 
@@ -280,25 +300,66 @@ class PayrollService:
         }
 
     @staticmethod
+    def _calc_expected_days(
+        year: int,
+        month: int,
+        holiday_date_strings: Set[str],
+        working_day_nums: Optional[Set[int]],
+        doj: Optional[date],
+        dol: Optional[date],
+    ) -> Optional[int]:
+        """Working days the employee was actually expected to work this month,
+        clamped to [date_of_joining, date_of_leaving]. Returns None when the
+        full month applies (no clamping needed)."""
+        _, last_day = _cal.monthrange(year, month)
+        month_start = date(year, month, 1)
+        month_end = date(year, month, last_day)
+
+        start = month_start if not doj or doj <= month_start else doj
+        end = month_end if not dol or dol >= month_end else dol
+        if start == month_start and end == month_end:
+            return None
+        if end < start:
+            return 0
+
+        if not working_day_nums:
+            working_day_nums = {0, 1, 2, 3, 4}
+        expected = 0
+        current = start
+        while current <= end:
+            if current.weekday() in working_day_nums and current.strftime("%Y-%m-%d") not in holiday_date_strings:
+                expected += 1
+            current += timedelta(days=1)
+        return expected
+
+    @staticmethod
     def _apply_attendance(
         salary_dict: dict,
         working_days: int,
         present_days: float,
         paid_leave_days: float,
+        expected_days: Optional[int] = None,
     ) -> dict:
         """
         Compute LOP deduction and final net from attendance data.
 
         payable_days = present_days + paid_leave_days
-        lop_days     = max(0, working_days - payable_days)
+        lop_days     = max(0, expected_days - payable_days)
         lop_deduction = round(gross / working_days * lop_days, 2)
         net_salary    = gross - lop_deduction - statutory_deductions
+
+        expected_days defaults to the full month's working days; it is lower
+        when the employee joined or left mid-month, plus the days before
+        joining / after leaving are themselves unpaid (LOP).
         """
         gross = salary_dict["gross_earnings"]
         statutory = salary_dict.pop("_statutory_deductions", 0.0)
 
+        target_days = working_days if expected_days is None else expected_days
+        # Days outside the employment window are unpaid too
+        out_of_window = max(0, working_days - target_days)
         payable_days = present_days + paid_leave_days
-        lop_days = max(0.0, round(working_days - payable_days, 4))
+        lop_days = max(0.0, round(target_days - payable_days, 4)) + out_of_window
         per_day = gross / working_days if working_days > 0 else 0.0
         lop_deduction = round(per_day * lop_days, 2)
 
@@ -497,15 +558,34 @@ class PayrollService:
             att_records   = att_map.get(emp_id, [])
             leave_records = leave_map.get(emp_id, [])
 
+            # Days actually attended — a day must not count as both present and paid leave
+            present_dates: Set[str] = set()
+            for rec in att_records:
+                if rec.get("check_in") or _PRESENT_STATUSES.get(rec.get("status", ""), 0.0) > 0:
+                    d = self._to_date(rec.get("date"))
+                    if d:
+                        present_dates.add(d.strftime("%Y-%m-%d"))
+
             paid_leave_days = self._calc_paid_leave_days(
-                leave_records, year, month, holiday_dates
+                leave_records, year, month, holiday_dates, tenant_working_days, present_dates
             )
+
+            # Prorate for mid-month joiners / leavers
+            expected_days = self._calc_expected_days(
+                year, month, holiday_dates, tenant_working_days,
+                self._to_date(emp.get("date_of_joining")),
+                self._to_date(emp.get("date_of_leaving")),
+            )
+
             if att_records:
                 present_days = self._calc_present_days(att_records)
             else:
-                present_days = max(0.0, float(working_days) - paid_leave_days)
+                target = float(working_days if expected_days is None else expected_days)
+                present_days = max(0.0, target - paid_leave_days)
 
-            att_dict = self._apply_attendance(salary_dict, working_days, present_days, paid_leave_days)
+            att_dict = self._apply_attendance(
+                salary_dict, working_days, present_days, paid_leave_days, expected_days
+            )
 
             doc = {
                 "_id":                  str(ObjectId()),
@@ -574,6 +654,20 @@ class PayrollService:
         payment_reference: Optional[str],
         paid_on: Optional[datetime],
     ) -> Optional[dict]:
+        from fastapi import HTTPException
+        valid_statuses = {s.value for s in PayrollStatus}
+        if status not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"Invalid payroll status '{status}'")
+
+        existing = await self.col.find_one(
+            {"_id": payslip_id, "company_id": company_id}, {"status": 1}
+        )
+        if not existing:
+            return None
+        # Paid payslips are locked — money has moved; no further status changes
+        if existing.get("status") == PayrollStatus.PAID.value and status != PayrollStatus.PAID.value:
+            raise HTTPException(status_code=400, detail="A paid payslip is locked and cannot change status.")
+
         now = datetime.now(timezone.utc)
         upd: dict = {"status": status, "updated_at": now}
         if payment_reference:
@@ -592,6 +686,12 @@ class PayrollService:
     ) -> Optional[dict]:
         """Update payslip fields and auto-recalculate gross / LOP / net."""
         existing = await self.get(payslip_id, company_id)
+        if existing and existing.get("status") == PayrollStatus.PAID.value:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=400,
+                detail="A paid payslip is locked and cannot be edited."
+            )
         if existing:
             merged = {**existing}
             for k, v in data.items():

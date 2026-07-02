@@ -127,10 +127,85 @@ class LeaveService:
             if depts and department not in depts:
                 raise ValueError(f"'{policy['name']}' is not applicable to your department")
 
+    # Comp-off leave types are backed by earned credits, not policy allocation
+    _COMP_OFF_TYPES = ("comp_off", "compensatory")
+
+    async def _comp_off_available(self, employee_id: str, company_id: str) -> float:
+        """Sum of available comp-off credits minus pending comp-off leave days."""
+        agg = await self.db["hrm_comp_off_credits"].aggregate([
+            {"$match": {
+                "company_id": company_id, "employee_id": employee_id,
+                "status": "available", "is_deleted": False,
+            }},
+            {"$group": {"_id": None, "total": {"$sum": "$credits"}}},
+        ]).to_list(1)
+        credits = float(agg[0]["total"]) if agg else 0.0
+
+        pend = await self.col.aggregate([
+            {"$match": {
+                "company_id": company_id, "employee_id": employee_id,
+                "leave_type": {"$in": list(self._COMP_OFF_TYPES)},
+                "status": LeaveStatus.PENDING.value,
+            }},
+            {"$group": {"_id": None, "total": {"$sum": "$total_days"}}},
+        ]).to_list(1)
+        pending = float(pend[0]["total"]) if pend else 0.0
+        return credits - pending
+
+    async def _consume_comp_off_credits(self, employee_id: str, company_id: str, days: float) -> None:
+        """Consume comp-off credits FIFO (oldest work date first)."""
+        remaining = days
+        cursor = self.db["hrm_comp_off_credits"].find({
+            "company_id": company_id, "employee_id": employee_id,
+            "status": "available", "is_deleted": False,
+        }).sort("work_date", 1)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        async for credit in cursor:
+            if remaining <= 0:
+                break
+            value = float(credit.get("credits", 0))
+            take = min(value, remaining)
+            leftover = round(value - take, 2)
+            await self.db["hrm_comp_off_credits"].update_one(
+                {"_id": credit["_id"]},
+                {"$set": {
+                    "credits": leftover,
+                    "status": "available" if leftover > 0 else "used",
+                    "updated_at": now,
+                }},
+            )
+            remaining = round(remaining - take, 2)
+
+    async def _restore_comp_off_credits(self, employee_id: str, company_id: str, days: float, leave_id: str) -> None:
+        """Restore credits for a cancelled/revoked approved comp-off leave (auditable new entry)."""
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        await self.db["hrm_comp_off_credits"].insert_one({
+            "_id": str(ObjectId()),
+            "company_id":  company_id,
+            "employee_id": employee_id,
+            "work_date":   date.today().isoformat(),
+            "reason":      f"Restored from cancelled comp-off leave {leave_id}",
+            "credits":     float(days),
+            "status":      "available",
+            "is_deleted":  False,
+            "created_at":  now,
+            "updated_at":  now,
+        })
+
     async def _check_balance(
         self, employee_id: str, company_id: str, leave_type: str, days: float
     ) -> None:
         """Raise ValueError if insufficient balance (policy-driven, all leave types)."""
+        # Comp-off is credit-backed: employees can only take what they earned
+        if leave_type in self._COMP_OFF_TYPES:
+            available = await self._comp_off_available(employee_id, company_id)
+            if available < days:
+                raise ValueError(
+                    f"Insufficient comp-off credits. Available: {max(0.0, available):.1f} day(s), "
+                    f"Requested: {days:.1f} day(s)"
+                )
+            return
+
         policy = await self._get_policy(leave_type, company_id)
         if not policy:
             return  # No policy configured — allow
@@ -212,6 +287,10 @@ class LeaveService:
         # Normalise enum → plain string so all subsequent lookups use "casual" not "LeaveType.CASUAL"
         leave_type = self._enum_val(data.get("leave_type", ""))
         duration   = self._enum_val(data.get("duration", LeaveDuration.FULL_DAY.value))
+
+        # A half-day leave must cover exactly one calendar day
+        if duration in ("half_day_morning", "half_day_afternoon") and from_date != to_date:
+            raise ValueError("Half-day leave must have the same start and end date")
 
         # Compute working days (excludes weekends + holidays)
         days = await self._count_working_days(from_date, to_date, company_id, department, duration)
@@ -298,6 +377,9 @@ class LeaveService:
         company_id: str,
         rejection_reason: Optional[str] = None,
     ) -> Optional[dict]:
+        if action not in ("approve", "reject"):
+            raise ValueError(f"Invalid action '{action}'. Must be 'approve' or 'reject'.")
+
         now = datetime.now(timezone.utc)
         new_status = LeaveStatus.APPROVED if action == "approve" else LeaveStatus.REJECTED
         update: dict = {
@@ -314,10 +396,29 @@ class LeaveService:
         if not leave:
             return None
 
+        current_status = leave.get("status")
+        # Transition guard: approve only from pending; reject from pending or
+        # approved (revoking an approval). Concluded leaves are immutable.
+        if action == "approve" and current_status != LeaveStatus.PENDING.value:
+            raise ValueError(f"Cannot approve a {current_status} leave")
+        if action == "reject" and current_status not in (
+            LeaveStatus.PENDING.value, LeaveStatus.APPROVED.value
+        ):
+            raise ValueError(f"Cannot reject a {current_status} leave")
+
+        leave_type = str(leave.get("leave_type", ""))
+        total_days = float(leave.get("total_days", 1))
+
         if action == "approve":
+            # Comp-off leaves consume earned credits at approval time
+            if leave_type in self._COMP_OFF_TYPES:
+                available = await self._comp_off_available(leave["employee_id"], company_id) + total_days
+                if available < total_days:
+                    raise ValueError("Insufficient comp-off credits to approve this leave.")
+                await self._consume_comp_off_credits(leave["employee_id"], company_id, total_days)
             await self._deduct_balance(
                 leave["employee_id"], company_id,
-                leave.get("leave_type"), float(leave.get("total_days", 1)),
+                leave.get("leave_type"), total_days,
             )
             # Create attendance placeholder records for each working day of the leave.
             # Runs after deduct_balance so the leave is logically committed first.
@@ -326,6 +427,14 @@ class LeaveService:
                 await self.create_attendance_for_leave(leave_for_attendance, company_id)
             except Exception as exc:
                 logger.warning("create_attendance_for_leave failed for leave %s: %s", leave_id, exc)
+        elif current_status == LeaveStatus.APPROVED.value:
+            # Revoking an approval: clean up on_leave placeholders and restore credits
+            try:
+                await self.remove_attendance_for_leave(leave_id, company_id)
+            except Exception as exc:
+                logger.warning("remove_attendance_for_leave failed for leave %s: %s", leave_id, exc)
+            if leave_type in self._COMP_OFF_TYPES:
+                await self._restore_comp_off_credits(leave["employee_id"], company_id, total_days, leave_id)
 
         await self.col.update_one({"_id": leave_id, "company_id": company_id}, {"$set": update})
 
@@ -351,6 +460,14 @@ class LeaveService:
             raise ValueError("You can only cancel your own leaves")
         if leave.get("status") not in (LeaveStatus.PENDING, LeaveStatus.APPROVED):
             raise ValueError(f"Cannot cancel a {leave.get('status')} leave")
+        # A leave that has fully ended cannot be cancelled (would silently
+        # reclaim balance for days already taken)
+        try:
+            leave_end = date.fromisoformat(str(leave.get("to_date", "")))
+        except (TypeError, ValueError):
+            leave_end = None
+        if leave_end is not None and leave_end < date.today():
+            raise ValueError("Cannot cancel a leave that has already ended")
         now = datetime.now(timezone.utc)
         await self.col.update_one(
             {"_id": leave_id},
@@ -362,6 +479,10 @@ class LeaveService:
                 employee_id, company_id,
                 leave.get("leave_type"), float(leave.get("total_days", 1)),
             )
+            if str(leave.get("leave_type", "")) in self._COMP_OFF_TYPES:
+                await self._restore_comp_off_credits(
+                    employee_id, company_id, float(leave.get("total_days", 1)), leave_id
+                )
             # Remove attendance placeholder records created for this leave
             try:
                 await self.remove_attendance_for_leave(leave_id, company_id)

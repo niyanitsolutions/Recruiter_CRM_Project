@@ -30,7 +30,7 @@ def _get_service(master_db: AsyncIOMotorDatabase = Depends(get_master_db)) -> Co
 @router.post("/announcements", status_code=status.HTTP_201_CREATED)
 async def create_announcement(
     data: SuperAnnouncementCreate,
-    admin: dict = Depends(require_super_admin),
+    admin: dict = Depends(require_super_admin()),
     svc: CommunicationService = Depends(_get_service),
 ):
     doc = await svc.create(data, admin.get("id", ""))
@@ -45,7 +45,7 @@ async def list_announcements(
     status_filter:     Optional[str]  = Query(None, alias="status"),
     skip:              int            = Query(0, ge=0),
     limit:             int            = Query(50, ge=1, le=200),
-    _: dict = Depends(require_super_admin),
+    _: dict = Depends(require_super_admin()),
     svc: CommunicationService = Depends(_get_service),
 ):
     result = await svc.list_all(
@@ -62,7 +62,7 @@ async def list_announcements(
 @router.get("/announcements/{announcement_id}")
 async def get_announcement(
     announcement_id: str,
-    _: dict = Depends(require_super_admin),
+    _: dict = Depends(require_super_admin()),
     svc: CommunicationService = Depends(_get_service),
 ):
     doc = await svc.get_by_id(announcement_id)
@@ -75,7 +75,7 @@ async def get_announcement(
 async def update_announcement(
     announcement_id: str,
     data: SuperAnnouncementUpdate,
-    admin: dict = Depends(require_super_admin),
+    admin: dict = Depends(require_super_admin()),
     svc: CommunicationService = Depends(_get_service),
 ):
     doc = await svc.update(announcement_id, data, admin.get("id", ""))
@@ -87,7 +87,7 @@ async def update_announcement(
 @router.delete("/announcements/{announcement_id}")
 async def delete_announcement(
     announcement_id: str,
-    _: dict = Depends(require_super_admin),
+    _: dict = Depends(require_super_admin()),
     svc: CommunicationService = Depends(_get_service),
 ):
     deleted = await svc.delete(announcement_id)
@@ -100,7 +100,7 @@ async def delete_announcement(
 async def toggle_announcement(
     announcement_id: str,
     payload: dict,
-    _: dict = Depends(require_super_admin),
+    _: dict = Depends(require_super_admin()),
     svc: CommunicationService = Depends(_get_service),
 ):
     is_active = payload.get("is_active")
@@ -118,7 +118,7 @@ async def toggle_announcement(
 async def upload_announcement_image(
     announcement_id: str,
     file: UploadFile = File(...),
-    _: dict = Depends(require_super_admin),
+    _: dict = Depends(require_super_admin()),
     svc: CommunicationService = Depends(_get_service),
 ):
     existing = await svc.get_by_id(announcement_id)
@@ -156,7 +156,7 @@ async def upload_announcement_image(
 @router.delete("/announcements/{announcement_id}/image")
 async def remove_announcement_image(
     announcement_id: str,
-    _: dict = Depends(require_super_admin),
+    _: dict = Depends(require_super_admin()),
     svc: CommunicationService = Depends(_get_service),
 ):
     existing = await svc.get_by_id(announcement_id)
@@ -178,7 +178,7 @@ async def remove_announcement_image(
 @router.get("/announcements/{announcement_id}/analytics")
 async def get_analytics(
     announcement_id: str,
-    _: dict = Depends(require_super_admin),
+    _: dict = Depends(require_super_admin()),
     svc: CommunicationService = Depends(_get_service),
 ):
     data = await svc.get_analytics(announcement_id)
@@ -191,7 +191,7 @@ async def get_analytics(
 
 @router.get("/stats")
 async def get_stats(
-    _: dict = Depends(require_super_admin),
+    _: dict = Depends(require_super_admin()),
     svc: CommunicationService = Depends(_get_service),
 ):
     from datetime import datetime, timezone
@@ -233,7 +233,7 @@ async def get_stats(
 async def search_tenants(
     q:     str = Query("", description="Search query"),
     limit: int = Query(20, ge=1, le=100),
-    _: dict = Depends(require_super_admin),
+    _: dict = Depends(require_super_admin()),
     master_db: AsyncIOMotorDatabase = Depends(get_master_db),
 ):
     import re

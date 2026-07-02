@@ -61,8 +61,10 @@ async def _run_auto_checkout(source: str = "scheduler") -> None:
         from app.services.attendance_service import AttendanceService
 
         master_db = get_master_db()
+        # Company DBs are keyed by the short company_id, NOT the tenant _id (UUID) —
+        # using _id here resolved non-existent DB names and the sweep closed nothing.
         tenant_ids = await master_db.tenants.distinct(
-            "_id", {"is_deleted": {"$ne": True}, "is_active": {"$ne": False}}
+            "company_id", {"is_deleted": {"$ne": True}, "is_active": {"$ne": False}}
         )
 
         total = 0

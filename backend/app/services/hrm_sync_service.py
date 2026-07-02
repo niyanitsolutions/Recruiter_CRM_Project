@@ -23,8 +23,8 @@ class HRMSyncService:
         return doc
 
     async def _next_employee_id(self, company_id: str) -> str:
-        count = await self.employees.count_documents({"company_id": company_id})
-        return f"EMP{(count + 1):04d}"
+        from app.services.employee_service import next_employee_code
+        return await next_employee_code(self.employees, company_id)
 
     # ── Status ────────────────────────────────────────────────────────────────
 

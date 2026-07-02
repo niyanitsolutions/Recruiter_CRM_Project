@@ -84,7 +84,31 @@ class JobService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Client not found"
             )
-        
+
+        # Jobs cannot be created for clients that are not in working status
+        client_status = client.get("status", "active")
+        if client_status in ("blacklisted", "rejected", "inactive"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot create a job for a client with status '{client_status}'."
+            )
+
+        # Validate job status value
+        if job_data.status and job_data.status not in {s.value for s in JobStatus}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid job status '{job_data.status}'."
+            )
+
+        # User-supplied job codes must be unique
+        if job_data.job_code:
+            dup = await collection.find_one({"job_code": job_data.job_code, "is_deleted": False})
+            if dup:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"A job with code '{job_data.job_code}' already exists."
+                )
+
         # Generate job code if not provided
         job_code = job_data.job_code
         if not job_code:
@@ -357,6 +381,11 @@ class JobService:
         if "status" in update_dict:
             new_status = update_dict["status"]
             old_status = existing.get("status")
+            if new_status not in {s.value for s in JobStatus}:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid job status '{new_status}'."
+                )
             if new_status == JobStatus.OPEN.value and old_status != JobStatus.OPEN.value:
                 update_dict["posted_date"] = datetime.now(timezone.utc).replace(
                     hour=0, minute=0, second=0, microsecond=0
@@ -407,10 +436,11 @@ class JobService:
         if not existing:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
         
+        from app.models.company.application import ACTIVE_APPLICATION_STATUSES
         applications_collection = db["applications"]
         active_applications = await applications_collection.count_documents({
             "job_id": job_id,
-            "status": {"$in": ["applied", "screening", "shortlisted", "interview", "offered"]},
+            "status": {"$in": ACTIVE_APPLICATION_STATUSES},
             "is_deleted": False
         })
         
@@ -520,15 +550,18 @@ class JobService:
         cursor = candidates_collection.find(query).limit(limit * 2)
         candidates = await cursor.to_list(length=limit * 2)
         
+        from app.services.matching_service import MatchingService
         results = []
         for cand in candidates:
-            eligibility_result = await JobService.check_candidate_eligibility(db, job_id, cand["_id"])
-            if eligibility_result.get("eligible", False):
+            # Job and candidate docs are already loaded — evaluate directly with
+            # the central engine instead of re-fetching both per candidate.
+            ev = MatchingService.evaluate_dicts(job, cand)
+            if ev.get("eligible", False):
                 results.append({
                     "candidate_id": cand["_id"], "name": cand.get("full_name"), "email": cand["email"],
                     "experience": cand.get("total_experience_years"), "current_ctc": cand.get("current_ctc"),
                     "expected_ctc": cand.get("expected_ctc"), "notice_period": cand.get("notice_period"),
-                    "skills": cand.get("skill_tags", [])[:5], "score": eligibility_result["score"]
+                    "skills": cand.get("skill_tags", [])[:5], "score": ev["final_score"]
                 })
 
         results.sort(key=lambda x: x["score"], reverse=True)

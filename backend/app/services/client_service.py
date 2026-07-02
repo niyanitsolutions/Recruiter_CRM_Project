@@ -226,15 +226,8 @@ class ClientService:
 
         # Format response
         result = []
-        _log = logging.getLogger("client_service")
         for client in clients:
             live_active_jobs = job_counts.get(client["_id"], 0)
-            _log.info(
-                "CLIENT LIST | %s | active_jobs=%d | city=%r | raw_keys=%s",
-                client["name"], live_active_jobs,
-                client.get("city"),
-                [k for k in client.keys() if "city" in k.lower() or "location" in k.lower() or "address" in k.lower()]
-            )
             result.append(ClientListResponse(
                 id=client["_id"],
                 name=client["name"],
@@ -387,14 +380,15 @@ class ClientService:
                 detail="Client not found"
             )
         
-        # Check for active jobs
+        # Check for active jobs (draft jobs count too — deleting the client
+        # would orphan them and they could later be opened against it)
         jobs_collection = db["jobs"]
         active_jobs = await jobs_collection.count_documents({
             "client_id": client_id,
-            "status": {"$in": ["open", "on_hold"]},
+            "status": {"$in": ["draft", "open", "on_hold"]},
             "is_deleted": False
         })
-        
+
         if active_jobs > 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

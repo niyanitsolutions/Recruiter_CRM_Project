@@ -1303,9 +1303,10 @@ async def bulk_delete_candidates(
             continue
 
         # Block deletion when active applications exist
+        from app.models.company.application import ACTIVE_APPLICATION_STATUSES
         active_apps = await db["applications"].count_documents({
             "candidate_id": cid,
-            "status": {"$in": ["applied", "screening", "shortlisted", "interview", "offered"]},
+            "status": {"$in": ACTIVE_APPLICATION_STATUSES},
             "is_deleted": False,
         })
         if active_apps > 0:

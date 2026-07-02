@@ -231,7 +231,9 @@ async def bulk_apply_candidates(
 ):
     """Apply multiple candidates to a job at once"""
     results = {"success": [], "failed": []}
-    
+
+    partner_id = current_user["id"] if current_user.get("role") == "partner" else None
+
     for candidate_id in candidate_ids:
         try:
             application_data = ApplicationCreate(
@@ -241,7 +243,8 @@ async def bulk_apply_candidates(
             await ApplicationService.create_application(
                 db=db,
                 application_data=application_data,
-                created_by=current_user["id"]
+                created_by=current_user["id"],
+                partner_id=partner_id
             )
             results["success"].append(candidate_id)
         except HTTPException as e:

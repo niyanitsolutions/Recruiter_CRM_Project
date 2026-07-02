@@ -60,11 +60,16 @@ class AttendanceService:
             "max_breaks":           int(doc.get("attendance_max_breaks",        _DEFAULT_MAX_BREAKS)),
             "ip_restriction":       bool(doc.get("attendance_ip_restriction_enabled", False)),
             "approved_ips":         doc.get("approved_office_ips", []),
-            # Geo-fence
-            "geo_fence_enabled":    bool(doc.get("attendance_geo_fence_enabled", False)),
+            # Geo-fence — two config schemas exist historically:
+            #   attendance_* keys (single point, HRM attendance settings screen)
+            #   geo_fence_enabled + geo_fence_locations (multi-zone, company settings screen)
+            # Check-in enforcement honors BOTH so no tenant config silently no-ops.
+            "geo_fence_enabled":    bool(doc.get("attendance_geo_fence_enabled", False))
+                                    or bool(doc.get("geo_fence_enabled", False)),
             "geo_fence_radius":     int(doc.get("attendance_geo_fence_radius_meters", 100)),
             "geo_fence_lat":        doc.get("attendance_geo_fence_latitude"),
             "geo_fence_lon":        doc.get("attendance_geo_fence_longitude"),
+            "geo_fence_locations":  doc.get("geo_fence_locations") or [],
             # Working days: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
             # Default Mon-Fri. Stored as JSON array in company_settings.
             "working_days":         doc.get("attendance_working_days", [0, 1, 2, 3, 4]),
@@ -96,6 +101,45 @@ class AttendanceService:
             ]
         doc = await self.db["hrm_holidays"].find_one(query)
         return doc["name"] if doc else None
+
+    @staticmethod
+    def _local_now(settings: dict) -> datetime:
+        """Current time in the tenant's timezone, as a naive datetime.
+
+        Shift times ("09:00") are wall-clock times in the tenant's timezone;
+        comparing them against naive UTC marks everyone late/early by the UTC
+        offset. Falls back to UTC when the timezone is missing or invalid.
+        """
+        tz_name = settings.get("timezone") or "UTC"
+        try:
+            from zoneinfo import ZoneInfo
+            return datetime.now(ZoneInfo(tz_name)).replace(tzinfo=None)
+        except Exception:
+            return datetime.now(timezone.utc).replace(tzinfo=None)
+
+    def _geo_zones(self, settings: dict) -> List[dict]:
+        """All configured geo-fence zones (legacy single point + multi-zone list)."""
+        zones: List[dict] = []
+        if settings.get("geo_fence_lat") is not None and settings.get("geo_fence_lon") is not None:
+            zones.append({
+                "lat": settings["geo_fence_lat"],
+                "lon": settings["geo_fence_lon"],
+                "radius": int(settings.get("geo_fence_radius", 100)),
+            })
+        for z in settings.get("geo_fence_locations") or []:
+            if z.get("latitude") is not None and z.get("longitude") is not None:
+                zones.append({
+                    "lat": z["latitude"],
+                    "lon": z["longitude"],
+                    "radius": int(z.get("radius", 500)),
+                })
+        return zones
+
+    def _is_within_any_zone(self, zones: List[dict], latitude: float, longitude: float) -> bool:
+        return any(
+            self._haversine_meters(latitude, longitude, z["lat"], z["lon"]) <= z["radius"]
+            for z in zones
+        )
 
     @staticmethod
     def _haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -333,6 +377,12 @@ class AttendanceService:
             # Already punched in today — return existing record unchanged
             return self._serialize(dict(existing))
 
+        # Invalid GPS coordinates (out of WGS-84 range) are treated as not provided
+        if latitude is not None and not (-90.0 <= latitude <= 90.0):
+            latitude = longitude = None
+        if longitude is not None and not (-180.0 <= longitude <= 180.0):
+            latitude = longitude = None
+
         settings = await self._get_settings()
         emp = await self._get_employee(employee_id, company_id)
         dept = emp.get("department") if emp else None
@@ -363,17 +413,11 @@ class AttendanceService:
             active_wmr = await self._get_active_work_mode_request(employee_id, company_id, today_str)
             approved_mode = active_wmr.get("work_mode") if active_wmr else None
 
-            # 9. Geo fence
-            if settings["geo_fence_enabled"] and not bypass_geo:
-                if (settings["geo_fence_lat"] is not None
-                        and settings["geo_fence_lon"] is not None
-                        and latitude is not None
-                        and longitude is not None):
-                    distance = self._haversine_meters(
-                        latitude, longitude,
-                        settings["geo_fence_lat"], settings["geo_fence_lon"],
-                    )
-                    if distance <= settings["geo_fence_radius"]:
+            # 9. Geo fence — employee must be inside ANY configured zone
+            geo_zones = self._geo_zones(settings)
+            if settings["geo_fence_enabled"] and not bypass_geo and geo_zones:
+                if latitude is not None and longitude is not None:
+                    if self._is_within_any_zone(geo_zones, latitude, longitude):
                         work_mode = "office"
                     else:
                         if approved_mode:
@@ -414,19 +458,14 @@ class AttendanceService:
                     raise ValueError(
                         f"Check-in blocked: your IP ({client_ip}) is not in the list of approved office IPs."
                     )
+            admin_geo_zones = self._geo_zones(settings)
             if (work_mode == "office"
                     and settings["geo_fence_enabled"]
-                    and settings["geo_fence_lat"] is not None
-                    and settings["geo_fence_lon"] is not None):
+                    and admin_geo_zones):
                 if latitude is not None and longitude is not None:
-                    distance = self._haversine_meters(
-                        latitude, longitude,
-                        settings["geo_fence_lat"], settings["geo_fence_lon"],
-                    )
-                    if distance > settings["geo_fence_radius"]:
+                    if not self._is_within_any_zone(admin_geo_zones, latitude, longitude):
                         raise ValueError(
-                            f"You are not in the office location required by your organization "
-                            f"(distance: {int(distance)}m, allowed radius: {settings['geo_fence_radius']}m). "
+                            "You are not in the office location required by your organization. "
                             "Please contact HR if you require remote access approval."
                         )
         # is_owner==True falls through without any geo/IP checks
@@ -443,12 +482,14 @@ class AttendanceService:
         working_days = self._get_effective_working_days(settings, emp)
         is_today_weekend = date.today().weekday() not in working_days
 
-        # 11. Late calculation
+        # 11. Late calculation — shift times are wall-clock in the TENANT timezone,
+        # so compare against tenant-local now, not UTC.
+        local_now = self._local_now(settings)
         sh, sm = map(int, shift_start.split(":"))
-        shift_dt = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+        shift_dt = local_now.replace(hour=sh, minute=sm, second=0, microsecond=0)
         late_threshold = shift_dt + timedelta(minutes=grace)
-        is_late = now > late_threshold
-        late_by = max(0, int((now - late_threshold).total_seconds() / 60)) if is_late else 0
+        is_late = local_now > late_threshold
+        late_by = max(0, int((local_now - late_threshold).total_seconds() / 60)) if is_late else 0
 
         # ── Status determination ─────────────────────────────────────────────
         if holiday_name:
@@ -517,6 +558,30 @@ class AttendanceService:
                 **checkin_fields,
             }
             await self.col.insert_one(result)
+
+        # Fraud scan (spoofed GPS / impossible travel) — audit only, never blocks
+        try:
+            from app.services.attendance_login_validator import flag_location_fraud
+            prev_rec = await self.col.find_one(
+                {
+                    "employee_id": employee_id,
+                    "company_id": company_id,
+                    "check_in": {"$ne": None},
+                    "date": {"$lt": today},
+                },
+                sort=[("date", -1)],
+            )
+            zones = self._geo_zones(settings)
+            first_zone = zones[0] if zones else {}
+            await flag_location_fraud(
+                self.db, company_id, employee_id, work_mode,
+                latitude, longitude,
+                first_zone.get("lat"), first_zone.get("lon"),
+                int(first_zone.get("radius", settings["geo_fence_radius"])),
+                prev_rec, now,
+            )
+        except Exception:
+            pass
 
         # Fire punch-in notification (non-blocking)
         crm_user_id = emp.get("crm_user_id") if emp else None
@@ -614,11 +679,13 @@ class AttendanceService:
         )
         shift_end_str = shift["end"]
         eh, em = map(int, shift_end_str.split(":"))
-        shift_end_dt = now.replace(hour=eh, minute=em, second=0, microsecond=0)
+        # Shift end is wall-clock in the TENANT timezone — compare in local time
+        local_now = self._local_now(settings)
+        shift_end_dt = local_now.replace(hour=eh, minute=em, second=0, microsecond=0)
         # Night shift: if shift ends next day, adjust
-        if shift.get("is_overnight") and shift_end_dt < now.replace(hour=12, minute=0, second=0, microsecond=0):
+        if shift.get("is_overnight") and shift_end_dt < local_now.replace(hour=12, minute=0, second=0, microsecond=0):
             shift_end_dt += timedelta(days=1)
-        overtime = max(0.0, round((now - shift_end_dt).total_seconds() / 3600, 2)) if now > shift_end_dt else 0.0
+        overtime = max(0.0, round((local_now - shift_end_dt).total_seconds() / 3600, 2)) if local_now > shift_end_dt else 0.0
         is_half_day = work_hours < settings["half_day_hours"]
 
         geo = None
@@ -701,6 +768,9 @@ class AttendanceService:
         breaks = list(record.get("breaks", []))
         if breaks and not breaks[-1].get("end"):
             return self._serialize(dict(record))  # already on break
+        settings = await self._get_settings()
+        if settings["max_breaks"] > 0 and len(breaks) >= settings["max_breaks"]:
+            raise ValueError(f"Break limit reached: maximum {settings['max_breaks']} breaks per day.")
         breaks.append({"start": now, "end": None, "duration_minutes": None, "reason": reason})
         await self.col.update_one({"_id": record["_id"]},
             {"$set": {"breaks": breaks, "updated_at": now}})

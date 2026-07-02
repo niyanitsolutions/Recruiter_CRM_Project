@@ -14,7 +14,8 @@ from app.models.company.application import (
     ApplicationResponse,
     ApplicationListResponse,
     ApplicationStatus,
-    get_application_status_display
+    get_application_status_display,
+    is_valid_status_transition
 )
 from app.services.audit_service import AuditService
 
@@ -156,7 +157,14 @@ class ApplicationService:
             "is_deleted": False
         }
         
-        await collection.insert_one(app_dict)
+        try:
+            await collection.insert_one(app_dict)
+        except Exception as exc:
+            # Unique index (candidate_id + job_id, active docs) guards against
+            # duplicate applications created by concurrent requests.
+            if "duplicate key" in str(exc).lower():
+                raise HTTPException(status_code=400, detail="Candidate has already applied for this job")
+            raise
 
         # Update job stats and candidate tracking (non-critical — don't fail the response)
         try:
@@ -173,7 +181,7 @@ class ApplicationService:
                     "$set": {
                         "current_job_id": application_data.job_id,
                         "current_job_title": job.get("title"),
-                        "current_stage": ApplicationStatus.APPLIED.value
+                        "current_stage": initial_status
                     }
                 }
             )
@@ -231,6 +239,8 @@ class ApplicationService:
             rejection_remarks=app.get("rejection_remarks"),
             assigned_to=app.get("assigned_to"),
             assigned_to_name=app.get("assigned_to_name"),
+            partner_id=app.get("partner_id"),
+            created_by=app.get("created_by"),
             eligibility_score=app.get("eligibility_score"),
             eligibility_reason=app.get("eligibility_reason"),
             matching_breakdown=app.get("matching_breakdown") or app.get("eligibility_details"),
@@ -340,8 +350,6 @@ class ApplicationService:
         candidate_id: str
     ) -> List[Dict[str, Any]]:
         """Return all open jobs with eligibility scores for a candidate (scoped to tenant DB)."""
-        from app.services.job_service import JobService
-
         candidate = await db["candidates"].find_one({"_id": candidate_id, "is_deleted": False})
         if not candidate:
             raise HTTPException(status_code=404, detail="Candidate not found")
@@ -359,9 +367,13 @@ class ApplicationService:
             "job_id", {"candidate_id": candidate_id, "is_deleted": False}
         ))
 
+        from app.services.matching_service import MatchingService
         results = []
         for job in jobs:
-            elig = await JobService.check_candidate_eligibility(db, job["_id"], candidate_id)
+            # Candidate and job docs are already loaded — evaluate in-memory
+            # instead of re-fetching both per job (was 2 extra queries per job).
+            ev = MatchingService.evaluate_dicts(job, candidate)
+            elig = {"score": ev["final_score"], "eligible": ev["eligible"], "issues": ev["rejection_reasons"]}
             results.append({
                 "job_id":          job["_id"],
                 "job_title":       job.get("title"),
@@ -394,7 +406,15 @@ class ApplicationService:
         
         old_status = existing.get("status")
         new_status = status_update.status
-        
+
+        # Enforce the application state machine: reject unknown statuses and
+        # invalid jumps out of concluded states (joined/rejected/withdrawn/offer_declined).
+        ok, err = is_valid_status_transition(old_status, new_status)
+        if not ok:
+            raise HTTPException(status_code=400, detail=err)
+        if old_status == new_status:
+            return await ApplicationService.get_application(db, application_id)
+
         # Get user name
         users_collection = db["users"]
         user = await users_collection.find_one({"_id": updated_by})
@@ -442,7 +462,12 @@ class ApplicationService:
         # Handle joining
         if new_status == ApplicationStatus.JOINED.value:
             update_data["actual_joining_date"] = status_update.actual_joining_date or datetime.now(timezone.utc)
-        
+
+        # Handle withdrawal
+        if new_status == ApplicationStatus.WITHDRAWN.value:
+            update_data["withdrawal_reason"] = status_update.remarks or status_update.rejection_reason
+            update_data["withdrawn_at"] = datetime.now(timezone.utc)
+
         await collection.update_one(
             {"_id": application_id},
             {
@@ -451,6 +476,34 @@ class ApplicationService:
             }
         )
         
+        # Withdrawal/rejection mid-interview: cancel any still-active interviews
+        # for this application so the pipeline holds no live interviews for a
+        # concluded application (non-critical — don't fail the response).
+        if new_status in (ApplicationStatus.WITHDRAWN.value, ApplicationStatus.REJECTED.value):
+            try:
+                now_dt = datetime.now(timezone.utc)
+                res = await db["interviews"].update_many(
+                    {
+                        "application_id": application_id,
+                        "status": {"$in": ["scheduled", "confirmed", "in_progress", "rescheduled", "on_hold"]},
+                        "is_deleted": False,
+                    },
+                    {"$set": {
+                        "status": "cancelled",
+                        "cancellation_reason": f"Application {new_status}",
+                        "cancelled_by": updated_by,
+                        "cancelled_at": now_dt,
+                        "updated_at": now_dt,
+                    }}
+                )
+                if res.modified_count:
+                    await collection.update_one(
+                        {"_id": application_id},
+                        {"$inc": {"pending_interviews": -res.modified_count}}
+                    )
+            except Exception:
+                pass
+
         # Update job stats and candidate tracking (non-critical — don't fail the response)
         try:
             from app.services.job_service import JobService

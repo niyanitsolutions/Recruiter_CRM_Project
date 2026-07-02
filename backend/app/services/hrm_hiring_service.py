@@ -114,10 +114,23 @@ class HRMHiringService:
         return self._ser(doc) if doc else None
 
     async def update_candidate(self, cand_id: str, company_id: str, data: dict) -> Optional[dict]:
+        from fastapi import HTTPException
         now = datetime.now(timezone.utc)
         upd = {k: v for k, v in data.items() if v is not None}
         upd["updated_at"] = now
         if "current_stage" in upd:
+            new_stage = str(upd["current_stage"])
+            valid_stages = {s.value for s in HiringStage}
+            if new_stage not in valid_stages:
+                raise HTTPException(status_code=400, detail=f"Invalid hiring stage '{new_stage}'")
+            existing = await self.candidates.find_one(
+                {"_id": cand_id, "company_id": company_id}, {"current_stage": 1}
+            )
+            # HIRED is terminal — the person is now an employee; the hiring
+            # record must not be re-opened (would allow a second employee creation)
+            if existing and existing.get("current_stage") == HiringStage.HIRED.value \
+                    and new_stage != HiringStage.HIRED.value:
+                raise HTTPException(status_code=400, detail="Cannot change stage of a hired candidate.")
             await self.candidates.update_one(
                 {"_id": cand_id, "company_id": company_id},
                 {"$push": {"stage_history": {"stage": upd["current_stage"], "changed_at": now.isoformat()}}}
@@ -198,6 +211,20 @@ class HRMHiringService:
         return self._ser(doc) if doc else None
 
     async def respond_offer(self, offer_id: str, company_id: str, action: str, rejection_reason: Optional[str]) -> Optional[dict]:
+        from fastapi import HTTPException
+        if action not in ("accept", "reject"):
+            raise HTTPException(status_code=400, detail=f"Invalid action '{action}'. Must be 'accept' or 'reject'.")
+
+        current = await self.offers.find_one({"_id": offer_id, "company_id": company_id}, {"status": 1})
+        if not current:
+            return None
+        # Only pending offers (draft/sent) can be responded to
+        if current.get("status") not in (OfferStatus.DRAFT.value, OfferStatus.SENT.value):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot {action} an offer with status '{current.get('status')}'."
+            )
+
         now = datetime.now(timezone.utc)
         if action == "accept":
             upd = {"status": OfferStatus.ACCEPTED, "accepted_at": now, "updated_at": now}
@@ -212,6 +239,18 @@ class HRMHiringService:
         return await self.get_offer(offer_id, company_id)
 
     async def update_offer_status(self, offer_id: str, company_id: str, status: str) -> Optional[dict]:
+        from fastapi import HTTPException
+        if status not in {s.value for s in OfferStatus}:
+            raise HTTPException(status_code=400, detail=f"Invalid offer status '{status}'")
+        current = await self.offers.find_one({"_id": offer_id, "company_id": company_id}, {"status": 1})
+        if not current:
+            return None
+        # An accepted offer is committed (candidate moved to onboarding) —
+        # it can only be revoked, not silently reverted to draft/sent/rejected
+        if current.get("status") == OfferStatus.ACCEPTED.value and status not in (
+            OfferStatus.ACCEPTED.value, OfferStatus.REVOKED.value
+        ):
+            raise HTTPException(status_code=400, detail="An accepted offer can only be revoked.")
         await self.offers.update_one(
             {"_id": offer_id, "company_id": company_id},
             {"$set": {"status": status, "updated_at": datetime.now(timezone.utc)}}
@@ -221,8 +260,35 @@ class HRMHiringService:
     # ── ONBOARDING ────────────────────────────────────────────────────────────
 
     async def create_onboarding(self, company_id: str, data: dict, created_by: str) -> dict:
+        from fastapi import HTTPException
         now = datetime.now(timezone.utc)
         cand = await self.candidates.find_one({"_id": data["candidate_id"], "company_id": company_id})
+
+        # Workflow gate: onboarding (→ employee creation) requires an ACCEPTED offer
+        offer_query: dict = {"company_id": company_id, "status": OfferStatus.ACCEPTED.value}
+        if data.get("offer_id"):
+            offer_query["_id"] = data["offer_id"]
+        else:
+            offer_query["candidate_id"] = data["candidate_id"]
+        accepted_offer = await self.offers.find_one(offer_query, {"_id": 1})
+        if not accepted_offer:
+            raise HTTPException(
+                status_code=400,
+                detail="Onboarding requires an accepted offer for this candidate."
+            )
+
+        # One active onboarding per candidate — a duplicate would allow a second
+        # employee record for the same hire
+        existing_onb = await self.onboardings.find_one({
+            "company_id": company_id,
+            "candidate_id": data["candidate_id"],
+            "status": {"$ne": OnboardingStatus.CANCELLED.value},
+        }, {"_id": 1})
+        if existing_onb:
+            raise HTTPException(
+                status_code=400,
+                detail="An onboarding record already exists for this candidate."
+            )
         doc = {
             "_id": str(ObjectId()),
             "company_id": company_id,
@@ -271,6 +337,14 @@ class HRMHiringService:
         onb = await self.onboardings.find_one({"_id": onb_id, "company_id": company_id})
         if not onb:
             return None
+
+        # Idempotency guard: completing twice must not create a second employee
+        if onb.get("status") == OnboardingStatus.COMPLETED or onb.get("employee_id"):
+            return await self.get_onboarding(onb_id, company_id)
+
+        if onb.get("status") == OnboardingStatus.CANCELLED:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="Cannot complete a cancelled onboarding.")
 
         emp_svc = EmployeeService(self.db)
         from app.models.company.employee import EmployeeCreate

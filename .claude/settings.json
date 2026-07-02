@@ -9,7 +9,8 @@
       "Bash(npx --no-install eslint frontend/src/pages/hrm/document-center/QuickBuilder.jsx --max-warnings=50)",
       "Bash(python3 -c \"import razorpay; import os; print\\(os.path.dirname\\(razorpay.__file__\\)\\)\")",
       "Bash(.venv/Scripts/python.exe -c \"import razorpay, os; print\\(os.path.dirname\\(razorpay.__file__\\)\\)\")",
-      "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe -c \"import razorpay, os; print\\(os.path.dirname\\(razorpay.__file__\\)\\)\")"
+      "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe -c \"import razorpay, os; print\\(os.path.dirname\\(razorpay.__file__\\)\\)\")",
+      "Bash(echo \"COMPILEALL_EXIT=$?\")"
     ]
   }
 }

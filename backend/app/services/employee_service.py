@@ -29,6 +29,28 @@ from app.models.company.employee import (
 )
 
 
+async def next_employee_code(col, company_id: str) -> str:
+    """Next sequential EMP code from the highest existing number.
+
+    Count-based generation reused numbers after deletions (10 employees, delete
+    one, next create → duplicate EMP0010). Soft-deleted docs stay in the
+    collection, so taking max over all docs never reuses a code.
+    """
+    docs = await col.find(
+        {"company_id": company_id, "employee_id": {"$regex": r"^EMP\d+$"}},
+        {"employee_id": 1},
+    ).sort("employee_id", -1).limit(1).to_list(1)
+    n = 0
+    if docs:
+        try:
+            n = int(docs[0]["employee_id"][3:])
+        except (ValueError, TypeError):
+            n = 0
+    if n <= 0:
+        n = await col.count_documents({"company_id": company_id})
+    return f"EMP{(n + 1):04d}"
+
+
 class EmployeeService:
     COL = "hrm_employees"
 
@@ -39,8 +61,7 @@ class EmployeeService:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     async def _next_employee_id(self, company_id: str) -> str:
-        count = await self.col.count_documents({"company_id": company_id})
-        return f"EMP{(count + 1):04d}"
+        return await next_employee_code(self.col, company_id)
 
     @staticmethod
     def _serialize(doc: dict) -> dict:
@@ -62,10 +83,22 @@ class EmployeeService:
         crm_enabled: bool = True,
         hrm_enabled: bool = True,
     ) -> dict:
+        # Duplicate employee email → would auto-link two employees to one user
+        from fastapi import HTTPException
+        dup_emp = await self.col.find_one({
+            "email": {"$regex": f"^{re.escape(str(data.email).lower().strip())}$", "$options": "i"},
+            "company_id": company_id,
+            "is_deleted": False,
+        }, {"_id": 1})
+        if dup_emp:
+            raise HTTPException(status_code=409, detail={
+                "duplicate": True,
+                "fields": {"email": str(data.email)},
+            })
+
         # ── Pre-validate account_info before creating anything ────────────────
         # This prevents orphan employees when account creation fails due to duplicates.
         if data.account_info and data.account_info.username and data.account_info.password:
-            from fastapi import HTTPException
             ai = data.account_info
             employee_email = str(data.email).lower().strip()
 
@@ -349,10 +382,23 @@ class EmployeeService:
         return await self.get(employee_id, company_id)
 
     async def delete(self, employee_id: str, company_id: str) -> bool:
+        emp = await self.col.find_one(
+            {"_id": employee_id, "company_id": company_id}, {"crm_user_id": 1}
+        )
         result = await self.col.update_one(
             {"_id": employee_id, "company_id": company_id},
             {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}},
         )
+        # Unlink the CRM user so it no longer points at a deleted employee record
+        if result.modified_count and emp and emp.get("crm_user_id"):
+            try:
+                await self.db.users.update_one(
+                    {"_id": emp["crm_user_id"]},
+                    {"$unset": {"hrm_employee_id": ""},
+                     "$set": {"updated_at": datetime.now(timezone.utc)}},
+                )
+            except Exception:
+                pass
         return result.modified_count > 0
 
     async def get_by_email(self, email: str, company_id: str) -> Optional[dict]:

@@ -328,6 +328,20 @@ class InterviewService:
             client_id = job_doc.get("client_id")
             client_name = job_doc.get("client_name")
 
+        # Concluded applications cannot receive new interviews
+        if application is not None:
+            app_status = application.get("status")
+            if app_status in ("rejected", "withdrawn", "joined", "offer_accepted", "offer_declined"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot schedule an interview: application status is '{app_status}'."
+                )
+
+        # Closed jobs cannot receive new interviews
+        job_status_doc = await db["jobs"].find_one({"_id": job_id, "is_deleted": False}, {"status": 1})
+        if job_status_doc and job_status_doc.get("status") == "closed":
+            raise HTTPException(status_code=400, detail="Cannot schedule an interview for a closed job.")
+
         # Blacklist guard + full pre-flight validation (server-side enforcement)
         validation = await InterviewService.validate_scheduling(db, candidate_id, job_id)
         if not validation["can_schedule"]:
@@ -478,7 +492,12 @@ class InterviewService:
             same_day = await collection.find({
                 "interviewer_ids": {"$in": interview_data.interviewer_ids},
                 "scheduled_datetime": {"$gte": day_start, "$lte": day_end},
-                "status": {"$in": [InterviewStatus.SCHEDULED.value, InterviewStatus.IN_PROGRESS.value]},
+                "status": {"$in": [
+                    InterviewStatus.SCHEDULED.value,
+                    InterviewStatus.CONFIRMED.value,
+                    InterviewStatus.IN_PROGRESS.value,
+                    InterviewStatus.RESCHEDULED.value,
+                ]},
                 "is_deleted": False,
             }).to_list(length=50)
             for existing_iv in same_day:
@@ -496,17 +515,23 @@ class InterviewService:
 
         await collection.insert_one(interview_dict)
 
-        # Update application status → "interview"
+        # Update application status → "interview" (never downgrade an application
+        # that is already past the interview stage, e.g. selected/offered)
         if interview_data.application_id:
+            set_fields: Dict[str, Any] = {
+                "current_stage": stage_id,
+                "current_stage_name": stage_name,
+            }
+            if (application or {}).get("status") in (
+                "applied", "eligible", "screening", "shortlisted",
+                "interview", "next_round", "on_hold",
+            ):
+                set_fields["status"] = "interview"
             await applications_collection.update_one(
                 {"_id": interview_data.application_id},
                 {
                     "$inc": {"total_interviews": 1, "pending_interviews": 1},
-                    "$set": {
-                        "status": "interview",
-                        "current_stage": stage_id,
-                        "current_stage_name": stage_name,
-                    }
+                    "$set": set_fields,
                 }
             )
 
@@ -702,20 +727,37 @@ class InterviewService:
 
         await collection.update_one({"_id": interview_id}, {"$set": update_set})
 
-        # Update application
-        if app_status_update and interview.get("application_id"):
-            set_dict: Dict[str, Any] = {"status": app_status_update, "updated_at": now}
-            if app_status_update == "rejected":
-                set_dict["rejection_reason"] = "failed_interview"
-            await db["applications"].update_one(
-                {"_id": interview["application_id"]},
-                {"$set": set_dict, "$inc": {"completed_interviews": 1, "pending_interviews": -1}}
-            )
-        elif interview.get("application_id"):
+        # Interview counters track interview records, not rounds: adjust them only
+        # once, when the whole pipeline concludes (selected or failed).
+        concluded = update_set.get("overall_status") in ("selected", "failed")
+        if concluded and interview.get("application_id"):
             await db["applications"].update_one(
                 {"_id": interview["application_id"]},
                 {"$inc": {"completed_interviews": 1, "pending_interviews": -1}}
             )
+
+        # Update application status via the single authoritative path so stage
+        # history, rejection metadata, job stats and candidate stage stay consistent.
+        if app_status_update and interview.get("application_id"):
+            try:
+                from app.services.application_service import ApplicationService
+                from app.models.company.application import ApplicationStatusUpdate
+                await ApplicationService.update_application_status(
+                    db, interview["application_id"],
+                    ApplicationStatusUpdate(
+                        status=app_status_update,
+                        rejection_reason="failed_interview" if app_status_update == "rejected" else None,
+                        remarks=f"Interview round {current_idx + 1} result: {result_data.result}",
+                    ),
+                    submitted_by,
+                )
+            except HTTPException as exc:
+                # Application already in a concluded state — keep the interview
+                # result but do not overwrite the application's terminal status.
+                import logging as _log
+                _log.getLogger(__name__).warning(
+                    "Application status update skipped after round result: %s", exc.detail
+                )
 
         return await InterviewService.get_interview(db, interview_id)
 
@@ -892,6 +934,11 @@ class InterviewService:
         if not existing:
             raise HTTPException(status_code=404, detail="Interview not found")
 
+        if existing.get("feedback_submitted"):
+            raise HTTPException(status_code=400, detail="Feedback has already been submitted for this interview.")
+        if existing.get("status") == InterviewStatus.CANCELLED.value:
+            raise HTTPException(status_code=400, detail="Cannot submit feedback for a cancelled interview.")
+
         users_collection = db["users"]
         user = await users_collection.find_one({"_id": submitted_by})
         user_name = user.get("full_name") if user else None
@@ -928,7 +975,8 @@ class InterviewService:
             }
         )
 
-        if existing.get("application_id"):
+        # Adjust counters only on the first transition into "completed"
+        if existing.get("application_id") and existing.get("status") != InterviewStatus.COMPLETED.value:
             await db["applications"].update_one(
                 {"_id": existing["application_id"]},
                 {"$inc": {"completed_interviews": 1, "pending_interviews": -1}}
@@ -969,6 +1017,13 @@ class InterviewService:
         if not existing:
             raise HTTPException(status_code=404, detail="Interview not found")
 
+        if existing.get("status") == InterviewStatus.CANCELLED.value:
+            raise HTTPException(status_code=400, detail="Interview is already cancelled.")
+        if existing.get("overall_status") in ("selected", "failed") or existing.get("status") == InterviewStatus.COMPLETED.value:
+            raise HTTPException(status_code=400, detail="Cannot cancel a concluded interview.")
+
+        was_active = existing.get("status") in _ACTIVE_STATUSES
+
         await collection.update_one(
             {"_id": interview_id},
             {
@@ -983,7 +1038,8 @@ class InterviewService:
             }
         )
 
-        if existing.get("application_id"):
+        # Decrement pending count only when the interview was actually pending
+        if existing.get("application_id") and was_active:
             await db["applications"].update_one(
                 {"_id": existing["application_id"]},
                 {"$inc": {"pending_interviews": -1}}

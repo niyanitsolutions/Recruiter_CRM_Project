@@ -112,11 +112,22 @@ async def ensure_company_indexes(db) -> None:
     ])
 
     # ── applications ───────────────────────────────────────────────────────────
+    # The uniqueness guard must only cover ACTIVE applications: a soft-deleted
+    # application must not block the candidate from re-applying. Drop the old
+    # full-collection unique index if present, then create the partial one.
+    try:
+        existing_app_indexes = await db["applications"].index_information()
+        if "app_cand_job" in existing_app_indexes:
+            await db["applications"].drop_index("app_cand_job")
+    except Exception as exc:
+        logger.warning("Could not drop legacy app_cand_job index: %s", exc)
+
     await db["applications"].create_indexes([
         IndexModel([("company_id", ASCENDING), ("job_id", ASCENDING), ("status", ASCENDING)],
                    name="app_job_status"),
-        IndexModel([("company_id", ASCENDING), ("candidate_id", ASCENDING), ("job_id", ASCENDING)],
-                   name="app_cand_job", unique=True, sparse=True),
+        IndexModel([("candidate_id", ASCENDING), ("job_id", ASCENDING)],
+                   name="app_cand_job_active", unique=True,
+                   partialFilterExpression={"is_deleted": False}),
     ])
 
     # ── interviews ─────────────────────────────────────────────────────────────
