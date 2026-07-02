@@ -257,9 +257,9 @@ const ClientDetails = () => {
                           <Mail className="w-3.5 h-3.5" />{cp.email}
                         </a>
                       )}
-                      {cp.phone && (
-                        <a href={`tel:${cp.phone}`} className="flex items-center gap-1.5 text-xs text-surface-500">
-                          <Phone className="w-3.5 h-3.5" />{cp.phone}
+                      {cp.mobile && (
+                        <a href={`tel:${cp.mobile}`} className="flex items-center gap-1.5 text-xs text-surface-500">
+                          <Phone className="w-3.5 h-3.5" />{cp.mobile}
                         </a>
                       )}
                     </div>

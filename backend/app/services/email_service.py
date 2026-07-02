@@ -729,7 +729,7 @@ async def send_welcome_email(
     creds_block = (
         f"""<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;
                         padding:16px;margin:16px 0">
-          <p style="margin:0 0 8px"><strong>Username:</strong> {username}</p>
+          <p style="margin:0 0 8px"><strong>Email:</strong> {to_email}</p>
           <p style="margin:0 0 8px"><strong>Temporary Password:</strong>
             <code style="background:#DCFCE7;padding:2px 8px;border-radius:4px;
                          font-size:13px">{temp_password}</code>
@@ -739,7 +739,7 @@ async def send_welcome_email(
           </p>
         </div>"""
         if temp_password else
-        f"<p><strong>Username:</strong> {username}</p>"
+        f"<p><strong>Email:</strong> {to_email}</p>"
     )
     html = _wrap(f"""
       <h2 style="color:#4F46E5;margin-top:0">Welcome to {_BRAND}!</h2>
@@ -755,7 +755,7 @@ async def send_welcome_email(
       </div>""")
     text = (
         f"Hi {full_name},\n\nYour {company_name} account is ready.\n"
-        f"Login at: {login_url}\nUsername: {username}"
+        f"Login at: {login_url}\nEmail: {to_email}"
         + (f"\nTemporary Password: {temp_password}" if temp_password else "")
     )
     return await send_email(
@@ -2099,6 +2099,74 @@ async def send_seat_limit_reached_notification(
     )
 
 
+async def send_payment_confirmation_email(
+    to_email: str,
+    admin_name: str,
+    company_name: str,
+    plan_name: str,
+    billing_cycle: str,
+    amount_paise: int,
+    currency: str,
+    invoice_number: str,
+    transaction_id: str,
+    expiry_date=None,
+) -> bool:
+    """Payment success email sent to the tenant owner after subscription activation."""
+    amount_display = f"{amount_paise / 100:,.2f}"
+    expiry_str = expiry_date.strftime("%d %B %Y") if expiry_date else "N/A"
+    billing_label = {"monthly": "Monthly", "quarterly": "Quarterly", "yearly": "Yearly"}.get(
+        billing_cycle, billing_cycle.title()
+    )
+    subject = f"Payment Successful — {company_name} Subscription Activated"
+    html = _wrap(f"""
+      <div style="background:#F0FDF4;border-left:4px solid #22C55E;padding:16px;
+                  border-radius:4px;margin-bottom:24px">
+        <strong style="color:#15803D">✓ Payment Successful</strong>
+      </div>
+      <p>Hi <strong>{admin_name}</strong>,</p>
+      <p>Thank you! Your payment has been received and your
+         <strong>{company_name}</strong> subscription is now active.</p>
+      <table style="width:100%;border-collapse:collapse;margin:24px 0;font-size:14px">
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280;width:45%">Plan</td>
+          <td style="padding:10px 0;font-weight:600">{plan_name} ({billing_label})</td>
+        </tr>
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280">Amount Paid</td>
+          <td style="padding:10px 0;font-weight:600">{currency} {amount_display}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280">Valid Until</td>
+          <td style="padding:10px 0;font-weight:600;color:#15803D">{expiry_str}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280">Invoice No.</td>
+          <td style="padding:10px 0">{invoice_number}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 0;color:#6B7280">Transaction ID</td>
+          <td style="padding:10px 0;font-size:12px;color:#6B7280">{transaction_id}</td>
+        </tr>
+      </table>
+      <p style="font-size:13px;color:#6B7280">
+        Keep this email as your payment record. You can also download your invoice
+        from the Billing section in your account.
+      </p>""")
+    text = (
+        f"Payment Successful — {company_name}\n\n"
+        f"Hi {admin_name},\n"
+        f"Your subscription has been activated.\n\n"
+        f"Plan: {plan_name} ({billing_label})\n"
+        f"Amount: {currency} {amount_display}\n"
+        f"Valid Until: {expiry_str}\n"
+        f"Invoice: {invoice_number}\n"
+        f"Transaction ID: {transaction_id}"
+    )
+    return await send_email(
+        to_email, subject, html, text, "payment_confirmation", force_system=True
+    )
+
+
 async def send_payment_failed_notification(
     to_email: str,
     admin_name: str,
@@ -2216,6 +2284,7 @@ class EmailService:
     # --- admin notifications ---
     send_new_user_added_notification = staticmethod(send_new_user_added_notification)
     send_seat_limit_reached_notification = staticmethod(send_seat_limit_reached_notification)
+    send_payment_confirmation_email = staticmethod(send_payment_confirmation_email)
     send_payment_failed_notification = staticmethod(send_payment_failed_notification)
     send_subscription_cancelled_notification = staticmethod(send_subscription_cancelled_notification)
 

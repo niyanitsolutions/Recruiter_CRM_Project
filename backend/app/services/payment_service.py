@@ -555,6 +555,35 @@ class PaymentService:
                     })
                     logger.info(f"Commission created: seller={seller_id}, amount={commission_amount}")
 
+            # Send payment confirmation email to tenant owner.
+            # Wrapped in its own try/except: SMTP failure must not mark the
+            # payment for reconciliation — the subscription is already active.
+            try:
+                owner = (current_tenant or {}).get("owner", {})
+                owner_email = owner.get("email", "")
+                if owner_email:
+                    from app.services.email_service import send_payment_confirmation_email
+                    await send_payment_confirmation_email(
+                        to_email=owner_email,
+                        admin_name=owner.get("full_name", "Admin"),
+                        company_name=payment.get("company_name", ""),
+                        plan_name=payment.get("plan_display_name") or payment.get("plan_name", ""),
+                        billing_cycle=billing_cycle,
+                        amount_paise=int(payment.get("total_amount", 0)),
+                        currency=payment.get("currency", "INR"),
+                        invoice_number=payment.get("invoice_number", ""),
+                        transaction_id=payment.get("transaction_id", ""),
+                        expiry_date=new_subscription_end,
+                    )
+                    logger.info(f"Payment confirmation email sent to {owner_email}")
+                else:
+                    logger.warning(f"No owner email for tenant {payment.get('tenant_id')} — confirmation email skipped")
+            except Exception as _email_exc:
+                logger.error(
+                    f"Failed to send payment confirmation email for payment {payment['_id']}: {_email_exc}",
+                    exc_info=True,
+                )
+
         except Exception as _sec_exc:
             _secondary_error = str(_sec_exc)
             logger.error(
