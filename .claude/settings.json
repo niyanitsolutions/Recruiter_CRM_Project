@@ -10,7 +10,9 @@
       "Bash(python3 -c \"import razorpay; import os; print\\(os.path.dirname\\(razorpay.__file__\\)\\)\")",
       "Bash(.venv/Scripts/python.exe -c \"import razorpay, os; print\\(os.path.dirname\\(razorpay.__file__\\)\\)\")",
       "PowerShell(C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe -c \"import razorpay, os; print\\(os.path.dirname\\(razorpay.__file__\\)\\)\")",
-      "Bash(echo \"COMPILEALL_EXIT=$?\")"
+      "Bash(echo \"COMPILEALL_EXIT=$?\")",
+      "Bash(cd ../frontend && ls src/services/ src/pages/ 2>/dev/null && ls src/pages/admin src/pages/hrm 2>/dev/null | head -60)",
+      "Read(//d//**)"
     ]
   }
 }

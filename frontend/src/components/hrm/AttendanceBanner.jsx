@@ -257,7 +257,10 @@ export default function AttendanceBanner() {
       await hrmService.startBreak({})
       toast.success('Break started')
       loadRecord()
-    } catch { toast.error('Failed to start break') }
+    } catch (err) {
+      // Surfaces the configured break-limit message from the backend
+      toast.error(err?.response?.data?.detail || 'Failed to start break')
+    }
     setLoading(false)
   }
 

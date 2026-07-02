@@ -54,6 +54,24 @@ const STATUS_STYLES = {
 const getStatusStyle = s => STATUS_STYLES[s] || STATUS_STYLES.withdrawn
 const fmtStatus = s => (s || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
+// Mirrors the backend application state machine (TERMINAL_TRANSITION_BLOCKS):
+// concluded applications cannot jump straight to hiring outcomes, and a joined
+// application is immutable. Keeps invalid options out of the dropdown so the UI
+// never offers an action the backend will reject.
+const TRANSITION_BLOCKS = {
+  joined:         'ALL',
+  rejected:       ['selected', 'offered', 'offer_accepted', 'joined', 'withdrawn'],
+  withdrawn:      ['selected', 'offered', 'offer_accepted', 'joined', 'rejected'],
+  offer_declined: ['offer_accepted', 'joined', 'selected'],
+}
+
+const getAllowedStatuses = (current, allStatuses) => {
+  const blocked = TRANSITION_BLOCKS[current]
+  if (!blocked) return allStatuses
+  if (blocked === 'ALL') return allStatuses.filter(s => s.value === current)
+  return allStatuses.filter(s => s.value === current || !blocked.includes(s.value))
+}
+
 // ── Score badge ───────────────────────────────────────────────────────────────
 
 function ScoreBadge({ score }) {
@@ -339,8 +357,14 @@ const Applications = () => {
   const handleBulkStatusUpdate = async (newStatus) => {
     if (!selectedIds.length) { toast.error('Select applications first'); return }
     try {
-      await applicationService.bulkUpdateStatus(selectedIds, newStatus)
-      toast.success(`Updated ${selectedIds.length} applications`)
+      const res = await applicationService.bulkUpdateStatus(selectedIds, newStatus)
+      const okCount = res?.data?.success?.length ?? selectedIds.length
+      const failed = res?.data?.failed || []
+      if (failed.length) {
+        toast.error(`${okCount} updated, ${failed.length} skipped (invalid transition or concluded application)`)
+      } else {
+        toast.success(`Updated ${okCount} applications`)
+      }
       setSelectedIds([])
       setShowStatusModal(false)
       loadApplications()
@@ -651,8 +675,9 @@ const Applications = () => {
                               onChange={e => handleStatusUpdate(app.id, e.target.value)}
                               className="text-xs font-medium rounded-full px-2 py-1 border-0 cursor-pointer focus:outline-none"
                               style={getStatusStyle(app.status)}
+                              disabled={app.status === 'joined'}
                             >
-                              {(statuses.length ? statuses : FALLBACK_STATUSES).map(s => (
+                              {getAllowedStatuses(app.status, statuses.length ? statuses : FALLBACK_STATUSES).map(s => (
                                 <option key={s.value} value={s.value}>{s.label}</option>
                               ))}
                             </select>

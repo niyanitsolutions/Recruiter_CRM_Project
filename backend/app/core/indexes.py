@@ -257,6 +257,16 @@ async def ensure_master_indexes(master_db) -> None:
         IndexModel([("email", ASCENDING)], name="seller_email", unique=True, sparse=True),
     ])
 
+    # ── subscription_queue ─────────────────────────────────────────────────────
+    # Queued-plan lookups: per-tenant status queries (login lazy activation,
+    # overview endpoint) and the hourly due-activation sweep.
+    await master_db["subscription_queue"].create_indexes([
+        IndexModel([("tenant_id", ASCENDING), ("status", ASCENDING), ("activation_date", ASCENDING)],
+                   name="subq_tenant_status_date"),
+        IndexModel([("status", ASCENDING), ("activation_date", ASCENDING)],
+                   name="subq_status_date"),
+    ])
+
 
 async def init_all_indexes(app_db_factory, master_db) -> None:
     """

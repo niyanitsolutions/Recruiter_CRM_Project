@@ -40,9 +40,12 @@ router = APIRouter()
 class RenewalOrderRequest(BaseModel):
     tenant_id: str
     plan_id: str
-    billing_cycle: str = "monthly"
+    billing_cycle: str = "monthly"  # monthly | quarterly | half_yearly | yearly
     user_count: int = 1
-    payment_type: str = "renewal"  # renewal | seat_upgrade | extend_duration | seat_upgrade_extend
+    # renewal | seat_upgrade | extend_duration | seat_upgrade_extend
+    # | new_subscription (activate a different plan NOW)
+    # | plan_change_queued (activate a different plan AFTER current expiry)
+    payment_type: str = "renewal"
     extend_months: int = 0         # months to extend for extend_duration / seat_upgrade_extend
 
 

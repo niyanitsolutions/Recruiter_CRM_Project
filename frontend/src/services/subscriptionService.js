@@ -50,15 +50,36 @@ const subscriptionService = {
 
   /**
    * FLOW 3 & 4 — Change plan (and optionally seats).
-   * Updates plan_name, billing_cycle, max_users, and resets plan_expiry.
-   * payment_type = "renewal"
+   *
+   * activation = 'now'   → payment_type "new_subscription":
+   *                        current plan ends immediately, new plan starts now.
+   *                        Backend preserves licensed seats (max of current vs requested).
+   * activation = 'queue' → payment_type "plan_change_queued":
+   *                        paid now, activates automatically when the current
+   *                        plan expires (renewal queue).
    *
    * @param {string} tenantId
    * @param {string} planId        – new plan ID
-   * @param {string} billingCycle  – 'monthly' | 'yearly'
-   * @param {number} userCount     – total seats after change (existingSeats for plan-only, existingSeats + added for plan+seats)
+   * @param {string} billingCycle  – 'monthly' | 'quarterly' | 'half_yearly' | 'yearly'
+   * @param {number} userCount     – total seats after change
+   * @param {string} activation    – 'now' | 'queue'
    */
-  createPlanChangeOrder: (tenantId, planId, billingCycle, userCount) =>
+  createPlanChangeOrder: (tenantId, planId, billingCycle, userCount, activation = 'now') =>
+    api.post('/auth/renew/create-order', {
+      tenant_id:     tenantId,
+      plan_id:       planId,
+      billing_cycle: billingCycle,
+      user_count:    userCount,
+      payment_type:  activation === 'queue' ? 'plan_change_queued' : 'new_subscription',
+      extend_months: 0,
+    }),
+
+  /**
+   * Same-plan renewal. Licensed seats are derived SERVER-SIDE (purchased seats
+   * persist across renewals; any scheduled reduction applies on the new cycle).
+   * payment_type = "renewal"
+   */
+  createRenewalOrder: (tenantId, planId, billingCycle, userCount = 0) =>
     api.post('/auth/renew/create-order', {
       tenant_id:     tenantId,
       plan_id:       planId,
@@ -67,6 +88,22 @@ const subscriptionService = {
       payment_type:  'renewal',
       extend_months: 0,
     }),
+
+  /** Full subscription overview: licensed_seats, scheduled_seat_reduction, queued_subscriptions */
+  getCurrentSubscription: () =>
+    api.get('/payments/current-subscription'),
+
+  /** Schedule a seat reduction — takes effect on the NEXT billing cycle */
+  scheduleSeatReduction: (targetSeats) =>
+    api.post('/payments/subscription/reduce-seats', { target_seats: targetSeats }),
+
+  /** Cancel a pending scheduled seat reduction */
+  cancelSeatReduction: () =>
+    api.delete('/payments/subscription/reduce-seats'),
+
+  /** Cancel a queued (not yet active) plan */
+  cancelQueuedPlan: (entryId) =>
+    api.post(`/payments/subscription/queue/${entryId}/cancel`),
 }
 
 export default subscriptionService

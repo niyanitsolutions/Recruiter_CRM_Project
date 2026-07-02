@@ -106,6 +106,25 @@ class TenantResolver:
                 plan_expiry = plan_expiry.replace(tzinfo=timezone.utc)
 
             if plan_expiry < datetime.now(timezone.utc):
+                # Lazy queue activation: a queued "activate after expiry" plan
+                # takes over automatically the moment the tenant is validated.
+                # activate_due_for_tenant mutates the tenant dict in place on
+                # success, so re-checking plan_expiry below sees the new plan.
+                try:
+                    from app.services.subscription_queue_service import SubscriptionQueueService
+                    if await SubscriptionQueueService.activate_due_for_tenant(tenant):
+                        new_expiry = tenant.get("plan_expiry")
+                        if new_expiry and new_expiry.tzinfo is None:
+                            new_expiry = new_expiry.replace(tzinfo=timezone.utc)
+                        if new_expiry and new_expiry > datetime.now(timezone.utc):
+                            return True, ""
+                except Exception as _queue_exc:
+                    # Queue activation must never break login validation
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "Queued-plan activation failed during login validation: %s", _queue_exc
+                    )
+
                 expiry_iso = plan_expiry.isoformat()
                 return False, f"SUBSCRIPTION_EXPIRED|{expiry_iso}|Your subscription has expired. Please renew your plan to continue."
 

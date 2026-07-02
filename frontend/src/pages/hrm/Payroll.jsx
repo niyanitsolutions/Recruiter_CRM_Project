@@ -237,7 +237,7 @@ function EditPayslipModal({ ps, onClose, onSave }) {
     try {
       await onSave(data)
       onClose()
-    } catch { toast.error('Failed to save changes') }
+    } catch { /* onSave already surfaced the backend error; keep modal open */ }
     setSaving(false)
   }
 
@@ -365,8 +365,8 @@ export default function Payroll() {
       await hrmService.updatePayslipStatus(id, { status: 'paid' })
       toast.success('Marked as paid')
       load()
-    } catch {
-      toast.error('Failed to update status')
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to update status')
     }
   }
 
@@ -382,9 +382,14 @@ export default function Payroll() {
   }
 
   const saveEdit = async (data) => {
-    const res = await hrmService.updatePayslip(editPs.id, data)
-    toast.success('Payslip updated')
-    setPayslips(prev => prev.map(p => p.id === res.data.id ? res.data : p))
+    try {
+      const res = await hrmService.updatePayslip(editPs.id, data)
+      toast.success('Payslip updated')
+      setPayslips(prev => prev.map(p => p.id === res.data.id ? res.data : p))
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to update payslip')
+      throw err // keep the modal open so edits aren't lost
+    }
   }
 
   const printPayslip = (ps) => {

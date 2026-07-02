@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import toast from 'react-hot-toast'
 import { Plus, UserCheck, CheckCircle } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
@@ -37,14 +38,27 @@ export default function HROnboarding() {
   const handleCreate = async (e) => {
     e.preventDefault()
     setSaving(true)
-    try { await hrmService.createOnboarding(form); setShowForm(false); load() } catch {}
+    try {
+      await hrmService.createOnboarding(form)
+      toast.success('Onboarding created')
+      setShowForm(false); load()
+    } catch (err) {
+      // Backend enforces: accepted offer required, one onboarding per candidate
+      toast.error(err?.response?.data?.detail || 'Failed to create onboarding')
+    }
     setSaving(false)
   }
 
   const handleComplete = async (id, name) => {
     if (!window.confirm(`Complete onboarding for ${name} and create employee record?`)) return
     setCompleting(id)
-    try { await hrmService.completeOnboarding(id); load() } catch {}
+    try {
+      await hrmService.completeOnboarding(id)
+      toast.success('Onboarding completed — employee record created')
+      load()
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to complete onboarding')
+    }
     setCompleting(null)
   }
 

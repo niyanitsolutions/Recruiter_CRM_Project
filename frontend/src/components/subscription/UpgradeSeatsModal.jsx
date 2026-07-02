@@ -18,10 +18,12 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
+import toast from 'react-hot-toast'
 import { selectUser } from '../../store/authSlice'
+import subscriptionService from '../../services/subscriptionService'
 import {
   X, Users, Minus, Plus, ArrowRight, Settings,
-  Calendar, Clock, Layers, RefreshCw,
+  Calendar, Clock, Layers, RefreshCw, UserMinus,
 } from 'lucide-react'
 
 const DURATION_OPTIONS = [
@@ -36,6 +38,7 @@ const MODES = [
   { key: 'seats',             label: 'Add Seats',            icon: Users,      desc: 'Add more user seats'             },
   { key: 'change_plan',       label: 'Change Plan',          icon: Layers,     desc: 'Switch to a different plan'      },
   { key: 'change_plan_seats', label: 'Change Plan + Seats',  icon: RefreshCw,  desc: 'New plan with more seats'        },
+  { key: 'reduce',            label: 'Reduce Seats',         icon: UserMinus,  desc: 'Takes effect next renewal'       },
 ]
 
 function addMonths(dateStr, months) {
@@ -101,15 +104,29 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
   const [mode, setMode]                       = useState('extend')
   const [additionalSeats, setAdditionalSeats] = useState(1)
   const [extendMonths, setExtendMonths]       = useState(null)
+  const [targetSeats, setTargetSeats]         = useState(null)   // reduce-seats target
+  const [subInfo, setSubInfo]                 = useState(null)   // /payments/current-subscription
+  const [busy, setBusy]                       = useState(false)
+
+  const totalSeats = seatStatus?.total_user_seats ?? 0
 
   // canProceed per mode
   const canProceed = useMemo(() => {
+    if (busy) return false
     if (mode === 'extend')            return extendMonths != null
     if (mode === 'seats')             return additionalSeats >= 1
     if (mode === 'change_plan')       return true   // plan selected on next screen
     if (mode === 'change_plan_seats') return additionalSeats >= 1
+    if (mode === 'reduce')            return targetSeats != null && targetSeats >= 1 && targetSeats < totalSeats
     return false
-  }, [mode, additionalSeats, extendMonths])
+  }, [mode, additionalSeats, extendMonths, targetSeats, totalSeats, busy])
+
+  // Subscription overview: licensed seats, scheduled reduction, queued plans
+  const loadSubInfo = () => {
+    subscriptionService.getCurrentSubscription()
+      .then(res => setSubInfo(res.data))
+      .catch(() => setSubInfo(null))  // panel simply hides when unavailable
+  }
 
   // Reset when modal opens
   useEffect(() => {
@@ -117,12 +134,14 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
       setMode('extend')
       setAdditionalSeats(1)
       setExtendMonths(null)
+      setTargetSeats(null)
+      loadSubInfo()
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = ''
     }
     return () => { document.body.style.overflow = '' }
-  }, [isOpen])
+  }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isOpen) return null
 
@@ -148,8 +167,54 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
     if (!isNaN(val) && val >= 1) setAdditionalSeats(val)
   }
 
+  // Reduce seats: direct API call (no payment) — effective next renewal
+  const handleReduceSeats = async () => {
+    if (!canProceed) return
+    setBusy(true)
+    try {
+      const res = await subscriptionService.scheduleSeatReduction(targetSeats)
+      toast.success(
+        `Seat reduction scheduled: ${res.data.current_seats} → ${res.data.seats_after_next_renewal} at next renewal. ` +
+        'Your current cycle keeps all seats.'
+      )
+      loadSubInfo()
+      setTargetSeats(null)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Could not schedule seat reduction')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleCancelReduction = async () => {
+    setBusy(true)
+    try {
+      await subscriptionService.cancelSeatReduction()
+      toast.success('Scheduled seat reduction cancelled')
+      loadSubInfo()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Could not cancel the reduction')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleCancelQueued = async (entryId) => {
+    setBusy(true)
+    try {
+      await subscriptionService.cancelQueuedPlan(entryId)
+      toast.success('Queued plan cancelled')
+      loadSubInfo()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Could not cancel the queued plan')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const handleProceed = () => {
     if (!canProceed) return
+    if (mode === 'reduce') { handleReduceSeats(); return }
     onClose()
     navigate('/upgrade-plan', {
       state: {
@@ -220,6 +285,57 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
             ))}
           </div>
 
+          {/* ── Pending subscription changes (scheduled reduction / queued plans) ── */}
+          {(subInfo?.scheduled_seat_reduction || (subInfo?.queued_subscriptions?.length > 0)) && (
+            <div className="space-y-2">
+              {subInfo?.scheduled_seat_reduction && (
+                <div className="flex items-center justify-between px-3 py-2 rounded-xl"
+                  style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.20)' }}>
+                  <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    <UserMinus className="w-3.5 h-3.5" style={{ color: '#d97706' }} />
+                    <span>
+                      Seat reduction scheduled:{' '}
+                      <strong>{subInfo.licensed_seats} → {subInfo.scheduled_seat_reduction}</strong> at next renewal
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleCancelReduction}
+                    disabled={busy}
+                    className="text-[11px] font-semibold px-2 py-1 rounded-lg transition-colors"
+                    style={{ color: '#d97706', border: '1px solid rgba(217,119,6,0.35)' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+              {(subInfo?.queued_subscriptions || []).map(q => (
+                <div key={q.id} className="flex items-center justify-between px-3 py-2 rounded-xl"
+                  style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.20)' }}>
+                  <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    <Layers className="w-3.5 h-3.5" style={{ color: '#7c3aed' }} />
+                    <span>
+                      {q.status === 'queued' ? 'Queued plan' : 'Activated plan'}:{' '}
+                      <strong>{q.plan_name}</strong> · {q.seats} seats
+                      {q.status === 'queued' && q.activation_date && (
+                        <> · activates {fmtDate(new Date(q.activation_date))}</>
+                      )}
+                    </span>
+                  </div>
+                  {q.status === 'queued' && (
+                    <button
+                      onClick={() => handleCancelQueued(q.id)}
+                      disabled={busy}
+                      className="text-[11px] font-semibold px-2 py-1 rounded-lg transition-colors"
+                      style={{ color: '#7c3aed', border: '1px solid rgba(124,58,237,0.35)' }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* ── Action selector ── */}
           <div>
             <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>What would you like to do?</p>
@@ -230,7 +346,7 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
                 return (
                   <button
                     key={m.key}
-                    onClick={() => { setMode(m.key); setExtendMonths(null); setAdditionalSeats(1) }}
+                    onClick={() => { setMode(m.key); setExtendMonths(null); setAdditionalSeats(1); setTargetSeats(null) }}
                     className="flex items-start gap-2.5 p-3 rounded-xl border-2 text-left transition-all"
                     style={{
                       borderColor: active ? '#7c3aed' : 'var(--border)',
@@ -325,6 +441,44 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
               </div>
             )}
 
+            {/* Reduce Seats: target seat count — effective next renewal */}
+            {mode === 'reduce' && (
+              <div>
+                <p className="text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
+                  <UserMinus className="inline w-3.5 h-3.5 mr-1" />
+                  Licensed seats from next renewal
+                </p>
+                <SeatCounter
+                  value={targetSeats ?? Math.max(1, totalSeats - 1)}
+                  onAdjust={(delta) => setTargetSeats(prev => {
+                    const base = prev ?? Math.max(1, totalSeats - 1)
+                    return Math.min(Math.max(1, base + delta), Math.max(1, totalSeats - 1))
+                  })}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10)
+                    if (!isNaN(val)) setTargetSeats(Math.min(Math.max(1, val), Math.max(1, totalSeats - 1)))
+                  }}
+                />
+                <div className="mt-2 rounded-xl px-4 py-3" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.20)' }}>
+                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                    Reductions never apply immediately — your current cycle keeps all{' '}
+                    <strong>{totalSeats}</strong> seats and no user is deactivated. The new count
+                    takes effect at your next renewal.
+                  </p>
+                </div>
+                {targetSeats != null && (
+                  <div className="mt-2 flex items-center justify-between px-3 py-2 rounded-lg"
+                    style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{totalSeats} seats now</span>
+                    <ArrowRight className="w-3 h-3" style={{ color: 'var(--text-muted)' }} />
+                    <span className="text-xs font-bold" style={{ color: '#d97706' }}>
+                      {targetSeats} seats <span className="font-normal opacity-70">(next renewal)</span>
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Change Plan + Seats: seat counter + info */}
             {mode === 'change_plan_seats' && (
               <div className="space-y-3">
@@ -367,7 +521,9 @@ export default function UpgradeSeatsModal({ isOpen, onClose, seatStatus = {} }) 
             onMouseEnter={e => canProceed && (e.currentTarget.style.background = '#6d28d9')}
             onMouseLeave={e => canProceed && (e.currentTarget.style.background = '#7c3aed')}
           >
-            {(mode === 'change_plan' || mode === 'change_plan_seats') ? 'Select Plan & Pay' : 'Proceed to Payment'}
+            {mode === 'reduce'
+              ? (busy ? 'Scheduling…' : 'Schedule Reduction')
+              : (mode === 'change_plan' || mode === 'change_plan_seats') ? 'Select Plan & Pay' : 'Proceed to Payment'}
             <ArrowRight className="w-4 h-4" />
           </button>
           <button

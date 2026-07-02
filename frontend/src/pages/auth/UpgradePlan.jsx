@@ -86,6 +86,43 @@ const PAGE_CONFIG = {
 // upgradeTypes that need the plan selector UI
 const NEEDS_PLAN_SELECTOR = new Set(['change_plan', 'change_plan_seats', 'renewal'])
 
+// ── Activation choice (plan changes): Activate Now vs After Current Plan ─────
+function ActivationChoice({ activation, setActivation, currentExpiry }) {
+  const options = [
+    { value: 'now',   label: 'Activate Now',
+      desc: 'Current plan ends immediately; the new plan starts today' },
+    { value: 'queue', label: 'Activate After Current Plan',
+      desc: currentExpiry
+        ? `Starts automatically on ${fmtDate(currentExpiry)}`
+        : 'Starts automatically when the current plan expires' },
+  ]
+  return (
+    <div className="mt-3">
+      <label className="block text-xs font-medium text-surface-700 mb-2">When should the new plan activate?</label>
+      <div className="grid grid-cols-2 gap-2">
+        {options.map(opt => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => setActivation(opt.value)}
+            className={clsx(
+              'text-left p-3 rounded-xl border-2 transition-all',
+              activation === opt.value
+                ? 'border-accent-500 bg-accent-50'
+                : 'border-surface-200 bg-surface-50 hover:border-surface-300'
+            )}
+          >
+            <p className={clsx('text-xs font-semibold', activation === opt.value ? 'text-accent-700' : 'text-surface-800')}>
+              {opt.label}
+            </p>
+            <p className="text-[10px] text-surface-500 mt-0.5">{opt.desc}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 const UpgradePlan = () => {
@@ -120,6 +157,10 @@ const UpgradePlan = () => {
   const [isLoading,    setIsLoading]    = useState(false)
   const [loadingPlans, setLoadingPlans] = useState(true)
   const [success,      setSuccess]      = useState(null)
+  // Plan changes: 'now' = replace current plan immediately, 'queue' = activate after current plan expires
+  const [activation,   setActivation]   = useState('now')
+  // Authoritative current-subscription info (billing cycle + dates) for prorated seat pricing
+  const [subInfo,      setSubInfo]      = useState(null)
 
   // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -165,6 +206,38 @@ const UpgradePlan = () => {
     fetchPlans()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Fetch subscription details for prorated seat pricing (authed flows only) ─
+  useEffect(() => {
+    if (!fromDashboard || upgradeType !== 'seats') return
+    let cancelled = false
+    import('../../services/paymentService').then(({ default: paymentService }) =>
+      paymentService.getCurrentSubscription()
+        .then(res => { if (!cancelled) setSubInfo(res.data) })
+        .catch(() => {}) // preview falls back to note-only; backend still charges correctly
+    )
+    return () => { cancelled = true }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Proration preview (mirrors backend formula) ────────────────────────────
+  const CYCLE_DAYS   = { monthly: 30, quarterly: 90, half_yearly: 180, yearly: 365 }
+  const CYCLE_MONTHS = { monthly: 1,  quarterly: 3,  half_yearly: 6,   yearly: 12  }
+  const getProration = () => {
+    const expiry = subInfo?.plan_expiry || currentExpiry
+    if (!expiry) return null
+    const now = new Date()
+    const exp = new Date(expiry)
+    if (isNaN(exp) || exp <= now) return null
+    const remaining = Math.ceil((exp - now) / 86400000)
+    const cycle = subInfo?.billing_cycle || 'monthly'
+    let total = CYCLE_DAYS[cycle] || 30
+    if (subInfo?.plan_start) {
+      const start = new Date(subInfo.plan_start)
+      const actual = Math.round((exp - start) / 86400000)
+      if (!isNaN(start) && actual > 0) total = actual
+    }
+    return { remaining, total, cycle }
+  }
+
   // ── Pricing helpers ────────────────────────────────────────────────────────
   const getPricePerUser = (plan) => {
     if (!plan) return 0
@@ -186,10 +259,21 @@ const UpgradePlan = () => {
         const months = extendMonths || 1
         return getPpuForExtension(plan, months) * existingSeats * months
       }
-      case 'seats':
+      case 'seats': {
+        // Seat purchases are billed PRORATED for the remaining validity of the
+        // current cycle (backend is authoritative — this mirrors its formula).
+        const pro = getProration()
+        if (pro) {
+          const cyclePpu = pro.cycle === 'yearly'
+            ? (plan.price_per_user_yearly || ppu) * 12
+            : plan.price_per_user_monthly * (CYCLE_MONTHS[pro.cycle] || 1)
+          return Math.round(cyclePpu / pro.total * pro.remaining) * Math.max(userCount, 1)
+        }
+        // No expiry info — fall back to one full cycle as an upper-bound estimate
         return billing === 'yearly'
           ? ppu * Math.max(userCount, 1) * 12
           : ppu * Math.max(userCount, 1)
+      }
 
       case 'change_plan':
         // New plan pricing × current seat count × billing period
@@ -242,16 +326,16 @@ const UpgradePlan = () => {
       } else if (upgradeType === 'change_plan') {
         // Plan change: same seat count, new plan + billing cycle
         orderRes = await subscriptionService.createPlanChangeOrder(
-          tenantId, selectedPlan.id, billing, existingSeats,
+          tenantId, selectedPlan.id, billing, existingSeats, activation,
         )
       } else if (upgradeType === 'change_plan_seats') {
         // Plan change + seat increase
         orderRes = await subscriptionService.createPlanChangeOrder(
-          tenantId, selectedPlan.id, billing, existingSeats + Math.max(userCount, 1),
+          tenantId, selectedPlan.id, billing, existingSeats + Math.max(userCount, 1), activation,
         )
       } else {
-        // renewal — standard plan purchase
-        orderRes = await subscriptionService.createPlanChangeOrder(
+        // renewal — same-plan renewal; licensed seats derived server-side
+        orderRes = await subscriptionService.createRenewalOrder(
           tenantId, selectedPlan.id, billing, Math.max(userCount, 1),
         )
       }
@@ -305,12 +389,16 @@ const UpgradePlan = () => {
         upgradeType === 'renewal'           ? Math.max(userCount, 1) :
         existingSeats
 
+      const isQueued = (upgradeType === 'change_plan' || upgradeType === 'change_plan_seats')
+        && activation === 'queue'
+
       setSuccess({
         planName:    selectedPlan.display_name || selectedPlan.name,
-        planExpiry:  verifyRes.data.plan_expiry,
+        planExpiry:  isQueued ? null : verifyRes.data.plan_expiry,
         invoice:     verifyRes.data.invoice_number,
-        upgradeType,
-        newSeats:    newSeatTotal,
+        upgradeType: isQueued ? 'queued_plan' : upgradeType,
+        newSeats:    isQueued ? 0 : newSeatTotal,
+        queuedFrom:  isQueued ? currentExpiry : null,
       })
     } catch (err) {
       const msg = err.response?.data?.detail || err.message || 'Payment failed. Please try again.'
@@ -355,6 +443,7 @@ const UpgradePlan = () => {
       change_plan:       'Your plan has been changed!',
       change_plan_seats: 'Plan changed and seats added!',
       renewal:           'Subscription Renewed!',
+      queued_plan:       'Plan queued! It activates automatically when your current plan expires.',
     }
     return (
       <div className="min-h-screen bg-surface-50 flex items-center justify-center px-4">
@@ -366,9 +455,18 @@ const UpgradePlan = () => {
             {successMessages[success.upgradeType] || 'Success!'}
           </h2>
           <p className="text-surface-500 mb-4">
-            Your <span className="font-medium text-surface-800">{success.planName}</span> plan has been updated.
+            {success.upgradeType === 'queued_plan' ? (
+              <>Your <span className="font-medium text-surface-800">{success.planName}</span> plan is queued and will activate automatically.</>
+            ) : (
+              <>Your <span className="font-medium text-surface-800">{success.planName}</span> plan has been updated.</>
+            )}
           </p>
           <div className="space-y-2 mb-6">
+            {success.queuedFrom && (
+              <p className="text-sm text-surface-600">
+                Activates after: <strong>{fmtDate(success.queuedFrom)}</strong>
+              </p>
+            )}
             {success.planExpiry && (
               <p className="text-sm text-surface-600">
                 New expiry: <strong>{fmtDate(success.planExpiry)}</strong>
@@ -645,6 +743,7 @@ const UpgradePlan = () => {
                 <Users className="w-3.5 h-3.5" />
                 <span>Seats remain unchanged: <strong className="text-surface-800">{existingSeats}</strong></span>
               </div>
+              <ActivationChoice activation={activation} setActivation={setActivation} currentExpiry={currentExpiry} />
             </div>
           )}
 
@@ -690,6 +789,7 @@ const UpgradePlan = () => {
                   New total: {existingSeats + Math.max(userCount, 1)}
                 </div>
               </div>
+              <ActivationChoice activation={activation} setActivation={setActivation} currentExpiry={currentExpiry} />
             </div>
           )}
 
@@ -697,6 +797,10 @@ const UpgradePlan = () => {
           {upgradeType === 'renewal' && selectedPlan && (
             <div className="bg-white rounded-xl border border-surface-200 p-5 mb-4">
               <label className="block text-sm font-medium text-surface-700 mb-3">Number of Users</label>
+              <p className="text-[11px] text-surface-400 mb-3 -mt-2">
+                Renewing an existing subscription keeps your current licensed seats —
+                the final seat count and amount are confirmed at payment.
+              </p>
               <div className="flex items-center gap-3">
                 <button type="button" onClick={() => adjustUserCount(-1)}
                   className="w-9 h-9 rounded-lg border border-surface-200 flex items-center justify-center hover:bg-surface-50 transition-colors">
@@ -729,15 +833,25 @@ const UpgradePlan = () => {
                   </div>
                 )}
 
-                {upgradeType === 'seats' && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-surface-600">
-                      {formatCurrency(getPricePerUser(selectedPlan))} × {Math.max(userCount, 1)} new seat{userCount !== 1 ? 's' : ''}
-                      {billing === 'yearly' ? ' × 12 months' : ''}
-                    </span>
-                    <span className="font-medium text-surface-800">{formatCurrency(subtotal)}</span>
-                  </div>
-                )}
+                {upgradeType === 'seats' && (() => {
+                  const pro = getProration()
+                  return (
+                    <>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-surface-600">
+                          {pro
+                            ? `${Math.max(userCount, 1)} new seat${userCount !== 1 ? 's' : ''} · prorated for ${pro.remaining} of ${pro.total} days`
+                            : `${formatCurrency(getPricePerUser(selectedPlan))} × ${Math.max(userCount, 1)} new seat${userCount !== 1 ? 's' : ''}${billing === 'yearly' ? ' × 12 months' : ''}`}
+                        </span>
+                        <span className="font-medium text-surface-800">{formatCurrency(subtotal)}</span>
+                      </div>
+                      <p className="text-[11px] text-surface-400">
+                        Seat purchases are billed only for the remaining validity of your current
+                        subscription and become part of your licensed seats permanently.
+                      </p>
+                    </>
+                  )
+                })()}
 
                 {upgradeType === 'change_plan' && (
                   <>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import toast from 'react-hot-toast'
 import { Plus, FileText, CheckCircle, XCircle } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
@@ -40,13 +41,22 @@ export default function HROffer() {
     setSaving(true)
     try {
       await hrmService.createOffer({ ...form, offered_ctc: Number(form.offered_ctc) })
+      toast.success('Offer created')
       setShowForm(false); load()
-    } catch {}
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to create offer')
+    }
     setSaving(false)
   }
 
   const handleRespond = async (id, action) => {
-    await hrmService.respondOffer(id, { action })
+    try {
+      await hrmService.respondOffer(id, { action })
+      toast.success(action === 'accept' ? 'Offer accepted' : 'Offer rejected')
+    } catch (err) {
+      // Backend enforces: only draft/sent offers can be responded to
+      toast.error(err?.response?.data?.detail || 'Failed to update offer')
+    }
     load()
   }
 

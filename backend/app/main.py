@@ -259,6 +259,9 @@ async def lifespan(app: FastAPI):
     print(" HRM midnight auto punch-out scheduler started")
     tenant_cleanup_task = asyncio.create_task(tenant_cleanup_loop())
     print(" Tenant deletion cleanup scheduler started (runs daily at 2 AM UTC)")
+    from app.services.subscription_queue_service import subscription_queue_loop
+    subscription_queue_task = asyncio.create_task(subscription_queue_loop())
+    print(" Subscription queue activation scheduler started (hourly)")
     # Layer-2 recovery: close any attendance records left open from a previous
     # day because the server was down/restarting over its last shift-end window.
     # Fire-and-forget so a large tenant count doesn't delay app readiness.
@@ -286,6 +289,7 @@ async def lifespan(app: FastAPI):
 
     yield
     # Shutdown
+    subscription_queue_task.cancel()
     tenant_cleanup_task.cancel()
     auto_checkout_task.cancel()
     cleanup_task.cancel()

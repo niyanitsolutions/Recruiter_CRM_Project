@@ -22,6 +22,85 @@ from app.services.tenant_service import tenant_service
 logger = logging.getLogger(__name__)
 
 
+# ── Billing-cycle reference tables (single source of truth) ────────────────────
+CYCLE_DAYS = {"monthly": 30, "quarterly": 90, "half_yearly": 180, "yearly": 365}
+CYCLE_MONTHS = {"monthly": 1, "quarterly": 3, "half_yearly": 6, "yearly": 12}
+
+
+def cycle_price_per_seat(plan: dict, billing_cycle: str) -> int:
+    """Full-cycle price for ONE seat on the given billing cycle.
+
+    Monthly/quarterly/half-yearly bill at the monthly per-user rate × months.
+    Yearly uses the (discounted) yearly per-user rate × 12.
+    """
+    monthly_rate = plan.get("price_per_user_monthly", plan.get("price_monthly", 0))
+    if billing_cycle == "yearly":
+        yearly_rate = plan.get("price_per_user_yearly", plan.get("price_yearly", monthly_rate))
+        return int(yearly_rate * 12)
+    return int(monthly_rate * CYCLE_MONTHS.get(billing_cycle, 1))
+
+
+def remaining_validity_days(tenant: dict, now: Optional[datetime] = None) -> Tuple[int, int]:
+    """(remaining_days, total_cycle_days) of the tenant's CURRENT subscription.
+
+    remaining = ceil days from now to plan_expiry (0 when expired).
+    total     = actual current cycle length (plan_expiry − plan_start_date) when
+                both dates are stored; falls back to the standard days for the
+                tenant's billing_cycle. Deterministic for leap years and
+                month-end because it uses the real stored dates.
+    """
+    now = now or datetime.now(timezone.utc)
+    expiry = tenant.get("plan_expiry")
+    start = tenant.get("plan_start_date")
+
+    def _aware(dt):
+        if dt is None:
+            return None
+        if isinstance(dt, str):
+            try:
+                dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+
+    expiry = _aware(expiry)
+    start = _aware(start)
+
+    fallback_total = CYCLE_DAYS.get(tenant.get("billing_cycle", "monthly"), 30)
+    if not expiry:
+        return 0, fallback_total
+
+    remaining_secs = (expiry - now).total_seconds()
+    remaining = max(0, -(-int(remaining_secs) // 86400))  # ceil to whole days
+
+    total = fallback_total
+    if start and expiry > start:
+        actual = (expiry - start).days
+        if actual > 0:
+            total = actual
+
+    return remaining, max(total, 1)
+
+
+def prorated_seat_amount(plan: dict, tenant: dict, seats: int, now: Optional[datetime] = None) -> Tuple[int, int, int]:
+    """Prorated charge for adding `seats` for the REMAINDER of the current cycle.
+
+    charge = full_cycle_price_per_seat ÷ total_cycle_days × remaining_days × seats
+
+    Returns (amount, remaining_days, total_days). amount is 0 when nothing
+    remains (caller must reject the upgrade and ask for a renewal first).
+    """
+    remaining, total = remaining_validity_days(tenant, now)
+    if remaining <= 0:
+        return 0, remaining, total
+    cycle = tenant.get("billing_cycle", "monthly")
+    per_seat_full = cycle_price_per_seat(plan, cycle)
+    amount = int(round(per_seat_full / total * remaining)) * max(int(seats), 1)
+    return max(amount, 0), remaining, total
+
+
 class PaymentService:
     """
     Payment Processing Service
@@ -131,7 +210,18 @@ class PaymentService:
         Pricing model: price_per_user × user_count (× 12 for yearly).
         For reseller tenants the reseller discount is applied on the subtotal.
         For extend_duration: price = price_per_user × existing_seats × extend_months.
+        For seat_upgrade: prorated to the remaining validity of the current cycle.
+        For plan_change_queued: full next-cycle price; activates when current plan ends.
         """
+        _VALID_PAYMENT_TYPES = {
+            "new_subscription", "renewal", "seat_upgrade",
+            "extend_duration", "seat_upgrade_extend", "plan_change_queued",
+        }
+        if payment_type not in _VALID_PAYMENT_TYPES:
+            return None, f"Invalid payment type '{payment_type}'"
+        if billing_cycle not in CYCLE_DAYS:
+            return None, f"Invalid billing cycle '{billing_cycle}'"
+
         master_db = get_master_db()
 
         # Load active payment provider credentials from centralised DB config (Super Admin)
@@ -198,6 +288,15 @@ class PaymentService:
 
         price_per_user = plan.get("price_per_user_monthly", plan.get("price_monthly", 0))
         existing_seats = int(tenant.get("max_users", 1))
+        # A scheduled seat reduction becomes the licensed base for the NEXT cycle
+        scheduled_reduction = tenant.get("scheduled_seat_reduction")
+        next_cycle_seats = (
+            int(scheduled_reduction) if scheduled_reduction and int(scheduled_reduction) > 0
+            else existing_seats
+        )
+
+        # Proration metadata (populated only for prorated seat upgrades)
+        proration_info: dict = {}
 
         # ── Amount and days calculation per payment type ───────────────────────
         if payment_type == "extend_duration":
@@ -210,37 +309,60 @@ class PaymentService:
             base_amount = pu_ext * existing_seats * months
             days = 30 * months
             user_count = 0  # no seat change
-        elif payment_type in ("seat_upgrade", "seat_upgrade_extend"):
+        elif payment_type == "seat_upgrade":
+            # Permanent licensed-seat increase, billed ONLY for the remaining
+            # validity of the current subscription (never a full cycle again).
             user_count = max(int(user_count), 1)
-            if payment_type == "seat_upgrade_extend":
-                months = max(int(extend_months), 1)
-                # 12-month extensions use yearly rate; shorter ones use monthly rate
-                pu_ext = (
-                    plan.get("price_per_user_yearly", plan.get("price_yearly", price_per_user))
-                    if months >= 12 else price_per_user
+            base_amount, remaining_days, total_days = prorated_seat_amount(
+                plan, tenant, user_count
+            )
+            if remaining_days <= 0:
+                return None, (
+                    "Your subscription has expired — renew it first, "
+                    "then add seats to the active subscription."
                 )
-                # Charge: new_seats × monthly + existing_seats × rate × months
-                base_amount = (price_per_user * user_count) + (pu_ext * existing_seats * months)
-                days = 30 * months
-            else:
-                # seat_upgrade: standard monthly billing for the new seats
-                if billing_cycle == "yearly":
-                    price_per_user = plan.get("price_per_user_yearly", plan.get("price_yearly", 0))
-                    base_amount = price_per_user * user_count * 12
-                    days = 365
-                else:
-                    base_amount = price_per_user * user_count
-                    days = 30
-        else:
-            # new_subscription / renewal: standard billing
+            days = remaining_days
+            proration_info = {
+                "prorated": True,
+                "proration_remaining_days": remaining_days,
+                "proration_total_days": total_days,
+                "proration_cycle": tenant.get("billing_cycle", "monthly"),
+            }
+        elif payment_type == "seat_upgrade_extend":
             user_count = max(int(user_count), 1)
-            if billing_cycle == "yearly":
-                price_per_user = plan.get("price_per_user_yearly", plan.get("price_yearly", 0))
-                base_amount = price_per_user * user_count * 12
-                days = 365
-            else:
-                base_amount = price_per_user * user_count
-                days = 30
+            months = max(int(extend_months), 1)
+            # 12-month extensions use yearly rate; shorter ones use monthly rate
+            pu_ext = (
+                plan.get("price_per_user_yearly", plan.get("price_yearly", price_per_user))
+                if months >= 12 else price_per_user
+            )
+            # Charge: new_seats × monthly + existing_seats × rate × months
+            base_amount = (price_per_user * user_count) + (pu_ext * existing_seats * months)
+            days = 30 * months
+        elif payment_type == "plan_change_queued":
+            # Full next-cycle purchase that activates when the current plan ends.
+            # Seats default to the tenant's licensed count (after any scheduled
+            # reduction) unless explicitly overridden with a larger count.
+            user_count = max(int(user_count), 0) or next_cycle_seats or 1
+            per_seat = cycle_price_per_seat(plan, billing_cycle)
+            base_amount = per_seat * user_count
+            days = CYCLE_DAYS.get(billing_cycle, 30)
+        elif payment_type == "renewal":
+            # Same-plan renewal: the licensed seat count is derived SERVER-SIDE —
+            # purchased seats persist across renewals until explicitly reduced.
+            user_count = next_cycle_seats if next_cycle_seats > 0 else max(int(user_count), 1)
+            per_seat = cycle_price_per_seat(plan, billing_cycle)
+            base_amount = per_seat * user_count
+            days = CYCLE_DAYS.get(billing_cycle, 30)
+        else:
+            # new_subscription (first purchase or "activate now" plan change).
+            # Never silently drop licensed seats on a plan change: seats stay at
+            # the current licensed count unless a HIGHER count is requested.
+            requested = max(int(user_count), 1)
+            user_count = max(requested, next_cycle_seats) if next_cycle_seats > 0 else requested
+            per_seat = cycle_price_per_seat(plan, billing_cycle)
+            base_amount = per_seat * user_count
+            days = CYCLE_DAYS.get(billing_cycle, 30)
 
         if base_amount == 0:
             return None, "This plan is free and doesn't require payment"
@@ -314,6 +436,7 @@ class PaymentService:
             "payment_method": PaymentMethod.RAZORPAY,
             "payment_type": payment_type,
             "extend_months": extend_months,
+            **proration_info,
             "status": PaymentStatus.PENDING,
             "subscription_start": datetime.now(timezone.utc),
             "subscription_end": subscription_end,
@@ -419,6 +542,8 @@ class PaymentService:
 
         # ── Calculate new expiry and seat totals per payment type ─────────────
         newly_purchased = int(payment.get("user_count", 0))
+        scheduled_reduction = (current_tenant or {}).get("scheduled_seat_reduction")
+        reduction_target = int(scheduled_reduction) if scheduled_reduction and int(scheduled_reduction) > 0 else 0
 
         if payment_type == "seat_upgrade":
             # Add seats only — KEEP current expiry unchanged
@@ -439,15 +564,30 @@ class PaymentService:
             new_subscription_end = base + timedelta(days=30 * months)
             new_total_seats = existing_seats + newly_purchased
 
+        elif payment_type == "plan_change_queued":
+            # Payment completes now; the plan activates only when the current
+            # subscription ends. Tenant plan/seats/expiry stay untouched here.
+            planned_start = (current_expiry if current_expiry and current_expiry > payment_time else payment_time)
+            new_subscription_end = planned_start + timedelta(days=CYCLE_DAYS.get(billing_cycle, 30))
+            new_total_seats = existing_seats  # unchanged until activation
+
+        elif payment_type == "renewal":
+            # Same-plan renewal EXTENDS the subscription: remaining validity is
+            # never lost when renewing early. Licensed seats persist across
+            # renewals; a scheduled seat reduction takes effect on this new cycle.
+            base = (current_expiry if current_expiry and current_expiry > payment_time else payment_time)
+            new_subscription_end = base + timedelta(days=CYCLE_DAYS.get(billing_cycle, 30))
+            if reduction_target:
+                new_total_seats = reduction_target
+            elif newly_purchased > 0:
+                new_total_seats = newly_purchased  # server-derived at order time
+            else:
+                new_total_seats = max(existing_seats, 1)
+
         else:
-            # renewal / new_subscription: calculate from billing_cycle, replace both
-            if billing_cycle == "monthly":
-                renewal_days = 30
-            elif billing_cycle == "quarterly":
-                renewal_days = 90
-            else:  # yearly
-                renewal_days = 365
-            new_subscription_end = payment_time + timedelta(days=renewal_days)
+            # new_subscription (first purchase or "activate now" plan change):
+            # current plan ends immediately, new plan starts now.
+            new_subscription_end = payment_time + timedelta(days=CYCLE_DAYS.get(billing_cycle, 30))
             new_total_seats = max(newly_purchased, 1)
 
         # ── Atomically transition PENDING → COMPLETED ─────────────────────────
@@ -491,40 +631,76 @@ class PaymentService:
         # reconciliation and log the error so ops can fix it.
         _secondary_error: str = ""
         try:
-            # Activate tenant subscription (updates expiry in tenants collection)
-            if payment_type != "seat_upgrade":
-                success, error = await tenant_service.activate_tenant(
-                    payment["tenant_id"],
-                    new_subscription_end
+            if payment_type == "plan_change_queued":
+                # No tenant mutation — create the queued subscription entry only.
+                from app.services.subscription_queue_service import SubscriptionQueueService
+                planned_start = (
+                    current_expiry if current_expiry and current_expiry > payment_time
+                    else payment_time
                 )
-                if not success:
-                    logger.error(f"activate_tenant failed: {error}")
+                await SubscriptionQueueService.create_queued_entry(
+                    payment=payment,
+                    seats=newly_purchased if newly_purchased > 0 else max(existing_seats, 1),
+                    activation_date=planned_start,
+                    expiry_date=new_subscription_end,
+                )
+            else:
+                # Activate tenant subscription (updates expiry in tenants collection)
+                if payment_type != "seat_upgrade":
+                    success, error = await tenant_service.activate_tenant(
+                        payment["tenant_id"],
+                        new_subscription_end
+                    )
+                    if not success:
+                        logger.error(f"activate_tenant failed: {error}")
 
-            # Build and apply tenant update payload
-            tenant_update: dict = {
-                "max_users": new_total_seats,
-                "is_trial": False,
-                "status": TenantStatus.ACTIVE,
-                "updated_at": payment_time,
-                "reminder_sent": False,
-            }
+                # Build and apply tenant update payload
+                tenant_update: dict = {
+                    "max_users": new_total_seats,
+                    "is_trial": False,
+                    "status": TenantStatus.ACTIVE,
+                    "updated_at": payment_time,
+                    "reminder_sent": False,
+                }
+                tenant_unset: dict = {}
 
-            if payment_type in ("renewal", "new_subscription"):
-                tenant_update["plan_id"] = payment["plan_id"]
-                tenant_update["plan_name"] = payment["plan_name"]
-                tenant_update["plan_display_name"] = payment.get("plan_display_name", payment["plan_name"])
-                tenant_update["billing_cycle"] = billing_cycle
-                tenant_update["plan_start_date"] = payment_time
-                tenant_update["plan_expiry"] = new_subscription_end
-            elif payment_type == "extend_duration":
-                tenant_update["plan_expiry"] = new_subscription_end
-            elif payment_type == "seat_upgrade_extend":
-                tenant_update["plan_expiry"] = new_subscription_end
+                if payment_type in ("renewal", "new_subscription"):
+                    tenant_update["plan_id"] = payment["plan_id"]
+                    tenant_update["plan_name"] = payment["plan_name"]
+                    tenant_update["plan_display_name"] = payment.get("plan_display_name", payment["plan_name"])
+                    tenant_update["billing_cycle"] = billing_cycle
+                    tenant_update["plan_start_date"] = payment_time
+                    tenant_update["plan_expiry"] = new_subscription_end
+                    # A new billing cycle consumes any scheduled seat reduction
+                    if reduction_target:
+                        tenant_unset["scheduled_seat_reduction"] = ""
+                elif payment_type == "extend_duration":
+                    tenant_update["plan_expiry"] = new_subscription_end
+                elif payment_type == "seat_upgrade_extend":
+                    tenant_update["plan_expiry"] = new_subscription_end
 
-            await master_db.tenants.update_one(
-                {"_id": payment["tenant_id"]},
-                {"$set": tenant_update}
-            )
+                # Permanent seat purchases also raise any scheduled-reduction
+                # target and pending queued plans by the same amount, so the
+                # newly licensed seats survive the next cycle.
+                if payment_type in ("seat_upgrade", "seat_upgrade_extend") and newly_purchased > 0:
+                    if reduction_target:
+                        tenant_update["scheduled_seat_reduction"] = reduction_target + newly_purchased
+                    try:
+                        await master_db.subscription_queue.update_many(
+                            {"tenant_id": payment["tenant_id"], "status": "queued"},
+                            {"$inc": {"seats": newly_purchased},
+                             "$set": {"updated_at": payment_time}},
+                        )
+                    except Exception as _q_exc:
+                        logger.warning(f"Queued-plan seat sync failed: {_q_exc}")
+
+                tenant_ops: dict = {"$set": tenant_update}
+                if tenant_unset:
+                    tenant_ops["$unset"] = tenant_unset
+                await master_db.tenants.update_one(
+                    {"_id": payment["tenant_id"]},
+                    tenant_ops
+                )
 
             # Commission record for reseller tenants
             seller_id = payment.get("seller_id")
@@ -878,6 +1054,100 @@ class PaymentService:
         if event_key:
             await PaymentService._update_webhook_event(event_key, status="processed", result=result_msg)
         return True, "Refund recorded"
+
+    # ── Scheduled seat reduction ───────────────────────────────────────────────
+
+    @staticmethod
+    async def schedule_seat_reduction(
+        tenant_id: str,
+        target_seats: int,
+        company_id_guard: str = "",
+    ) -> Tuple[Optional[dict], str]:
+        """Schedule a licensed-seat reduction for the NEXT billing cycle.
+
+        Never touches max_users immediately (active users must not be
+        deactivated mid-cycle). The target is applied when the next renewal /
+        plan purchase / queued-plan activation starts a new cycle.
+        A zero-amount entry is appended to billing history for the audit trail.
+        """
+        master_db = get_master_db()
+        tenant = await master_db.tenants.find_one({"_id": tenant_id, "is_deleted": {"$ne": True}})
+        if not tenant:
+            return None, "Company not found"
+        if company_id_guard and tenant.get("company_id") != company_id_guard:
+            return None, "You are not authorized to manage this company's subscription"
+
+        current_seats = int(tenant.get("max_users", 1))
+        target_seats = int(target_seats)
+        if target_seats < 1:
+            return None, "Seat count must be at least 1"
+        if target_seats >= current_seats:
+            return None, (
+                f"Target ({target_seats}) must be lower than the current licensed "
+                f"seats ({current_seats}). To add seats, purchase a seat upgrade."
+            )
+
+        now = datetime.now(timezone.utc)
+        await master_db.tenants.update_one(
+            {"_id": tenant_id},
+            {"$set": {"scheduled_seat_reduction": target_seats, "updated_at": now}},
+        )
+
+        # Immutable billing-history entry (zero amount — no charge for reductions)
+        history_id = str(uuid.uuid4())
+        await master_db.payments.insert_one({
+            "_id": history_id,
+            "transaction_id": f"TXN{now.strftime('%Y%m%d%H%M%S')}{str(uuid.uuid4()).replace('-', '')[:8].upper()}",
+            "tenant_id": tenant_id,
+            "company_id": tenant.get("company_id"),
+            "company_name": tenant.get("company_name"),
+            "plan_id": tenant.get("plan_id"),
+            "plan_name": tenant.get("plan_name"),
+            "plan_display_name": tenant.get("plan_display_name") or tenant.get("plan_name"),
+            "billing_cycle": tenant.get("billing_cycle", "monthly"),
+            "user_count": target_seats,
+            "seats_before": current_seats,
+            "seats_after_next_renewal": target_seats,
+            "price_per_user": 0,
+            "base_amount": 0,
+            "amount": 0,
+            "tax_amount": 0,
+            "total_amount": 0,
+            "currency": "INR",
+            "payment_method": "system",
+            "payment_type": "seat_reduction",
+            "status": PaymentStatus.COMPLETED,
+            "payment_date": now,
+            "invoice_number": f"INV{now.strftime('%Y%m%d')}{str(uuid.uuid4())[:6].upper()}",
+            "created_at": now,
+            "updated_at": now,
+        })
+
+        return {
+            "success": True,
+            "current_seats": current_seats,
+            "seats_after_next_renewal": target_seats,
+            "effective": "next_renewal",
+            "history_id": history_id,
+        }, ""
+
+    @staticmethod
+    async def cancel_seat_reduction(tenant_id: str, company_id_guard: str = "") -> Tuple[bool, str]:
+        """Remove a pending scheduled seat reduction (before it takes effect)."""
+        master_db = get_master_db()
+        tenant = await master_db.tenants.find_one({"_id": tenant_id, "is_deleted": {"$ne": True}})
+        if not tenant:
+            return False, "Company not found"
+        if company_id_guard and tenant.get("company_id") != company_id_guard:
+            return False, "You are not authorized to manage this company's subscription"
+        if not tenant.get("scheduled_seat_reduction"):
+            return False, "No scheduled seat reduction to cancel"
+        await master_db.tenants.update_one(
+            {"_id": tenant_id},
+            {"$unset": {"scheduled_seat_reduction": ""},
+             "$set": {"updated_at": datetime.now(timezone.utc)}},
+        )
+        return True, ""
 
     @staticmethod
     async def get_payment_history(

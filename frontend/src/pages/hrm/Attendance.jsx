@@ -573,9 +573,9 @@ function DashboardTab() {
     return new Date(dt.endsWith('Z') ? dt : dt + 'Z').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
-  const handleCheckIn    = async (empId) => { setChecking(empId+'_in');    try { await hrmService.checkIn({ employee_id: empId });    load(1) } catch { toast.error('Check-in failed') }    setChecking(null) }
-  const handleCheckOut   = async (empId) => { setChecking(empId+'_out');   try { await hrmService.checkOut({ employee_id: empId });   load(1) } catch { toast.error('Check-out failed') }   setChecking(null) }
-  const handleBreakStart = async (empId) => { setChecking(empId+'_bs');    try { await hrmService.startBreak({ employee_id: empId }); toast.success('Break started'); load(1) } catch { toast.error('Failed') } setChecking(null) }
+  const handleCheckIn    = async (empId) => { setChecking(empId+'_in');    try { await hrmService.checkIn({ employee_id: empId });    load(1) } catch (err) { toast.error(err?.response?.data?.detail || 'Check-in failed') }    setChecking(null) }
+  const handleCheckOut   = async (empId) => { setChecking(empId+'_out');   try { await hrmService.checkOut({ employee_id: empId });   load(1) } catch (err) { toast.error(err?.response?.data?.detail || 'Check-out failed') }   setChecking(null) }
+  const handleBreakStart = async (empId) => { setChecking(empId+'_bs');    try { await hrmService.startBreak({ employee_id: empId }); toast.success('Break started'); load(1) } catch (err) { toast.error(err?.response?.data?.detail || 'Failed') } setChecking(null) }
   const handleBreakEnd   = async (empId) => { setChecking(empId+'_be');    try { await hrmService.endBreak({ employee_id: empId });   toast.success('Break ended');   load(1) } catch { toast.error('Failed') } setChecking(null) }
 
   // ── Export ─────────────────────────────────────────────────────────────────

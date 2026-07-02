@@ -12,7 +12,7 @@ class CreateOrderRequest(BaseModel):
     """Request to create Razorpay order"""
     tenant_id: str
     plan_id: str
-    billing_cycle: Literal["monthly", "quarterly", "yearly"] = "monthly"
+    billing_cycle: Literal["monthly", "quarterly", "half_yearly", "yearly"] = "monthly"
 
 
 class CreateOrderResponse(BaseModel):

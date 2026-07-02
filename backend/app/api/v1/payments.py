@@ -4,6 +4,7 @@ Payment processing and history
 """
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status, Depends, Query
+from pydantic import BaseModel
 import hashlib
 import hmac
 import json
@@ -207,18 +208,115 @@ async def get_current_subscription(auth: AuthContext = Depends(get_current_user)
     
     latest_payment = payments[0] if payments else None
     
+    # Queued ("activate after expiry") subscriptions, if any
+    from app.services.subscription_queue_service import SubscriptionQueueService
+    queued_entries = await SubscriptionQueueService.list_for_tenant(tenant["_id"])
+
     return {
         "plan_name": tenant.get("plan_name"),
         "is_trial": tenant.get("is_trial", False),
         "plan_start": tenant.get("plan_start_date"),
         "plan_expiry": tenant.get("plan_expiry"),
         "status": tenant.get("status"),
+        "billing_cycle": tenant.get("billing_cycle", "monthly"),
+        "licensed_seats": tenant.get("max_users"),
+        "scheduled_seat_reduction": tenant.get("scheduled_seat_reduction"),
+        "queued_subscriptions": [
+            {
+                "id": q["_id"],
+                "plan_name": q.get("plan_display_name") or q.get("plan_name"),
+                "billing_cycle": q.get("billing_cycle"),
+                "seats": q.get("seats"),
+                "purchase_date": q.get("purchase_date"),
+                "activation_date": q.get("activation_date"),
+                "status": q.get("status"),
+            }
+            for q in queued_entries
+        ],
         "last_payment": {
             "amount": latest_payment.get("total_amount") if latest_payment else None,
             "date": latest_payment.get("payment_date") if latest_payment else None,
             "invoice": latest_payment.get("invoice_number") if latest_payment else None
         } if latest_payment else None
     }
+
+
+# ── Seat reduction (effective NEXT billing cycle) ──────────────────────────────
+
+class SeatReductionRequest(BaseModel):
+    target_seats: int
+
+
+@router.post("/subscription/reduce-seats")
+async def schedule_seat_reduction(
+    body: SeatReductionRequest,
+    auth: AuthContext = Depends(get_current_user),
+):
+    """Schedule a licensed-seat reduction for the next billing cycle.
+    Never reduces immediately — active users are never deactivated mid-cycle."""
+    if auth.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="SuperAdmin has no subscription")
+    if not (auth.is_owner or auth.role == "admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the owner or an admin can change seats")
+
+    tenant = await tenant_service.get_tenant(company_id=auth.company_id)
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+
+    result, error = await payment_service.schedule_seat_reduction(
+        tenant_id=tenant["_id"],
+        target_seats=body.target_seats,
+        company_id_guard=auth.company_id,
+    )
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return result
+
+
+@router.delete("/subscription/reduce-seats")
+async def cancel_seat_reduction(auth: AuthContext = Depends(get_current_user)):
+    """Cancel a pending scheduled seat reduction before it takes effect."""
+    if auth.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="SuperAdmin has no subscription")
+    if not (auth.is_owner or auth.role == "admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the owner or an admin can change seats")
+
+    tenant = await tenant_service.get_tenant(company_id=auth.company_id)
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+
+    ok, error = await payment_service.cancel_seat_reduction(
+        tenant_id=tenant["_id"], company_id_guard=auth.company_id
+    )
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    return {"success": True}
+
+
+@router.post("/subscription/queue/{entry_id}/cancel")
+async def cancel_queued_subscription(
+    entry_id: str,
+    auth: AuthContext = Depends(get_current_user),
+):
+    """Cancel a queued (not yet active) subscription. queued → cancelled only —
+    active/expired entries are immutable history."""
+    if auth.is_super_admin:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="SuperAdmin has no subscription")
+    if not (auth.is_owner or auth.role == "admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the owner or an admin can manage the plan queue")
+
+    tenant = await tenant_service.get_tenant(company_id=auth.company_id)
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tenant not found")
+
+    from app.services.subscription_queue_service import SubscriptionQueueService
+    ok = await SubscriptionQueueService.cancel_queued(entry_id, tenant["_id"])
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Queued subscription not found or already active/cancelled",
+        )
+    return {"success": True}
 
 
 async def _run_post_payment_hooks(event_key: str, order_id: str, payment_id: str) -> None:
