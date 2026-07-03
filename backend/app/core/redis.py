@@ -230,6 +230,26 @@ async def delete_cache(key: str) -> bool:
         return False
 
 
+async def invalidate_dashboard_cache(company_id: str) -> None:
+    """
+    Invalidate every cached admin-dashboard entry for a company (all users,
+    all period filters). Cache keys are `dashboard:{company_id}:{user_id}:{days}`,
+    so a targeted delete_cache() can't know every user/period combination —
+    must scan the company's key space instead. Call after any write that
+    changes a count shown on the dashboard (candidate/job/application create).
+    """
+    client = get_redis()
+    if not client or not company_id:
+        return
+    try:
+        pattern = f"dashboard:{company_id}:*"
+        keys = [key async for key in client.scan_iter(match=pattern)]
+        if keys:
+            await client.delete(*keys)
+    except Exception as e:
+        logger.warning(f"Redis invalidate_dashboard_cache failed: {e}")
+
+
 # ─── Rate Limiting ─────────────────────────────────────────────────────────────
 
 async def check_rate_limit(key: str, max_requests: int, window_seconds: int) -> tuple[bool, int]:

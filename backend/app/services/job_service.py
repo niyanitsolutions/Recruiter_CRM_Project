@@ -167,6 +167,15 @@ class JobService:
         except Exception:
             pass
 
+        # Dashboard "Active Jobs" count is Redis-cached (5 min TTL) with no
+        # invalidation hook — bust it now so the dashboard reflects this job
+        # immediately instead of after the cache naturally expires.
+        try:
+            from app.core.redis import invalidate_dashboard_cache
+            await invalidate_dashboard_cache(company_id)
+        except Exception:
+            pass
+
         # Audit log — best-effort
         try:
             audit = AuditService(db)

@@ -132,10 +132,16 @@ const JobMatchingCandidates = () => {
     try {
       setApplying(true)
       const res = await applicationService.bulkApply(jobId, selectedIds)
-      const ok   = res.data?.success?.length || 0
-      const fail = res.data?.failed?.length  || 0
-      if (ok)   toast.success(`${ok} candidate(s) applied successfully`)
-      if (fail) toast.error(`${fail} application(s) failed (may already exist)`)
+      const ok     = res.data?.success?.length || 0
+      const failed = res.data?.failed || []
+      if (ok) toast.success(`${ok} candidate(s) applied successfully`)
+      if (failed.length) {
+        // Surface the real backend reason (e.g. "Job is not open for applications")
+        // instead of guessing "may already exist" — that guess was misleading
+        // whenever the failure was for any other reason.
+        const reason = failed[0]?.error || 'unknown error'
+        toast.error(`${failed.length} application(s) failed: ${reason}`)
+      }
       setSelectedIds([])
       await runMatchingSilent()
     } catch (error) {

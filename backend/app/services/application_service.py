@@ -30,7 +30,8 @@ class ApplicationService:
         db: AsyncIOMotorDatabase,
         application_data: ApplicationCreate,
         created_by: str,
-        partner_id: Optional[str] = None
+        partner_id: Optional[str] = None,
+        company_id: Optional[str] = None
     ) -> ApplicationResponse:
         """Create a new application (apply candidate to job)"""
         collection = db[ApplicationService.COLLECTION]
@@ -197,6 +198,19 @@ class ApplicationService:
                 description=f"Application created for {candidate.get('full_name')}",
                 new_value={"candidate": candidate.get("full_name"), "job": job.get("title")},
             )
+        except Exception:
+            pass
+
+        # Dashboard "Applications"/"Offers Pending" counts are Redis-cached
+        # (5 min TTL) with no invalidation hook — bust it now so the dashboard
+        # reflects this application immediately instead of after the cache
+        # naturally expires. Prefer the caller-supplied company_id (from the
+        # authenticated request) over the job doc's field — older job records
+        # can have a null/missing company_id and would otherwise silently
+        # skip invalidation.
+        try:
+            from app.core.redis import invalidate_dashboard_cache
+            await invalidate_dashboard_cache(company_id or job.get("company_id") or "")
         except Exception:
             pass
 

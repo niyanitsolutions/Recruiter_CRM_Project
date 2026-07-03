@@ -101,7 +101,8 @@ async def create_application(
         db=db,
         application_data=application_data,
         created_by=current_user["id"],
-        partner_id=partner_id
+        partner_id=partner_id,
+        company_id=current_user.get("company_id", "")
     )
     
     return {"success": True, "message": "Application created successfully", "data": application}
@@ -244,7 +245,8 @@ async def bulk_apply_candidates(
                 db=db,
                 application_data=application_data,
                 created_by=current_user["id"],
-                partner_id=partner_id
+                partner_id=partner_id,
+                company_id=current_user.get("company_id", "")
             )
             results["success"].append(candidate_id)
         except HTTPException as e:
