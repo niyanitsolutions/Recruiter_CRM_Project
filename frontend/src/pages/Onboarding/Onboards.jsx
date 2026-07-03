@@ -630,7 +630,7 @@ const Onboards = () => {
   }
 
   return (
-    <div className="p-6 space-y-6 page-enter">
+    <div className="p-4 space-y-3 page-enter">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -647,41 +647,43 @@ const Onboards = () => {
 
       {/* Stat Cards */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {STAT_CARDS.map(({ key, label, color, icon: Icon }) => (
-            <div key={key} className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-              <div className="w-8 h-8 rounded-lg mb-3 flex items-center justify-center" style={{ background: `${color}22` }}>
-                <Icon className="w-4 h-4" style={{ color }} />
+            <div key={key} className="rounded-xl p-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${color}22` }}>
+                  <Icon className="w-4 h-4" style={{ color }} />
+                </div>
+                <div>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{label}</p>
+                  <p className="text-lg font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>{stats[key] ?? 0}</p>
+                </div>
               </div>
-              <p className="text-sm mb-1" style={{ color: 'var(--text-muted)' }}>{label}</p>
-              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{stats[key] ?? 0}</p>
             </div>
           ))}
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-card-alt)' }}>
-        {TABS.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => handleTabChange(tab.key)}
-            style={{
-              padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer',
-              fontSize: 14, fontWeight: 500, transition: 'all 0.15s',
-              background: activeTab === tab.key ? 'var(--bg-card)' : 'transparent',
-              color: activeTab === tab.key ? 'var(--accent)' : 'var(--text-muted)',
-              boxShadow: activeTab === tab.key ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Search Filter */}
-      <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-        <div className="relative max-w-xs">
+      {/* Tabs + Search (single row) */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex gap-1 p-1 rounded-xl flex-shrink-0" style={{ background: 'var(--bg-card-alt)' }}>
+          {TABS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => handleTabChange(tab.key)}
+              style={{
+                padding: '6px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                fontSize: 14, fontWeight: 500, transition: 'all 0.15s',
+                background: activeTab === tab.key ? 'var(--bg-card)' : 'transparent',
+                color: activeTab === tab.key ? 'var(--accent)' : 'var(--text-muted)',
+                boxShadow: activeTab === tab.key ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
           <input
             type="text"

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, Component } from 'reac
 import { Link } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import {
-  Users, UserCheck, Building, Award, Briefcase, Calendar,
+  Users, Building, Award, Briefcase, Calendar,
   UserPlus, History, TrendingUp, Activity, ArrowRight,
   RefreshCw, Users2, DollarSign, Target, Bot,
   BarChart2, Clock, CheckCircle2,
@@ -419,8 +419,8 @@ const AdminDashboard = () => {
     return (
       <div className="p-2 space-y-3 page-enter">
         <div className="h-16 rounded-xl skeleton" />
-        <div className="grid grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2">
-          {Array.from({ length: 9 }).map((_, i) => <div key={i} className="h-24 rounded-xl skeleton" />)}
+        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+          {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-20 rounded-xl skeleton" />)}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           {[1,2,3,4].map(i => <div key={i} className="h-60 rounded-xl skeleton" />)}
@@ -470,6 +470,7 @@ const AdminDashboard = () => {
   const activeUsers     = user_stats?.active_users
   const inactiveUsers   = user_stats?.inactive_users
   const loggedInToday   = user_stats?.logged_in_today
+  const onlineUsers     = user_stats?.online_users
   const onLeaveToday    = hrmStats?.on_leave_today ?? hrmStats?.leaves_today ?? hrmStats?.on_leave
   const pendingFeedback = ivStats?.pending_feedback ?? ivStats?.pending_feedback_count
 
@@ -783,16 +784,12 @@ const AdminDashboard = () => {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* 9 STAT KPI CARDS — with sparklines                                     */}
+      {/* 8 STAT KPI CARDS — compact                                             */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <WidgetErrorBoundary>
       {(() => {
-        // Sparkline data: use real activity trend values; flat structural line if no data yet
-        const sparkVals = trendData.length > 1
-          ? trendData.map(d => d.value)
-          : [1, 1, 1, 1, 1, 1, 1]
         return (
-          <div className="grid grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
             {has('candidates:view') && (
               <KpiCard
                 title="Total Candidates"
@@ -803,7 +800,7 @@ const AdminDashboard = () => {
                   ? { value: `+${recruitStats.recent_week} this week`, dir: 'up' }
                   : undefined}
                 subtitle="In pipeline"
-                sparkline={sparkVals}
+                compact={true}
                 linkTo="/candidates"
                 delay={0}
               />
@@ -818,7 +815,7 @@ const AdminDashboard = () => {
                   ? { value: `${jobStats.filled} filled`, dir: 'up' }
                   : undefined}
                 subtitle="Open positions"
-                sparkline={sparkVals}
+                compact={true}
                 linkTo="/jobs"
                 delay={50}
               />
@@ -830,7 +827,7 @@ const AdminDashboard = () => {
                 icon={Activity}
                 color="orange"
                 subtitle="In Progress"
-                sparkline={sparkVals}
+                compact={true}
                 linkTo="/applications"
                 delay={100}
               />
@@ -845,7 +842,7 @@ const AdminDashboard = () => {
                   ? { value: `${ivStats.this_week} this week`, dir: 'up' }
                   : undefined}
                 subtitle="Scheduled"
-                sparkline={sparkVals}
+                compact={true}
                 linkTo="/interviews"
                 delay={150}
               />
@@ -860,7 +857,7 @@ const AdminDashboard = () => {
                   ? { value: `${offerRate}% offer rate`, dir: offerRate >= 20 ? 'up' : 'down' }
                   : undefined}
                 subtitle="Awaiting response"
-                sparkline={sparkVals}
+                compact={true}
                 linkTo="/applications"
                 delay={200}
               />
@@ -872,33 +869,44 @@ const AdminDashboard = () => {
                 icon={DollarSign}
                 color="pink"
                 subtitle="This month"
-                sparkline={sparkVals}
+                compact={true}
                 delay={250}
               />
             )}
             {has('users:view') && (
-              <KpiCard
-                title="Total Users"
-                value={totalUsers}
-                icon={Users}
-                color="indigo"
-                subtitle={activeUsers != null ? `${activeUsers} active` : 'System users'}
-                compact={true}
-                linkTo="/users"
-                delay={300}
-              />
-            )}
-            {has('users:view') && (
-              <KpiCard
-                title="Active Users"
-                value={activeUsers}
-                icon={UserCheck}
-                color="blue"
-                subtitle={loggedInToday != null ? `${loggedInToday} online today` : 'Status: active'}
-                compact={true}
-                linkTo="/users"
-                delay={350}
-              />
+              <Link to="/users" className="block" style={{ animationDelay: '300ms' }}>
+                <div
+                  className="rounded-xl relative overflow-hidden"
+                  style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-card)',
+                    padding: '10px 12px 8px',
+                    boxShadow: 'var(--shadow-card)',
+                  }}
+                >
+                  <div className="absolute top-0 left-0 right-0" style={{ height: '2px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)' }} />
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-2" style={{ background: '#6366f118' }}>
+                    <Users className="w-[15px] h-[15px]" style={{ color: '#6366f1' }} />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="font-bold leading-none" style={{ fontSize: '20px', color: 'var(--text-heading)', letterSpacing: '-0.5px' }}>
+                        {totalUsers ?? '—'}
+                      </p>
+                      <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>Total</p>
+                    </div>
+                    <div className="w-px self-stretch" style={{ background: 'var(--border)' }} />
+                    <div>
+                      <p className="font-bold leading-none flex items-center gap-1.5" style={{ fontSize: '20px', color: 'var(--text-heading)', letterSpacing: '-0.5px' }}>
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: onlineUsers > 0 ? '#22c55e' : 'var(--text-disabled)' }} />
+                        {onlineUsers ?? '—'}
+                      </p>
+                      <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>Online</p>
+                    </div>
+                  </div>
+                  <p className="text-xs font-semibold mt-1.5" style={{ color: 'var(--text-secondary)' }}>Users</p>
+                </div>
+              </Link>
             )}
             {has('candidates:view') && (
               <KpiCard
@@ -910,7 +918,7 @@ const AdminDashboard = () => {
                   ? { value: `${joinRate}% join rate`, dir: joinRate >= 50 ? 'up' : 'down' }
                   : undefined}
                 subtitle="This Month"
-                sparkline={sparkVals}
+                compact={true}
                 delay={400}
               />
             )}

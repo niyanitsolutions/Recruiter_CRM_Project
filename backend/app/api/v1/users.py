@@ -106,8 +106,8 @@ async def get_dashboard_stats(
 ):
     """Get user statistics for admin dashboard"""
     user_service = UserService(db)
-    stats = await user_service.get_dashboard_stats()
-    
+    stats = await user_service.get_dashboard_stats(current_user.get("company_id"))
+
     return {
         "success": True,
         "data": stats

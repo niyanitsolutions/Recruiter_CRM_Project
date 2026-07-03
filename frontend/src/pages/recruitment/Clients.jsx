@@ -117,9 +117,9 @@ const Clients = () => {
   }
 
   return (
-    <div className="p-6 page-enter">
+    <div className="p-4 page-enter">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Clients</h1>
           <p style={{ color: 'var(--text-muted)' }}>Manage hiring companies and vendors</p>
@@ -146,16 +146,16 @@ const Clients = () => {
         </div>
       </div>
 
-      {/* Tabs + View Toggle */}
-      <div className="flex items-center justify-between mb-6" style={{ borderBottom: '1px solid var(--border)' }}>
-        <div className="flex gap-1">
+      {/* Toolbar: Tabs + Search + Filters + View Toggle (single row) */}
+      <div className="flex flex-wrap items-center gap-3 mb-3 pb-2" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex gap-1 flex-shrink-0">
           {[['all', 'All'], ['active', 'Active'], ['rejected', 'Rejected']].map(([key, label]) => (
             <button
               key={key}
               onClick={() => { setActiveTab(key); setPagination(p => ({ ...p, page: 1 })) }}
-              className="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+              className="px-3 py-1.5 text-sm font-medium border-b-2 transition-colors"
               style={activeTab === key
-                ? { borderColor: 'var(--accent)', color: 'var(--accent)', marginBottom: '-1px' }
+                ? { borderColor: 'var(--accent)', color: 'var(--accent)', marginBottom: '-9px' }
                 : { borderColor: 'transparent', color: 'var(--text-muted)' }
               }
             >
@@ -163,8 +163,28 @@ const Clients = () => {
             </button>
           ))}
         </div>
+        <div className="flex-1 min-w-[180px]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="Search clients..."
+              value={filters.search}
+              onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+              className="input pl-10 w-full"
+            />
+          </div>
+        </div>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className="btn-secondary flex items-center gap-2"
+          style={showFilters ? { background: 'var(--bg-active)', color: 'var(--accent)' } : {}}
+        >
+          <Filter className="w-4 h-4" />
+          Filters
+        </button>
         <div
-          className="flex items-center rounded-lg p-1 mb-1"
+          className="flex items-center rounded-lg p-1"
           style={{ border: '1px solid var(--border)', background: 'var(--bg-card-alt)' }}
         >
           <button
@@ -186,63 +206,37 @@ const Clients = () => {
         </div>
       </div>
 
-      {/* Search & Filters */}
-      <div className="rounded-xl p-4 mb-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-        <div className="flex flex-wrap gap-4">
-          <div className="flex-1 min-w-[200px]">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search clients..."
-                value={filters.search}
-                onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                className="input pl-10 w-full"
-              />
-            </div>
-          </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="btn-secondary flex items-center gap-2"
-            style={showFilters ? { background: 'var(--bg-active)', color: 'var(--accent)' } : {}}
+      {showFilters && (
+        <div className="rounded-xl p-4 mb-3 grid grid-cols-1 md:grid-cols-3 gap-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <select
+            value={filters.status}
+            onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+            className="input"
           >
-            <Filter className="w-4 h-4" />
-            Filters
-          </button>
+            <option value="">All Statuses</option>
+            {statuses.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <select
+            value={filters.client_type}
+            onChange={(e) => setFilters(prev => ({ ...prev, client_type: e.target.value }))}
+            className="input"
+          >
+            <option value="">All Types</option>
+            {types.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+          <input
+            type="text"
+            placeholder="Filter by city..."
+            value={filters.city}
+            onChange={(e) => setFilters(prev => ({ ...prev, city: e.target.value }))}
+            className="input"
+          />
         </div>
-
-        {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
-              className="input"
-            >
-              <option value="">All Statuses</option>
-              {statuses.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-            <select
-              value={filters.client_type}
-              onChange={(e) => setFilters(prev => ({ ...prev, client_type: e.target.value }))}
-              className="input"
-            >
-              <option value="">All Types</option>
-              {types.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <input
-              type="text"
-              placeholder="Filter by city..."
-              value={filters.city}
-              onChange={(e) => setFilters(prev => ({ ...prev, city: e.target.value }))}
-              className="input"
-            />
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Card View */}
       {viewMode === 'card' && (
-        <div className="mb-6">
+        <div className="mb-3">
           {loading ? (
             <SkeletonCards count={6} />
           ) : clients.length === 0 ? (

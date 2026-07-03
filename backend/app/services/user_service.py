@@ -990,7 +990,7 @@ class UserService:
         except Exception as e:
             return False, f"Error deleting user: {str(e)}"
     
-    async def get_dashboard_stats(self) -> Dict:
+    async def get_dashboard_stats(self, company_id: Optional[str] = None) -> Dict:
         """Get user statistics for admin dashboard"""
         # Exclude partner users to match the Users page which only shows internal users
         internal_filter = {"is_deleted": False, "user_type": {"$in": ["internal", None]}}
@@ -1015,13 +1015,30 @@ class UserService:
             **internal_filter,
             "last_login": {"$gte": day_ago}
         })
-        
+
+        # Online now — reuses the same "truly active" session definition as the
+        # session-management API (heartbeat within SESSION_TRULY_ACTIVE_THRESHOLD_SECONDS).
+        online_users = 0
+        if company_id:
+            from app.services.auth_service import SESSION_TRULY_ACTIVE_THRESHOLD_SECONDS
+            now = datetime.now(timezone.utc)
+            cutoff = now - timedelta(seconds=SESSION_TRULY_ACTIVE_THRESHOLD_SECONDS)
+            master_db = get_master_db()
+            online_user_ids = await master_db.sessions.distinct("user_id", {
+                "company_id": company_id,
+                "is_active": True,
+                "expires_at": {"$gt": now},
+                "last_activity_at": {"$gte": cutoff},
+            })
+            online_users = len(online_user_ids)
+
         return {
             "total_users": total,
             "active_users": active,
             "inactive_users": inactive,
             "suspended_users": suspended,
             "logged_in_today": logged_in_today,
+            "online_users": online_users,
             "users_by_role": role_stats
         }
     

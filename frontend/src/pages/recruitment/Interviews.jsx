@@ -151,9 +151,9 @@ const Interviews = () => {
       : interviews
 
   return (
-    <div className="p-6 page-enter">
+    <div className="p-4 page-enter">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Interviews</h1>
           <p style={{ color: 'var(--text-muted)' }}>Schedule and manage candidate interviews</p>
@@ -176,12 +176,12 @@ const Interviews = () => {
 
       {/* Summary Stat Cards */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
           {STAT_CARDS.map(({ key, label, color, icon: Icon }) => (
             <button
               key={key}
               onClick={() => handleTabChange(key)}
-              className="rounded-xl p-4 text-left transition-all"
+              className="rounded-xl p-3 text-left transition-all"
               style={{
                 background: 'var(--bg-card)',
                 border: activeTab === key ? `2px solid ${color}` : '1px solid var(--border-card)',
@@ -190,23 +190,27 @@ const Interviews = () => {
               onMouseEnter={e => { if (activeTab !== key) e.currentTarget.style.borderColor = color }}
               onMouseLeave={e => { if (activeTab !== key) e.currentTarget.style.borderColor = 'var(--border-card)' }}
             >
-              <div
-                className="w-9 h-9 rounded-lg mb-3 flex items-center justify-center"
-                style={{ background: `${color}22` }}
-              >
-                <Icon className="w-5 h-5" style={{ color }} />
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: `${color}22` }}
+                >
+                  <Icon className="w-4 h-4" style={{ color }} />
+                </div>
+                <div>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{label}</p>
+                  <p className="text-lg font-bold leading-tight" style={{ color: 'var(--text-primary)' }}>
+                    {stats[key] ?? 0}
+                  </p>
+                </div>
               </div>
-              <p className="text-sm mb-1" style={{ color: 'var(--text-muted)' }}>{label}</p>
-              <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                {stats[key] ?? 0}
-              </p>
             </button>
           ))}
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 mb-6 flex-wrap">
+      <div className="flex items-center gap-1 mb-3 flex-wrap">
         <div
           className="flex rounded-lg p-1 flex-wrap gap-1"
           style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}
@@ -215,7 +219,7 @@ const Interviews = () => {
             <button
               key={key}
               onClick={() => handleTabChange(key)}
-              className="px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5"
               style={activeTab === key
                 ? { background: 'var(--accent)', color: '#fff' }
                 : { color: 'var(--text-secondary)' }
@@ -230,16 +234,10 @@ const Interviews = () => {
         </div>
       </div>
 
-      {/* View Toggle */}
-      <div className="flex items-center justify-end mb-2 gap-1">
-        <button onClick={() => setViewMode('table')} className="p-2 rounded-lg transition-colors" style={viewMode === 'table' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Table view"><List className="w-4 h-4" /></button>
-        <button onClick={() => setViewMode('card')} className="p-2 rounded-lg transition-colors" style={viewMode === 'card' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Card view"><LayoutGrid className="w-4 h-4" /></button>
-      </div>
-
-      {/* Date Filters (all/status tabs) */}
-      {!['today', 'pending'].includes(activeTab) && (
-        <div className="rounded-xl p-4 mb-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-          <div className="flex flex-wrap gap-4">
+      {/* Date Filters + View Toggle (single row) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+        {!['today', 'pending'].includes(activeTab) ? (
+          <div className="flex flex-wrap items-center gap-3">
             <input
               type="date"
               value={filters.date_from}
@@ -263,8 +261,15 @@ const Interviews = () => {
               </button>
             )}
           </div>
+        ) : <div />}
+        <div
+          className="flex items-center rounded-lg p-1"
+          style={{ border: '1px solid var(--border)', background: 'var(--bg-card-alt)' }}
+        >
+          <button onClick={() => setViewMode('table')} className="p-1.5 rounded-md transition-colors" style={viewMode === 'table' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Table view"><List className="w-4 h-4" /></button>
+          <button onClick={() => setViewMode('card')} className="p-1.5 rounded-md transition-colors" style={viewMode === 'card' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Card view"><LayoutGrid className="w-4 h-4" /></button>
         </div>
-      )}
+      </div>
 
       {/* Card View */}
       {viewMode === 'card' && (

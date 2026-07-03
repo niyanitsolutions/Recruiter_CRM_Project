@@ -230,9 +230,9 @@ const loadJobs = async (silent = false) => {
   })
 
   return (
-    <div className="p-6 page-enter">
+    <div className="p-4 page-enter">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Jobs</h1>
           <p style={{ color: 'var(--text-muted)' }}>Manage job postings and requirements</p>
@@ -259,46 +259,45 @@ const loadJobs = async (silent = false) => {
         </div>
       </div>
 
-      {/* Search & Filters */}
-      <div className="rounded-xl p-4 mb-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-        <div className="flex flex-wrap gap-4">
-          <div className="flex-1 min-w-[200px]">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
-              <input
-                type="text"
-                placeholder="Search jobs..."
-                value={filters.keyword}
-                onChange={(e) => setFilters(prev => ({ ...prev, keyword: e.target.value }))}
-                className="input pl-10 w-full"
-              />
-            </div>
+      {/* Toolbar: Search + Filters + View Toggle (single row) */}
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <div className="flex-1 min-w-[200px]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="Search jobs..."
+              value={filters.keyword}
+              onChange={(e) => setFilters(prev => ({ ...prev, keyword: e.target.value }))}
+              className="input pl-10 w-full"
+            />
           </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="btn-secondary flex items-center gap-2"
-            style={showFilters ? { background: 'var(--bg-active)', color: 'var(--accent)' } : {}}
-          >
-            <Filter className="w-4 h-4" />
-            Filters
-          </button>
         </div>
-
-        {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
-            <select value={filters.status}   onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}   className="input"><option value="">All Statuses</option>{statuses.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
-            <select value={filters.job_type} onChange={(e) => setFilters(prev => ({ ...prev, job_type: e.target.value }))} className="input"><option value="">All Job Types</option>{jobTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select>
-            <select value={filters.work_mode}onChange={(e) => setFilters(prev => ({ ...prev, work_mode: e.target.value }))}className="input"><option value="">All Work Modes</option>{workModes.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}</select>
-            <select value={filters.priority} onChange={(e) => setFilters(prev => ({ ...prev, priority: e.target.value }))} className="input"><option value="">All Priorities</option>{priorities.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}</select>
-          </div>
-        )}
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className="btn-secondary flex items-center gap-2"
+          style={showFilters ? { background: 'var(--bg-active)', color: 'var(--accent)' } : {}}
+        >
+          <Filter className="w-4 h-4" />
+          Filters
+        </button>
+        <div
+          className="flex items-center rounded-lg p-1"
+          style={{ border: '1px solid var(--border)', background: 'var(--bg-card-alt)' }}
+        >
+          <button onClick={() => setViewMode('table')} className="p-1.5 rounded-md transition-colors" style={viewMode === 'table' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Table view"><List className="w-4 h-4" /></button>
+          <button onClick={() => setViewMode('card')}  className="p-1.5 rounded-md transition-colors" style={viewMode === 'card'  ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Card view"><LayoutGrid className="w-4 h-4" /></button>
+        </div>
       </div>
 
-      {/* View Toggle */}
-      <div className="flex items-center justify-end mb-4 gap-1">
-        <button onClick={() => setViewMode('table')} className="p-2 rounded-lg transition-colors" style={viewMode === 'table' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Table view"><List className="w-4 h-4" /></button>
-        <button onClick={() => setViewMode('card')}  className="p-2 rounded-lg transition-colors" style={viewMode === 'card'  ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Card view"><LayoutGrid className="w-4 h-4" /></button>
-      </div>
+      {showFilters && (
+        <div className="rounded-xl p-4 mb-3 grid grid-cols-1 md:grid-cols-4 gap-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <select value={filters.status}   onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}   className="input"><option value="">All Statuses</option>{statuses.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}</select>
+          <select value={filters.job_type} onChange={(e) => setFilters(prev => ({ ...prev, job_type: e.target.value }))} className="input"><option value="">All Job Types</option>{jobTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select>
+          <select value={filters.work_mode}onChange={(e) => setFilters(prev => ({ ...prev, work_mode: e.target.value }))}className="input"><option value="">All Work Modes</option>{workModes.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}</select>
+          <select value={filters.priority} onChange={(e) => setFilters(prev => ({ ...prev, priority: e.target.value }))} className="input"><option value="">All Priorities</option>{priorities.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}</select>
+        </div>
+      )}
 
       {/* Bulk action toolbar */}
       {selectedIds.size > 0 && (

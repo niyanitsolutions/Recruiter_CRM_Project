@@ -393,9 +393,9 @@ const Candidates = () => {
   }
 
   return (
-    <div className="p-6 page-enter">
+    <div className="p-4 page-enter">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Candidates</h1>
           <p style={{ color: 'var(--text-muted)' }}>Master talent pool — manage candidate profiles</p>
@@ -434,25 +434,53 @@ const Candidates = () => {
         </div>
       </div>
 
-      {/* Tabs + View Toggle */}
-      <div className="flex items-center justify-between mb-6" style={{ borderBottom: '1px solid var(--border)' }}>
-        <div className="flex gap-1">
-          {[['all', 'All'], ['active', 'Active'], ['blacklisted', 'Blacklisted']].map(([key, label]) => (
+      {/* Toolbar: Tabs + Search Mode + View Toggle (single row) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-2" style={{ borderBottom: '1px solid var(--border)' }}>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex gap-1">
+            {[['all', 'All'], ['active', 'Active'], ['blacklisted', 'Blacklisted']].map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => { setActiveTab(key); setPagination(p => ({ ...p, page: 1 })) }}
+                className="px-3 py-1.5 text-sm font-medium border-b-2 transition-colors"
+                style={activeTab === key
+                  ? { borderColor: 'var(--accent)', color: 'var(--accent)', marginBottom: '-9px' }
+                  : { borderColor: 'transparent', color: 'var(--text-muted)' }
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div
+            className="flex rounded-lg p-1"
+            style={{ border: '1px solid var(--border)', background: 'var(--bg-card-alt)' }}
+          >
             <button
-              key={key}
-              onClick={() => { setActiveTab(key); setPagination(p => ({ ...p, page: 1 })) }}
-              className="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
-              style={activeTab === key
-                ? { borderColor: 'var(--accent)', color: 'var(--accent)', marginBottom: '-1px' }
-                : { borderColor: 'transparent', color: 'var(--text-muted)' }
+              onClick={() => setSearchMode('filter')}
+              className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors"
+              style={searchMode === 'filter'
+                ? { background: 'var(--accent)', color: '#fff' }
+                : { color: 'var(--text-secondary)' }
               }
             >
-              {label}
+              Filter Search
             </button>
-          ))}
+            <button
+              onClick={() => setSearchMode('keyword')}
+              className="px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5"
+              style={searchMode === 'keyword'
+                ? { background: 'var(--accent)', color: '#fff' }
+                : { color: 'var(--text-secondary)' }
+              }
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              AI Keyword Search
+            </button>
+          </div>
         </div>
         <div
-          className="flex items-center rounded-lg p-1 mb-1"
+          className="flex items-center rounded-lg p-1"
           style={{ border: '1px solid var(--border)', background: 'var(--bg-card-alt)' }}
         >
           <button
@@ -481,38 +509,9 @@ const Candidates = () => {
       </div>
 
       {/* Search / Filters */}
-      <div className="rounded-xl p-4 mb-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-        <div className="flex items-center gap-4 mb-4">
-          <div
-            className="flex rounded-lg p-1"
-            style={{ border: '1px solid var(--border)', background: 'var(--bg-card-alt)' }}
-          >
-            <button
-              onClick={() => setSearchMode('filter')}
-              className="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-              style={searchMode === 'filter'
-                ? { background: 'var(--accent)', color: '#fff' }
-                : { color: 'var(--text-secondary)' }
-              }
-            >
-              Filter Search
-            </button>
-            <button
-              onClick={() => setSearchMode('keyword')}
-              className="px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2"
-              style={searchMode === 'keyword'
-                ? { background: 'var(--accent)', color: '#fff' }
-                : { color: 'var(--text-secondary)' }
-              }
-            >
-              <Sparkles className="w-4 h-4" />
-              AI Keyword Search
-            </button>
-          </div>
-        </div>
-
+      <div className="mb-3">
         {searchMode === 'keyword' ? (
-          <div className="flex gap-4">
+          <div className="flex gap-3">
             <div className="flex-1">
               <div className="relative">
                 <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--accent)' }} />
@@ -533,7 +532,7 @@ const Candidates = () => {
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap gap-3">
               <div className="flex-1 min-w-[200px]">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-muted)' }} />
@@ -557,7 +556,7 @@ const Candidates = () => {
             </div>
 
             {showFilters && (
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
+              <div className="rounded-xl p-4 mt-3 grid grid-cols-1 md:grid-cols-4 gap-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
                 <input
                   type="text"
                   placeholder="Skills (comma separated)"

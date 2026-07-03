@@ -42,7 +42,8 @@
       "Bash(curl -s -X GET 'http://localhost:3000/api/v1/applications/?page=1&page_size=20' -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -H 'Origin: http://localhost:3000' --max-time 15 -w '\\\\nHTTP_STATUS:%{http_code}\\\\n')",
       "Bash(python3 -c ' *)",
       "Bash(/c/Users/Lenovo/AppData/Local/Programs/Python/Python312/python -c ' *)",
-      "Bash(/c/Users/Lenovo/AppData/Local/Programs/Python/Python312/python -c \"import fakeredis; print\\('available'\\)\")"
+      "Bash(/c/Users/Lenovo/AppData/Local/Programs/Python/Python312/python -c \"import fakeredis; print\\('available'\\)\")",
+      "Bash(npx eslint *)"
     ]
   }
 }

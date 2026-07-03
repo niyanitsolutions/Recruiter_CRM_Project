@@ -55,7 +55,7 @@ async def get_dashboard_data(
 
     # User stats + activity in parallel
     user_stats, activity_stats, recent_activity = await asyncio.gather(
-        user_service.get_dashboard_stats(),
+        user_service.get_dashboard_stats(current_user.get("company_id")),
         audit_service.get_activity_stats(days=7),
         audit_service.get_recent_activity(limit=10),
     )
@@ -129,8 +129,8 @@ async def get_users_summary(
 ):
     """Get users summary for dashboard cards"""
     user_service = UserService(db)
-    stats = await user_service.get_dashboard_stats()
-    
+    stats = await user_service.get_dashboard_stats(current_user.get("company_id"))
+
     return {
         "success": True,
         "data": stats

@@ -384,9 +384,9 @@ const Applications = () => {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 page-enter">
+    <div className="p-4 page-enter">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>Applications</h1>
           <p style={{ color: 'var(--text-muted)' }}>Track candidate applications through the hiring pipeline</p>
@@ -406,41 +406,9 @@ const Applications = () => {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="rounded-xl p-4 mb-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-        <div className="flex flex-wrap gap-3">
-          <div className="flex-1 min-w-[200px]">
-            <input
-              type="text"
-              value={filters.keyword}
-              onChange={e => setFilters(prev => ({ ...prev, keyword: e.target.value }))}
-              placeholder={mainView === 'candidates' ? 'Search by candidate, job, client or skills…' : 'Search by candidate, job or client…'}
-              className="input w-full"
-            />
-          </div>
-          <div className="min-w-[180px]">
-            <select
-              value={filters.status}
-              onChange={e => setFilters(prev => ({ ...prev, status: e.target.value }))}
-              className="input w-full"
-            >
-              <option value="">All Statuses</option>
-              {(statuses.length ? statuses : FALLBACK_STATUSES).map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </select>
-          </div>
-          {hasActiveFilters && (
-            <button onClick={clearFilters} className="btn-secondary text-sm flex items-center gap-1">
-              <X className="w-3.5 h-3.5" /> Clear
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* View Toggle: outer (Candidates / Applications) */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-1 p-1 rounded-xl" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+      {/* Toolbar: View Toggle + Search + Status + Filters (single row) */}
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <div className="flex items-center gap-1 p-1 rounded-xl flex-shrink-0" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
           <button
             onClick={() => { setMainView('candidates'); setCandidatesPagination(p => ({ ...p, page: 1 })) }}
             style={{
@@ -467,11 +435,41 @@ const Applications = () => {
           </button>
         </div>
 
+        <div className="flex-1 min-w-[180px]">
+          <input
+            type="text"
+            value={filters.keyword}
+            onChange={e => setFilters(prev => ({ ...prev, keyword: e.target.value }))}
+            placeholder={mainView === 'candidates' ? 'Search by candidate, job, client or skills…' : 'Search by candidate, job or client…'}
+            className="input w-full"
+          />
+        </div>
+        <div className="min-w-[160px]">
+          <select
+            value={filters.status}
+            onChange={e => setFilters(prev => ({ ...prev, status: e.target.value }))}
+            className="input w-full"
+          >
+            <option value="">All Statuses</option>
+            {(statuses.length ? statuses : FALLBACK_STATUSES).map(s => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+        </div>
+        {hasActiveFilters && (
+          <button onClick={clearFilters} className="btn-secondary text-sm flex items-center gap-1">
+            <X className="w-3.5 h-3.5" /> Clear
+          </button>
+        )}
+
         {/* Inner view toggle (table / card) — only in Applications view */}
         {mainView === 'applications' && (
-          <div className="flex items-center gap-1">
-            <button onClick={() => setViewMode('table')} className="p-2 rounded-lg transition-colors" style={viewMode === 'table' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Table view"><List className="w-4 h-4" /></button>
-            <button onClick={() => setViewMode('card')} className="p-2 rounded-lg transition-colors" style={viewMode === 'card' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Card view"><LayoutGrid className="w-4 h-4" /></button>
+          <div
+            className="flex items-center rounded-lg p-1 flex-shrink-0"
+            style={{ border: '1px solid var(--border)', background: 'var(--bg-card-alt)' }}
+          >
+            <button onClick={() => setViewMode('table')} className="p-1.5 rounded-md transition-colors" style={viewMode === 'table' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Table view"><List className="w-4 h-4" /></button>
+            <button onClick={() => setViewMode('card')} className="p-1.5 rounded-md transition-colors" style={viewMode === 'card' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Card view"><LayoutGrid className="w-4 h-4" /></button>
           </div>
         )}
       </div>
