@@ -635,13 +635,41 @@ class ApplicationService:
         # Update job stats
         from app.services.job_service import JobService
         await JobService.update_job_stats(db, existing["job_id"])
-        
-        # Update candidate stats
+
+        # Update candidate stats. `total_applications` decrements directly, but
+        # `current_job_id`/`current_job_title`/`current_stage` are a cached
+        # snapshot of the candidate's most recent application (set by
+        # create_application / update_application_status) — deleting that
+        # exact application must recompute the snapshot from whatever's left,
+        # otherwise the candidate profile keeps pointing at a deleted job.
         candidates_collection = db["candidates"]
         await candidates_collection.update_one(
             {"_id": existing["candidate_id"]},
             {"$inc": {"total_applications": -1}}
         )
+        if existing["candidate_id"] and existing.get("job_id"):
+            candidate_doc = await candidates_collection.find_one(
+                {"_id": existing["candidate_id"]}, {"current_job_id": 1}
+            )
+            if candidate_doc and candidate_doc.get("current_job_id") == existing["job_id"]:
+                remaining = await collection.find_one(
+                    {"candidate_id": existing["candidate_id"], "is_deleted": False},
+                    sort=[("applied_at", -1)],
+                )
+                if remaining:
+                    await candidates_collection.update_one(
+                        {"_id": existing["candidate_id"]},
+                        {"$set": {
+                            "current_job_id": remaining["job_id"],
+                            "current_job_title": remaining.get("job_title"),
+                            "current_stage": remaining.get("status"),
+                        }}
+                    )
+                else:
+                    await candidates_collection.update_one(
+                        {"_id": existing["candidate_id"]},
+                        {"$unset": {"current_job_id": "", "current_job_title": "", "current_stage": ""}}
+                    )
         
         try:
             await AuditService(db).log(
