@@ -302,8 +302,19 @@ class DatabaseManager:
         """
         Idempotently create/update indexes for an existing company DB.
         Safe to call on startup for all tenants — MongoDB skips existing indexes.
+
+        `create_company_database` and `ensure_company_indexes` cover different,
+        independently-useful sets of indexes (e.g. applications' duplicate-guard
+        unique index lives only in the latter). They are intentionally isolated
+        with their own try/except: a legacy index-name conflict on one
+        collection (e.g. from a pre-migration schema) must not silently skip
+        index maintenance for every other collection, including ones critical
+        to correctness (like the applications uniqueness guard).
         """
-        await cls.create_company_database(company_id)
+        try:
+            await cls.create_company_database(company_id)
+        except Exception as _base_err:
+            logger.warning("Base company index init failed for %s: %s", company_id, _base_err)
         try:
             from app.core.indexes import ensure_company_indexes
             db = cls.get_company_db(company_id)
