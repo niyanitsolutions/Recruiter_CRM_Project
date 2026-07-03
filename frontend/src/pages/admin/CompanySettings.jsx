@@ -129,6 +129,65 @@ const LANGUAGE_OPTIONS = [
   { value: 'bn', label: 'Bengali' },
 ]
 
+// ── Error handling helper ──────────────────────────────────────────────────
+// Surfaces a specific, actionable message instead of a generic "Unexpected
+// error" — while the raw error is always available in the browser console
+// for support/debugging.
+const getErrorMessage = (e, fallback) => {
+  console.error(fallback, e)
+  if (!e?.response) {
+    return 'Network unavailable. Please check your connection and try again.'
+  }
+  const status = e.response.status
+  const detail = e.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim() && !/unexpected error/i.test(detail)) {
+    return detail
+  }
+  if (status === 401 || status === 403) {
+    return 'You do not have permission to perform this action.'
+  }
+  if (status === 404) {
+    return 'The requested settings could not be found.'
+  }
+  return fallback
+}
+
+// ── IP address validation (Phase 4 / 8) ────────────────────────────────────
+const IPV4_RE = /^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/
+const IPV6_RE = /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|:((:[0-9a-fA-F]{1,4}){1,7}|:)|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6}))$/
+
+const isValidIp = (ip) => IPV4_RE.test(ip) || IPV6_RE.test(ip)
+
+// Client-side mirror of the server's -90..90 / -180..180 / positive-radius
+// rules so the user gets an inline message instead of waiting on a 422.
+const validateGeoFence = (g) => {
+  const errs = []
+  if (g.geo_fence_enabled) {
+    if (g.geo_fence_locations.length === 0) {
+      errs.push('Geo Fence is enabled but no locations were added. Add a location or turn Geo Fence off.')
+    }
+    g.geo_fence_locations.forEach((loc, i) => {
+      const label = loc.name ? `"${loc.name}"` : `Location ${i + 1}`
+      const lat = parseFloat(loc.latitude)
+      const lng = parseFloat(loc.longitude)
+      const rad = parseInt(loc.radius, 10)
+      if (loc.latitude === '' || Number.isNaN(lat) || lat < -90 || lat > 90) {
+        errs.push(`${label}: Latitude must be a number between -90 and 90.`)
+      }
+      if (loc.longitude === '' || Number.isNaN(lng) || lng < -180 || lng > 180) {
+        errs.push(`${label}: Longitude must be a number between -180 and 180.`)
+      }
+      if (loc.radius === '' || Number.isNaN(rad) || rad <= 0) {
+        errs.push(`${label}: Radius must be a positive number.`)
+      }
+    })
+  }
+  if (g.ip_restriction_enabled && (!g.approved_ips || g.approved_ips.length === 0)) {
+    errs.push('IP Restriction is enabled but no IP addresses were added. Add an IP or turn IP Restriction off.')
+  }
+  return errs
+}
+
 // ── DEFAULT EMPTY STATES ───────────────────────────────────────────────────
 
 const DEFAULT_PROFILE = {
@@ -136,7 +195,10 @@ const DEFAULT_PROFILE = {
   address: '', city: '', state: '', country: 'India', zip_code: '', timezone: 'Asia/Kolkata',
 }
 const DEFAULT_CONTACT = { admin_name: '', admin_email: '', admin_phone: '', support_email: '' }
-const DEFAULT_GEO = { geo_fence_enabled: false, geo_fence_locations: [], user_geo_fence: [] }
+const DEFAULT_GEO = {
+  geo_fence_enabled: false, geo_fence_locations: [], user_geo_fence: [],
+  ip_restriction_enabled: false, approved_ips: [],
+}
 const DEFAULT_LOCALIZATION = { date_format: 'DD-MM-YYYY', time_format: '12h', timezone: 'Asia/Kolkata', language: 'en' }
 
 // ── MAIN COMPONENT ─────────────────────────────────────────────────────────
@@ -158,11 +220,19 @@ const CompanySettings = () => {
   const [locForm,  setLocForm]  = useState(DEFAULT_LOCALIZATION)
   const [subscription, setSubscription] = useState(null)
   const [subLoading,   setSubLoading]   = useState(false)
+  const [loadError,    setLoadError]    = useState('')
+
+  // IP restriction — add/edit inputs
+  const [ipInput,       setIpInput]       = useState('')
+  const [ipError,       setIpError]       = useState('')
+  const [editingIpIdx,  setEditingIpIdx]  = useState(-1)
+  const [editingIpValue, setEditingIpValue] = useState('')
 
   // ── Load all settings ──────────────────────────────────────────────────
   const loadSettings = useCallback(async () => {
     try {
       setLoading(true)
+      setLoadError('')
       const res = await api.get('/company-settings/')
       const d   = res.data?.data || {}
       setProfile({
@@ -184,23 +254,33 @@ const CompanySettings = () => {
         support_email: d.support_email || '',
       })
       setGeo({
-        geo_fence_enabled:   !!d.geo_fence_enabled,
-        geo_fence_locations: d.geo_fence_locations || [],
-        user_geo_fence:      d.user_geo_fence      || [],
+        geo_fence_enabled:      !!d.geo_fence_enabled,
+        geo_fence_locations:    d.geo_fence_locations || [],
+        user_geo_fence:         d.user_geo_fence      || [],
+        ip_restriction_enabled: !!d.attendance_ip_restriction_enabled,
+        approved_ips:           d.approved_office_ips || [],
       })
-      // Load localization from unified tenant-settings endpoint
+      // Load localization from the unified tenant-settings endpoint. This is
+      // the single source of truth for timezone — the Profile tab's Time
+      // Zone selector is mirrored from it below so the two tabs never show
+      // different values (see saveProfile / Select onChange for the other
+      // half of this sync).
       try {
         const locRes = await api.get('/tenant-settings/localization')
         const locData = locRes.data?.data || {}
-        setLocForm({
+        const resolvedLoc = {
           date_format: locData.date_format || DEFAULT_LOCALIZATION.date_format,
           time_format: locData.time_format || DEFAULT_LOCALIZATION.time_format,
           timezone:    locData.timezone    || DEFAULT_LOCALIZATION.timezone,
           language:    locData.language    || DEFAULT_LOCALIZATION.language,
-        })
+        }
+        setLocForm(resolvedLoc)
+        setProfile(p => ({ ...p, timezone: resolvedLoc.timezone }))
       } catch { /* keep defaults */ }
-    } catch {
-      toast.error('Failed to load settings')
+    } catch (e) {
+      const msg = getErrorMessage(e, 'Unable to load company settings. Please try again.')
+      setLoadError(msg)
+      toast.error(msg)
     } finally {
       setLoading(false)
     }
@@ -211,7 +291,8 @@ const CompanySettings = () => {
       setSubLoading(true)
       const res = await api.get('/company-settings/subscription')
       setSubscription(res.data?.data || null)
-    } catch {
+    } catch (e) {
+      getErrorMessage(e, 'Unable to load subscription details.')  // logs to console
       setSubscription(null)
     } finally {
       setSubLoading(false)
@@ -229,9 +310,16 @@ const CompanySettings = () => {
     try {
       setSaving(true)
       await api.put('/company-settings/profile', profile)
+      // Timezone is canonically owned by Localization (tenant_settings) — mirror
+      // it there too so a timezone change made from this tab is never lost and
+      // both tabs keep showing the same value (see Phase 5 sync).
+      const locResult = await dispatch(saveLocalizationThunk({ ...locForm, timezone: profile.timezone }))
+      if (saveLocalizationThunk.fulfilled.match(locResult)) {
+        setLocForm(f => ({ ...f, timezone: profile.timezone }))
+      }
       toast.success('Company profile saved')
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to save profile')
+      toast.error(getErrorMessage(e, 'Unable to save company profile. Please try again.'))
     } finally { setSaving(false) }
   }
 
@@ -241,17 +329,35 @@ const CompanySettings = () => {
       await api.put('/company-settings/contact', contact)
       toast.success('Contact details saved')
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to save contact')
+      toast.error(getErrorMessage(e, 'Unable to save contact details. Please try again.'))
     } finally { setSaving(false) }
   }
 
   const saveSecurity = async () => {
+    const errors = validateGeoFence(geo)
+    if (errors.length) {
+      toast.error(errors[0])
+      return
+    }
     try {
       setSaving(true)
-      await api.put('/company-settings/security', geo)
+      // Coerce location fields to real numbers only at save time — the inputs
+      // themselves keep whatever raw string the user is typing (see
+      // updateLocation) so backspace/clear/paste behave like a normal input.
+      const payload = {
+        ...geo,
+        geo_fence_locations: geo.geo_fence_locations.map(loc => ({
+          ...loc,
+          latitude:  parseFloat(loc.latitude)  || 0,
+          longitude: parseFloat(loc.longitude) || 0,
+          radius:    parseInt(loc.radius, 10)  || 500,
+        })),
+      }
+      await api.put('/company-settings/security', payload)
+      setGeo(payload)
       toast.success('Security settings saved')
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to save security settings')
+      toast.error(getErrorMessage(e, 'Geo Fence settings could not be saved. Please verify the entered values.'))
     } finally { setSaving(false) }
   }
 
@@ -260,9 +366,10 @@ const CompanySettings = () => {
       setSaving(true)
       const result = await dispatch(saveLocalizationThunk(locForm))
       if (saveLocalizationThunk.fulfilled.match(result)) {
+        setProfile(p => ({ ...p, timezone: locForm.timezone }))
         toast.success('Localization settings saved')
       } else {
-        toast.error(result.payload || 'Failed to save localization settings')
+        toast.error(result.payload || 'Unable to save localization settings. Please try again.')
       }
     } finally { setSaving(false) }
   }
@@ -280,15 +387,68 @@ const CompanySettings = () => {
   }
 
   const updateLocation = (idx, field, value) => {
+    // Store the raw input value as-is (including '' while the user is
+    // clearing the field) — numbers are only parsed on save. Forcing
+    // `parseFloat(value) || 0` on every keystroke made it impossible to
+    // backspace a field to empty before typing a new value.
     setGeo(g => {
       const locs = [...g.geo_fence_locations]
-      locs[idx] = { ...locs[idx], [field]: field === 'name' ? value : parseFloat(value) || 0 }
+      locs[idx] = { ...locs[idx], [field]: value }
       return { ...g, geo_fence_locations: locs }
     })
   }
 
   const removeLocation = (idx) => {
     setGeo(g => ({ ...g, geo_fence_locations: g.geo_fence_locations.filter((_, i) => i !== idx) }))
+  }
+
+  // ── IP restriction helpers (Phase 4) ───────────────────────────────────
+
+  const handleAddIp = () => {
+    const ip = ipInput.trim()
+    if (!ip) return
+    if (!isValidIp(ip)) {
+      setIpError('Enter a valid IPv4 or IPv6 address.')
+      return
+    }
+    if (geo.approved_ips.includes(ip)) {
+      setIpError('This IP address has already been added.')
+      return
+    }
+    setGeo(g => ({ ...g, approved_ips: [...g.approved_ips, ip] }))
+    setIpInput('')
+    setIpError('')
+  }
+
+  const removeIp = (idx) => {
+    setGeo(g => ({ ...g, approved_ips: g.approved_ips.filter((_, i) => i !== idx) }))
+    if (editingIpIdx === idx) setEditingIpIdx(-1)
+  }
+
+  const startEditIp = (idx) => {
+    setEditingIpIdx(idx)
+    setEditingIpValue(geo.approved_ips[idx])
+    setIpError('')
+  }
+
+  const commitEditIp = (idx) => {
+    const ip = editingIpValue.trim()
+    if (!ip) { setEditingIpIdx(-1); return }
+    if (!isValidIp(ip)) {
+      setIpError('Enter a valid IPv4 or IPv6 address.')
+      return
+    }
+    if (geo.approved_ips.some((existing, i) => existing === ip && i !== idx)) {
+      setIpError('This IP address has already been added.')
+      return
+    }
+    setGeo(g => {
+      const ips = [...g.approved_ips]
+      ips[idx] = ip
+      return { ...g, approved_ips: ips }
+    })
+    setEditingIpIdx(-1)
+    setIpError('')
   }
 
 
@@ -299,6 +459,25 @@ const CompanySettings = () => {
           <div className="h-8 bg-surface-200 rounded w-56" />
           <div className="h-12 bg-surface-100 rounded-xl" />
           <div className="h-64 bg-surface-100 rounded-xl" />
+        </div>
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="flex flex-col items-center gap-3 py-16 bg-white border border-surface-100 rounded-xl">
+          <AlertCircle className="w-8 h-8 text-danger-400" />
+          <p className="text-sm font-medium text-surface-700">{loadError}</p>
+          <button
+            onClick={loadSettings}
+            className="mt-1 inline-flex items-center gap-2 px-4 py-2 bg-accent-600 text-white text-sm
+                       font-medium rounded-lg hover:bg-accent-700 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Try Again
+          </button>
         </div>
       </div>
     )
@@ -422,10 +601,14 @@ const CompanySettings = () => {
               </Field>
             </div>
 
-            <Field label="Time Zone">
+            <Field label="Time Zone" hint="Shared with the Localization tab — changing it here updates both">
               <Select
                 value={profile.timezone}
-                onChange={e => setProfile(p => ({ ...p, timezone: e.target.value }))}
+                onChange={e => {
+                  const tz = e.target.value
+                  setProfile(p => ({ ...p, timezone: tz }))
+                  setLocForm(f => ({ ...f, timezone: tz }))
+                }}
               >
                 {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
               </Select>
@@ -633,36 +816,118 @@ const CompanySettings = () => {
                           placeholder="Head Office"
                         />
                       </Field>
-                      <Field label="Radius (metres)">
+                      <Field label="Radius (metres)" hint="10 – 100,000">
                         <Input
                           type="number"
                           value={loc.radius}
                           onChange={e => updateLocation(idx, 'radius', e.target.value)}
-                          min={50}
+                          min={10}
+                          max={100000}
                           placeholder="500"
                         />
                       </Field>
-                      <Field label="Latitude">
+                      <Field label="Latitude" hint="-90 to 90">
                         <Input
                           type="number"
                           step="0.0001"
                           value={loc.latitude}
                           onChange={e => updateLocation(idx, 'latitude', e.target.value)}
+                          min={-90}
+                          max={90}
                           placeholder="12.9716"
                         />
                       </Field>
-                      <Field label="Longitude">
+                      <Field label="Longitude" hint="-180 to 180">
                         <Input
                           type="number"
                           step="0.0001"
                           value={loc.longitude}
                           onChange={e => updateLocation(idx, 'longitude', e.target.value)}
+                          min={-180}
+                          max={180}
                           placeholder="77.5946"
                         />
                       </Field>
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* IP Restriction — independent of Geo Fence; both can be on at once */}
+            <div className="border border-surface-200 rounded-xl p-4 space-y-1">
+              <Toggle
+                checked={geo.ip_restriction_enabled}
+                onChange={v => setGeo(g => ({ ...g, ip_restriction_enabled: v }))}
+                label="Enable IP Address Restriction"
+                description="When enabled, all users must log in from an allowed IP address. Can be combined with Geo Fence — if both are on, both rules must be satisfied."
+              />
+            </div>
+
+            {geo.ip_restriction_enabled && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-surface-800 flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-accent-500" />
+                  Allowed IP Addresses
+                </h3>
+
+                <div className="flex gap-2">
+                  <Input
+                    value={ipInput}
+                    onChange={e => { setIpInput(e.target.value); setIpError('') }}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddIp() } }}
+                    placeholder="192.168.1.10"
+                  />
+                  <button
+                    onClick={handleAddIp}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium
+                               bg-accent-50 text-accent-700 rounded-lg hover:bg-accent-100 transition-colors whitespace-nowrap"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add IP
+                  </button>
+                </div>
+                {ipError && <p className="text-xs text-danger-500">{ipError}</p>}
+
+                {geo.approved_ips.length === 0 ? (
+                  <p className="text-sm text-surface-400 text-center py-4 border border-dashed border-surface-200 rounded-xl">
+                    No IP addresses added yet.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {geo.approved_ips.map((ip, idx) => (
+                      <li key={`${ip}-${idx}`} className="flex items-center justify-between border border-surface-200 rounded-lg px-3 py-2 gap-2">
+                        {editingIpIdx === idx ? (
+                          <Input
+                            autoFocus
+                            value={editingIpValue}
+                            onChange={e => setEditingIpValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitEditIp(idx) } }}
+                          />
+                        ) : (
+                          <span className="text-sm font-mono text-surface-700 break-all">{ip}</span>
+                        )}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {editingIpIdx === idx ? (
+                            <button onClick={() => commitEditIp(idx)} className="px-2 py-1 text-xs font-medium text-accent-600 hover:underline">
+                              Save
+                            </button>
+                          ) : (
+                            <button onClick={() => startEditIp(idx)} className="px-2 py-1 text-xs font-medium text-surface-500 hover:text-surface-800">
+                              Edit
+                            </button>
+                          )}
+                          <button
+                            onClick={() => removeIp(idx)}
+                            className="p-1 text-danger-500 hover:bg-danger-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 
@@ -704,10 +969,14 @@ const CompanySettings = () => {
                 </Select>
               </Field>
 
-              <Field label="Timezone" hint="Used for scheduling, reports, and attendance">
+              <Field label="Timezone" hint="Used for scheduling, reports, and attendance — applies across the whole app">
                 <Select
                   value={locForm.timezone}
-                  onChange={e => setLocForm(f => ({ ...f, timezone: e.target.value }))}
+                  onChange={e => {
+                    const tz = e.target.value
+                    setLocForm(f => ({ ...f, timezone: tz }))
+                    setProfile(p => ({ ...p, timezone: tz }))
+                  }}
                 >
                   {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
                 </Select>

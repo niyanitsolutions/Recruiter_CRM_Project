@@ -27,7 +27,7 @@ import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 import KpiCard from '../../components/dashboard/KpiCard'
 import HiringTrend from '../../components/dashboard/HiringTrend'
 import PunchInModal from '../../components/hrm/PunchInModal'
-import { formatDateTime } from '../../utils/format'
+import { formatDateTime, getTenantTimezone } from '../../utils/format'
 import { useLivePolling } from '../../hooks/useLivePolling'
 
 // ── Section-level error boundary — wraps individual grid rows ────────────────
@@ -102,7 +102,13 @@ const _cache = {
 
 // ── Time-based greeting ───────────────────────────────────────────────────────
 const getGreeting = () => {
-  const h = new Date().getHours()
+  // Hour must be resolved in the tenant's saved Localization timezone, not
+  // the browser/OS clock — otherwise the greeting can disagree with every
+  // other time display on the page.
+  const h = parseInt(
+    new Intl.DateTimeFormat('en-GB', { timeZone: getTenantTimezone(), hour: '2-digit', hour12: false }).format(new Date()),
+    10,
+  )
   if (h < 12) return 'Good morning'
   if (h < 17) return 'Good afternoon'
   return 'Good evening'
@@ -215,7 +221,7 @@ const formatTrendData = (raw) => {
   if (!Array.isArray(items)) return []
   return items.map(item => ({
     label: item.date
-      ? new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })
+      ? new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: getTenantTimezone() })
       : (item.label || ''),
     value: item.count ?? item.value ?? item.actions ?? 0,
   }))
@@ -574,7 +580,7 @@ const AdminDashboard = () => {
   ].filter(m => m.value !== null)
 
   const dateStr = new Date().toLocaleDateString('en-IN', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: getTenantTimezone(),
   })
 
   return (
@@ -645,7 +651,7 @@ const AdminDashboard = () => {
                   {seatStatus.plan_expiry && (
                     <div className="text-center hidden xl:block">
                       <p className="text-xs font-bold leading-tight whitespace-nowrap" style={{ color: 'var(--text-heading)' }}>
-                        {new Date(seatStatus.plan_expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' })}
+                        {new Date(seatStatus.plan_expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: getTenantTimezone() })}
                       </p>
                       <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>Expiry</p>
                     </div>
@@ -1024,7 +1030,7 @@ const AdminDashboard = () => {
                         </div>
                         {dt && (
                           <p className="text-[9px] mt-0.5 font-medium leading-tight" style={{ color: 'var(--text-muted)' }}>
-                            {new Date(dt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })}
+                            {new Date(dt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: getTenantTimezone() })}
                           </p>
                         )}
                       </div>

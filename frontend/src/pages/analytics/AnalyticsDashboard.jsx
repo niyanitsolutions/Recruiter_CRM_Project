@@ -13,6 +13,7 @@ import {
   ChevronRight, Zap
 } from 'lucide-react';
 import analyticsService from '../../services/analyticsService';
+import { getTenantTimezone } from '../../utils/format';
 import KPICard from './components/KPICard';
 import TrendChart from './components/TrendChart';
 import FunnelChart from './components/FunnelChart';
@@ -365,7 +366,7 @@ const AnalyticsDashboard = () => {
           <p className="text-gray-500 dark:text-gray-400 text-sm mt-0.5">
             {selectedPresetLabel} · Live data
             {lastUpdated && (
-              <span className="ml-2 text-gray-400">· Updated {lastUpdated.toLocaleTimeString()}</span>
+              <span className="ml-2 text-gray-400">· Updated {lastUpdated.toLocaleTimeString('en-IN', { timeZone: getTenantTimezone() })}</span>
             )}
           </p>
         </div>

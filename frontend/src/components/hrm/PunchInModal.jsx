@@ -13,6 +13,7 @@ import React, { useState, useEffect } from 'react'
 import {
   Clock, MapPin, Loader2, Wifi, Home, Building2, X, Briefcase,
 } from 'lucide-react'
+import { getTenantTimezone } from '../../utils/format'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
 import ModalPortal from '../common/ModalPortal'
@@ -101,7 +102,7 @@ export default function PunchInModal({ isOpen, onClose, onDismiss, onPunchedIn }
               <div>
                 <h2 className="text-lg font-bold">Good morning!</h2>
                 <p className="text-sm text-white/80">
-                  {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', timeZone: getTenantTimezone() })}
                 </p>
               </div>
             </div>

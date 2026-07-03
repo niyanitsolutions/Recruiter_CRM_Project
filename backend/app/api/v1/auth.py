@@ -1247,6 +1247,7 @@ async def get_login_analytics(
         _tz = ZoneInfo(_tz_name)
     except (ZoneInfoNotFoundError, Exception):
         _tz = timezone.utc
+        _tz_name = "UTC"  # keep in sync with `_tz` — also passed to Mongo as the aggregation timezone below
     local_now = now.astimezone(_tz)
     today_start_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_start_utc = today_start_local.astimezone(timezone.utc).replace(tzinfo=None)
@@ -1276,17 +1277,16 @@ async def get_login_analytics(
         {"company_id": auth.company_id, "is_active": True}
     )
 
-    # Daily trend
+    # Daily trend — bucketed in the tenant's configured timezone (MongoDB's
+    # date aggregation operators accept an IANA zone name directly), not a
+    # hardcoded IST offset, so this is correct for every tenant.
     daily_pipeline = [
         {"$match": base_match},
-        {"$addFields": {
-            "ist_time": {"$add": ["$login_time", 19800000]}  # +5:30 in ms
-        }},
         {"$group": {
             "_id": {
-                "y": {"$year": "$ist_time"},
-                "m": {"$month": "$ist_time"},
-                "d": {"$dayOfMonth": "$ist_time"},
+                "y": {"$year":       {"date": "$login_time", "timezone": _tz_name}},
+                "m": {"$month":      {"date": "$login_time", "timezone": _tz_name}},
+                "d": {"$dayOfMonth": {"date": "$login_time", "timezone": _tz_name}},
             },
             "count": {"$sum": 1},
         }},
@@ -1300,12 +1300,11 @@ async def get_login_analytics(
             "count": doc["count"],
         })
 
-    # Hourly distribution (IST hours, all-time in range)
+    # Hourly distribution, bucketed in the tenant's configured timezone
     hourly_pipeline = [
         {"$match": base_match},
-        {"$addFields": {"ist_time": {"$add": ["$login_time", 19800000]}}},
         {"$group": {
-            "_id": {"$hour": "$ist_time"},
+            "_id": {"$hour": {"date": "$login_time", "timezone": _tz_name}},
             "count": {"$sum": 1},
         }},
         {"$sort": {"_id": 1}},

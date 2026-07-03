@@ -8,6 +8,7 @@ import {
   ChevronDown, ChevronUp, ArrowUpDown, Search
 } from 'lucide-react';
 import { TrendChart, FunnelChart, PieChart as PieChartComponent, BarChart } from '../analytics/components/Charts';
+import { getTenantTimezone } from '../../utils/format';
 
 const ReportViewer = ({ data, reportType }) => {
   const [viewMode, setViewMode] = useState('table');
@@ -92,7 +93,7 @@ const ReportViewer = ({ data, reportType }) => {
         case 'percentage':
           return `${Number(value).toFixed(1)}%`;
         case 'date':
-          return value ? new Date(value).toLocaleDateString('en-IN') : '-';
+          return value ? new Date(value).toLocaleDateString('en-IN', { timeZone: getTenantTimezone() }) : '-';
         case 'number':
           return Number(value).toLocaleString();
         default:
@@ -114,7 +115,7 @@ const ReportViewer = ({ data, reportType }) => {
       return `${Number(value).toFixed(1)}%`;
     }
     if (key.endsWith('_date') || key.endsWith('_at') || key === 'date') {
-      return value ? new Date(value).toLocaleDateString('en-IN') : '-';
+      return value ? new Date(value).toLocaleDateString('en-IN', { timeZone: getTenantTimezone() }) : '-';
     }
     if (typeof value === 'number') {
       return value.toLocaleString();
@@ -153,7 +154,7 @@ const ReportViewer = ({ data, reportType }) => {
           <div>
             <h3 className="text-lg font-semibold text-gray-900">{report_name}</h3>
             <p className="text-sm text-gray-500">
-              Generated: {new Date(generated_at).toLocaleString()} • 
+              Generated: {new Date(generated_at).toLocaleString('en-IN', { timeZone: getTenantTimezone() })} •
               {Array.isArray(reportData) ? ` ${reportData.length} records` : ''}
             </p>
           </div>

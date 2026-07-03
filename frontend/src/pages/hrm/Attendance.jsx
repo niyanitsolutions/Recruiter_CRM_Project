@@ -11,6 +11,7 @@ import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
 import { usePermissions } from '../../hooks/usePermissions'
 import hrmService from '../../services/hrmService'
+import { getTenantTimezone } from '../../utils/format'
 import TableScroll from '../../components/common/TableScroll'
 import HolidayManagement from './HolidayManagement'
 import LeavePolicyManagement from './LeavePolicyManagement'
@@ -110,7 +111,7 @@ function RecoveryModal({ record, onClose, onSuccess }) {
 
   const fmtTime = (dt) => {
     if (!dt) return '—'
-    return new Date(dt.endsWith('Z') ? dt : dt + 'Z').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return new Date(dt.endsWith('Z') ? dt : dt + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() })
   }
 
   return (
@@ -570,7 +571,7 @@ function DashboardTab() {
   }
   const fmtTime = (dt) => {
     if (!dt) return '—'
-    return new Date(dt.endsWith('Z') ? dt : dt + 'Z').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return new Date(dt.endsWith('Z') ? dt : dt + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() })
   }
 
   const handleCheckIn    = async (empId) => { setChecking(empId+'_in');    try { await hrmService.checkIn({ employee_id: empId });    load(1) } catch (err) { toast.error(err?.response?.data?.detail || 'Check-in failed') }    setChecking(null) }
@@ -866,9 +867,15 @@ function DashboardTab() {
                 const onBrk = isToday ? isOnBreak(rec) : false
                 const st = STATUS_STYLE[rec.status] || {}
                 const dateLabel = rec.date
-                  ? new Date(rec.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short' })
+                  // rec.date is a plain calendar date (no time component) — build
+                  // it from explicit Y/M/D parts so the displayed date never
+                  // shifts due to a timezone conversion (it isn't a UTC instant).
+                  ? (() => {
+                      const [y, m, d] = rec.date.split('-').map(Number)
+                      return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short' })
+                    })()
                   : isToday
-                  ? new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short' })
+                  ? new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short', timeZone: getTenantTimezone() })
                   : '—'
                 return (
                   <tr key={rec.id || idx}
@@ -1731,10 +1738,10 @@ function ExceptionsTab() {
                       <td className="px-3 py-2 text-xs max-w-48 truncate" style={{ color: 'var(--text-muted)' }}
                           title={ex.reason}>{ex.reason}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>
-                        {new Date(ex.from_datetime).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
+                        {new Date(ex.from_datetime).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', timeZone: getTenantTimezone() })}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>
-                        {new Date(ex.to_datetime).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
+                        {new Date(ex.to_datetime).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', timeZone: getTenantTimezone() })}
                       </td>
                       <td className="px-3 py-2 text-center">
                         {ex.allow_login
@@ -1986,17 +1993,56 @@ function GeoFenceTab() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  const geoFenceApiError = (e, fallback) => {
+    const detail = e?.response?.data?.detail
+    if (typeof detail === 'string' && detail.trim() && !/unexpected error/i.test(detail)) return detail
+    if (!e?.response) return 'Network unavailable. Please check your connection and try again.'
+    return fallback
+  }
+
   const load = useCallback(async () => {
     try { const r = await hrmService.getAttendanceSettings(); setCfg(r.data) }
-    catch { toast.error('Failed to load geo fence settings') }
+    catch (e) { toast.error(geoFenceApiError(e, 'Unable to load Geo Fence settings. Please try again.')) }
     setLoading(false)
   }, [])
   useEffect(() => { load() }, [load])
 
   const save = async () => {
+    // Client-side validation mirrors the backend's -90..90 / -180..180 / 10..10000 bounds
+    if (cfg.geo_fence_enabled) {
+      const lat = parseFloat(cfg.geo_fence_latitude)
+      const lng = parseFloat(cfg.geo_fence_longitude)
+      const rad = parseInt(cfg.geo_fence_radius_meters, 10)
+      if (cfg.geo_fence_latitude === '' || cfg.geo_fence_latitude == null || Number.isNaN(lat) || lat < -90 || lat > 90) {
+        toast.error('Office Latitude must be a number between -90 and 90.'); return
+      }
+      if (cfg.geo_fence_longitude === '' || cfg.geo_fence_longitude == null || Number.isNaN(lng) || lng < -180 || lng > 180) {
+        toast.error('Office Longitude must be a number between -180 and 180.'); return
+      }
+      if (cfg.geo_fence_radius_meters === '' || Number.isNaN(rad) || rad < 10 || rad > 10000) {
+        toast.error('Radius must be a number between 10 and 10,000 metres.'); return
+      }
+    }
+    if (cfg.ip_restriction_enabled && (!cfg.approved_ips || cfg.approved_ips.length === 0)) {
+      toast.error('IP Restriction is enabled but no IP addresses were added. Add an IP or turn it off.'); return
+    }
     setSaving(true)
-    try { await hrmService.updateAttendanceSettings(cfg); toast.success('Geo fence settings saved') }
-    catch { toast.error('Failed to save') }
+    try {
+      // Coerce to real numbers only at save time — the inputs keep whatever
+      // raw string the user is typing (see `set`) so backspace/clear/paste
+      // behave like a normal input instead of snapping back to a default.
+      const payload = {
+        ...cfg,
+        geo_fence_radius_meters: parseInt(cfg.geo_fence_radius_meters, 10) || 100,
+        geo_fence_latitude:  cfg.geo_fence_latitude  === '' || cfg.geo_fence_latitude  == null ? null : parseFloat(cfg.geo_fence_latitude),
+        geo_fence_longitude: cfg.geo_fence_longitude === '' || cfg.geo_fence_longitude == null ? null : parseFloat(cfg.geo_fence_longitude),
+      }
+      await hrmService.updateAttendanceSettings(payload)
+      setCfg(payload)
+      toast.success('Geo fence settings saved')
+    } catch (e) {
+      toast.error(geoFenceApiError(e, 'Geo Fence settings could not be saved. Please verify the entered values.'))
+    }
     setSaving(false)
   }
   const set = (k, v) => setCfg(p => ({ ...p, [k]: v }))
@@ -2025,22 +2071,22 @@ function GeoFenceTab() {
                 Radius (meters) — employees must be within this distance to check in
               </span>
               <input type="number" min={10} max={10000} value={cfg.geo_fence_radius_meters}
-                     onChange={e => set('geo_fence_radius_meters', parseInt(e.target.value) || 100)}
+                     onChange={e => set('geo_fence_radius_meters', e.target.value)}
                      className="w-full rounded-lg px-3 py-2 text-sm"
                      style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)' }} />
             </label>
             <label className="space-y-1">
-              <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Office Latitude</span>
-              <input type="number" step="0.000001" value={cfg.geo_fence_latitude || ''}
-                     onChange={e => set('geo_fence_latitude', parseFloat(e.target.value) || null)}
+              <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Office Latitude (-90 to 90)</span>
+              <input type="number" step="0.000001" min={-90} max={90} value={cfg.geo_fence_latitude ?? ''}
+                     onChange={e => set('geo_fence_latitude', e.target.value)}
                      placeholder="e.g. 12.9716"
                      className="w-full rounded-lg px-3 py-2 text-sm"
                      style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)' }} />
             </label>
             <label className="space-y-1">
-              <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Office Longitude</span>
-              <input type="number" step="0.000001" value={cfg.geo_fence_longitude || ''}
-                     onChange={e => set('geo_fence_longitude', parseFloat(e.target.value) || null)}
+              <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>Office Longitude (-180 to 180)</span>
+              <input type="number" step="0.000001" min={-180} max={180} value={cfg.geo_fence_longitude ?? ''}
+                     onChange={e => set('geo_fence_longitude', e.target.value)}
                      placeholder="e.g. 77.5946"
                      className="w-full rounded-lg px-3 py-2 text-sm"
                      style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)' }} />

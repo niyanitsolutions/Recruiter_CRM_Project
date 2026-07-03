@@ -38,8 +38,8 @@ class AttendanceSettingsUpdate(BaseModel):
     wfh_enabled:            bool  = True
     geo_fence_enabled:      bool  = False
     geo_fence_radius_meters: int  = Field(100,  ge=10,  le=10000)
-    geo_fence_latitude:     Optional[float] = None
-    geo_fence_longitude:    Optional[float] = None
+    geo_fence_latitude:     Optional[float] = Field(None, ge=-90,  le=90)
+    geo_fence_longitude:    Optional[float] = Field(None, ge=-180, le=180)
     ip_restriction_enabled: bool  = False
     approved_ips:           List[str] = Field(default_factory=list)
     # Working days: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
@@ -663,6 +663,17 @@ async def get_attendance_settings(
 ):
     """Return the full attendance configuration for this company."""
     doc = await db["company_settings"].find_one({}) or {}
+
+    # Geo fence is sourced from `geo_fence_locations[0]` — the same list that
+    # Company Settings → Security edits — so both screens always agree.
+    # Legacy `attendance_geo_fence_*` fields are used only as a fallback for
+    # tenants that saved from this screen before the two were unified.
+    locations = doc.get("geo_fence_locations") or []
+    primary = locations[0] if locations else {}
+    geo_enabled = doc.get("geo_fence_enabled")
+    if geo_enabled is None:
+        geo_enabled = doc.get("attendance_geo_fence_enabled", False)
+
     return {
         "office_start_time":      doc.get("attendance_office_start",          "09:00"),
         "office_end_time":        doc.get("attendance_office_end",            "18:00"),
@@ -672,10 +683,10 @@ async def get_attendance_settings(
         "max_break_minutes":      int(doc.get("attendance_max_break_minutes", 90)),
         "max_breaks":             int(doc.get("attendance_max_breaks",        5)),
         "wfh_enabled":            bool(doc.get("attendance_wfh_enabled",      True)),
-        "geo_fence_enabled":      bool(doc.get("attendance_geo_fence_enabled",   False)),
-        "geo_fence_radius_meters": int(doc.get("attendance_geo_fence_radius_meters", 100)),
-        "geo_fence_latitude":     doc.get("attendance_geo_fence_latitude"),
-        "geo_fence_longitude":    doc.get("attendance_geo_fence_longitude"),
+        "geo_fence_enabled":      bool(geo_enabled),
+        "geo_fence_radius_meters": int(primary.get("radius") or doc.get("attendance_geo_fence_radius_meters", 100)),
+        "geo_fence_latitude":     primary.get("latitude", doc.get("attendance_geo_fence_latitude")),
+        "geo_fence_longitude":    primary.get("longitude", doc.get("attendance_geo_fence_longitude")),
         "ip_restriction_enabled": bool(doc.get("attendance_ip_restriction_enabled", False)),
         "approved_ips":           doc.get("approved_office_ips", []),
         "working_days":           doc.get("attendance_working_days", [0, 1, 2, 3, 4]),
@@ -690,6 +701,27 @@ async def update_attendance_settings(
     _perm=Depends(require_any_permission([["hrm:attendance:manage"], ["hrm:attendance:edit"]])),
 ):
     """Save attendance configuration for this company."""
+    # Write geo fence into `geo_fence_locations[0]` — the same canonical list
+    # Company Settings → Security edits — instead of a separate single-point
+    # field set, so both screens stay perfectly in sync automatically.
+    # `attendance_geo_fence_*` are also mirrored for backward compatibility
+    # with any legacy reader that hasn't migrated to the unified fields.
+    existing_doc = await db["company_settings"].find_one({}) or {}
+    existing_locations = existing_doc.get("geo_fence_locations") or []
+    primary = dict(existing_locations[0]) if existing_locations else {}
+    primary["id"] = primary.get("id") or "primary"
+    primary["name"] = primary.get("name") or "Office"
+    if data.geo_fence_latitude is not None:
+        primary["latitude"] = data.geo_fence_latitude
+    else:
+        primary.setdefault("latitude", 0.0)
+    if data.geo_fence_longitude is not None:
+        primary["longitude"] = data.geo_fence_longitude
+    else:
+        primary.setdefault("longitude", 0.0)
+    primary["radius"] = data.geo_fence_radius_meters
+    new_locations = [primary] + list(existing_locations[1:])
+
     await db["company_settings"].update_one(
         {},
         {"$set": {
@@ -701,6 +733,8 @@ async def update_attendance_settings(
             "attendance_max_break_minutes":      data.max_break_minutes,
             "attendance_max_breaks":             data.max_breaks,
             "attendance_wfh_enabled":            data.wfh_enabled,
+            "geo_fence_enabled":                 data.geo_fence_enabled,
+            "geo_fence_locations":               new_locations,
             "attendance_geo_fence_enabled":      data.geo_fence_enabled,
             "attendance_geo_fence_radius_meters": data.geo_fence_radius_meters,
             "attendance_geo_fence_latitude":     data.geo_fence_latitude,

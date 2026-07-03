@@ -5,6 +5,7 @@ import {
   Calendar, CheckCircle, RefreshCw, CreditCard, Users2, Megaphone,
 } from 'lucide-react'
 import { notificationService } from '../../services'
+import { getTenantTimezone } from '../../utils/format'
 
 const TYPE_ICONS = {
   offer_released:       UserPlus,
@@ -101,7 +102,7 @@ const formatTime = (iso) => {
   if (h < 24)   return `${h}h ago`
   const d = Math.floor(h / 24)
   if (d < 7)    return `${d}d ago`
-  return new Date(iso).toLocaleDateString()
+  return new Date(iso).toLocaleDateString('en-IN', { timeZone: getTenantTimezone() })
 }
 
 const Notifications = () => {

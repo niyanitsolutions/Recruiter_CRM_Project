@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import auditService from '../../services/auditService'
 import ModalPortal from '../../components/common/ModalPortal'
-import { formatDateTime, formatRelativeTime } from '../../utils/format'
+import { formatDateTime, formatRelativeTime, getTenantTimezone, getTenantTimezoneAbbr } from '../../utils/format'
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
@@ -141,23 +141,24 @@ const UserHistoryDrawer = ({ user, onClose }) => {
   if (!user) return null
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
-  // Group logs by date label
+  // Group logs by date label — day boundaries are computed in the tenant's
+  // saved Localization timezone (not a hardcoded IST offset), so "Today" /
+  // "Yesterday" are correct for every tenant, not just IST ones.
   const groupedLogs = (() => {
+    const tz = getTenantTimezone()
+    const dayKey = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d)  // YYYY-MM-DD
     const now = new Date()
-    const IST_MS = 5.5 * 3600 * 1000
-    const todayIST  = new Date(now.getTime() + IST_MS)
-    todayIST.setUTCHours(0, 0, 0, 0)
-    const yesterdayIST = new Date(todayIST.getTime() - 86400000)
+    const todayKey = dayKey(now)
+    const yesterdayKey = dayKey(new Date(now.getTime() - 86400000))
     const groups = {}
     for (const log of logs) {
       const dt = new Date(log.login_time)
-      const dtIST = new Date(dt.getTime() + IST_MS)
-      dtIST.setUTCHours(0, 0, 0, 0)
+      const key = dayKey(dt)
       let label
-      if (dtIST.getTime() === todayIST.getTime()) label = 'Today'
-      else if (dtIST.getTime() === yesterdayIST.getTime()) label = 'Yesterday'
+      if (key === todayKey) label = 'Today'
+      else if (key === yesterdayKey) label = 'Yesterday'
       else {
-        label = dt.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })
+        label = dt.toLocaleDateString('en-IN', { timeZone: tz, day: '2-digit', month: 'short', year: 'numeric' })
       }
       if (!groups[label]) groups[label] = []
       groups[label].push(log)
@@ -360,7 +361,7 @@ const AnalyticsPanel = ({ analytics, loading }) => {
 
       {/* Hourly heatmap bar chart */}
       <div className="xl:col-span-3 rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-        <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text-heading)' }}>Login Activity by Hour (IST)</p>
+        <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text-heading)' }}>Login Activity by Hour ({getTenantTimezoneAbbr()})</p>
         {loading
           ? <div className="h-36 rounded animate-pulse" style={{ background: 'var(--bg-hover)' }} />
           : (
@@ -372,7 +373,7 @@ const AnalyticsPanel = ({ analytics, loading }) => {
                   tick={axisStyle} interval={2} />
                 <YAxis tick={axisStyle} allowDecimals={false} />
                 <Tooltip content={<ChartTooltip />} formatter={(v) => [v, 'Logins']}
-                  labelFormatter={h => `${h}:00 – ${h}:59 IST`} />
+                  labelFormatter={h => `${h}:00 – ${h}:59 ${getTenantTimezoneAbbr()}`} />
                 <Bar dataKey="count" name="Logins" radius={[3, 3, 0, 0]}>
                   {(analytics?.hourly_dist || []).map((entry, i) => (
                     <Cell key={i} fill={entry.count > 0 ? '#6366f1' : 'var(--bg-hover)'} fillOpacity={0.7 + (entry.count > 5 ? 0.3 : 0)} />
@@ -782,7 +783,7 @@ const SystemActivity = () => {
           <table className="w-full">
             <thead style={{ background: 'var(--bg-hover)', borderBottom: '1px solid var(--border)' }}>
               <tr>
-                {['Action','Module','Description','User','Time (IST)',''].map(h => (
+                {['Action','Module','Description','User',`Time (${getTenantTimezoneAbbr()})`,''].map(h => (
                   <th key={h} className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider"
                     style={{ color: 'var(--text-muted)' }}>{h}</th>
                 ))}
@@ -931,7 +932,7 @@ const RawLoginEvents = () => {
         <table className="w-full">
           <thead style={{ background: 'var(--bg-hover)', borderBottom: '1px solid var(--border)' }}>
             <tr>
-              {['User','Role','Login Time (IST)','IP Address','Device / User-Agent'].map(h => (
+              {['User','Role',`Login Time (${getTenantTimezoneAbbr()})`,'IP Address','Device / User-Agent'].map(h => (
                 <th key={h} className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                   style={{ color: 'var(--text-muted)' }}>{h}</th>
               ))}
@@ -1034,13 +1035,13 @@ const AuditLogs = () => {
             Audit & Session Intelligence
           </h1>
           <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            Enterprise login analytics, session tracking, and system activity · IST (Asia/Kolkata)
+            Enterprise login analytics, session tracking, and system activity · {getTenantTimezoneAbbr()} ({getTenantTimezone()})
           </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs"
             style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-            <Clock className="w-3.5 h-3.5" />All times in IST
+            <Clock className="w-3.5 h-3.5" />All times in {getTenantTimezoneAbbr()}
           </div>
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs"
             style={{ background: '#6366f118', border: '1px solid #6366f130', color: '#6366f1' }}>

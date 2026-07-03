@@ -316,7 +316,13 @@ class SettingsService:
         if not settings:
             # Return default settings
             return CompanySettings()
-        
+
+        # Mongo assigns a real ObjectId to `_id` on upsert; CompanySettings.id
+        # is typed as Optional[str], so it must be stringified before the raw
+        # document is unpacked into the model or Pydantic v2 rejects it.
+        if "_id" in settings:
+            settings["_id"] = str(settings["_id"])
+
         return CompanySettings(**settings)
     
     @staticmethod

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import applicationService from '../../services/applicationService'
+import { getTenantTimezone } from '../../utils/format'
 
 // ── Status color map ──────────────────────────────────────────────────────────
 const STATUS_COLORS = {
@@ -65,8 +66,8 @@ function StageTimeline({ history }) {
         const isLast = idx === history.length - 1
         const c = STATUS_COLORS[entry.to_stage] || STATUS_COLORS.applied
         const dt = entry.changed_at ? new Date(entry.changed_at) : null
-        const dateStr = dt ? dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''
-        const timeStr = dt ? dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''
+        const dateStr = dt ? dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: getTenantTimezone() }) : ''
+        const timeStr = dt ? dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() }) : ''
 
         return (
           <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: isLast ? 0 : '24px', position: 'relative' }}>

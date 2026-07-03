@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import ActionMenu, { ActionMenuItem } from '../../components/common/ActionMenu';
 import reportService from '../../services/reportService';
+import { getTenantTimezone } from '../../utils/format';
 import ScheduleReportModal from './components/ScheduleReportModal';
 
 const SavedReports = () => {
@@ -232,7 +233,7 @@ const ReportCard = ({ report, onRun, onEdit, onDelete, onDuplicate, onSchedule }
         {report.last_run && (
           <span className="flex items-center gap-1">
             <Clock className="w-3 h-3" />
-            Last run: {new Date(report.last_run).toLocaleDateString()}
+            Last run: {new Date(report.last_run).toLocaleDateString('en-IN', { timeZone: getTenantTimezone() })}
           </span>
         )}
         {report.schedule && (

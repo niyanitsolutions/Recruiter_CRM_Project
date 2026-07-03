@@ -56,10 +56,27 @@ const SecuritySettingsPage = () => {
   const save = async () => {
     try {
       setSaving(true)
-      await tenantSettingsService.saveSecuritySettings(data)
+      // Coerce numeric fields to real numbers only at save time — the inputs
+      // keep whatever raw string the user is typing (see `set`) so
+      // backspace/clear/paste behave like a normal input instead of
+      // snapping back to a default value on every keystroke.
+      const payload = {
+        ...data,
+        min_password_length:      parseInt(data.min_password_length, 10)      || 8,
+        password_expiry_days:     data.password_expiry_days === '' ? 0 : (parseInt(data.password_expiry_days, 10) || 0),
+        max_login_attempts:       parseInt(data.max_login_attempts, 10)       || 5,
+        lockout_duration_minutes: parseInt(data.lockout_duration_minutes, 10) || 30,
+        session_timeout_minutes:  parseInt(data.session_timeout_minutes, 10)  || 480,
+      }
+      await tenantSettingsService.saveSecuritySettings(payload)
+      setData(payload)
       toast.success('Security settings saved')
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to save')
+      const detail = e.response?.data?.detail
+      const msg = (typeof detail === 'string' && detail.trim() && !/unexpected error/i.test(detail))
+        ? detail
+        : (!e.response ? 'Network unavailable. Please check your connection and try again.' : 'Unable to save security settings. Please try again.')
+      toast.error(msg)
     } finally {
       setSaving(false)
     }
@@ -140,7 +157,7 @@ const SecuritySettingsPage = () => {
               <Input
                 type="number" min={6} max={32}
                 value={data.min_password_length}
-                onChange={e => set('min_password_length', parseInt(e.target.value) || 8)}
+                onChange={e => set('min_password_length', e.target.value)}
                 className="w-24"
                 disabled={!customEnabled}
               />
@@ -161,7 +178,7 @@ const SecuritySettingsPage = () => {
               <Input
                 type="number" min={0}
                 value={data.password_expiry_days}
-                onChange={e => set('password_expiry_days', parseInt(e.target.value) || 0)}
+                onChange={e => set('password_expiry_days', e.target.value)}
                 className="w-24"
                 disabled={!customEnabled}
               />
@@ -179,7 +196,7 @@ const SecuritySettingsPage = () => {
               <Input
                 type="number" min={1} max={20}
                 value={data.max_login_attempts}
-                onChange={e => set('max_login_attempts', parseInt(e.target.value) || 5)}
+                onChange={e => set('max_login_attempts', e.target.value)}
                 className="w-24"
                 disabled={!customEnabled}
               />
@@ -188,7 +205,7 @@ const SecuritySettingsPage = () => {
               <Input
                 type="number" min={1}
                 value={data.lockout_duration_minutes}
-                onChange={e => set('lockout_duration_minutes', parseInt(e.target.value) || 30)}
+                onChange={e => set('lockout_duration_minutes', e.target.value)}
                 className="w-28"
                 disabled={!customEnabled}
               />
@@ -214,7 +231,7 @@ const SecuritySettingsPage = () => {
             <Input
               type="number" min={15}
               value={data.session_timeout_minutes}
-              onChange={e => set('session_timeout_minutes', parseInt(e.target.value) || 480)}
+              onChange={e => set('session_timeout_minutes', e.target.value)}
               className="w-28"
               disabled={!customEnabled}
             />

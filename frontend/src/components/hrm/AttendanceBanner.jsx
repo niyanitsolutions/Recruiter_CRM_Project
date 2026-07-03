@@ -27,6 +27,7 @@ import toast from 'react-hot-toast'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
 import hrmService from '../../services/hrmService'
+import { getTenantTimezone } from '../../utils/format'
 import PunchInModal from './PunchInModal'
 
 const DISMISS_KEY = 'attendance_modal_dismissed'
@@ -282,7 +283,7 @@ export default function AttendanceBanner() {
 
   const checkInTime = parseUTC(record?.check_in)
   const checkInStr  = checkInTime
-    ? checkInTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    ? checkInTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() })
     : null
 
   const pillStyle = checkedOut

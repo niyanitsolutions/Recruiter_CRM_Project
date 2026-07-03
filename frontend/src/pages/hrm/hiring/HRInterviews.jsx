@@ -3,6 +3,7 @@ import { Plus, Calendar, CheckCircle, XCircle } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
 import TableScroll from '../../../components/common/TableScroll'
+import { getTenantTimezone } from '../../../utils/format'
 
 const RESULT_COLORS = {
   pending:    'bg-gray-100 text-gray-600',
@@ -52,7 +53,7 @@ export default function HRInterviews() {
     setSaving(false)
   }
 
-  const fmt = (dt) => dt ? new Date(dt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'
+  const fmt = (dt) => dt ? new Date(dt).toLocaleString('en-IN', { timeZone: getTenantTimezone(), day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '—'
 
   return (
     <div className="p-6 space-y-5">

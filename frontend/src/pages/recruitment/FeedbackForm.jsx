@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { MessageSquare, ArrowLeft, Save, Star, ThumbsUp, ThumbsDown, Minus } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import interviewService from '../../services/interviewService'
+import { getTenantTimezone } from '../../utils/format'
 
 const FeedbackForm = () => {
   const navigate = useNavigate()
@@ -150,7 +151,7 @@ const FeedbackForm = () => {
             <div>
               <p className="text-surface-500">Date</p>
               <p className="font-medium text-surface-900">
-                {new Date(interview.scheduled_date).toLocaleDateString()}
+                {new Date(interview.scheduled_date).toLocaleDateString('en-IN', { timeZone: getTenantTimezone() })}
               </p>
             </div>
           </div>

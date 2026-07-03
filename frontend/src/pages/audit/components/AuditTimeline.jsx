@@ -5,7 +5,7 @@
 import React from 'react';
 import { Activity, User, FileText, Settings, LogIn, LogOut, Edit, Trash2, Plus } from 'lucide-react';
 import auditAdvancedService from '../../services/auditAdvancedService';
-import { formatDate, formatDateTime } from '../../../utils/format';
+import { formatDate, formatDateTime, getTenantTimezone } from '../../../utils/format';
 
 const AuditTimeline = ({ events = [], loading = false }) => {
   if (loading) {
@@ -105,7 +105,7 @@ const AuditTimeline = ({ events = [], loading = false }) => {
                           )}
                         </div>
                         <span className="text-xs text-gray-400">
-                          {new Date(event.timestamp).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })}
+                          {new Date(event.timestamp).toLocaleTimeString('en-IN', { timeZone: getTenantTimezone(), hour: '2-digit', minute: '2-digit', hour12: true })}
                         </span>
                       </div>
                       

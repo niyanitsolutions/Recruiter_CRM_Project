@@ -48,6 +48,11 @@ class GeoFenceUpdateRequest(BaseModel):
     geo_fence_enabled: bool
     geo_fence_locations: List[GeoFenceLocation] = []
     user_geo_fence: List[UserGeoFenceConfig] = []
+    # IP restriction shares storage with HRM Attendance Geo Fence
+    # (CompanySettings.attendance_ip_restriction_enabled / approved_office_ips)
+    # so both screens read/write the same values.
+    ip_restriction_enabled: bool = False
+    approved_ips: List[str] = []
 
 
 class NotificationsUpdateRequest(BaseModel):
@@ -97,6 +102,19 @@ async def update_profile(
     """Update company profile (name, logo, industry, address, timezone …)."""
     update = CompanySettingsUpdate(**data.model_dump(exclude_none=True))
     updated = await SettingsService.update_company_settings(db, update, current_user["id"])
+    # Mirror timezone into tenant_settings("localization") too — that is the
+    # store the Localization tab and the rest of the app actually read, so a
+    # timezone change made from the Profile tab must not be lost there (see
+    # also /tenant-settings/localization, which mirrors the reverse direction).
+    if data.timezone:
+        try:
+            await db["tenant_settings"].update_one(
+                {"company_id": current_user["company_id"], "key": "localization"},
+                {"$set": {"timezone": data.timezone, "updated_at": datetime.now(timezone.utc), "updated_by": current_user["id"]}},
+                upsert=True,
+            )
+        except Exception:
+            pass  # best-effort mirror — the primary profile save above already succeeded
     return {"success": True, "message": "Company profile updated", "data": _settings_to_dict(updated)}
 
 
@@ -199,6 +217,8 @@ async def update_security(
         geo_fence_enabled=data.geo_fence_enabled,
         geo_fence_locations=data.geo_fence_locations,
         user_geo_fence=data.user_geo_fence,
+        attendance_ip_restriction_enabled=data.ip_restriction_enabled,
+        approved_office_ips=data.approved_ips,
     )
     updated = await SettingsService.update_company_settings(db, update, current_user["id"])
     return {"success": True, "message": "Security settings updated", "data": _settings_to_dict(updated)}

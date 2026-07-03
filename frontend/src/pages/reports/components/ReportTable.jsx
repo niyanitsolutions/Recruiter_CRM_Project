@@ -4,6 +4,7 @@
  */
 import React, { useState, useMemo } from 'react';
 import { ArrowUpDown, ArrowUp, ArrowDown, Search, Download } from 'lucide-react';
+import { getTenantTimezone } from '../../../utils/format';
 
 const ReportTable = ({
   data = [],
@@ -93,7 +94,7 @@ const ReportTable = ({
 
     // Date formatting
     if (column.type === 'date' || column.key?.includes('date') || column.key?.includes('_at')) {
-      return new Date(value).toLocaleDateString();
+      return new Date(value).toLocaleDateString('en-IN', { timeZone: getTenantTimezone() });
     }
 
     // Number formatting

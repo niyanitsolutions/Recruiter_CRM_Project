@@ -784,6 +784,23 @@ async def save_localization(
 ):
     company_id = current_user["company_id"]
     saved = await _save_setting(db, company_id, "localization", data.model_dump(), current_user["id"])
+    # Mirror into CompanySettings too — some backend consumers (e.g. the
+    # login-analytics day/hour bucketing) still read CompanySettings.timezone
+    # directly, so the two stores must never disagree (see also
+    # /company-settings/profile, which mirrors the reverse direction).
+    try:
+        await db["company_settings"].update_one(
+            {},
+            {"$set": {
+                "timezone":    data.timezone,
+                "date_format": data.date_format,
+                "time_format": data.time_format,
+                "language":    data.language,
+            }},
+            upsert=True,
+        )
+    except Exception:
+        pass  # best-effort mirror — the canonical tenant_settings save above already succeeded
     return {"success": True, "data": saved, "message": "Localization settings saved"}
 
 

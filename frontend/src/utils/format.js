@@ -1,9 +1,32 @@
 import { format, formatDistance, isValid, parseISO } from 'date-fns'
+import { store } from '../store/store'
 
-// All timestamps from the backend are UTC ISO strings.
-// Explicit IST (Asia/Kolkata, +05:30) ensures consistent display
-// regardless of the user's browser or OS timezone setting.
-const IST = 'Asia/Kolkata'
+// All timestamps from the backend are UTC ISO strings. They are always
+// rendered in the tenant's saved Localization timezone (Company Settings →
+// Localization), read live from Redux — not a hardcoded zone — so that
+// saving a new timezone updates every screen that uses these helpers
+// immediately, with no page reload required. Falls back to Asia/Kolkata
+// only until localization settings have loaded.
+const FALLBACK_TZ = 'Asia/Kolkata'
+
+export const getTenantTimezone = () => {
+  try {
+    return store.getState().localization?.settings?.timezone || FALLBACK_TZ
+  } catch {
+    return FALLBACK_TZ
+  }
+}
+
+/** Short zone abbreviation for the tenant timezone, e.g. "IST", "GMT+4". */
+export const getTenantTimezoneAbbr = () => {
+  const tz = getTenantTimezone()
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' }).formatToParts(new Date())
+    return parts.find(p => p.type === 'timeZoneName')?.value || tz
+  } catch {
+    return tz
+  }
+}
 
 /**
  * Format currency (Indian Rupees)
@@ -37,18 +60,18 @@ export const formatDate = (date, formatStr = 'dd MMM yyyy') => {
 
   const str = typeof date === 'string' ? date : date.toISOString()
 
-  // Full UTC datetime — convert to IST before extracting the date
+  // Full UTC datetime — convert to the tenant timezone before extracting the date
   if (str.includes('T') || str.endsWith('Z')) {
     const d = new Date(str)
     if (isNaN(d.getTime())) return '-'
-    // Use Intl to get day/month/year in IST, then reformat with date-fns
+    // Use Intl to get day/month/year in the tenant timezone, then reformat with date-fns
     const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: IST,
+      timeZone: getTenantTimezone(),
       year: 'numeric', month: '2-digit', day: '2-digit',
     }).formatToParts(d)
     const p = Object.fromEntries(parts.map(({ type, value }) => [type, value]))
-    const istDate = parseISO(`${p.year}-${p.month}-${p.day}`)
-    return isValid(istDate) ? format(istDate, formatStr) : '-'
+    const tzDate = parseISO(`${p.year}-${p.month}-${p.day}`)
+    return isValid(tzDate) ? format(tzDate, formatStr) : '-'
   }
 
   // Date-only string — parse and format directly (no timezone shift needed)
@@ -57,7 +80,7 @@ export const formatDate = (date, formatStr = 'dd MMM yyyy') => {
 }
 
 /**
- * Format date with time, always in IST (Asia/Kolkata, +05:30).
+ * Format date with time in the tenant's saved Localization timezone.
  * Handles UTC ISO strings from the backend correctly regardless of the
  * browser's local timezone.
  */
@@ -66,10 +89,25 @@ export const formatDateTime = (date) => {
   const d = typeof date === 'string' ? new Date(date) : date
   if (isNaN(d.getTime())) return '-'
   return d.toLocaleString('en-IN', {
-    timeZone: IST,
+    timeZone: getTenantTimezone(),
     day: '2-digit',
     month: 'short',
     year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
+
+/**
+ * Format time only (no date) in the tenant's saved Localization timezone.
+ */
+export const formatTimeOnly = (date) => {
+  if (!date) return '-'
+  const d = typeof date === 'string' ? new Date(date) : date
+  if (isNaN(d.getTime())) return '-'
+  return d.toLocaleTimeString('en-IN', {
+    timeZone: getTenantTimezone(),
     hour: '2-digit',
     minute: '2-digit',
     hour12: true,

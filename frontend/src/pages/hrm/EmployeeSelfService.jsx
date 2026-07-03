@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
+import { getTenantTimezone } from '../../utils/format'
 import ModalPortal from '../../components/common/ModalPortal'
 import { PayslipDocument } from './Payroll'
 
@@ -518,7 +519,7 @@ function PunchInPanel({ todayCtx, onPunchIn, onPunchOut, activeSession, elapsed,
           </span>
           <span className="text-xs ml-auto" style={{ color: 'var(--text-muted)' }}>
             In since {new Date(activeSession.check_in.endsWith('Z') ? activeSession.check_in : activeSession.check_in + 'Z')
-              .toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+              .toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() })}
           </span>
         </div>
       )}
@@ -1011,9 +1012,16 @@ function AttendanceTab() {
                 <tbody>
                   {records.map((rec, i) => {
                     const cfg = STATUS_COLORS[rec.status] || { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' }
-                    const checkIn  = rec.check_in  ? new Date(rec.check_in.endsWith('Z')  ? rec.check_in  : rec.check_in  + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
-                    const checkOut = rec.check_out ? new Date(rec.check_out.endsWith('Z') ? rec.check_out : rec.check_out + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
-                    const dateStr  = rec.date ? new Date(rec.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short' }) : '—'
+                    const checkIn  = rec.check_in  ? new Date(rec.check_in.endsWith('Z')  ? rec.check_in  : rec.check_in  + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() }) : '—'
+                    const checkOut = rec.check_out ? new Date(rec.check_out.endsWith('Z') ? rec.check_out : rec.check_out + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() }) : '—'
+                    // rec.date is a plain calendar date — build from Y/M/D parts
+                    // so display never shifts due to a timezone conversion.
+                    const dateStr  = rec.date
+                      ? (() => {
+                          const [y, m, d] = rec.date.split('-').map(Number)
+                          return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit', weekday: 'short' })
+                        })()
+                      : '—'
                     return (
                       <tr key={rec.id || i}
                           style={{ background: i % 2 === 0 ? 'transparent' : 'var(--bg-row-alt)', borderBottom: '1px solid var(--border-subtle)' }}>

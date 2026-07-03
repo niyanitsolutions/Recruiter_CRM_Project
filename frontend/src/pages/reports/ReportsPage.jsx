@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import reportService from '../../services/reportService';
 import usePermissions from '../../hooks/usePermissions';
+import { getTenantTimezone } from '../../utils/format';
 
 // ─── Category config ──────────────────────────────────────────────────────────
 
@@ -462,7 +463,7 @@ const SavedReportsTab = ({ reports, onRun, onDelete, onEdit }) => {
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   {report.type_display || report.report_type} •{' '}
                   {report.last_run
-                    ? `Last run: ${new Date(report.last_run).toLocaleDateString()}`
+                    ? `Last run: ${new Date(report.last_run).toLocaleDateString('en-IN', { timeZone: getTenantTimezone() })}`
                     : 'Never run'}
                   {report.schedule && (
                     <span className="ml-2 inline-flex items-center gap-1 text-green-600">
@@ -535,7 +536,7 @@ const ScheduledReportsTab = ({ reports }) => {
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 {freqLabel[report.schedule?.frequency] || report.schedule?.frequency} •{' '}
                 Next: {report.next_run
-                  ? new Date(report.next_run).toLocaleDateString()
+                  ? new Date(report.next_run).toLocaleDateString('en-IN', { timeZone: getTenantTimezone() })
                   : 'Pending'}
                 {report.schedule?.recipients?.length > 0 && (
                   <> • {report.schedule.recipients.length} recipient{report.schedule.recipients.length > 1 ? 's' : ''}</>

@@ -257,9 +257,9 @@ class GeoFenceLocation(BaseModel):
     """A single allowed geo fence zone"""
     id: str = Field(default_factory=lambda: str(__import__('uuid').uuid4()))
     name: str = ""
-    latitude: float = 0.0
-    longitude: float = 0.0
-    radius: int = 500  # metres
+    latitude: float = Field(default=0.0, ge=-90, le=90)
+    longitude: float = Field(default=0.0, ge=-180, le=180)
+    radius: int = Field(default=500, ge=10, le=100000)  # metres
 
     model_config = ConfigDict(populate_by_name=True)
 
