@@ -209,8 +209,8 @@ const Interviews = () => {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 mb-3 flex-wrap">
+      {/* Toolbar: Tabs + Date Filters + View Toggle — single horizontal row, wraps gracefully */}
+      <div className="flex flex-wrap items-center gap-3 mb-3">
         <div
           className="flex rounded-lg p-1 flex-wrap gap-1"
           style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}
@@ -232,12 +232,9 @@ const Interviews = () => {
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Date Filters + View Toggle (single row) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-        {!['today', 'pending'].includes(activeTab) ? (
-          <div className="flex flex-wrap items-center gap-3">
+        {!['today', 'pending'].includes(activeTab) && (
+          <div className="flex flex-wrap items-center gap-2">
             <input
               type="date"
               value={filters.date_from}
@@ -261,9 +258,10 @@ const Interviews = () => {
               </button>
             )}
           </div>
-        ) : <div />}
+        )}
+
         <div
-          className="flex items-center rounded-lg p-1"
+          className="flex items-center rounded-lg p-1 ml-auto"
           style={{ border: '1px solid var(--border)', background: 'var(--bg-card-alt)' }}
         >
           <button onClick={() => setViewMode('table')} className="p-1.5 rounded-md transition-colors" style={viewMode === 'table' ? { background: 'var(--accent)', color: '#fff' } : { color: 'var(--text-muted)' }} title="Table view"><List className="w-4 h-4" /></button>
