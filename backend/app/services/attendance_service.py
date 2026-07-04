@@ -5,6 +5,7 @@ import math
 from datetime import datetime, date, timezone, timedelta
 from typing import Optional, List
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 from app.models.company.attendance import AttendanceStatus, WorkMode
 
@@ -557,7 +558,20 @@ class AttendanceService:
                 "created_at": now,
                 **checkin_fields,
             }
-            await self.col.insert_one(result)
+            try:
+                await self.col.insert_one(result)
+            except DuplicateKeyError:
+                # Race: another concurrent check-in for this employee+day (see
+                # the `existing` lookup above) won between our check and this
+                # insert. The unique (company_id, employee_id, date) index
+                # caught it — fall back to the same idempotent "already
+                # punched in" return used above instead of a raw 500.
+                winner = await self.col.find_one(
+                    {"employee_id": employee_id, "date": today, "company_id": company_id}
+                )
+                if not winner:
+                    raise  # unexpected: constraint fired but no matching doc found
+                return self._serialize(dict(winner))
 
         # Fraud scan (spoofed GPS / impossible travel) — audit only, never blocks
         try:

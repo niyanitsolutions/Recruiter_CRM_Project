@@ -4,7 +4,7 @@ import {
   Plus, Search, Edit2, Trash2, Eye, Users, UserPlus,
   CheckCircle2, AlertCircle, Building2, TrendingUp, UserMinus,
   Filter, ChevronLeft, ChevronRight,
-  Link2, Download, ChevronDown, Mail, Copy, Check, Loader2,
+  Link2, ArrowUpFromLine, ChevronDown, Mail, Copy, Check, Loader2,
 } from 'lucide-react'
 import hrmService from '../../services/hrmService'
 import EmployeeAvatar from '../../components/common/EmployeeAvatar'
@@ -321,7 +321,7 @@ export default function Employees() {
             >
               {exportLoading
                 ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <Download className="w-4 h-4" />}
+                : <ArrowUpFromLine className="w-4 h-4" />}
               Export
               <ChevronDown className="w-3.5 h-3.5" />
             </button>

@@ -225,28 +225,18 @@ async def get_system_health(
     
     _internal = {"is_deleted": False, "user_type": "internal"}
 
-    # Users created this week (internal only — partners don't count against seats)
-    new_users_week = await db.users.count_documents({
-        **_internal,
-        "created_at": {"$gte": week_ago},
-    })
-
-    # Active users today
-    active_today = await db.users.count_documents({
-        **_internal,
-        "last_login": {"$gte": day_ago},
-    })
-
-    # Total actions today
-    actions_today = await db.audit_logs.count_documents({
-        "created_at": {"$gte": day_ago}
-    })
-
-    # Suspended users
-    suspended_users = await db.users.count_documents({
-        **_internal,
-        "status": "suspended",
-    })
+    # The 4 counts below are independent (different filters, 2 different
+    # collections) so they run concurrently instead of one at a time.
+    new_users_week, active_today, actions_today, suspended_users = await asyncio.gather(
+        # Users created this week (internal only — partners don't count against seats)
+        db.users.count_documents({**_internal, "created_at": {"$gte": week_ago}}),
+        # Active users today
+        db.users.count_documents({**_internal, "last_login": {"$gte": day_ago}}),
+        # Total actions today
+        db.audit_logs.count_documents({"created_at": {"$gte": day_ago}}),
+        # Suspended users
+        db.users.count_documents({**_internal, "status": "suspended"}),
+    )
     
     return {
         "success": True,

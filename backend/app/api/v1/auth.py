@@ -347,7 +347,7 @@ async def trial_setup(request: TrialSetupRequest):
 
 @router.post("/register", response_model=RegistrationResponse)
 @limiter.limit("5/minute")
-async def register(_http_request: Request, request: CompleteRegistration):
+async def register(request: Request, payload: CompleteRegistration):
     """
     Company registration endpoint
 
@@ -366,7 +366,7 @@ async def register(_http_request: Request, request: CompleteRegistration):
             detail="Self-registration is currently disabled. Please contact the platform administrator.",
         )
     _reg_pw_min = await _get_pw_min()
-    if len(request.owner_password) < _reg_pw_min:
+    if len(payload.owner_password) < _reg_pw_min:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Password must be at least {_reg_pw_min} characters long.",
@@ -374,29 +374,29 @@ async def register(_http_request: Request, request: CompleteRegistration):
 
     result, error = await tenant_service.register_company(
         # Company details
-        company_name=request.company_name,
-        industry=request.industry,
-        phone=request.phone,
-        city=request.city,
-        state=request.state,
-        zip_code=request.zip_code,
-        website=request.website,
-        gst_number=request.gst_number,
-        street=request.street,
-        country=request.country,
-        location=request.location,
-        company_email=request.company_email,
+        company_name=payload.company_name,
+        industry=payload.industry,
+        phone=payload.phone,
+        city=payload.city,
+        state=payload.state,
+        zip_code=payload.zip_code,
+        website=payload.website,
+        gst_number=payload.gst_number,
+        street=payload.street,
+        country=payload.country,
+        location=payload.location,
+        company_email=payload.company_email,
         # Owner details
-        owner_name=request.owner_name,
-        owner_email=request.owner_email,
-        owner_mobile=request.owner_mobile,
-        owner_username=request.owner_username,
-        owner_password=request.owner_password,
-        owner_designation=request.owner_designation,
+        owner_name=payload.owner_name,
+        owner_email=payload.owner_email,
+        owner_mobile=payload.owner_mobile,
+        owner_username=payload.owner_username,
+        owner_password=payload.owner_password,
+        owner_designation=payload.owner_designation,
         # Plan
-        plan_id=request.plan_id,
-        billing_cycle=request.billing_cycle,
-        user_count=request.user_count,
+        plan_id=payload.plan_id,
+        billing_cycle=payload.billing_cycle,
+        user_count=payload.user_count,
     )
     
     if error:
@@ -519,7 +519,7 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest, backgro
 
 @router.post("/reset-password", response_model=MessageResponse)
 @limiter.limit("5/minute")
-async def reset_password(_http_request: Request, request: ResetPasswordRequest):
+async def reset_password(request: Request, payload: ResetPasswordRequest):
     """
     Reset password using the token from the reset email.
 
@@ -536,8 +536,8 @@ async def reset_password(_http_request: Request, request: ResetPasswordRequest):
 
     master_db = _get_master_db()
     now = datetime.now(timezone.utc)
-    token = request.token
-    new_password = request.new_password
+    token = payload.token
+    new_password = payload.new_password
     new_hash = hash_password(new_password)
 
     # ── 1. Centralised password_reset_tokens (new scoped system) ─────────────

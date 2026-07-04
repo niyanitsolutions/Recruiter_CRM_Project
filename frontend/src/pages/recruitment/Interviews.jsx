@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Calendar, Plus, Eye, Clock,
-  User, XCircle, Download, MessageSquare,
+  User, XCircle, ArrowUpFromLine, MessageSquare,
   List, LayoutGrid, CheckCircle, PauseCircle, AlertCircle
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -161,7 +161,7 @@ const Interviews = () => {
         <div className="flex flex-wrap items-center gap-2">
           {has('exports:create') && (
             <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
-              <Download className="w-4 h-4" />
+              <ArrowUpFromLine className="w-4 h-4" />
               Export
             </button>
           )}

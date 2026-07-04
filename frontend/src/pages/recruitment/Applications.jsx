@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  FileText, Eye, Download, X, List, LayoutGrid,
+  FileText, Eye, ArrowUpFromLine, X, List, LayoutGrid,
   Users, ChevronRight, Building2
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -394,7 +394,7 @@ const Applications = () => {
         <div className="flex flex-wrap items-center gap-2">
           {has('exports:create') && (
             <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
-              <Download className="w-4 h-4" /> Export
+              <ArrowUpFromLine className="w-4 h-4" /> Export
             </button>
           )}
           {mainView === 'applications' && selectedIds.length > 0 && has('applications:edit') && (

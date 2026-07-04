@@ -140,9 +140,9 @@ function TaskCard({ task, onStatusChange, onDelete, onOpen, onEdit, isDark }) {
     backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
     boxShadow: '0 4px 16px rgba(0,0,20,0.30), inset 0 1px 0 rgba(255,255,255,0.07)',
   } : {
-    background: '#ffffff', border: `1px solid ${task.is_overdue ? 'rgba(239,68,68,0.3)' : 'rgba(108,99,255,0.12)'}`,
-    borderRadius: 14, padding: '16px', marginBottom: 12, cursor: 'pointer',
-    boxShadow: '0 2px 8px rgba(108,99,255,0.06)',
+    background: 'var(--bg-card)', border: `1px solid ${task.is_overdue ? 'rgba(239,68,68,0.3)' : 'var(--border-card)'}`,
+    borderRadius: 12, padding: '16px', marginBottom: 12, cursor: 'pointer',
+    boxShadow: 'var(--shadow-card)',
   }
   const mutedColor = isDark ? '#334155' : '#d1d5db'
 
@@ -150,7 +150,7 @@ function TaskCard({ task, onStatusChange, onDelete, onOpen, onEdit, isDark }) {
     <div style={cardStyle} onClick={() => onOpen(task)}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 500, lineHeight: 1.4, color: task.status === 'completed' ? (isDark ? '#475569' : '#9ca3af') : (isDark ? '#e2e8f0' : '#1a1a2e'), textDecoration: task.status === 'completed' ? 'line-through' : 'none', marginBottom: 8 }}>
+          <div style={{ fontSize: 15, fontWeight: 500, lineHeight: 1.4, color: task.status === 'completed' ? (isDark ? '#475569' : 'var(--text-muted)') : (isDark ? '#e2e8f0' : 'var(--text-heading)'), textDecoration: task.status === 'completed' ? 'line-through' : 'none', marginBottom: 8 }}>
             {task.title}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -190,13 +190,13 @@ function TaskCard({ task, onStatusChange, onDelete, onOpen, onEdit, isDark }) {
           <div style={{ height: 1, background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(108,99,255,0.08)', margin: '10px 0' }} />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             {dueDateStr && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: task.is_overdue ? '#f87171' : (isDark ? '#94a3b8' : '#9ca3af') }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: task.is_overdue ? '#f87171' : (isDark ? '#94a3b8' : 'var(--text-muted)') }}>
                 <Clock size={12} color={task.is_overdue ? '#f87171' : '#64748b'} />
                 {task.is_overdue && '⚠ '}{dueDateStr}
               </span>
             )}
             {task.assigned_to_name && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: isDark ? '#94a3b8' : '#9ca3af', marginLeft: 'auto' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: isDark ? '#94a3b8' : 'var(--text-muted)', marginLeft: 'auto' }}>
                 <UserIcon size={12} color="#64748b" /> {task.assigned_to_name}
               </span>
             )}
@@ -209,21 +209,24 @@ function TaskCard({ task, onStatusChange, onDelete, onOpen, onEdit, isDark }) {
 
 // ── Kanban Column ─────────────────────────────────────────────────────────────
 function KanbanColumn({ label, count, tasks, onStatusChange, onDelete, onOpen, onEdit, isDark }) {
+  // Light theme uses the same design tokens as the Candidates/Jobs cards
+  // (--bg-card = pure white, --border-card, --shadow-card) so the columns no
+  // longer look washed out next to the rest of the CRM.
   const colStyle = isDark ? {
     background: 'rgba(14,20,55,0.32)', border: '1px solid rgba(255,255,255,0.11)', borderRadius: 16, padding: '20px 16px', flex: 1, minWidth: 0,
     backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', boxShadow: '0 8px 32px rgba(0,0,20,0.30), inset 0 1px 0 rgba(255,255,255,0.07)',
   } : {
-    background: '#f8f9ff', border: '1px solid rgba(108,99,255,0.10)', borderRadius: 16, padding: '20px 16px', flex: 1, minWidth: 0,
-    boxShadow: '0 2px 12px rgba(108,99,255,0.06)',
+    background: 'var(--bg-card)', border: '1px solid var(--border-card)', borderRadius: 12, padding: '20px 16px', flex: 1, minWidth: 0,
+    boxShadow: 'var(--shadow-card)',
   }
   return (
     <div style={colStyle}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <span style={{ fontSize: 16, fontWeight: 600, color: isDark ? '#e2e8f0' : '#1a1a2e' }}>{label}</span>
-        <span style={{ fontSize: 14, color: '#64748b' }}>({count})</span>
+        <span style={{ fontSize: 16, fontWeight: 600, color: isDark ? '#e2e8f0' : 'var(--text-heading)' }}>{label}</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: isDark ? '#94a3b8' : 'var(--text-secondary)' }}>({count})</span>
       </div>
       {tasks.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: '#334155' }}>No tasks</div>
+        <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: isDark ? '#94a3b8' : 'var(--text-muted)' }}>No tasks</div>
       ) : tasks.map(t => (
         <TaskCard key={t.id} task={t} onStatusChange={onStatusChange} onDelete={onDelete} onOpen={onOpen} onEdit={onEdit} isDark={isDark} />
       ))}

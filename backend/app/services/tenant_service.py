@@ -3,6 +3,7 @@ Tenant Service
 Handles company registration and management
 """
 
+import asyncio
 import re
 import secrets
 import logging
@@ -13,6 +14,7 @@ from typing import Optional, Tuple, List
 from pymongo.errors import OperationFailure
 
 from app.core.database import get_master_db, DatabaseManager
+from app.core.indexes import ensure_company_indexes
 from app.core.security import hash_password
 from app.models.master.tenant import TenantStatus
 from app.models.company.user import UserRole, UserStatus, ROLE_PERMISSIONS
@@ -42,76 +44,98 @@ class TenantService:
     ) -> Tuple[bool, str]:
         """
         Check if registration fields are unique
-        
+
         Returns:
             Tuple of (is_unique, error_message)
+
+        All applicable lookups (up to 8, across company_name/email/mobile/
+        username) are independent reads — different fields, no query depends
+        on another's result — so they're issued concurrently via
+        asyncio.gather instead of one at a time. Which checks run is
+        unchanged (still gated on the same `if field:` guards), and the
+        precedence for which error message wins when multiple fields collide
+        is preserved exactly by evaluating the gathered results in the same
+        order the sequential checks used to run in.
         """
         master_db = get_master_db()
-        
+
+        # (query coroutine, error message) — appended in the exact order the
+        # old sequential code checked them, so picking the first truthy
+        # result below reproduces the old early-return precedence exactly.
+        checks: list = []
+
         if company_name:
-            existing = await master_db.tenants.find_one({
-                "company_name": {"$regex": f"^{re.escape(company_name)}$", "$options": "i"},
-                "is_deleted": False
-            })
-            if existing:
-                return False, "Company name already registered"
-        
+            checks.append((
+                master_db.tenants.find_one({
+                    "company_name": {"$regex": f"^{re.escape(company_name)}$", "$options": "i"},
+                    "is_deleted": False
+                }),
+                "Company name already registered",
+            ))
+
         if email:
-            # Check in tenants (owner email)
-            existing = await master_db.tenants.find_one({
-                "owner.email": email,
-                "is_deleted": False
-            })
-            if existing:
-                return False, "Email already registered"
-
-            # Check in super_admins
-            existing = await master_db.super_admins.find_one({
-                "email": email,
-                "is_deleted": False
-            })
-            if existing:
-                return False, "Email already registered"
-
-            # Check in pending registrations awaiting verification
-            existing = await master_db.pending_registrations.find_one({
-                "email": email,
-                "status": "pending_verification",
-            })
-            if existing:
-                return False, "Email already registered. Please check your inbox to verify your account."
+            checks.append((
+                master_db.tenants.find_one({"owner.email": email, "is_deleted": False}),
+                "Email already registered",
+            ))
+            checks.append((
+                master_db.super_admins.find_one({"email": email, "is_deleted": False}),
+                "Email already registered",
+            ))
+            checks.append((
+                master_db.pending_registrations.find_one({
+                    "email": email, "status": "pending_verification",
+                }),
+                "Email already registered. Please check your inbox to verify your account.",
+            ))
+            # global_users enforces a hard unique index on email across EVERY
+            # tenant's users (not just owners) — without this check, an email
+            # already used by some other tenant's employee passes validation
+            # here, then crashes with an unhandled DuplicateKeyError inside
+            # upsert_global_user() partway through register_company(), after
+            # the tenant/company DB/owner user have already been created —
+            # leaving a partially-initialized, orphaned tenant behind.
+            checks.append((
+                master_db.global_users.find_one({"email": email.lower().strip()}),
+                "Email already registered",
+            ))
 
         if mobile:
-            existing = await master_db.tenants.find_one({
-                "owner.mobile": mobile,
-                "is_deleted": False
-            })
-            if existing:
-                return False, "Mobile number already registered"
-
-            # Check pending registrations
-            existing = await master_db.pending_registrations.find_one({
-                "contact_number": mobile,
-                "status": "pending_verification",
-            })
-            if existing:
-                return False, "Mobile number already registered. Please check your inbox to verify your account."
+            checks.append((
+                master_db.tenants.find_one({"owner.mobile": mobile, "is_deleted": False}),
+                "Mobile number already registered",
+            ))
+            checks.append((
+                master_db.pending_registrations.find_one({
+                    "contact_number": mobile, "status": "pending_verification",
+                }),
+                "Mobile number already registered. Please check your inbox to verify your account.",
+            ))
+            # Same rationale as the global_users.email check above, for mobile.
+            checks.append((
+                master_db.global_users.find_one({"mobile": mobile}),
+                "Mobile number already registered",
+            ))
 
         if username:
-            existing = await master_db.tenants.find_one({
-                "owner.username": username.lower(),
-                "is_deleted": False
-            })
-            if existing:
-                return False, "Username already taken"
+            checks.append((
+                master_db.tenants.find_one({"owner.username": username.lower(), "is_deleted": False}),
+                "Username already taken",
+            ))
+            checks.append((
+                master_db.pending_registrations.find_one({
+                    "username": username.lower(), "status": "pending_verification",
+                }),
+                "Username already taken",
+            ))
 
-            # Check pending registrations
-            existing = await master_db.pending_registrations.find_one({
-                "username": username.lower(),
-                "status": "pending_verification",
-            })
+        if not checks:
+            return True, ""
+
+        results = await asyncio.gather(*(query for query, _ in checks))
+        for (_, message), existing in zip(checks, results):
             if existing:
-                return False, "Username already taken"
+                return False, message
 
         return True, ""
     
@@ -257,6 +281,11 @@ class TenantService:
         # contains every non-owner permission.  The is_owner flag is what grants
         # unrestricted bypass in the permission middleware.
         company_db = DatabaseManager.get_company_db(company_id)
+        # Second index set (hrm_attendance, hrm_jobs, hrm_candidates, etc.) —
+        # create_company_database() alone doesn't cover these; awaited directly
+        # (not swallowed) so an index failure still fails registration exactly
+        # as create_company_database()'s own failures already do.
+        await ensure_company_indexes(company_db)
 
         is_owner = (owner_designation == "Owner")
         first_user_id = tenant_data["owner"]["_id"]
@@ -648,6 +677,7 @@ class TenantService:
             )
             await DatabaseManager.create_company_database(company_id)
             company_db = DatabaseManager.get_company_db(company_id)
+            await ensure_company_indexes(company_db)
 
             owner_user = {
                 "_id": user_id,
@@ -908,6 +938,7 @@ class TenantService:
         try:
             await DatabaseManager.create_company_database(company_id)
             company_db = DatabaseManager.get_company_db(company_id)
+            await ensure_company_indexes(company_db)
 
             owner_user = {
                 "_id": user_id,
@@ -1545,6 +1576,7 @@ class TenantService:
         # Create company database + owner user
         await DatabaseManager.create_company_database(company_id)
         company_db = DatabaseManager.get_company_db(company_id)
+        await ensure_company_indexes(company_db)
 
         owner_user = {
             "_id": owner_id,

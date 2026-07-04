@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from typing import Any, ClassVar
+import asyncio
 import logging
 
 from pymongo import IndexModel, ASCENDING, DESCENDING, TEXT
@@ -32,7 +33,18 @@ class DatabaseManager:
     async def connect(cls):
         """Initialize MongoDB connection"""
         if cls.client is None:
-            cls.client = AsyncIOMotorClient(settings.MONGODB_URI)
+            # Explicit pool sizing — same single shared client as before, just
+            # fewer cold-start connection stalls under concurrent request bursts
+            # (library defaults were maxPoolSize=100, minPoolSize=0, no idle
+            # timeout). Values are per gunicorn worker process.
+            cls.client = AsyncIOMotorClient(
+                settings.MONGODB_URI,
+                maxPoolSize=200,
+                minPoolSize=10,
+                maxIdleTimeMS=60_000,
+                waitQueueTimeoutMS=10_000,
+                retryWrites=True,
+            )
             # Verify connection
             await cls.client.admin.command('ping')
             logger.info("✅ MongoDB connection established")
@@ -289,10 +301,15 @@ class DatabaseManager:
             ],
         }
 
-        # One create_indexes() call per collection — all indexes sent in a single
-        # MongoDB command, reducing Atlas round-trips from ~83 to 23 (~4x faster).
-        for collection_name, index_models in collections_indexes.items():
-            await db[collection_name].create_indexes(index_models)
+        # One create_indexes() call per collection, and all collections run
+        # concurrently — each collection's indexes are independent of every
+        # other collection's (different, brand-new, empty collections), so
+        # there is no ordering requirement between them. This turns ~23
+        # sequential Atlas round-trips into a single concurrent batch.
+        await asyncio.gather(*[
+            db[collection_name].create_indexes(index_models)
+            for collection_name, index_models in collections_indexes.items()
+        ])
 
         logger.info("✅ Company database created: c_%s", company_id.replace("-", ""))
         return db

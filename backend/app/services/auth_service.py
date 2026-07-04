@@ -200,7 +200,7 @@ class AuthService:
                 if user.get("is_owner")
                 else user.get("password_hash", "")
             )
-            if not verify_password(password, ph):
+            if not await asyncio.to_thread(verify_password, password, ph):
                 await AuthService._increment_failed_attempts(
                     tenant["company_id"],
                     user.get("_id") or user.get("id"),
@@ -243,7 +243,7 @@ class AuthService:
             if _lo_err:
                 return None, _lo_err
 
-            _pw_ok = verify_password(password, _gu_hash)
+            _pw_ok = await asyncio.to_thread(verify_password, password, _gu_hash)
             logger.info("[LOGIN-DIAG] Password verify (global path) | ok=%s", _pw_ok)
 
             if not _pw_ok:
@@ -384,7 +384,7 @@ class AuthService:
                 return None, _lo_err
 
             ph = owner_tenant.get("owner", {}).get("password_hash", "")
-            _legacy_pw_ok = verify_password(password, ph)
+            _legacy_pw_ok = await asyncio.to_thread(verify_password, password, ph)
             logger.info(
                 "[LOGIN-DIAG] Legacy owner path | company_id=%s | has_ph=%s | pw_ok=%s",
                 owner_tenant.get("company_id"), bool(ph), _legacy_pw_ok,
@@ -413,7 +413,7 @@ class AuthService:
             if _le:
                 _last_lockout_err = _le
                 continue  # skip locked accounts; try other companies
-            if verify_password(password, u.get("password_hash", "")):
+            if await asyncio.to_thread(verify_password, password, u.get("password_hash", "")):
                 is_valid, _ = await tenant_resolver.validate_tenant_access(t)
                 if is_valid:
                     valid_matches.append((t, u))
@@ -823,7 +823,7 @@ class AuthService:
         if _lo_err:
             return None, _lo_err
 
-        if not verify_password(password, super_admin.get("password_hash", "")):
+        if not await asyncio.to_thread(verify_password, password, super_admin.get("password_hash", "")):
             # Increment failed attempts and apply lockout after threshold
             _sa_threshold, _sa_lockout_min = await AuthService._get_lockout_settings()
             _sa_new_count = (super_admin.get("failed_login_attempts", 0) or 0) + 1
@@ -906,7 +906,7 @@ class AuthService:
         if _sl_lo_err:
             return None, _sl_lo_err
 
-        if not verify_password(password, seller.get("password_hash", "")):
+        if not await asyncio.to_thread(verify_password, password, seller.get("password_hash", "")):
             _sl_threshold, _sl_lockout_min = await AuthService._get_lockout_settings()
             _sl_new_count = (seller.get("failed_login_attempts", 0) or 0) + 1
             _sl_upd: dict = {"$inc": {"failed_login_attempts": 1}}

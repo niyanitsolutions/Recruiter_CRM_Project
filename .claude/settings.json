@@ -43,7 +43,10 @@
       "Bash(python3 -c ' *)",
       "Bash(/c/Users/Lenovo/AppData/Local/Programs/Python/Python312/python -c ' *)",
       "Bash(/c/Users/Lenovo/AppData/Local/Programs/Python/Python312/python -c \"import fakeredis; print\\('available'\\)\")",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(ls src/pages/tasks/)",
+      "Bash(grep -rln \"Kanban\\\\|kanban\" src/pages/tasks/)",
+      "Bash(wc -l src/pages/tasks/*.jsx)"
     ]
   }
 }

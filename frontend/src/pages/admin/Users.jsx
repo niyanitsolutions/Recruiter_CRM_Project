@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import usePermissions from '../../hooks/usePermissions'
 import {
   Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, EyeOff,
-  UserCheck, UserX, Key, ChevronLeft, ChevronRight, X, Download,
+  UserCheck, UserX, Key, ChevronLeft, ChevronRight, X, ArrowUpFromLine,
   Building, Award, Save, Loader2, Users as UsersIcon, UserCog, CheckCircle2, AlertCircle,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -722,7 +722,7 @@ const Users = () => {
         <div className="flex items-center gap-2">
           {has('exports:create') && (
             <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
-              <Download className="w-4 h-4" /> Export
+              <ArrowUpFromLine className="w-4 h-4" /> Export
             </button>
           )}
           {has('users:create') && (

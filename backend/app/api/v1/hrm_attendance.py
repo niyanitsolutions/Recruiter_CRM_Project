@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 from app.core.dependencies import (
     get_company_db, require_hrm_module, require_permissions, require_non_partner,
@@ -154,7 +155,21 @@ async def _resolve_emp_id(
             "created_at": now,
             "updated_at": now,
         }
-        await db.hrm_employees.insert_one(emp_doc)
+        try:
+            await db.hrm_employees.insert_one(emp_doc)
+        except DuplicateKeyError:
+            # Concurrent first-punch-in race: another request for the same
+            # user already created a profile between our lookup above and
+            # this insert. The unique (company_id, crm_user_id) index (see
+            # core/indexes.py) caught it — use the winning profile instead
+            # of creating a duplicate.
+            winner = await db.hrm_employees.find_one(
+                {"company_id": cu["company_id"], "crm_user_id": cu["id"]},
+                {"_id": 1},
+            )
+            if not winner:
+                raise  # unexpected: constraint fired but no matching doc found
+            new_emp_id = str(winner["_id"])
         await db.users.update_one(
             {"_id": cu["id"]},
             {"$set": {"hrm_employee_id": new_emp_id}},
