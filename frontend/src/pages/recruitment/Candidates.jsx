@@ -977,7 +977,9 @@ const Candidates = () => {
                         <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                           {candidate.created_by_name}
                         </p>
-                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Admin</span>
+                        {candidate.created_by_role && (
+                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{candidate.created_by_role}</span>
+                        )}
                       </div>
                     ) : (
                       <span className="text-xs px-2 py-0.5 rounded font-medium" style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)' }}>

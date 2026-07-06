@@ -24,6 +24,21 @@ from app.models.company.candidate import (
     ResumeParseResult
 )
 from app.services.audit_service import AuditService
+from app.models.company.user import get_role_display_name
+
+
+def _resolve_creator_role(user_doc: Optional[dict]) -> Optional[str]:
+    """Human-readable designation/role for a user, matching the same
+    Owner > designation > role priority used on the Users list page."""
+    if not user_doc:
+        return None
+    if user_doc.get("is_owner") or user_doc.get("role") == "owner" or user_doc.get("designation") == "Owner":
+        return "Owner"
+    if user_doc.get("designation"):
+        return user_doc["designation"]
+    if user_doc.get("role"):
+        return get_role_display_name(user_doc["role"])
+    return None
 
 
 def _normalize_status(s: str) -> str:
@@ -402,10 +417,10 @@ class CandidateService:
         if all_lookup_ids:
             users_cursor = db["users"].find(
                 {"_id": {"$in": all_lookup_ids}},
-                {"_id": 1, "full_name": 1}
+                {"_id": 1, "full_name": 1, "designation": 1, "role": 1, "is_owner": 1}
             )
             fetched = await users_cursor.to_list(length=len(all_lookup_ids))
-            users_map = {u["_id"]: u["full_name"] for u in fetched}
+            users_map = {u["_id"]: u for u in fetched}
 
         # Format response
         result = []
@@ -426,11 +441,12 @@ class CandidateService:
                 source=candidate.get("source", "direct"),
                 status=_normalize_status(candidate.get("status", "active")),
                 assigned_to=candidate.get("assigned_to"),
-                assigned_to_name=users_map.get(candidate.get("assigned_to")),
+                assigned_to_name=(users_map.get(candidate.get("assigned_to")) or {}).get("full_name"),
                 partner_id=candidate.get("partner_id"),
-                partner_name=users_map.get(candidate.get("partner_id")),
+                partner_name=(users_map.get(candidate.get("partner_id")) or {}).get("full_name"),
                 created_by=candidate.get("created_by"),
-                created_by_name=users_map.get(candidate.get("created_by")),
+                created_by_name=(users_map.get(candidate.get("created_by")) or {}).get("full_name"),
+                created_by_role=_resolve_creator_role(users_map.get(candidate.get("created_by"))),
                 resume_url=candidate.get("resume_url"),
                 photo_url=candidate.get("photo_url"),
                 total_applications=candidate.get("total_applications", 0),

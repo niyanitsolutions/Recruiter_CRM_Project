@@ -490,6 +490,7 @@ class CandidateListResponse(BaseModel):
     partner_name: Optional[str] = None
     created_by: Optional[str] = None
     created_by_name: Optional[str] = None
+    created_by_role: Optional[str] = None
     total_applications: int = 0
     current_job_title: Optional[str]
     current_stage: Optional[str]

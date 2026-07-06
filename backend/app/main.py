@@ -408,9 +408,13 @@ app.include_router(admin_dashboard.router, prefix=API_V1_PREFIX, tags=["Admin Da
 
 # ============== PHASE 3 ROUTERS ==============
 app.include_router(clients.router, prefix=API_V1_PREFIX, tags=["Clients"])
+# public_forms.router must be registered before candidates.router: its literal
+# "/candidates/my-public-form" path would otherwise be shadowed by candidates.py's
+# "/candidates/{candidate_id}" catch-all, since Starlette matches routes in
+# registration order and both routers share the "/candidates" prefix.
+app.include_router(public_forms.router, prefix=API_V1_PREFIX, tags=["Public Forms"])
 app.include_router(candidates.router, prefix=API_V1_PREFIX, tags=["Candidates"])
 app.include_router(candidates.public_router, prefix=API_V1_PREFIX, tags=["Public Forms"])
-app.include_router(public_forms.router, prefix=API_V1_PREFIX, tags=["Public Forms"])
 app.include_router(public_forms.public_router, prefix=API_V1_PREFIX, tags=["Public Apply"])
 app.include_router(jobs.router, prefix=API_V1_PREFIX, tags=["Jobs"])
 app.include_router(applications.router, prefix=API_V1_PREFIX, tags=["Applications"])
