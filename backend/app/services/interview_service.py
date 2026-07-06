@@ -89,6 +89,7 @@ class InterviewService:
             interview_mode_display=get_interview_mode_display(interview.get("interview_mode", "video")),
             venue=interview.get("venue"),
             meeting_link=interview.get("meeting_link"),
+            assessment_link=interview.get("assessment_link"),
             interviewer_names=interview.get("interviewer_names", []),
             primary_interviewer=interview.get("primary_interviewer"),
             status=interview.get("status", "scheduled"),
@@ -468,6 +469,7 @@ class InterviewService:
             "venue": interview_data.venue,
             "address": interview_data.address,
             "meeting_link": interview_data.meeting_link,
+            "assessment_link": interview_data.assessment_link,
             "dial_in_number": interview_data.dial_in_number,
             "interviewer_ids": interview_data.interviewer_ids,
             "interviewer_names": interviewer_names,
@@ -547,7 +549,7 @@ class InterviewService:
         mode = interview_dict.get("interview_mode", "")
         venue_or_link = interview_dict.get("meeting_link") or interview_dict.get("venue") or interview_dict.get("address") or ""
 
-        if candidate_email:
+        if candidate_email and interview_data.send_notification:
             try:
                 from app.services.email_service import send_interview_scheduled_email, _fire_email
                 _fire_email(send_interview_scheduled_email(
@@ -563,6 +565,7 @@ class InterviewService:
                     duration_minutes=interview_data.duration_minutes or 60,
                     instructions=interview_data.instructions,
                     company_id=company_id,
+                    assessment_link=interview_data.assessment_link,
                 ))
             except Exception as _e:
                 import logging as _log
@@ -605,6 +608,7 @@ class InterviewService:
         result_data: RoundResultSubmit,
         submitted_by: str,
         company_id: str = "",
+        company_name: str = "",
     ) -> InterviewResponse:
         """Submit result for the current active round and advance the pipeline."""
         collection = db[InterviewService.COLLECTION]
@@ -726,6 +730,30 @@ class InterviewService:
             update_set["status"] = InterviewStatus.ON_HOLD.value
 
         await collection.update_one({"_id": interview_id}, {"$set": update_set})
+
+        # Status update saved successfully — notify the candidate by email (opt-in,
+        # never blocks the response, never sent if the update above failed).
+        candidate_email = interview.get("candidate_email")
+        if result_data.notify_email and candidate_email:
+            status_label_map = {"passed": "shortlisted", "failed": "rejected", "on_hold": "on_hold"}
+            if result_data.result == "passed" and update_set.get("overall_status") == "selected":
+                status_label = "selected"
+            else:
+                status_label = status_label_map.get(result_data.result, result_data.result)
+            try:
+                from app.services.email_service import send_candidate_status_email, _fire_email
+                _fire_email(send_candidate_status_email(
+                    to_email=candidate_email,
+                    candidate_name=interview.get("candidate_name") or "",
+                    job_title=interview.get("job_title") or "",
+                    company_name=company_name,
+                    status_label=status_label,
+                    company_id=company_id,
+                    message=result_data.feedback or None,
+                ))
+            except Exception as _e:
+                import logging as _log
+                _log.getLogger(__name__).warning("Interview status email failed: %s", _e)
 
         # Interview counters track interview records, not rounds: adjust them only
         # once, when the whole pipeline concludes (selected or failed).

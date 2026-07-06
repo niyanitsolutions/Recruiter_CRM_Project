@@ -929,6 +929,35 @@ async def send_candidate_registered_email(
     )
 
 
+async def send_application_received_email(
+    to_email: str,
+    candidate_name: str,
+    job_title: str,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    """Confirmation sent to a candidate right after their application is created."""
+    subject = f"Application Received — {job_title} at {company_name}"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Application Received ✓</h2>
+      <p>Dear <strong>{candidate_name}</strong>,</p>
+      <p>Thank you for applying for the position of
+         <strong>{job_title}</strong> at <strong>{company_name}</strong>.</p>
+      <p>Your application has been received and our recruitment team will
+         review it shortly. We will reach out to you regarding next steps.</p>
+      <p style="color:#6B7280;font-size:13px">
+        If you have questions, please reply to this email or contact your recruiter directly.
+      </p>""")
+    text = (
+        f"Application Received — {job_title} at {company_name}\n"
+        f"Dear {candidate_name}, thank you for applying. "
+        "Our recruitment team will review your application and contact you regarding next steps."
+    )
+    return await send_email(
+        to_email, subject, html, text, "application_received", company_id=company_id
+    )
+
+
 async def send_candidate_form_link_email(
     to_email: str,
     form_url: str,
@@ -1020,6 +1049,7 @@ async def send_interview_scheduled_email(
     duration_minutes: int,
     instructions: Optional[str],
     company_id: str = "",
+    assessment_link: Optional[str] = None,
 ) -> bool:
     subject = f"Interview Scheduled — {job_title} at {company_name}"
     mode_label = interview_mode.replace("_", " ").title() if interview_mode else ""
@@ -1031,6 +1061,11 @@ async def send_interview_scheduled_email(
     iv_line = (
         f"<p style='margin:0 0 6px'><strong>Interviewer(s):</strong> {', '.join(interviewer_names)}</p>"
         if interviewer_names else ""
+    )
+    assessment_line = (
+        f"<p style='margin:0 0 6px'><strong>Assessment/Form Link:</strong> "
+        f"<a href='{assessment_link}' style='color:#4F46E5'>{assessment_link}</a></p>"
+        if assessment_link else ""
     )
     inst_block = (
         f"<div style='background:#FFF7ED;border-left:3px solid #F59E0B;padding:12px;"
@@ -1050,6 +1085,7 @@ async def send_interview_scheduled_email(
         <p style="margin:0 0 6px"><strong>Duration:</strong> {duration_minutes} minutes</p>
         <p style="margin:0 0 6px"><strong>Mode:</strong> {mode_label}</p>
         {loc_line}
+        {assessment_line}
         {iv_line}
       </div>
       {inst_block}
@@ -1062,6 +1098,7 @@ async def send_interview_scheduled_email(
         f"Date: {interview_date} | Time: {interview_time} | Mode: {mode_label}\n"
         + (f"Duration: {duration_minutes} min\n" if duration_minutes else "")
         + (f"Location: {venue_or_link}\n" if venue_or_link else "")
+        + (f"Assessment/Form Link: {assessment_link}\n" if assessment_link else "")
         + (f"Instructions: {instructions}" if instructions else "")
     )
     return await send_email(
@@ -1532,6 +1569,39 @@ async def send_offer_response_email(
     text = f"Offer {action} — {job_title} at {company_name}\nDear {candidate_name},\n\n{body}"
     return await send_email(
         to_email, subject, html, text, f"offer_{'accepted' if accepted else 'rejected'}", company_id=company_id
+    )
+
+
+async def send_onboarding_confirmation_email(
+    to_email: str,
+    candidate_name: str,
+    job_title: str,
+    company_name: str,
+    joining_date: str,
+    company_id: str = "",
+) -> bool:
+    """Confirmation sent to a candidate once they are marked as joined/onboarded."""
+    subject = f"Welcome to {company_name}!"
+    html = _wrap(f"""
+      <h2 style="color:#059669;margin-top:0">Welcome Aboard! 🎉</h2>
+      <p>Dear <strong>{candidate_name}</strong>,</p>
+      <p>We are pleased to confirm that your onboarding for the position of
+         <strong>{job_title}</strong> at <strong>{company_name}</strong> is complete.</p>
+      <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;
+                  padding:16px;margin:16px 0">
+        <p style="margin:0"><strong>Date of Joining:</strong> {joining_date}</p>
+      </div>
+      <p style="color:#6B7280;font-size:13px">
+        Welcome to the team! Our HR team will reach out with any further
+        details you may need.
+      </p>""")
+    text = (
+        f"Welcome to {company_name}!\n"
+        f"Dear {candidate_name}, your onboarding for {job_title} is complete.\n"
+        f"Date of Joining: {joining_date}"
+    )
+    return await send_email(
+        to_email, subject, html, text, "onboarding_confirmed", company_id=company_id
     )
 
 
@@ -2261,10 +2331,12 @@ class EmailService:
 
     # --- recruitment emails ---
     send_candidate_registered_email = staticmethod(send_candidate_registered_email)
+    send_application_received_email = staticmethod(send_application_received_email)
     send_candidate_status_email = staticmethod(send_candidate_status_email)
     send_candidate_form_link_email = staticmethod(send_candidate_form_link_email)
     send_offer_letter_email = staticmethod(send_offer_letter_email)
     send_offer_response_email = staticmethod(send_offer_response_email)
+    send_onboarding_confirmation_email = staticmethod(send_onboarding_confirmation_email)
     send_interview_scheduled_email = staticmethod(send_interview_scheduled_email)
     send_interview_rescheduled_email = staticmethod(send_interview_rescheduled_email)
     send_interview_cancelled_email = staticmethod(send_interview_cancelled_email)

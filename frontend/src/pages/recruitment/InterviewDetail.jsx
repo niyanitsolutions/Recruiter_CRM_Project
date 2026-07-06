@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, User, Briefcase, Building2, Layers,
   CheckCircle2, XCircle, PauseCircle, Clock, ChevronRight,
-  Calendar, MessageSquare
+  Calendar, MessageSquare, ExternalLink, ClipboardList
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import interviewService from '../../services/interviewService'
@@ -38,6 +38,7 @@ const InterviewDetail = () => {
   const [roundFeedback, setRoundFeedback] = useState('')
   const [nextRoundDate, setNextRoundDate] = useState('')
   const [nextRoundTime, setNextRoundTime] = useState('')
+  const [notifyCandidate, setNotifyCandidate] = useState(true)
 
   useEffect(() => {
     loadInterview()
@@ -65,6 +66,7 @@ const InterviewDetail = () => {
         feedback: roundFeedback,
         next_round_date: roundResult === 'passed' && nextRoundDate ? nextRoundDate : undefined,
         next_round_time: roundResult === 'passed' && nextRoundTime ? nextRoundTime : undefined,
+        notify_email: notifyCandidate,
       })
       toast.success(
         roundResult === 'passed'
@@ -165,6 +167,31 @@ const InterviewDetail = () => {
           <div className="mt-3 pt-3 border-t border-surface-100 flex items-center gap-2 text-sm text-surface-600">
             <Layers className="w-4 h-4" />
             <span>Pipeline: <span className="font-medium">{interview.pipeline_name}</span></span>
+          </div>
+        )}
+
+        {(interview.meeting_link || interview.assessment_link) && (
+          <div className="mt-3 pt-3 border-t border-surface-100 flex flex-col gap-2 text-sm">
+            {interview.meeting_link && (
+              <div className="flex items-center gap-2 text-surface-600">
+                <ExternalLink className="w-4 h-4 flex-shrink-0" />
+                <span className="flex-shrink-0">Interview / Meeting Link:</span>
+                <a href={interview.meeting_link} target="_blank" rel="noopener noreferrer"
+                  className="text-primary-600 hover:underline truncate">
+                  {interview.meeting_link}
+                </a>
+              </div>
+            )}
+            {interview.assessment_link && (
+              <div className="flex items-center gap-2 text-surface-600">
+                <ClipboardList className="w-4 h-4 flex-shrink-0" />
+                <span className="flex-shrink-0">Assessment / Form Link:</span>
+                <a href={interview.assessment_link} target="_blank" rel="noopener noreferrer"
+                  className="text-primary-600 hover:underline truncate">
+                  {interview.assessment_link}
+                </a>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -325,6 +352,16 @@ const InterviewDetail = () => {
               </div>
             </div>
           )}
+
+          <label className="flex items-center gap-2 text-sm text-surface-700 mb-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={notifyCandidate}
+              onChange={e => setNotifyCandidate(e.target.checked)}
+              className="w-4 h-4 rounded"
+            />
+            Notify Candidate by Email
+          </label>
 
           <button
             onClick={handleSubmitRound}

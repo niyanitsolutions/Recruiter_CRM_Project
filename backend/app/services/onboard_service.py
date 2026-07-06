@@ -294,6 +294,8 @@ class OnboardService:
         })
         if not onboard:
             return None
+        if onboard.get("status") != OnboardStatus.SELECTED.value:
+            raise ValueError("Offer can only be released for candidates in 'selected' status")
 
         status_history = StatusHistory(
             from_status=onboard.get("status"),
@@ -328,6 +330,16 @@ class OnboardService:
             ]
         if data.notes:
             update_data["notes"] = data.notes
+        if data.department:
+            update_data["department"] = data.department
+        if data.employment_type:
+            update_data["employment_type"] = data.employment_type
+        if data.variable_pay is not None:
+            update_data["variable_pay"] = data.variable_pay
+        if data.joining_bonus is not None:
+            update_data["joining_bonus"] = data.joining_bonus
+        if data.probation_period_months is not None:
+            update_data["probation_period_months"] = data.probation_period_months
 
         result = await self.collection.find_one_and_update(
             {"id": onboard_id, "company_id": company_id},
@@ -368,6 +380,85 @@ class OnboardService:
                 "$set": {
                     "status": OnboardStatus.REJECTED.value,
                     "rejection_reason": rejection_reason,
+                    "updated_at": datetime.now(timezone.utc),
+                    "updated_by": updated_by,
+                },
+                "$push": {"status_history": status_history.model_dump()},
+            },
+            return_document=True,
+        )
+        return OnboardResponse(**result) if result else None
+
+    async def put_on_hold(
+        self,
+        onboard_id: str,
+        company_id: str,
+        updated_by: str,
+        reason: Optional[str] = None,
+    ) -> Optional[OnboardResponse]:
+        """Pause a SELECTED candidate — moves them to HOLD without touching offer data."""
+        onboard = await self.collection.find_one({
+            "id": onboard_id,
+            "company_id": company_id,
+            "is_deleted": False,
+        })
+        if not onboard:
+            return None
+        if onboard.get("status") != OnboardStatus.SELECTED.value:
+            raise ValueError("Only candidates in 'selected' status can be put on hold")
+
+        status_history = StatusHistory(
+            from_status=onboard.get("status"),
+            to_status=OnboardStatus.HOLD.value,
+            changed_at=datetime.now(timezone.utc),
+            changed_by=updated_by,
+            reason=reason,
+        )
+
+        result = await self.collection.find_one_and_update(
+            {"id": onboard_id, "company_id": company_id},
+            {
+                "$set": {
+                    "status": OnboardStatus.HOLD.value,
+                    "updated_at": datetime.now(timezone.utc),
+                    "updated_by": updated_by,
+                },
+                "$push": {"status_history": status_history.model_dump()},
+            },
+            return_document=True,
+        )
+        return OnboardResponse(**result) if result else None
+
+    async def resume_from_hold(
+        self,
+        onboard_id: str,
+        company_id: str,
+        updated_by: str,
+    ) -> Optional[OnboardResponse]:
+        """Resume a HOLD candidate back to SELECTED."""
+        onboard = await self.collection.find_one({
+            "id": onboard_id,
+            "company_id": company_id,
+            "is_deleted": False,
+        })
+        if not onboard:
+            return None
+        if onboard.get("status") != OnboardStatus.HOLD.value:
+            raise ValueError("Only candidates in 'hold' status can be resumed")
+
+        status_history = StatusHistory(
+            from_status=onboard.get("status"),
+            to_status=OnboardStatus.SELECTED.value,
+            changed_at=datetime.now(timezone.utc),
+            changed_by=updated_by,
+            notes="Resumed from hold",
+        )
+
+        result = await self.collection.find_one_and_update(
+            {"id": onboard_id, "company_id": company_id},
+            {
+                "$set": {
+                    "status": OnboardStatus.SELECTED.value,
                     "updated_at": datetime.now(timezone.utc),
                     "updated_by": updated_by,
                 },
@@ -662,24 +753,30 @@ class OnboardService:
         })
         
         selected_count = status_counts.get(OnboardStatus.SELECTED.value, 0)
+        hold_count = status_counts.get(OnboardStatus.HOLD.value, 0)
         rejected_count = (
             status_counts.get(OnboardStatus.REJECTED.value, 0)
             + status_counts.get(OnboardStatus.OFFER_DECLINED.value, 0)
             + status_counts.get(OnboardStatus.NO_SHOW.value, 0)
+            + status_counts.get(OnboardStatus.ABSCONDED.value, 0)
+            + status_counts.get(OnboardStatus.TERMINATED.value, 0)
         )
-        # total_offers excludes pure "selected" pre-offer records
+        # total_offers = records that actually had an offer released. HOLD (never
+        # offered) and REJECTED (rejectable at any stage, including pre-offer while
+        # still SELECTED) are excluded so putting a candidate on hold or rejecting
+        # a not-yet-offered candidate never inflates this count.
         offer_statuses = {
             OnboardStatus.OFFER_RELEASED.value, OnboardStatus.OFFER_ACCEPTED.value,
             OnboardStatus.OFFER_DECLINED.value, OnboardStatus.DOJ_CONFIRMED.value,
             OnboardStatus.DOJ_EXTENDED.value, OnboardStatus.JOINED.value,
             OnboardStatus.NO_SHOW.value, OnboardStatus.ABSCONDED.value,
             OnboardStatus.TERMINATED.value, OnboardStatus.COMPLETED.value,
-            OnboardStatus.REJECTED.value,
         }
         total_offers = sum(v for k, v in status_counts.items() if k in offer_statuses)
 
         return OnboardDashboardStats(
             selected_count=selected_count,
+            hold_count=hold_count,
             total_offers=total_offers,
             offers_accepted=status_counts.get(OnboardStatus.OFFER_ACCEPTED.value, 0),
             offers_declined=status_counts.get(OnboardStatus.OFFER_DECLINED.value, 0),

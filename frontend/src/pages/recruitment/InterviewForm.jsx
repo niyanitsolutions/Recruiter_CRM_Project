@@ -82,7 +82,10 @@ const InterviewForm = () => {
     scheduled_date: '',
     scheduled_time: '',
     instructions:   '',
+    meeting_link:    '',
+    assessment_link: '',
   })
+  const [notifyCandidate, setNotifyCandidate] = useState(true)
 
   const [submitted, setSubmitted] = useState(false)
   const { draftAvailable, draftSavedAt, restoreDraft, discardDraft } = useDraftRecovery(
@@ -205,6 +208,9 @@ const InterviewForm = () => {
         scheduled_date: formData.scheduled_date,
         scheduled_time: formData.scheduled_time,
         instructions:   formData.instructions || undefined,
+        meeting_link:    formData.meeting_link || undefined,
+        assessment_link: formData.assessment_link || undefined,
+        send_notification: notifyCandidate,
       })
       setSubmitted(true)
       toast.success('Interview scheduled successfully')
@@ -412,6 +418,41 @@ const InterviewForm = () => {
           </div>
         </div>
 
+        {/* Links */}
+        <div className="rounded-xl p-6 space-y-4"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--text-heading)' }}>
+            Links
+            <span className="text-sm font-normal ml-2" style={{ color: 'var(--text-muted)' }}>(optional)</span>
+          </h2>
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>
+              Interview / Meeting Link
+            </label>
+            <input
+              type="url"
+              name="meeting_link"
+              value={formData.meeting_link}
+              onChange={handleChange}
+              className="input w-full"
+              placeholder="https://meet.google.com/…"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>
+              Assessment / Form Link
+            </label>
+            <input
+              type="url"
+              name="assessment_link"
+              value={formData.assessment_link}
+              onChange={handleChange}
+              className="input w-full"
+              placeholder="https://forms.example.com/…"
+            />
+          </div>
+        </div>
+
         {/* Instructions */}
         <div className="rounded-xl p-6"
           style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
@@ -443,20 +484,32 @@ const InterviewForm = () => {
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-3">
-          <button type="button" onClick={() => navigate('/interviews')} className="btn-secondary">
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving
-              ? <><Loader2 className="w-4 h-4 animate-spin" /> Scheduling…</>
-              : <><Calendar className="w-4 h-4" /> Schedule Interview</>
-            }
-          </button>
+        <div className="flex items-center justify-between gap-3">
+          <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+            <input
+              type="checkbox"
+              checked={notifyCandidate}
+              onChange={e => setNotifyCandidate(e.target.checked)}
+              className="w-4 h-4 rounded"
+              style={{ accentColor: 'var(--accent)' }}
+            />
+            Notify Candidate by Email
+          </label>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => navigate('/interviews')} className="btn-secondary">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Scheduling…</>
+                : <><Calendar className="w-4 h-4" /> Schedule Interview</>
+              }
+            </button>
+          </div>
         </div>
       </form>
     </div>

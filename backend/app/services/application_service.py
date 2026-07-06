@@ -31,7 +31,8 @@ class ApplicationService:
         application_data: ApplicationCreate,
         created_by: str,
         partner_id: Optional[str] = None,
-        company_id: Optional[str] = None
+        company_id: Optional[str] = None,
+        company_name: str = ""
     ) -> ApplicationResponse:
         """Create a new application (apply candidate to job)"""
         collection = db[ApplicationService.COLLECTION]
@@ -166,6 +167,22 @@ class ApplicationService:
             if "duplicate key" in str(exc).lower():
                 raise HTTPException(status_code=400, detail="Candidate has already applied for this job")
             raise
+
+        # Application saved successfully — notify the candidate by email (opt-in,
+        # never blocks the response, never sent if the insert above failed).
+        if application_data.notify_email and candidate.get("email"):
+            try:
+                from app.services.email_service import send_application_received_email, _fire_email
+                _fire_email(send_application_received_email(
+                    to_email=candidate["email"],
+                    candidate_name=candidate.get("full_name") or "",
+                    job_title=job.get("title") or "",
+                    company_name=company_name,
+                    company_id=company_id or job.get("company_id", ""),
+                ))
+            except Exception as _e:
+                import logging as _log
+                _log.getLogger(__name__).warning("Application received email failed: %s", _e)
 
         # Update job stats and candidate tracking (non-critical — don't fail the response)
         try:

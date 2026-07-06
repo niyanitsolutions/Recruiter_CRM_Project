@@ -102,7 +102,8 @@ async def create_application(
         application_data=application_data,
         created_by=current_user["id"],
         partner_id=partner_id,
-        company_id=current_user.get("company_id", "")
+        company_id=current_user.get("company_id", ""),
+        company_name=current_user.get("company_name", "")
     )
     
     return {"success": True, "message": "Application created successfully", "data": application}
@@ -239,7 +240,8 @@ async def bulk_apply_candidates(
         try:
             application_data = ApplicationCreate(
                 candidate_id=candidate_id,
-                job_id=job_id
+                job_id=job_id,
+                notify_email=False
             )
             await ApplicationService.create_application(
                 db=db,

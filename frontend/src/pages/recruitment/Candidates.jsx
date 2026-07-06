@@ -130,6 +130,7 @@ const Candidates = () => {
   const [eligibleJobs, setEligibleJobs] = useState([])
   const [eligibleLoading, setEligibleLoading] = useState(false)
   const [applyingJobId, setApplyingJobId] = useState(null)
+  const [notifyCandidateOnApply, setNotifyCandidateOnApply] = useState(true)
 
   // Debounce refs — keyword waits 400 ms, all other changes are immediate
   const _debounceTimer  = useRef(null)
@@ -294,6 +295,7 @@ const Candidates = () => {
       setApplyModal({ candidate })
       setEligibleJobs([])
       setEligibleLoading(true)
+      setNotifyCandidateOnApply(true)
       try {
         const res = await candidateService.getEligibleJobs(candidate.id)
         setEligibleJobs(res.data || [])
@@ -319,7 +321,8 @@ const Candidates = () => {
     try {
       const res = await applicationService.createApplication({
         candidate_id: applyModal.candidate.id,
-        job_id: jobId
+        job_id: jobId,
+        notify_email: notifyCandidateOnApply
       })
       if (res && res.success === false) {
         toast.error(res.message || 'Failed to apply.')
@@ -1193,6 +1196,19 @@ const Candidates = () => {
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+            <div className="flex items-center gap-2 px-5 pt-4">
+              <input
+                type="checkbox"
+                id="notify-candidate-on-apply"
+                checked={notifyCandidateOnApply}
+                onChange={e => setNotifyCandidateOnApply(e.target.checked)}
+                className="w-4 h-4 rounded"
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              <label htmlFor="notify-candidate-on-apply" className="text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                Notify Candidate by Email
+              </label>
             </div>
             <div className="overflow-y-auto flex-1 p-5">
               {eligibleLoading ? (

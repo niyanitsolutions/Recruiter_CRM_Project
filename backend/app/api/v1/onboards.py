@@ -304,12 +304,13 @@ async def extend_doj(
 async def mark_joined(
     onboard_id: str,
     actual_doj: date = Query(..., description="Actual date of joining (YYYY-MM-DD)"),
+    notify_email: bool = Query(True, description="Send onboarding confirmation email to the candidate"),
     current_user: dict = Depends(require_permissions(["onboards:edit"])),
     db = Depends(get_company_db)
 ):
     """Mark candidate as joined"""
     service = OnboardService(db)
-    return await service.update_status(
+    result = await service.update_status(
         onboard_id=onboard_id,
         data=OnboardStatusUpdate(
             status=OnboardStatus.JOINED,
@@ -318,6 +319,27 @@ async def mark_joined(
         company_id=current_user["company_id"],
         updated_by=current_user["id"]
     )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onboard record not found")
+
+    # Joining recorded successfully — send onboarding confirmation email (opt-in,
+    # never blocks the response, never sent if the update above failed).
+    if notify_email and result.candidate_email:
+        try:
+            from app.services.email_service import send_onboarding_confirmation_email, _fire_email
+            _fire_email(send_onboarding_confirmation_email(
+                to_email=result.candidate_email,
+                candidate_name=result.candidate_name or "",
+                job_title=result.job_title or "",
+                company_name=current_user.get("company_name", ""),
+                joining_date=str(actual_doj),
+                company_id=current_user["company_id"],
+            ))
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).warning("Onboarding confirmation email failed: %s", _e)
+
+    return result
 
 
 @router.post("/{onboard_id}/mark-no-show", response_model=OnboardResponse)
@@ -340,6 +362,50 @@ async def mark_no_show(
     )
 
 
+@router.post("/{onboard_id}/hold", response_model=OnboardResponse)
+async def put_on_hold(
+    onboard_id: str,
+    reason: Optional[str] = Query(None),
+    current_user: dict = Depends(require_permissions(["onboards:edit"])),
+    db = Depends(get_company_db)
+):
+    """Pause a 'selected' candidate — moves them to 'hold'. Does not touch offer data or offer counts."""
+    service = OnboardService(db)
+    try:
+        result = await service.put_on_hold(
+            onboard_id=onboard_id,
+            company_id=current_user["company_id"],
+            updated_by=current_user["id"],
+            reason=reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onboard record not found")
+    return result
+
+
+@router.post("/{onboard_id}/resume", response_model=OnboardResponse)
+async def resume_candidate(
+    onboard_id: str,
+    current_user: dict = Depends(require_permissions(["onboards:edit"])),
+    db = Depends(get_company_db)
+):
+    """Resume a 'hold' candidate back to 'selected'."""
+    service = OnboardService(db)
+    try:
+        result = await service.resume_from_hold(
+            onboard_id=onboard_id,
+            company_id=current_user["company_id"],
+            updated_by=current_user["id"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onboard record not found")
+    return result
+
+
 @router.post("/{onboard_id}/release-offer", response_model=OnboardResponse)
 async def release_offer(
     onboard_id: str,
@@ -349,14 +415,47 @@ async def release_offer(
 ):
     """Release offer for a candidate in 'selected' status, filling in offer details."""
     service = OnboardService(db)
-    result = await service.release_offer(
-        onboard_id=onboard_id,
-        data=data,
-        company_id=current_user["company_id"],
-        updated_by=current_user["id"],
-    )
+    try:
+        result = await service.release_offer(
+            onboard_id=onboard_id,
+            data=data,
+            company_id=current_user["company_id"],
+            updated_by=current_user["id"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onboard record not found")
+
+    # Offer saved successfully — send the offer email (opt-in, never blocks the
+    # response, never sent if the update above failed).
+    if data.notify_email and result.candidate_email:
+        try:
+            from app.services.email_service import send_offer_letter_email, _fire_email
+            offer_details = (
+                f"Designation: {data.offer_designation}\n"
+                f"CTC: {data.offer_ctc}\n"
+                f"Location: {data.offer_location}"
+                + (f"\nDepartment: {data.department}" if data.department else "")
+                + (f"\nEmployment Type: {data.employment_type}" if data.employment_type else "")
+                + (f"\nVariable Pay: {data.variable_pay}" if data.variable_pay else "")
+                + (f"\nJoining Bonus: {data.joining_bonus}" if data.joining_bonus else "")
+                + (f"\nProbation Period: {data.probation_period_months} month(s)" if data.probation_period_months else "")
+                + (f"\nExpected Date of Joining: {data.expected_doj}" if data.expected_doj else "")
+            )
+            _fire_email(send_offer_letter_email(
+                to_email=result.candidate_email,
+                candidate_name=result.candidate_name or "",
+                job_title=result.job_title or "",
+                company_name=current_user.get("company_name", ""),
+                offer_details=offer_details,
+                offer_deadline=str(data.offer_valid_until) if data.offer_valid_until else None,
+                company_id=current_user["company_id"],
+            ))
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).warning("Offer email failed: %s", _e)
+
     return result
 
 

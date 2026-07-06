@@ -96,9 +96,9 @@ const onboardService = {
   },
 
   // Mark as joined
-  markJoined: async (id, actualDoj) => {
+  markJoined: async (id, actualDoj, notifyEmail = true) => {
     const response = await api.post(`${BASE_URL}/${id}/mark-joined`, null, {
-      params: { actual_doj: actualDoj }
+      params: { actual_doj: actualDoj, notify_email: notifyEmail }
     })
     return response.data
   },
@@ -114,6 +114,20 @@ const onboardService = {
   // Release offer for a candidate in 'selected' status
   releaseOffer: async (id, data) => {
     const response = await api.post(`${BASE_URL}/${id}/release-offer`, data)
+    return response.data
+  },
+
+  // Put a 'selected' candidate on hold
+  putOnHold: async (id, reason = null) => {
+    const response = await api.post(`${BASE_URL}/${id}/hold`, null, {
+      params: { reason }
+    })
+    return response.data
+  },
+
+  // Resume a 'hold' candidate back to 'selected'
+  resumeCandidate: async (id) => {
+    const response = await api.post(`${BASE_URL}/${id}/resume`)
     return response.data
   },
 

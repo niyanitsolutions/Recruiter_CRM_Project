@@ -241,6 +241,7 @@ class InterviewCreate(BaseModel):
     venue: Optional[str] = None
     address: Optional[str] = None
     meeting_link: Optional[str] = None
+    assessment_link: Optional[str] = None
     dial_in_number: Optional[str] = None
 
     interviewer_ids: List[str] = Field(default_factory=list)
@@ -249,6 +250,7 @@ class InterviewCreate(BaseModel):
     instructions: Optional[str] = None
     internal_notes: Optional[str] = None
 
+    # Notify the candidate by email once the interview is scheduled
     send_notification: bool = Field(default=True)
 
 
@@ -259,6 +261,9 @@ class RoundResultSubmit(BaseModel):
     next_round_date: Optional[str] = None   # "YYYY-MM-DD" — schedule next round on pass
     next_round_time: Optional[str] = None   # "HH:MM"
     rejection_reason: Optional[str] = None  # technical | hr | communication | attendance | other
+
+    # Notify the candidate by email with the corresponding status update
+    notify_email: bool = Field(default=True)
 
 
 class InterviewValidateRequest(BaseModel):
@@ -279,6 +284,7 @@ class InterviewUpdate(BaseModel):
     venue: Optional[str] = None
     address: Optional[str] = None
     meeting_link: Optional[str] = None
+    assessment_link: Optional[str] = None
     dial_in_number: Optional[str] = None
 
     interviewer_ids: Optional[List[str]] = None
@@ -353,6 +359,7 @@ class InterviewResponse(BaseModel):
 
     venue: Optional[str] = None
     meeting_link: Optional[str] = None
+    assessment_link: Optional[str] = None
 
     interviewer_names: List[str] = Field(default_factory=list)
     primary_interviewer: Optional[str] = None

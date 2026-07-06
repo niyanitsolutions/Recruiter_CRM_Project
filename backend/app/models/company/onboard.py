@@ -14,6 +14,7 @@ import uuid
 class OnboardStatus(str, Enum):
     """Onboard status workflow"""
     SELECTED = "selected"          # Interview-selected, awaiting offer release
+    HOLD = "hold"                  # Selected candidate temporarily paused — resumes to SELECTED
     OFFER_RELEASED = "offer_released"
     OFFER_ACCEPTED = "offer_accepted"
     OFFER_DECLINED = "offer_declined"
@@ -213,6 +214,7 @@ class OnboardUpdate(BaseModel):
     offer_ctc: Optional[float] = None
     offer_designation: Optional[str] = None
     offer_location: Optional[str] = None
+    offer_released_date: Optional[date] = None
     offer_valid_until: Optional[date] = None
     offer_letter_url: Optional[str] = None
     expected_doj: Optional[date] = None
@@ -221,6 +223,11 @@ class OnboardUpdate(BaseModel):
     documents_required: Optional[List[str]] = None
     notes: Optional[str] = None
     hr_notes: Optional[str] = None
+    department: Optional[str] = None
+    employment_type: Optional[str] = None
+    variable_pay: Optional[float] = None
+    joining_bonus: Optional[float] = None
+    probation_period_months: Optional[int] = None
 
 
 class OnboardStatusUpdate(BaseModel):
@@ -244,6 +251,16 @@ class ReleaseOfferRequest(BaseModel):
     payout_days_required: int = 45
     documents_required: List[str] = []
     notes: Optional[str] = None
+
+    # Additional offer details (optional — surfaced on the Release Offer form)
+    department: Optional[str] = None
+    employment_type: Optional[str] = None
+    variable_pay: Optional[float] = None
+    joining_bonus: Optional[float] = None
+    probation_period_months: Optional[int] = None
+
+    # Send the offer email to the candidate after the offer is released
+    notify_email: bool = True
 
 
 class DOJExtension(BaseModel):
@@ -294,6 +311,11 @@ class OnboardResponse(BaseModel):
     payout_eligibility_date: Optional[date] = None
     notes: Optional[str] = None
     hr_notes: Optional[str] = None
+    department: Optional[str] = None
+    employment_type: Optional[str] = None
+    variable_pay: Optional[float] = None
+    joining_bonus: Optional[float] = None
+    probation_period_months: Optional[int] = None
     rejection_reason: Optional[str] = None
     status_history: List[StatusHistory] = []
     candidate_name: Optional[str] = None
@@ -321,6 +343,7 @@ class OnboardListResponse(BaseModel):
 class OnboardDashboardStats(BaseModel):
     """Dashboard statistics for onboarding"""
     selected_count: int = 0
+    hold_count: int = 0
     total_offers: int = 0
     offers_accepted: int = 0
     offers_declined: int = 0

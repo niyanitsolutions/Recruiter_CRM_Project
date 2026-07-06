@@ -30,6 +30,7 @@ const OnboardDetails = () => {
   const [showDOJModal, setShowDOJModal] = useState(false)
   const [showExtendModal, setShowExtendModal] = useState(false)
   const [dojDate, setDojDate] = useState('')
+  const [notifyOnJoin, setNotifyOnJoin] = useState(true)
   const [extendData, setExtendData] = useState({ new_doj: '', reason: '' })
 
   useEffect(() => {
@@ -65,7 +66,7 @@ const OnboardDetails = () => {
           await onboardService.extendDOJ(id, extendData)
           break
         case 'mark_joined':
-          await onboardService.markJoined(id, dojDate)
+          await onboardService.markJoined(id, dojDate, notifyOnJoin)
           break
         case 'mark_no_show':
           await onboardService.markNoShow(id, data.reason)
@@ -399,6 +400,17 @@ const OnboardDetails = () => {
                 className="w-full px-4 py-2 border border-surface-300 rounded-lg"
               />
             </div>
+            {onboard?.status !== 'offer_released' && (
+              <label className="flex items-center gap-2 text-sm text-surface-700 mb-4 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notifyOnJoin}
+                  onChange={(e) => setNotifyOnJoin(e.target.checked)}
+                  className="w-4 h-4 rounded"
+                />
+                Notify Candidate by Email
+              </label>
+            )}
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShowDOJModal(false)}

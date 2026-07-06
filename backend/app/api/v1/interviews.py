@@ -297,6 +297,7 @@ async def submit_round_result(
         result_data=result_data,
         submitted_by=current_user["id"],
         company_id=current_user.get("company_id", ""),
+        company_name=current_user.get("company_name", ""),
     )
     return {"success": True, "message": "Round result saved", "data": interview}
 

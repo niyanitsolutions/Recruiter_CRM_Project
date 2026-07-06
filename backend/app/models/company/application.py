@@ -157,6 +157,9 @@ class ApplicationCreate(BaseModel):
 
     notes: Optional[str] = None
 
+    # Send "Application Received" email to the candidate after successful creation
+    notify_email: bool = Field(default=True)
+
 
 class ApplicationUpdate(BaseModel):
     """Schema for updating an application"""

@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast'
 import jobService from '../../services/jobService'
 import applicationService from '../../services/applicationService'
 import { formatDate, formatStatus } from '../../utils/format'
+import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 
 // ── Status / priority config ──────────────────────────────────────────────────
 const JOB_STATUS = {
@@ -330,9 +331,7 @@ const JobDetails = () => {
                   to={`/applications/${app.id}`}
                   className="flex items-center gap-4 p-4 bg-white border border-surface-200 rounded-xl hover:border-accent-300 hover:shadow-sm transition-all group"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-surface-100 flex items-center justify-center text-surface-600 font-semibold text-sm flex-shrink-0">
-                    {(app.candidate_name || '?').charAt(0).toUpperCase()}
-                  </div>
+                  <EmployeeAvatar name={app.candidate_name} photoUrl={app.photo_url} size={36} style={{ borderRadius: 12 }} />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-surface-900 truncate">{app.candidate_name}</p>
                     <p className="text-xs text-surface-500">{formatDate(app.applied_at)}</p>
@@ -558,9 +557,7 @@ const JobDetails = () => {
                       to={`/applications/${app.id}`}
                       className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-surface-50 transition-colors group"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-surface-100 flex items-center justify-center text-surface-600 font-semibold text-xs flex-shrink-0">
-                        {(app.candidate_name || '?').charAt(0).toUpperCase()}
-                      </div>
+                      <EmployeeAvatar name={app.candidate_name} photoUrl={app.photo_url} size={32} style={{ borderRadius: 8 }} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-surface-900 truncate">{app.candidate_name}</p>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text}`}>

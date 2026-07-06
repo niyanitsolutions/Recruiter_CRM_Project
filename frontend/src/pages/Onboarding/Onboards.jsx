@@ -3,16 +3,16 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   Plus, Search, Eye, Edit, UserCheck, Calendar,
   Clock, FileText, CheckCircle, XCircle, PauseCircle,
-  Send, X
+  Send, X, RotateCcw, Save
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { onboardService } from '../../services'
-import interviewService from '../../services/interviewService'
 import usePermissions from '../../hooks/usePermissions'
 
 // ─── Status styles ────────────────────────────────────────────────────────────
 const STATUS_STYLES = {
   selected:       { background: 'rgba(56,249,215,0.15)',   color: '#38F9D7' },
+  hold:           { background: 'rgba(245,158,11,0.15)',   color: '#F59E0B' },
   offer_released: { background: 'rgba(79,172,254,0.15)',   color: '#4FACFE' },
   offer_accepted: { background: 'rgba(67,233,123,0.15)',   color: '#43E97B' },
   offer_declined: { background: 'rgba(255,71,87,0.15)',    color: '#FF4757' },
@@ -28,6 +28,7 @@ const STATUS_STYLES = {
 
 const STATUS_LABELS = {
   selected:       'Selected',
+  hold:           'On Hold',
   offer_released: 'Offer Released',
   offer_accepted: 'Offer Accepted',
   offer_declined: 'Offer Declined',
@@ -58,6 +59,11 @@ const TABS = [
     statuses: ['selected'],
   },
   {
+    key: 'hold',
+    label: 'Hold',
+    statuses: ['hold'],
+  },
+  {
     key: 'offer_released',
     label: 'Offer Released',
     statuses: ['offer_released', 'offer_accepted', 'doj_confirmed', 'doj_extended'],
@@ -76,6 +82,7 @@ const TABS = [
 
 const STAT_CARDS = [
   { key: 'selected_count',   label: 'Selected',      color: '#38F9D7', icon: CheckCircle },
+  { key: 'hold_count',       label: 'On Hold',       color: '#F59E0B', icon: PauseCircle },
   { key: 'total_offers',     label: 'Total Offers',  color: '#4FACFE', icon: FileText },
   { key: 'joined_this_month',label: 'Joined (Month)',color: '#43E97B', icon: UserCheck },
   { key: 'payout_eligible',  label: 'Payout Ready',  color: '#F59E0B', icon: Clock },
@@ -83,19 +90,61 @@ const STAT_CARDS = [
 ]
 
 // ─── Release Offer Modal ──────────────────────────────────────────────────────
+const EMPLOYMENT_TYPES = [
+  { value: 'full_time', label: 'Full-Time' },
+  { value: 'part_time', label: 'Part-Time' },
+  { value: 'contract', label: 'Contract' },
+  { value: 'intern', label: 'Intern' },
+]
+
 const ReleaseOfferModal = ({ onboard, onClose, onSuccess }) => {
   const today = new Date().toISOString().split('T')[0]
   const [form, setForm] = useState({
-    offer_ctc: '',
+    offer_ctc: onboard.offer_ctc || '',
     offer_designation: onboard.offer_designation || '',
+    department: onboard.department || '',
+    employment_type: onboard.employment_type || 'full_time',
     offer_location: onboard.offer_location || '',
     offer_released_date: today,
-    offer_valid_until: '',
-    expected_doj: '',
-    payout_days_required: 45,
-    notes: '',
+    offer_valid_until: onboard.offer_valid_until || '',
+    expected_doj: onboard.expected_doj || '',
+    variable_pay: onboard.variable_pay || '',
+    joining_bonus: onboard.joining_bonus || '',
+    probation_period_months: onboard.probation_period_months || '',
+    payout_days_required: onboard.payout_days_required || 45,
+    offer_letter_url: onboard.offer_letter_url || '',
+    notes: onboard.notes || '',
   })
   const [saving, setSaving] = useState(false)
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [sendOfferEmail, setSendOfferEmail] = useState(true)
+
+  const buildPayload = () => ({
+    ...form,
+    offer_ctc: form.offer_ctc ? parseFloat(form.offer_ctc) : undefined,
+    variable_pay: form.variable_pay ? parseFloat(form.variable_pay) : undefined,
+    joining_bonus: form.joining_bonus ? parseFloat(form.joining_bonus) : undefined,
+    probation_period_months: form.probation_period_months ? parseInt(form.probation_period_months) : undefined,
+    payout_days_required: parseInt(form.payout_days_required),
+    offer_valid_until: form.offer_valid_until || undefined,
+    expected_doj: form.expected_doj || undefined,
+    department: form.department || undefined,
+    offer_letter_url: form.offer_letter_url || undefined,
+    notes: form.notes || undefined,
+  })
+
+  const handleSaveDraft = async () => {
+    setSavingDraft(true)
+    try {
+      await onboardService.update(onboard.id, buildPayload())
+      toast.success('Draft saved')
+      onSuccess()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to save draft')
+    } finally {
+      setSavingDraft(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -106,12 +155,8 @@ const ReleaseOfferModal = ({ onboard, onClose, onSuccess }) => {
     setSaving(true)
     try {
       await onboardService.releaseOffer(onboard.id, {
-        ...form,
-        offer_ctc: parseFloat(form.offer_ctc),
-        payout_days_required: parseInt(form.payout_days_required),
-        offer_valid_until: form.offer_valid_until || undefined,
-        expected_doj: form.expected_doj || undefined,
-        notes: form.notes || undefined,
+        ...buildPayload(),
+        notify_email: sendOfferEmail,
       })
       toast.success('Offer released successfully')
       onSuccess()
@@ -125,64 +170,119 @@ const ReleaseOfferModal = ({ onboard, onClose, onSuccess }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="w-full max-w-lg rounded-2xl p-6" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-        <div className="flex items-center justify-between mb-5">
+      <div className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+        <div className="flex items-center justify-between p-6 pb-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
             <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Release Offer</h2>
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{onboard.candidate_name} · {onboard.job_title}</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
+              {onboard.candidate_name} · {onboard.job_title} · {onboard.client_name || '—'}
+            </p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg" style={{ color: 'var(--text-muted)' }}
+          <button onClick={onClose} className="p-2 rounded-lg flex-shrink-0" style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={e => e.currentTarget.style.background = ''}>
             <X className="w-5 h-5" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Offer CTC (₹) *</label>
-              <input type="number" value={form.offer_ctc} onChange={e => setForm(p => ({ ...p, offer_ctc: e.target.value }))} className="input w-full" placeholder="e.g. 600000" required />
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="overflow-y-auto p-6 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Designation *</label>
+                <input type="text" value={form.offer_designation} onChange={e => setForm(p => ({ ...p, offer_designation: e.target.value }))} className="input w-full" placeholder="e.g. Software Engineer" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Department</label>
+                <input type="text" value={form.department} onChange={e => setForm(p => ({ ...p, department: e.target.value }))} className="input w-full" placeholder="e.g. Engineering" />
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Designation *</label>
-              <input type="text" value={form.offer_designation} onChange={e => setForm(p => ({ ...p, offer_designation: e.target.value }))} className="input w-full" placeholder="e.g. Software Engineer" required />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Employment Type</label>
+                <select value={form.employment_type} onChange={e => setForm(p => ({ ...p, employment_type: e.target.value }))} className="input w-full">
+                  {EMPLOYMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Work Location *</label>
+                <input type="text" value={form.offer_location} onChange={e => setForm(p => ({ ...p, offer_location: e.target.value }))} className="input w-full" placeholder="e.g. Mumbai" required />
+              </div>
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Offer CTC (₹) *</label>
+                <input type="number" value={form.offer_ctc} onChange={e => setForm(p => ({ ...p, offer_ctc: e.target.value }))} className="input w-full" placeholder="e.g. 600000" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Variable Pay (₹)</label>
+                <input type="number" value={form.variable_pay} onChange={e => setForm(p => ({ ...p, variable_pay: e.target.value }))} className="input w-full" placeholder="Optional" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Joining Bonus (₹)</label>
+                <input type="number" value={form.joining_bonus} onChange={e => setForm(p => ({ ...p, joining_bonus: e.target.value }))} className="input w-full" placeholder="Optional" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Offer Date *</label>
+                <input type="date" value={form.offer_released_date} onChange={e => setForm(p => ({ ...p, offer_released_date: e.target.value }))} className="input w-full" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Valid Until</label>
+                <input type="date" value={form.offer_valid_until} onChange={e => setForm(p => ({ ...p, offer_valid_until: e.target.value }))} className="input w-full" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Expected DOJ</label>
+                <input type="date" value={form.expected_doj} onChange={e => setForm(p => ({ ...p, expected_doj: e.target.value }))} className="input w-full" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Probation Period (months)</label>
+                <input type="number" min="0" value={form.probation_period_months} onChange={e => setForm(p => ({ ...p, probation_period_months: e.target.value }))} className="input w-full" placeholder="e.g. 3" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Payout Days</label>
+                <select value={form.payout_days_required} onChange={e => setForm(p => ({ ...p, payout_days_required: e.target.value }))} className="input w-full">
+                  <option value={45}>45 days</option>
+                  <option value={60}>60 days</option>
+                  <option value={90}>90 days</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Offer Letter URL</label>
+              <input type="url" value={form.offer_letter_url} onChange={e => setForm(p => ({ ...p, offer_letter_url: e.target.value }))} className="input w-full" placeholder="Link to uploaded offer letter (optional)" />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Notes</label>
+              <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} className="input w-full" rows={2} placeholder="Optional notes" />
+            </div>
+
+            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+              <input
+                type="checkbox"
+                checked={sendOfferEmail}
+                onChange={e => setSendOfferEmail(e.target.checked)}
+                className="w-4 h-4 rounded"
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              Send Offer Email
+            </label>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Location *</label>
-            <input type="text" value={form.offer_location} onChange={e => setForm(p => ({ ...p, offer_location: e.target.value }))} className="input w-full" placeholder="e.g. Mumbai" required />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Offer Date *</label>
-              <input type="date" value={form.offer_released_date} onChange={e => setForm(p => ({ ...p, offer_released_date: e.target.value }))} className="input w-full" required />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Valid Until</label>
-              <input type="date" value={form.offer_valid_until} onChange={e => setForm(p => ({ ...p, offer_valid_until: e.target.value }))} className="input w-full" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Expected DOJ</label>
-              <input type="date" value={form.expected_doj} onChange={e => setForm(p => ({ ...p, expected_doj: e.target.value }))} className="input w-full" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Payout Days</label>
-              <select value={form.payout_days_required} onChange={e => setForm(p => ({ ...p, payout_days_required: e.target.value }))} className="input w-full">
-                <option value={45}>45 days</option>
-                <option value={60}>60 days</option>
-                <option value={90}>90 days</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: 'var(--text-label)' }}>Notes</label>
-            <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} className="input w-full" rows={2} placeholder="Optional notes" />
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-            <button type="submit" disabled={saving} className="btn-primary flex-1 flex items-center justify-center gap-2">
+
+          <div className="flex flex-wrap gap-3 p-6 pt-4 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+            <button type="button" onClick={onClose} className="btn-secondary flex-1 min-w-[100px]">Cancel</button>
+            <button type="button" onClick={handleSaveDraft} disabled={savingDraft} className="btn-secondary flex-1 min-w-[120px] flex items-center justify-center gap-2">
+              <Save className="w-4 h-4" />
+              {savingDraft ? 'Saving...' : 'Save Draft'}
+            </button>
+            <button type="submit" disabled={saving} className="btn-primary flex-1 min-w-[140px] flex items-center justify-center gap-2">
               <Send className="w-4 h-4" />
               {saving ? 'Releasing...' : 'Release Offer'}
             </button>
@@ -306,16 +406,24 @@ const Onboards = () => {
   }
 
   const handleOnHold = async (onboard) => {
-    if (!onboard.interview_id) {
-      toast.error('No linked interview to put on hold')
-      return
-    }
     try {
-      await interviewService.updateInterview(onboard.interview_id, { overall_status: 'on_hold' })
+      await onboardService.putOnHold(onboard.id)
       toast.success('Candidate put on hold')
       fetchOnboards()
+      fetchStats()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to put on hold')
+    }
+  }
+
+  const handleResume = async (onboard) => {
+    try {
+      await onboardService.resumeCandidate(onboard.id)
+      toast.success('Candidate resumed to Selected')
+      fetchOnboards()
+      fetchStats()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to resume candidate')
     }
   }
 
@@ -391,6 +499,59 @@ const Onboards = () => {
                     title="Put On Hold"
                   >
                     <PauseCircle className="w-4 h-4" />
+                  </button>
+                  <Link to={`/onboards/${ob.id}`} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = ''} title="View">
+                    <Eye className="w-4 h-4" />
+                  </Link>
+                </div>
+              </td>
+            )}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+
+  // ─── Hold Tab ─────────────────────────────────────────────────────────────────
+  const renderHoldTable = () => (
+    <table className="w-full">
+      <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '1px solid var(--border)' }}>
+        <tr>
+          <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Candidate</th>
+          <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Job / Client</th>
+          <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Status</th>
+          {has('onboards:edit') && (
+            <th className="px-4 py-3 text-left text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Actions</th>
+          )}
+        </tr>
+      </thead>
+      <tbody>
+        {onboards.map(ob => (
+          <tr key={ob.id} className="transition-colors" style={{ borderBottom: '1px solid var(--border-subtle)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseLeave={e => e.currentTarget.style.background = ''}>
+            <td className="px-4 py-3">
+              <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{ob.candidate_name}</p>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{ob.candidate_email}</p>
+            </td>
+            <td className="px-4 py-3">
+              <p className="font-medium" style={{ color: 'var(--text-primary)' }}>{ob.job_title}</p>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{ob.client_name}</p>
+            </td>
+            <td className="px-4 py-3">{renderBadge(ob.status)}</td>
+            {has('onboards:edit') && (
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleResume(ob)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                    style={{ background: 'rgba(67,233,123,0.15)', color: '#43E97B' }}
+                    title="Resume Candidate"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Resume Candidate
                   </button>
                   <Link to={`/onboards/${ob.id}`} className="p-2 rounded-lg transition-colors" style={{ color: 'var(--text-muted)' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
@@ -623,6 +784,7 @@ const Onboards = () => {
 
   const renderTable = () => {
     if (activeTab === 'selected') return renderSelectedTable()
+    if (activeTab === 'hold') return renderHoldTable()
     if (activeTab === 'offer_released') return renderOfferReleasedTable()
     if (activeTab === 'onboarded') return renderOnboardedTable()
     if (activeTab === 'rejected') return renderRejectedTable()
