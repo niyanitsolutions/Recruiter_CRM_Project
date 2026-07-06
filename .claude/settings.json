@@ -46,7 +46,9 @@
       "Bash(npx eslint *)",
       "Bash(ls src/pages/tasks/)",
       "Bash(grep -rln \"Kanban\\\\|kanban\" src/pages/tasks/)",
-      "Bash(wc -l src/pages/tasks/*.jsx)"
+      "Bash(wc -l src/pages/tasks/*.jsx)",
+      "Bash(cat frontend/.env.production)",
+      "Bash(cat frontend/.env.example)"
     ]
   }
 }

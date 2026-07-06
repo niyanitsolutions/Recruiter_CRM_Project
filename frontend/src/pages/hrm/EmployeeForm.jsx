@@ -16,7 +16,7 @@ import toast from 'react-hot-toast'
 import ModalPortal from '../../components/common/ModalPortal'
 import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
 import { useDraftRecovery } from '../../hooks/useDraftRecovery'
-import EmployeeAvatar from '../../components/common/EmployeeAvatar'
+import EmployeeAvatar, { resolvePhotoUrl } from '../../components/common/EmployeeAvatar'
 import ImageCropModal from '../../components/common/ImageCropModal'
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1432,7 +1432,7 @@ export default function EmployeeForm() {
             <div className="relative flex-shrink-0">
               {croppedPreview || (photoUrl && !photoLoadError) ? (
                 <img
-                  src={croppedPreview || photoUrl}
+                  src={croppedPreview || resolvePhotoUrl(photoUrl)}
                   alt="Profile"
                   className="w-20 h-20 rounded-2xl object-cover"
                   style={{ border: '2px solid #e5e7eb' }}

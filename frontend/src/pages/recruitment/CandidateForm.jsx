@@ -6,6 +6,7 @@ import candidateService from '../../services/candidateService'
 import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
 import { useDraftRecovery } from '../../hooks/useDraftRecovery'
 import ImageCropModal from '../../components/common/ImageCropModal'
+import { resolvePhotoUrl } from '../../components/common/EmployeeAvatar'
 
 const EMPTY_EDU = () => ({ degree: '', field_of_study: '', institution: '', from_year: '', to_year: '', percentage: '' })
 const EMPTY_EXP = () => ({ company_name: '', designation: '', start_date: '', end_date: '', is_current: false })
@@ -870,7 +871,7 @@ const CandidateForm = () => {
             <div className="flex-shrink-0">
               {(croppedPreview || photoUrl) ? (
                 <img
-                  src={croppedPreview || photoUrl}
+                  src={croppedPreview || resolvePhotoUrl(photoUrl)}
                   alt="Profile"
                   className="w-24 h-24 rounded-full object-cover border-2 border-surface-200 shadow-sm"
                   onError={(e) => { e.currentTarget.style.display = 'none' }}

@@ -27,10 +27,22 @@ function colorIndex(name) {
   return Math.abs(h) % GRADIENTS.length
 }
 
+// Older records may still hold the bare "/uploads/..." URL saved before
+// uploads moved under the /api/v1 prefix (some reverse-proxy setups only
+// forward /api/, not a separate /uploads/ rule). Both paths serve the same
+// files, so normalize here rather than migrating stored data.
+export function resolvePhotoUrl(photoUrl) {
+  if (photoUrl && photoUrl.startsWith('/uploads/')) {
+    return `/api/v1${photoUrl}`
+  }
+  return photoUrl
+}
+
 export default function EmployeeAvatar({ name, photoUrl, size = 40, className = '', style = {} }) {
   const [imgError, setImgError] = useState(false)
+  const resolvedUrl = resolvePhotoUrl(photoUrl)
   // Reset error state whenever the URL changes so a fresh load is attempted
-  useEffect(() => { setImgError(false) }, [photoUrl])
+  useEffect(() => { setImgError(false) }, [resolvedUrl])
   const initials = getInitials(name)
   const [c1, c2] = GRADIENTS[colorIndex(name)]
   const fontSize = Math.max(10, Math.round(size * 0.36))
@@ -43,10 +55,10 @@ export default function EmployeeAvatar({ name, photoUrl, size = 40, className = 
     ...style,
   }
 
-  if (photoUrl && !imgError) {
+  if (resolvedUrl && !imgError) {
     return (
       <img
-        src={photoUrl}
+        src={resolvedUrl}
         alt={name || 'Employee'}
         style={{ ...base, objectFit: 'cover' }}
         className={className}

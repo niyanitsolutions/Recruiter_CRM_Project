@@ -135,13 +135,19 @@ async def _upload_to_s3(content: bytes, folder: str, filename: str, ext: str) ->
 
 
 def _save_to_local(content: bytes, folder: str, filename: str) -> str:
-    """Save bytes to the local uploads directory and return a relative URL."""
+    """Save bytes to the local uploads directory and return a relative URL.
+
+    Served under the /api/v1 prefix (not bare /uploads) because reverse
+    proxies in front of this app (see nginx/nginx.conf) route /api/ to the
+    backend but may not have a separate /uploads/ rule deployed — main.py
+    mounts StaticFiles at both paths for exactly this reason.
+    """
     upload_dir = os.path.join(settings.UPLOAD_DIR, folder)
     os.makedirs(upload_dir, exist_ok=True)
     file_path = os.path.join(upload_dir, filename)
     with open(file_path, "wb") as fh:
         fh.write(content)
-    url = f"/uploads/{folder}/{filename}"
+    url = f"/api/v1/uploads/{folder}/{filename}"
     logger.debug("Local upload saved: %s", file_path)
     return url
 
@@ -193,8 +199,11 @@ async def delete_file(url: str) -> bool:
                 logger.info("S3 delete OK: %s", s3_key)
                 return True
 
-        elif url.startswith("/uploads/"):
-            local_path = os.path.join(settings.UPLOAD_DIR, url.lstrip("/uploads/"))
+        elif url.startswith("/api/v1/uploads/") or url.startswith("/uploads/"):
+            # Support both the current (/api/v1/uploads/...) and legacy
+            # (/uploads/...) URL formats so old records can still be cleaned up.
+            rel_path = url.split("/uploads/", 1)[1]
+            local_path = os.path.join(settings.UPLOAD_DIR, rel_path)
             if os.path.exists(local_path):
                 os.remove(local_path)
                 return True
