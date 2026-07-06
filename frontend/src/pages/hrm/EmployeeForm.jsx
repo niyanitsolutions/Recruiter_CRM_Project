@@ -1021,7 +1021,7 @@ export default function EmployeeForm() {
     setPhotoUrl(null)
     if (isEdit && id) {
       try {
-        await hrmService.updateEmployee(id, { photo_url: null })
+        await hrmService.deleteEmployeePhoto(id)
         window.dispatchEvent(new CustomEvent('employee-photo-updated', { detail: { employeeId: id, photoUrl: null } }))
       } catch { /* non-fatal */ }
     }

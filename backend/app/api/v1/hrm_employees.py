@@ -135,8 +135,40 @@ async def upload_employee_photo(
             {"$set": {"avatar_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
         )
 
-    logger.info("photo-upload ok — employee=%r file=%s size=%dB", employee_id, fpath, len(contents))
+    logger.info("photo-upload ok — employee=%r file=%s size=%dB", employee_id, photo_url, len(contents))
     return {"photo_url": photo_url}
+
+
+@router.delete("/{employee_id}/photo")
+async def delete_employee_photo(
+    employee_id: str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+):
+    """Remove an employee's profile photo (same access rule as upload)."""
+    is_own = cu.get("hrm_employee_id") == employee_id
+    user_perms = set(cu.get("permissions") or [])
+    has_manage = bool(user_perms & {"hrm:employees:manage", "hrm:employees:edit"})
+    if not is_own and not has_manage and not cu.get("is_owner") and not cu.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    emp = await db.hrm_employees.find_one(
+        {"_id": employee_id, "company_id": cu["company_id"], "is_deleted": False},
+        {"_id": 1, "crm_user_id": 1},
+    )
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    await db.hrm_employees.update_one(
+        {"_id": employee_id},
+        {"$set": {"photo_url": None, "updated_at": datetime.now(timezone.utc)}},
+    )
+    if emp.get("crm_user_id"):
+        await db.users.update_one(
+            {"_id": emp["crm_user_id"], "is_deleted": False},
+            {"$set": {"avatar_url": None, "updated_at": datetime.now(timezone.utc)}},
+        )
+    return {"success": True}
 
 
 @router.delete("/{employee_id}", status_code=204)

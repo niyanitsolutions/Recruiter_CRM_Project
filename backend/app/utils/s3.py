@@ -35,11 +35,12 @@ _ALLOWED_TYPES: dict[str, set[str]] = {
     "profiles":  {".jpg", ".jpeg", ".png", ".webp"},
 }
 
-# Max file sizes in bytes
+# Max file sizes in bytes — must match the per-route checks in candidates.py /
+# hrm_employees.py (both enforce 5 MB for profile photos before calling upload_file)
 _MAX_SIZES: dict[str, int] = {
     "resumes":   5 * 1024 * 1024,   # 5 MB
     "documents": 10 * 1024 * 1024,  # 10 MB
-    "profiles":  2 * 1024 * 1024,   # 2 MB
+    "profiles":  5 * 1024 * 1024,   # 5 MB
 }
 
 

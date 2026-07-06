@@ -136,6 +136,8 @@ const uploadEmployeePhoto = (employeeId, formData) =>
   api.post(`${BASE}/employees/${employeeId}/photo`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
+const deleteEmployeePhoto = (employeeId) =>
+  api.delete(`${BASE}/employees/${employeeId}/photo`)
 
 // ── Org Chart ──────────────────────────────────────────────────────────────
 const getOrgChart = () => api.get(`${BASE}/employees/org-chart/tree`)
@@ -255,7 +257,7 @@ const getAnnouncements = listAnnouncements
 
 const hrmService = {
   getDashboardStats, getAttendanceTrend,
-  listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee, uploadEmployeePhoto,
+  listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee, uploadEmployeePhoto, deleteEmployeePhoto,
   getTeamAttendanceHistory, getMyAttendanceHistory, getAttendanceRangeStats, exportTeamAttendanceCsv, exportMyAttendanceCsv,
   checkIn, checkOut, startBreak, endBreak, getMyTodayAttendance, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance, recoverAttendance,
   getAttendanceTodayStats, getAttendanceSettings, updateAttendanceSettings,
