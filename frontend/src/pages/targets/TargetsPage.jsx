@@ -11,6 +11,7 @@ import {
   CheckCircle, Clock, AlertCircle, Award
 } from 'lucide-react';
 import targetService from '../../services/targetService';
+import departmentService from '../../services/departmentService';
 import TargetCard from './components/TargetCard';
 import Leaderboard from './Leaderboard';
 import { useLivePolling } from '../../hooks/useLivePolling';
@@ -32,10 +33,24 @@ const TargetsPage = () => {
   });
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
+  const [departmentOptions, setDepartmentOptions] = useState([]);
 
   useEffect(() => {
     loadData();
   }, [activeTab, filters]);
+
+  // Department dropdown reflects the org's current Departments list — dynamic,
+  // deduped, sorted, no hardcoded values, updates as departments are added.
+  useEffect(() => {
+    departmentService.getDepartments()
+      .then(res => {
+        const names = (res.data || [])
+          .map(d => (d.name || '').trim())
+          .filter(Boolean);
+        setDepartmentOptions([...new Set(names)].sort((a, b) => a.localeCompare(b)));
+      })
+      .catch(() => {});
+  }, []);
 
   // Open edit modal when navigated to /targets/edit/:targetId
   useEffect(() => {
@@ -232,11 +247,9 @@ const TargetsPage = () => {
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Departments</option>
-            <option value="recruitment">Recruitment</option>
-            <option value="hr">HR</option>
-            <option value="accounts">Accounts</option>
-            <option value="admin">Admin</option>
-            <option value="partner">Partner</option>
+            {departmentOptions.map(name => (
+              <option key={name} value={name}>{name}</option>
+            ))}
           </select>
 
           <label className="inline-flex items-center gap-2 text-sm text-gray-600">
@@ -294,6 +307,7 @@ const TargetsPage = () => {
       {/* Create Target Modal */}
       {showCreateModal && (
         <CreateTargetModal
+          departmentOptions={departmentOptions}
           onClose={() => setShowCreateModal(false)}
           onCreated={() => {
             setShowCreateModal(false);
@@ -306,6 +320,7 @@ const TargetsPage = () => {
       {editTarget && (
         <EditTargetModal
           target={editTarget}
+          departmentOptions={departmentOptions}
           onClose={() => {
             setEditTarget(null);
             if (targetId) navigate('/targets', { replace: true });
@@ -322,7 +337,7 @@ const TargetsPage = () => {
 };
 
 // Edit Target Modal
-const EditTargetModal = ({ target, onClose, onUpdated }) => {
+const EditTargetModal = ({ target, departmentOptions, onClose, onUpdated }) => {
   const [formData, setFormData] = useState({
     name: target.name || '',
     target_value: target.target_value || '',
@@ -402,11 +417,9 @@ const EditTargetModal = ({ target, onClose, onUpdated }) => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Select Department</option>
-              <option value="recruitment">Recruitment</option>
-              <option value="hr">HR</option>
-              <option value="accounts">Accounts</option>
-              <option value="admin">Admin</option>
-              <option value="partner">Partner</option>
+              {departmentOptions.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
             </select>
           </div>
 
@@ -444,7 +457,7 @@ const EditTargetModal = ({ target, onClose, onUpdated }) => {
 };
 
 // Create Target Modal
-const CreateTargetModal = ({ onClose, onCreated }) => {
+const CreateTargetModal = ({ departmentOptions, onClose, onCreated }) => {
   const [formData, setFormData] = useState({
     name: '',
     target_type: 'placements',
@@ -579,11 +592,9 @@ const CreateTargetModal = ({ onClose, onCreated }) => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Select Department</option>
-              <option value="recruitment">Recruitment</option>
-              <option value="hr">HR</option>
-              <option value="accounts">Accounts</option>
-              <option value="admin">Admin</option>
-              <option value="partner">Partner</option>
+              {departmentOptions.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
             </select>
           </div>
 

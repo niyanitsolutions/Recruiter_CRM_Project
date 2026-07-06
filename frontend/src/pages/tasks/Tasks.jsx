@@ -712,9 +712,12 @@ export default function Tasks() {
   const [myOnly,         setMyOnly]        = useState(false)
   const [openTask,       setOpenTask]      = useState(null)
 
-  const [isDark, setIsDark] = useState(() => document.documentElement.getAttribute('data-theme') !== 'light')
+  // Only the actual "dark" theme gets the hardcoded dark palette below —
+  // "system" has its own CSS-variable-driven palette (see ThemeContext.jsx)
+  // and must fall through to the same branch as "light" to pick it up.
+  const [isDark, setIsDark] = useState(() => document.documentElement.getAttribute('data-theme') === 'dark')
   useEffect(() => {
-    const obs = new MutationObserver(() => setIsDark(document.documentElement.getAttribute('data-theme') !== 'light'))
+    const obs = new MutationObserver(() => setIsDark(document.documentElement.getAttribute('data-theme') === 'dark'))
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
     return () => obs.disconnect()
   }, [])

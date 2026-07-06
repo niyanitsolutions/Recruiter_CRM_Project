@@ -55,6 +55,12 @@ function InfoRow({ label, value, mono = false }) {
   )
 }
 
+function prettifyComponentKey(key) {
+  return key.replace(/^custom_(earn|ded)_\d+$/, '$1')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+}
+
 function Card({ title, icon: Icon, accent = '#6366f1', children }) {
   return (
     <div className="rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
@@ -235,8 +241,31 @@ function PersonalTab({ emp }) {
 
 // ── Employment Tab ────────────────────────────────────────────────────────────
 
-function EmploymentTab({ emp }) {
+function EmploymentTab({ emp, payrollStructure }) {
   const salary = emp.salary
+  const salaryComps = emp.salary_components || {}
+  const structureComponents = payrollStructure?.components || []
+
+  // Resolve each saved component to its configured label/type; fall back to a
+  // prettified key so a value is never silently dropped if the structure
+  // definition doesn't have it (e.g. custom or since-removed component).
+  const compEntries = Object.entries(salaryComps)
+    .filter(([, v]) => Number(v) > 0)
+    .map(([key, value]) => {
+      const def = structureComponents.find(c => c.key === key)
+      return {
+        key,
+        label: def?.label || prettifyComponentKey(key),
+        type: def?.component_type || (key.includes('ded') ? 'deduction' : 'earning'),
+        value: Number(value) || 0,
+      }
+    })
+  const earningRows   = compEntries.filter(c => c.type === 'earning')
+  const deductionRows = compEntries.filter(c => c.type === 'deduction')
+  const grossSalary   = earningRows.reduce((s, c) => s + c.value, 0)
+  const totalDeductions = deductionRows.reduce((s, c) => s + c.value, 0)
+  const netSalary = grossSalary - totalDeductions
+
   return (
     <div className="space-y-5">
       <Card title="Employment Details" icon={Briefcase} accent="#10b981">
@@ -258,13 +287,22 @@ function EmploymentTab({ emp }) {
         )}
       </Card>
 
-      {salary && (salary.ctc > 0 || salary.basic > 0) && (
+      {salary && (salary.ctc > 0 || compEntries.length > 0) && (
         <Card title="Salary Structure" icon={CreditCard} accent="#f59e0b">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6">
-            <InfoRow label="Annual CTC (₹)"   value={salary.ctc   ? salary.ctc.toLocaleString('en-IN')   : null} />
-            <InfoRow label="Basic (Monthly)"  value={salary.basic ? salary.basic.toLocaleString('en-IN') : null} />
-            <InfoRow label="HRA (Monthly)"    value={salary.hra   ? salary.hra.toLocaleString('en-IN')   : null} />
-            <InfoRow label="Special Allowance" value={salary.special_allowance ? salary.special_allowance.toLocaleString('en-IN') : null} />
+            <InfoRow label="Annual CTC (₹)" value={salary.ctc ? salary.ctc.toLocaleString('en-IN') : null} />
+            {earningRows.map(c => (
+              <InfoRow key={c.key} label={`${c.label} (Monthly)`} value={c.value.toLocaleString('en-IN')} />
+            ))}
+            {deductionRows.map(c => (
+              <InfoRow key={c.key} label={`${c.label} (Monthly)`} value={c.value.toLocaleString('en-IN')} />
+            ))}
+            {compEntries.length > 0 && (
+              <>
+                <InfoRow label="Gross Salary (Monthly)" value={grossSalary.toLocaleString('en-IN')} />
+                <InfoRow label="Net Salary (Monthly)"    value={netSalary.toLocaleString('en-IN')} />
+              </>
+            )}
           </div>
         </Card>
       )}
@@ -393,6 +431,7 @@ export default function EmployeeView() {
   const [emp, setEmp]               = useState(null)
   const [linkedUser, setLinkedUser] = useState(null)
   const [tab, setTab]               = useState('Overview')
+  const [payrollStructure, setPayrollStructure] = useState(null)
 
   useEffect(() => {
     if (!id) return
@@ -409,6 +448,9 @@ export default function EmployeeView() {
       })
       .catch(() => setEmp(null))
       .finally(() => setLoading(false))
+    hrmService.getPayrollStructure()
+      .then(r => setPayrollStructure(r.data))
+      .catch(() => {})
   }, [id])
 
   if (loading) {
@@ -570,7 +612,7 @@ export default function EmployeeView() {
       {/* ── Tab content ── */}
       {tab === 'Overview'    && <OverviewTab emp={emp} linkedUser={linkedUser} />}
       {tab === 'Personal'    && <PersonalTab emp={emp} />}
-      {tab === 'Employment'  && <EmploymentTab emp={emp} />}
+      {tab === 'Employment'  && <EmploymentTab emp={emp} payrollStructure={payrollStructure} />}
       {tab === 'Bank'        && <BankTab emp={emp} />}
       {tab === 'Emergency'   && <EmergencyTab emp={emp} />}
       {tab === 'Documents'   && <DocumentsTab emp={emp} />}
