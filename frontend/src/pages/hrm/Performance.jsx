@@ -32,8 +32,9 @@ const LIFECYCLE_STAGES = [
 
 const EMPTY_POINT = { title: '', description: '', rating: '' }
 const EMPTY_FORM  = {
-  employee_id: '', employee_name: '', employee_email: '',
+  employee_id: '', employee_name: '', employee_email: '', employee_mobile: '',
   description: '', review_cycle: 'annual', year: new Date().getFullYear(),
+  notify_email: true,
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -62,6 +63,9 @@ function CreateReviewModal({ isOpen, onClose, onCreated }) {
   const [reviewPoints, setPoints] = useState([])
   const [saving, setSaving]       = useState(false)
   const [pointsOpen, setPointsOpen] = useState(false)
+  const [employees, setEmployees] = useState([])
+  const [employeesLoading, setEmployeesLoading] = useState(false)
+  const [employeesLoaded, setEmployeesLoaded] = useState(false)
 
   const open = () => {
     setForm(EMPTY_FORM)
@@ -71,6 +75,29 @@ function CreateReviewModal({ isOpen, onClose, onCreated }) {
 
   useEffect(() => { if (isOpen) open() }, [isOpen])
 
+  // Fetch the active-employee list once and reuse it across modal opens —
+  // selecting an employee auto-fills from this already-fetched object, no
+  // extra API call per selection.
+  useEffect(() => {
+    if (!isOpen || employeesLoaded) return
+    setEmployeesLoading(true)
+    hrmService.listEmployees({ status: 'active', page_size: 200 })
+      .then(res => setEmployees(res.data?.items || []))
+      .catch(() => toast.error('Failed to load employees'))
+      .finally(() => { setEmployeesLoading(false); setEmployeesLoaded(true) })
+  }, [isOpen, employeesLoaded])
+
+  const handleEmployeeSelect = (employeeDocId) => {
+    const emp = employees.find(e => e.id === employeeDocId)
+    setForm(f => ({
+      ...f,
+      employee_id: emp?.employee_id || '',
+      employee_name: emp?.full_name || '',
+      employee_email: emp?.email || '',
+      employee_mobile: emp?.phone || '',
+    }))
+  }
+
   const addPoint = () => setPoints(p => [...p, { ...EMPTY_POINT }])
   const removePoint = (i) => setPoints(p => p.filter((_, idx) => idx !== i))
   const updatePoint = (i, field, val) =>
@@ -78,6 +105,10 @@ function CreateReviewModal({ isOpen, onClose, onCreated }) {
 
   const handleCreate = async (e) => {
     e.preventDefault()
+    if (!form.employee_id) {
+      toast.error('Please select an employee')
+      return
+    }
     setSaving(true)
     try {
       await hrmService.createReview({
@@ -101,21 +132,28 @@ function CreateReviewModal({ isOpen, onClose, onCreated }) {
           <div className="space-y-3">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Employee</h3>
             <div>
-              <label className="text-sm font-medium text-gray-700">Employee ID <span className="text-red-500">*</span></label>
-              <input className="input w-full mt-1" placeholder="e.g. EMP-001" value={form.employee_id}
-                onChange={e => setForm(f => ({ ...f, employee_id: e.target.value }))} required />
+              <label className="text-sm font-medium text-gray-700">Employee <span className="text-red-500">*</span></label>
+              <select className="input w-full mt-1" value={employees.find(e => e.employee_id === form.employee_id)?.id || ''}
+                onChange={e => handleEmployeeSelect(e.target.value)} required disabled={employeesLoading}>
+                <option value="">{employeesLoading ? 'Loading employees…' : 'Select Employee'}</option>
+                {employees.map(emp => (
+                  <option key={emp.id} value={emp.id}>{emp.employee_id} - {emp.full_name}</option>
+                ))}
+              </select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium text-gray-700">Name</label>
-                <input className="input w-full mt-1" placeholder="Full name" value={form.employee_name}
-                  onChange={e => setForm(f => ({ ...f, employee_name: e.target.value }))} />
+                <input className="input w-full mt-1 bg-gray-50" value={form.employee_name} readOnly placeholder="Auto-filled" />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">Email</label>
-                <input type="email" className="input w-full mt-1" placeholder="email@company.com" value={form.employee_email}
-                  onChange={e => setForm(f => ({ ...f, employee_email: e.target.value }))} />
+                <input type="email" className="input w-full mt-1 bg-gray-50" value={form.employee_email} readOnly placeholder="Auto-filled" />
               </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Mobile</label>
+              <input className="input w-full mt-1 bg-gray-50" value={form.employee_mobile} readOnly placeholder="Auto-filled" />
             </div>
           </div>
 
@@ -179,6 +217,15 @@ function CreateReviewModal({ isOpen, onClose, onCreated }) {
                 </button>
               </div>
             )}
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={form.notify_email}
+                onChange={e => setForm(f => ({ ...f, notify_email: e.target.checked }))}
+                className="w-4 h-4 rounded" />
+              Notify Employee (Send Email)
+            </label>
           </div>
 
           <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">

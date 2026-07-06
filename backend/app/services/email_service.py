@@ -1609,6 +1609,44 @@ async def send_onboarding_confirmation_email(
 #  HRM emails — leave, WFH, attendance, shift, exit, payslip
 # ─────────────────────────────────────────────────────────────────────────────
 
+async def send_performance_review_created_email(
+    to_email: str,
+    employee_name: str,
+    review_cycle: str,
+    year: int,
+    company_name: str,
+    company_id: str = "",
+) -> bool:
+    cycle_label = review_cycle.replace("_", " ").upper()
+    login_url = f"{settings.FRONTEND_URL}/login"
+    subject = f"Performance Review Created — {cycle_label} {year}"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Performance Review Created</h2>
+      <p>Hi <strong>{employee_name}</strong>,</p>
+      <p>A new performance review has been created for you at
+         <strong>{company_name}</strong>.</p>
+      <div style="background:#EEF2FF;border-radius:8px;padding:16px;margin:16px 0">
+        <p style="margin:0 0 6px"><strong>Review Cycle:</strong> {cycle_label}</p>
+        <p style="margin:0"><strong>Year:</strong> {year}</p>
+      </div>
+      <p>Please log in to your dashboard to view details and complete your self-review.</p>
+      <div style="text-align:center;margin:24px 0">
+        <a href="{login_url}"
+           style="background:#4F46E5;color:#fff;padding:12px 24px;border-radius:8px;
+                  text-decoration:none;font-weight:700;display:inline-block;font-size:14px">
+          Go to Dashboard
+        </a>
+      </div>""")
+    text = (
+        f"Performance Review Created — {cycle_label} {year}\n"
+        f"Hi {employee_name}, a new performance review has been created for you at {company_name}.\n"
+        f"Log in to your dashboard: {login_url}"
+    )
+    return await send_email(
+        to_email, subject, html, text, "performance_review_created", company_id=company_id
+    )
+
+
 async def send_leave_decision_email(
     to_email: str,
     employee_name: str,
@@ -2345,6 +2383,7 @@ class EmailService:
     send_job_opened_email = staticmethod(send_job_opened_email)
 
     # --- HRM emails ---
+    send_performance_review_created_email = staticmethod(send_performance_review_created_email)
     send_leave_decision_email = staticmethod(send_leave_decision_email)
     send_wfh_decision_email = staticmethod(send_wfh_decision_email)
     send_attendance_regularization_decision_email = staticmethod(send_attendance_regularization_decision_email)

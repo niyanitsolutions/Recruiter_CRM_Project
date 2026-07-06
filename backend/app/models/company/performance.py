@@ -49,6 +49,7 @@ class PerformanceReview(BaseModel):
     employee_id: str
     employee_name: Optional[str] = None
     employee_email: Optional[str] = None
+    employee_mobile: Optional[str] = None
     description: Optional[str] = None
 
     review_cycle: ReviewCycle
@@ -91,11 +92,14 @@ class CreateReview(BaseModel):
     employee_id: str
     employee_name: Optional[str] = None
     employee_email: Optional[str] = None
+    employee_mobile: Optional[str] = None
     description: Optional[str] = None
     review_cycle: ReviewCycle
     year: int
     goals: Optional[List[Goal]] = None
     review_points: Optional[List[ReviewPoint]] = None
+    # Send the review-created email to the employee (opt-in, defaults on)
+    notify_email: bool = True
 
 
 class SubmitSelfReview(BaseModel):

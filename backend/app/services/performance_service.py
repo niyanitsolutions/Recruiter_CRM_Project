@@ -19,7 +19,7 @@ class PerformanceService:
         doc["id"] = str(doc.pop("_id", ""))
         return doc
 
-    async def create(self, company_id: str, data: dict, created_by_id: str) -> dict:
+    async def create(self, company_id: str, data: dict, created_by_id: str, company_name: str = "") -> dict:
         now = datetime.now(timezone.utc)
         emp = await self.db[self.EMP_COL].find_one({"_id": data["employee_id"], "company_id": company_id})
         doc = {
@@ -28,6 +28,7 @@ class PerformanceService:
             "employee_id": data["employee_id"],
             "employee_name": data.get("employee_name") or (emp.get("full_name", "") if emp else ""),
             "employee_email": data.get("employee_email") or (emp.get("email", "") if emp else ""),
+            "employee_mobile": data.get("employee_mobile") or (emp.get("phone", "") if emp else ""),
             "description": data.get("description"),
             "review_cycle": data["review_cycle"],
             "year": data["year"],
@@ -38,6 +39,24 @@ class PerformanceService:
             "updated_at": now,
         }
         await self.col.insert_one(doc)
+
+        # Review saved successfully — notify the employee by email (opt-in,
+        # never blocks the response, never sent if the insert above failed).
+        if data.get("notify_email", True) and doc["employee_email"]:
+            try:
+                from app.services.email_service import send_performance_review_created_email, _fire_email
+                _fire_email(send_performance_review_created_email(
+                    to_email=doc["employee_email"],
+                    employee_name=doc["employee_name"] or "",
+                    review_cycle=doc["review_cycle"],
+                    year=doc["year"],
+                    company_name=company_name,
+                    company_id=company_id,
+                ))
+            except Exception as _e:
+                import logging as _log
+                _log.getLogger(__name__).warning("Performance review email failed: %s", _e)
+
         return self._serialize(doc)
 
     async def list(self, company_id: str, employee_id: Optional[str], year: Optional[int], page: int, page_size: int) -> dict:

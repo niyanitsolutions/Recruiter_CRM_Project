@@ -16,7 +16,9 @@ async def create_review(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:performance:manage"])),
 ):
-    return await PerformanceService(db).create(cu["company_id"], data.model_dump(), cu["id"])
+    return await PerformanceService(db).create(
+        cu["company_id"], data.model_dump(), cu["id"], company_name=cu.get("company_name") or ""
+    )
 
 
 @router.get("")
