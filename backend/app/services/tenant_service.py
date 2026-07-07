@@ -1277,6 +1277,20 @@ class TenantService:
         await master_db.tenants.delete_one({"_id": tenant_id})
         await master_db.payments.delete_many({"tenant_id": tenant_id})
 
+        # 2b. Release this company's identities from the global registry.
+        # Without this, master_db.global_users (unique index on email/mobile)
+        # keeps holding the owner's/every user's email forever, so recreating
+        # a company with the same admin email fails "Email already
+        # registered" even though the tenant no longer exists. Only removes
+        # a global_users record once it has no remaining membership in any
+        # OTHER company (see cleanup_company_global_users docstring).
+        from app.models.master.global_user import cleanup_company_global_users
+        released = await cleanup_company_global_users(master_db, company_id)
+        logger.info(
+            "permanent_delete_tenant: released %d global_users record(s) for company_id=%s",
+            released, company_id,
+        )
+
         # 3. Audit log (written before delete so company info is available)
         await master_db.tenant_audit_logs.insert_one({
             "_id": str(uuid.uuid4()),
@@ -1288,6 +1302,7 @@ class TenantService:
             "details": {
                 "database_dropped": db_deleted,
                 "tenant_id": tenant_id,
+                "global_users_released": released,
             },
         })
 

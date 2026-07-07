@@ -155,7 +155,8 @@ class AuthService:
         ip_address = ""
         device_info = ""
         if request:
-            ip_address = request.client.host if request.client else ""
+            from app.core.dependencies import get_client_ip
+            ip_address = get_client_ip(request)
             device_info = request.headers.get("user-agent", "")
 
         # First, try to find as SuperAdmin

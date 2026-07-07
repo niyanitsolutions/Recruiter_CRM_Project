@@ -305,12 +305,45 @@ def require_owner() -> Callable:
     return check_owner
 
 
-async def get_client_ip(request: Request) -> str:
-    """Extract client IP from request"""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+def get_client_ip(request: Request) -> str:
+    """Resolve the real client public IP, preferring trusted proxy headers
+    over the raw TCP peer address (which is the reverse proxy / load
+    balancer / CDN edge, not the client, in any proxied deployment).
+
+    Priority:
+      1. CF-Connecting-IP — set exclusively by Cloudflare's edge; Cloudflare
+         strips/overwrites any client-supplied copy, so it can't be spoofed.
+      2. X-Real-IP        — set by nginx (see nginx/nginx.conf) from
+         $remote_addr, i.e. the actual TCP peer nginx sees. Not appended-to
+         like X-Forwarded-For, so a client can't prefix it with a fake value.
+      3. X-Forwarded-For   — take the LAST entry, which is the one appended
+         by our own trusted proxy/load balancer, not any client-supplied
+         prefix earlier in the chain.
+      4. Direct TCP peer (request.client.host) — no proxy in front, e.g.
+         local development.
+
+    Never raises — falls back to "unknown" if nothing can be resolved, so a
+    missing/malformed header never blocks the caller (login, audit log, etc.).
+    """
+    try:
+        cf_ip = request.headers.get("CF-Connecting-IP")
+        if cf_ip and cf_ip.strip():
+            return cf_ip.strip()
+
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip and real_ip.strip():
+            return real_ip.strip()
+
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+            if parts:
+                return parts[-1]
+
+        return request.client.host if request.client else "unknown"
+    except Exception as exc:
+        logger.warning("get_client_ip: failed to resolve client IP: %s", exc)
+        return "unknown"
 
 
 async def require_hrm_module(

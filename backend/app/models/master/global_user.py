@@ -228,6 +228,40 @@ async def ensure_user_company_map(
     )
 
 
+async def cleanup_company_global_users(master_db, company_id: str) -> int:
+    """
+    Remove this company's user_company_map rows, then delete any global_users
+    record left with no remaining company membership anywhere.
+
+    Called from tenant permanent-delete. A person can belong to multiple
+    companies (one user_company_map row per membership), so a global_users
+    record — and the email/mobile uniqueness it holds — is only removed once
+    its LAST membership row is gone. This is what makes an email/mobile
+    reusable again after its only company is permanently deleted, without
+    affecting anyone who still belongs to another active company.
+
+    Returns the number of global_users records removed (for logging only).
+    """
+    cursor = master_db.user_company_map.find(
+        {"company_id": company_id}, {"global_user_id": 1}
+    )
+    global_user_ids = {doc["global_user_id"] async for doc in cursor}
+    if not global_user_ids:
+        return 0
+
+    await master_db.user_company_map.delete_many({"company_id": company_id})
+
+    removed = 0
+    for gu_id in global_user_ids:
+        remaining = await master_db.user_company_map.count_documents(
+            {"global_user_id": gu_id}
+        )
+        if remaining == 0:
+            await master_db.global_users.delete_one({"_id": gu_id})
+            removed += 1
+    return removed
+
+
 async def sync_global_password(
     master_db,
     *,
