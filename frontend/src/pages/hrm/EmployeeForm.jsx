@@ -653,6 +653,8 @@ export default function EmployeeForm() {
   const [croppedBlob,    setCroppedBlob]    = useState(null)     // blob after crop (create mode, pending upload)
   const [croppedPreview, setCroppedPreview] = useState(null)     // preview URL for cropped blob
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [removingPhoto,  setRemovingPhoto]  = useState(false)
+  const photoOpInFlight = uploadingPhoto || removingPhoto
   const photoInputRef = useRef(null)
 
   // ── Employee form state ──────────────────────────────────────────
@@ -988,6 +990,7 @@ export default function EmployeeForm() {
   }
 
   const handleCropSave = async (blob) => {
+    if (photoOpInFlight) return
     setCropFile(null)
     if (isEdit) {
       // Upload immediately in edit mode
@@ -1003,8 +1006,9 @@ export default function EmployeeForm() {
         toast.success('Profile photo updated')
       } catch {
         toast.error('Failed to upload photo')
+      } finally {
+        setUploadingPhoto(false)
       }
-      setUploadingPhoto(false)
     } else {
       // Create mode: stage for upload after employee creation
       const preview = URL.createObjectURL(blob)
@@ -1015,15 +1019,26 @@ export default function EmployeeForm() {
   }
 
   const handleRemovePhoto = async () => {
-    if (croppedPreview) URL.revokeObjectURL(croppedPreview)
-    setCroppedBlob(null)
-    setCroppedPreview(null)
-    setPhotoUrl(null)
+    if (photoOpInFlight) return
     if (isEdit && id) {
+      setRemovingPhoto(true)
       try {
         await hrmService.deleteEmployeePhoto(id)
+        if (croppedPreview) URL.revokeObjectURL(croppedPreview)
+        setCroppedBlob(null)
+        setCroppedPreview(null)
+        setPhotoUrl(null)
         window.dispatchEvent(new CustomEvent('employee-photo-updated', { detail: { employeeId: id, photoUrl: null } }))
-      } catch { /* non-fatal */ }
+      } catch {
+        toast.error('Failed to remove photo')
+      } finally {
+        setRemovingPhoto(false)
+      }
+    } else {
+      if (croppedPreview) URL.revokeObjectURL(croppedPreview)
+      setCroppedBlob(null)
+      setCroppedPreview(null)
+      setPhotoUrl(null)
     }
   }
 
@@ -1446,7 +1461,7 @@ export default function EmployeeForm() {
                   style={{ borderRadius: 16 }}
                 />
               )}
-              {uploadingPhoto && (
+              {photoOpInFlight && (
                 <div className="absolute inset-0 flex items-center justify-center rounded-2xl" style={{ background: 'rgba(0,0,0,0.5)' }}>
                   <Loader2 className="w-5 h-5 text-white animate-spin" />
                 </div>
@@ -1464,7 +1479,7 @@ export default function EmployeeForm() {
               />
               <button
                 type="button"
-                disabled={uploadingPhoto}
+                disabled={photoOpInFlight}
                 onClick={() => photoInputRef.current?.click()}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 hover:bg-gray-50 disabled:opacity-60"
               >
@@ -1474,8 +1489,9 @@ export default function EmployeeForm() {
               {(croppedPreview || (isEdit && photoUrl && !photoLoadError)) && (
                 <button
                   type="button"
+                  disabled={photoOpInFlight}
                   onClick={handleRemovePhoto}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 disabled:opacity-60"
                 >
                   <X className="w-4 h-4" /> Remove
                 </button>

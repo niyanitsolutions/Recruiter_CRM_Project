@@ -96,12 +96,22 @@ export const loginWithTenant = createAsyncThunk(
   'auth/loginWithTenant',
   async (credentials, { rejectWithValue }) => {
     try {
-      const { identifier, password, company_id, remember_me } = credentials
+      const { identifier, password, company_id, remember_me, ...locationMeta } = credentials
       const response = await authService.loginWithTenant(identifier, password, company_id, {
         device_fingerprint: getDeviceFingerprint(),
+        ...locationMeta,
       })
       return { ...response.data, remember_me: remember_me !== false }
     } catch (error) {
+      if (error.response?.status === 403) {
+        const detail = error.response.data?.detail || {}
+        if (detail.location_required) {
+          return rejectWithValue({
+            type:    'LOCATION_REQUIRED',
+            message: detail.message || 'Location access is required by your organization to sign in.',
+          })
+        }
+      }
       if (error.response?.status === 402) {
         const detail = error.response.data?.detail || {}
         return rejectWithValue({
@@ -172,6 +182,12 @@ export const login = createAsyncThunk(
             email_not_verified: true,
             email:   detail.email   || '',
             message: detail.message || 'Please verify your email before logging in.',
+          })
+        }
+        if (detail.location_required) {
+          return rejectWithValue({
+            type:    'LOCATION_REQUIRED',
+            message: detail.message || 'Location access is required by your organization to sign in.',
           })
         }
       }

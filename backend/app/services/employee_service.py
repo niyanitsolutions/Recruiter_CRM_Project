@@ -382,24 +382,106 @@ class EmployeeService:
         return await self.get(employee_id, company_id)
 
     async def delete(self, employee_id: str, company_id: str) -> bool:
-        emp = await self.col.find_one(
-            {"_id": employee_id, "company_id": company_id}, {"crm_user_id": 1}
-        )
-        result = await self.col.update_one(
-            {"_id": employee_id, "company_id": company_id},
-            {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}},
-        )
-        # Unlink the CRM user so it no longer points at a deleted employee record
-        if result.modified_count and emp and emp.get("crm_user_id"):
+        """Permanently delete an employee and all employee-scoped HRM data.
+
+        Business records the employee created/touched elsewhere (candidates,
+        clients, jobs, interviews, applications, tasks, reports, audit logs)
+        are intentionally left untouched — only data scoped to this employee
+        record itself is removed. The linked CRM user account (if any) is kept
+        and merely unlinked, matching prior behavior, since it may still be
+        referenced as created_by/assigned_to elsewhere.
+        """
+        emp = await self.col.find_one({"_id": employee_id, "company_id": company_id})
+        if not emp:
+            return False
+
+        now = datetime.now(timezone.utc)
+        from app.utils.s3 import delete_file
+
+        # ── 1. Remove stored files (photo + documents) ─────────────────────
+        photo_url = emp.get("photo_url")
+        if photo_url:
             try:
-                await self.db.users.update_one(
-                    {"_id": emp["crm_user_id"]},
-                    {"$unset": {"hrm_employee_id": ""},
-                     "$set": {"updated_at": datetime.now(timezone.utc)}},
+                await delete_file(photo_url)
+            except Exception:
+                pass
+        for doc in (emp.get("documents") or []):
+            file_url = doc.get("file_url") if isinstance(doc, dict) else None
+            if file_url:
+                try:
+                    await delete_file(file_url)
+                except Exception:
+                    pass
+
+        # ── 2. Unassign (not delete) any assets currently held by this employee ──
+        try:
+            cursor = self.db.hrm_assets.find({
+                "company_id": company_id, "assigned_to_id": employee_id,
+                "status": "assigned", "is_deleted": False,
+            })
+            async for asset in cursor:
+                history = asset.get("assignment_history", [])
+                for h in reversed(history):
+                    if h.get("returned_on") is None:
+                        h["returned_on"] = now
+                        h["notes"] = (h.get("notes") or "") + " | Auto-returned: employee deleted"
+                        break
+                await self.db.hrm_assets.update_one(
+                    {"_id": asset["_id"]},
+                    {"$set": {
+                        "status": "available", "assigned_to_id": None,
+                        "assigned_to_name": None, "assigned_on": None,
+                        "assignment_history": history, "updated_at": now,
+                    }},
+                )
+        except Exception:
+            pass
+
+        # ── 3. Cascade-delete employee-scoped collections ──────────────────
+        cascade_collections = [
+            "hrm_attendance", "hrm_leaves", "hrm_leave_balances", "hrm_comp_off_credits",
+            "hrm_payslips", "hrm_performance", "hrm_shift_assignments",
+            "hrm_shift_change_requests", "hrm_work_mode_requests",
+            "hrm_attendance_exceptions", "hrm_exit", "hrm_onboardings",
+        ]
+        for col_name in cascade_collections:
+            try:
+                await self.db[col_name].delete_many(
+                    {"employee_id": employee_id, "company_id": company_id}
                 )
             except Exception:
                 pass
-        return result.modified_count > 0
+
+        # ── 4. Invalidate/remove onboarding link tokens for this employee ──
+        for col_name in ("employee_onboarding_tokens", "hrm_doc_upload_tokens"):
+            try:
+                await self.db[col_name].delete_many({"employee_id": employee_id})
+            except Exception:
+                pass
+
+        # ── 5. Soft-delete generated documents (Document Center) — matches
+        # that module's existing single-document delete semantics. ─────────
+        try:
+            await self.db.doc_generated.update_many(
+                {"employee_id": employee_id},
+                {"$set": {"is_deleted": True, "updated_at": now}},
+            )
+        except Exception:
+            pass
+
+        # ── 6. Unlink the CRM user (kept, not deleted) ─────────────────────
+        if emp.get("crm_user_id"):
+            try:
+                await self.db.users.update_one(
+                    {"_id": emp["crm_user_id"]},
+                    {"$unset": {"hrm_employee_id": ""}, "$set": {"updated_at": now}},
+                )
+            except Exception:
+                pass
+
+        # ── 7. Hard-delete the employee record itself ──────────────────────
+        result = await self.col.delete_one({"_id": employee_id, "company_id": company_id})
+        return result.deleted_count > 0
 
     async def get_by_email(self, email: str, company_id: str) -> Optional[dict]:
         doc = await self.col.find_one({"email": email, "company_id": company_id, "is_deleted": False})

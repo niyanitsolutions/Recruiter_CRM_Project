@@ -41,6 +41,11 @@ class LoginRequest(BaseModel):
     # When omitted the geo fence position check is skipped (backward compatible).
     latitude:  Optional[float] = Field(None, description="Client latitude for geo fence check")
     longitude: Optional[float] = Field(None, description="Client longitude for geo fence check")
+    accuracy:  Optional[float] = Field(None, description="Browser-reported geolocation accuracy, in meters")
+    timezone:  Optional[str]   = Field(None, description="Client IANA timezone, e.g. Asia/Kolkata")
+    browser:   Optional[str]   = Field(None, description="Client browser name, parsed client-side")
+    os:        Optional[str]   = Field(None, description="Client OS name, parsed client-side")
+    device_type: Optional[str] = Field(None, description="'mobile' or 'desktop', parsed client-side")
 
 
 class SuperAdminLoginRequest(BaseModel):
@@ -179,6 +184,11 @@ class TenantLoginRequest(BaseModel):
     device_fingerprint: Optional[str] = None
     latitude:  Optional[float] = None
     longitude: Optional[float] = None
+    accuracy:  Optional[float] = None
+    timezone:  Optional[str]   = None
+    browser:   Optional[str]   = None
+    os:        Optional[str]   = None
+    device_type: Optional[str] = None
 
 
 class TenantSelectionResponse(BaseModel):

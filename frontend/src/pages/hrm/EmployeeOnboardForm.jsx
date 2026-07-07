@@ -99,8 +99,9 @@ export default function EmployeeOnboardForm() {
   const { token } = useParams()
 
   // page state
-  const [pageStatus,  setPageStatus]  = useState('loading') // loading | valid | invalid | submitted
+  const [pageStatus,  setPageStatus]  = useState('loading') // loading | valid | invalid | already_completed | submitted
   const [pageError,   setPageError]   = useState('')
+  const [completedName, setCompletedName] = useState('')
   const [saving,      setSaving]      = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [serverError, setServerError] = useState('')
@@ -159,7 +160,44 @@ export default function EmployeeOnboardForm() {
   // ── Validate token on mount ────────────────────────────────────────────────
   useEffect(() => {
     api.get(`/public/employee-onboarding/${token}`)
-      .then(() => setPageStatus('valid'))
+      .then(res => {
+        const data = res.data || {}
+        if (data.already_completed) {
+          setCompletedName(data.employee_name || '')
+          setPageStatus('already_completed')
+          return
+        }
+        const p = data.prefill
+        if (p) {
+          setForm(f => ({
+            ...f,
+            full_name:         p.full_name || f.full_name,
+            email:             p.email || f.email,
+            mobile:            p.mobile || f.mobile,
+            gender:            p.gender || f.gender,
+            date_of_birth:     p.date_of_birth ? String(p.date_of_birth).slice(0, 10) : f.date_of_birth,
+            blood_group:       p.blood_group || f.blood_group,
+            current_address:   p.current_address || f.current_address,
+            permanent_address: p.permanent_address || f.permanent_address,
+            pan_number:        p.pan_number || f.pan_number,
+            aadhaar_number:    p.aadhaar_number || f.aadhaar_number,
+            ec_name:           p.emergency_contact?.name || f.ec_name,
+            ec_relationship:   p.emergency_contact?.relationship || f.ec_relationship,
+            ec_mobile:         p.emergency_contact?.phone || f.ec_mobile,
+            bank_name:             p.bank_details?.bank_name || f.bank_name,
+            account_holder_name:  p.bank_details?.account_holder_name || f.account_holder_name,
+            account_number:        p.bank_details?.account_number || f.account_number,
+            ifsc_code:             p.bank_details?.ifsc_code || f.ifsc_code,
+          }))
+          if (Array.isArray(p.qualifications) && p.qualifications.length > 0) {
+            setQualifications(p.qualifications.map(q => ({
+              degree: q.title || '', institution: q.institution || '',
+              year: q.year || '', grade: q.grade || '',
+            })))
+          }
+        }
+        setPageStatus('valid')
+      })
       .catch(err => {
         setPageStatus('invalid')
         setPageError(err.response?.data?.detail || 'This link is invalid or has expired.')
@@ -444,6 +482,18 @@ export default function EmployeeOnboardForm() {
         <XCircle className="w-14 h-14 text-red-400 mx-auto mb-4" />
         <h2 className="text-xl font-bold text-gray-900 mb-2">Link Invalid or Expired</h2>
         <p className="text-gray-500 text-sm">{pageError}</p>
+      </div>
+    </div>
+  )
+
+  if (pageStatus === 'already_completed') return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-center p-8 max-w-sm">
+        <CheckCircle className="w-14 h-14 text-green-500 mx-auto mb-4" />
+        <h2 className="text-xl font-bold text-gray-900 mb-2">
+          {completedName ? `${completedName}, you're all set!` : "You're all set!"}
+        </h2>
+        <p className="text-gray-500 text-sm">You have already completed your onboarding.</p>
       </div>
     </div>
   )

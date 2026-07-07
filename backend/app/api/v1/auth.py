@@ -128,9 +128,17 @@ async def login(data: LoginRequest, request: Request):
         data.identifier, data.password, request=request, company_code=data.company_code,
         force_login=data.force_login, device_fingerprint=data.device_fingerprint or "",
         latitude=data.latitude, longitude=data.longitude,
+        accuracy=data.accuracy, timezone_str=data.timezone,
+        browser=data.browser, os_name=data.os, device_type=data.device_type,
     )
 
     if error:
+        if error.startswith("LOCATION_REQUIRED"):
+            message = error.split("|", 1)[1] if "|" in error else "Location access is required by your organization to sign in."
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"location_required": True, "message": message},
+            )
         if "ACTIVE_SESSION" in error:
             import json as _json
             _raw = error.split("|", 1)[1] if "|" in error else "{}"
@@ -232,9 +240,17 @@ async def login_with_tenant(data: TenantLoginRequest, request: Request):
         device_fingerprint=data.device_fingerprint or "",
         latitude=data.latitude,
         longitude=data.longitude,
+        accuracy=data.accuracy, timezone_str=data.timezone,
+        browser=data.browser, os_name=data.os, device_type=data.device_type,
     )
 
     if error:
+        if error.startswith("LOCATION_REQUIRED"):
+            message = error.split("|", 1)[1] if "|" in error else "Location access is required by your organization to sign in."
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"location_required": True, "message": message},
+            )
         if "ACTIVE_SESSION" in error:
             import json as _json
             _raw = error.split("|", 1)[1] if "|" in error else "{}"

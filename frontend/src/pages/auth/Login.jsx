@@ -24,8 +24,7 @@ import {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function parseUserAgent(ua = '') {
-  if (!ua) return 'Unknown device'
+function detectBrowserOs(ua = '') {
   let browser = 'Unknown browser', os = 'Unknown OS'
   if (/Edg\//.test(ua))          browser = 'Microsoft Edge'
   else if (/OPR\//.test(ua))     browser = 'Opera'
@@ -41,13 +40,104 @@ function parseUserAgent(ua = '') {
   else if (/iPad/.test(ua))          os = 'iOS (iPad)'
   else if (/Android/.test(ua))       os = 'Android'
   else if (/Linux/.test(ua))         os = 'Linux'
+  return { browser, os }
+}
+
+function parseUserAgent(ua = '') {
+  if (!ua) return 'Unknown device'
+  const { browser, os } = detectBrowserOs(ua)
   return `${browser} on ${os}`
 }
 
+function isMobileUa(ua = '') {
+  return /iPhone|Android|Mobile/.test(ua)
+}
+
 function DeviceIcon({ ua = '' }) {
-  const isMobile = /iPhone|Android|Mobile/.test(ua)
-  const Icon = isMobile ? Smartphone : Monitor
+  const Icon = isMobileUa(ua) ? Smartphone : Monitor
   return <Icon size={16} />
+}
+
+// ── Device/location metadata for the login payload ───────────────────────────
+// Browser/OS/timezone/device-type never require permission — always attached.
+// Geolocation is only attached silently when permission is already granted;
+// otherwise it is requested on-demand by the LocationRequiredModal below.
+function getStaticDeviceMeta() {
+  const ua = navigator.userAgent || ''
+  const { browser, os } = detectBrowserOs(ua)
+  let tz
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone } catch { tz = undefined }
+  return { browser, os, device_type: isMobileUa(ua) ? 'mobile' : 'desktop', timezone: tz }
+}
+
+function requestGeolocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error('Geolocation not supported')); return }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({
+        latitude:  pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracy:  pos.coords.accuracy,
+      }),
+      err => reject(err),
+      { timeout: 10000 },
+    )
+  })
+}
+
+async function getGeolocationIfAlreadyGranted() {
+  if (!navigator.geolocation || !navigator.permissions?.query) return null
+  try {
+    const status = await navigator.permissions.query({ name: 'geolocation' })
+    if (status.state !== 'granted') return null
+    return await requestGeolocation().catch(() => null)
+  } catch {
+    return null
+  }
+}
+
+// ── Location-required retry modal ─────────────────────────────────────────────
+function LocationRequiredModal({ message, onAllow, onCancel, busy, denied }) {
+  return (
+    <div role="dialog" aria-modal="true" style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+      background: 'rgba(0,0,0,0.70)', backdropFilter: 'blur(8px)',
+    }}>
+      <div style={{
+        width: '100%', maxWidth: '420px',
+        background: 'linear-gradient(145deg,#0f172a,#1e293b)',
+        border: '1px solid rgba(245,158,11,0.28)',
+        borderRadius: '20px', padding: '28px 24px', textAlign: 'center',
+      }}>
+        <div style={{
+          width: 54, height: 54, borderRadius: '50%', margin: '0 auto 12px',
+          background: 'rgba(245,158,11,0.11)', border: '1px solid rgba(245,158,11,0.28)',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Globe size={22} color="#f59e0b" />
+        </div>
+        <h3 style={{ color: '#f1f5f9', fontSize: '16px', fontWeight: 700, margin: 0 }}>
+          Location Required
+        </h3>
+        <p style={{ color: '#94a3b8', fontSize: '13px', marginTop: 8, lineHeight: 1.5 }}>
+          {message}
+        </p>
+        {denied && (
+          <p style={{ color: '#fca5a5', fontSize: '12px', marginTop: 8 }}>
+            Location access was blocked. Enable it for this site in your browser settings, then retry.
+          </p>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
+          <ModalBtn onClick={onAllow} disabled={busy}>
+            {busy ? <><Spinner /> Requesting…</> : <><Globe size={14} /> Allow Location</>}
+          </ModalBtn>
+          <ModalBtn variant="ghost" onClick={onAllow} disabled={busy}>Retry</ModalBtn>
+          <ModalBtn variant="ghost" onClick={onCancel} disabled={busy}>Cancel</ModalBtn>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function timeSince(isoStr) {
@@ -401,6 +491,7 @@ const Login = () => {
   const [inlineError,       setInlineError]       = useState('')
   const [showPassword,      setShowPassword]      = useState(false)
   const [activeSessionData, setActiveSessionData] = useState(null)
+  const [locationPrompt,    setLocationPrompt]    = useState(null) // { message, busy, denied, retry(loc) }
 
   const savedEmail    = getSavedEmail()
   const savedPassword = getSavedPassword()
@@ -416,43 +507,65 @@ const Login = () => {
   }, [])
 
   // ── Tenant selection ──────────────────────────────────────────────────────
-  const handleTenantSelect = async (company_id) => {
-    if (!tenantSelection) return
-    setTenantSelectError('')
-    const result = await dispatch(loginWithTenant({
-      identifier:  tenantSelection.identifier,
-      password:    tenantSelection.password,
-      company_id,
-      remember_me: tenantSelection.remember_me,
-    }))
+  const performTenantLogin = async (credentials) => {
+    const result = await dispatch(loginWithTenant(credentials))
     if (loginWithTenant.fulfilled.match(result)) {
-      if (tenantSelection.remember_me) { setSavedEmail(tenantSelection.identifier); setSavedPassword(tenantSelection.password) }
-      else                              { removeSavedEmail(); removeSavedPassword() }
+      if (credentials.remember_me) { setSavedEmail(credentials.identifier); setSavedPassword(credentials.password) }
+      else                          { removeSavedEmail(); removeSavedPassword() }
       toast.success('Login successful!')
+      setLocationPrompt(null)
     } else if (loginWithTenant.rejected.match(result)) {
       const payload = result.payload
+      if (payload?.type === 'LOCATION_REQUIRED') {
+        setLocationPrompt({
+          message: payload.message,
+          busy: false,
+          denied: false,
+          retry: (loc) => performTenantLogin({ ...credentials, ...loc }),
+        })
+        return
+      }
       if (!(payload && typeof payload === 'object' && payload.type === 'SUBSCRIPTION_EXPIRED')) {
         setTenantSelectError(typeof payload === 'string' ? payload : 'Login failed. Please try again.')
       }
     }
   }
 
-  // ── Main login ────────────────────────────────────────────────────────────
-  const onSubmit = async (data) => {
-    setLoginFailed(null); setEmailNotVerified(null)
-    setResendSent(false); setInlineError('')
+  const handleTenantSelect = async (company_id) => {
+    if (!tenantSelection) return
+    setTenantSelectError('')
+    const geo = await getGeolocationIfAlreadyGranted()
+    await performTenantLogin({
+      identifier:  tenantSelection.identifier,
+      password:    tenantSelection.password,
+      company_id,
+      remember_me: tenantSelection.remember_me,
+      ...getStaticDeviceMeta(),
+      ...(geo || {}),
+    })
+  }
 
-    const result = await dispatch(login({ ...data, remember_me: rememberMe }))
+  // ── Main login ────────────────────────────────────────────────────────────
+  const performLogin = async (credentials) => {
+    const result = await dispatch(login(credentials))
 
     if (login.fulfilled.match(result)) {
       if (result.payload.tenant_selection_required) return
-      if (rememberMe) { setSavedEmail(data.identifier); setSavedPassword(data.password) }
-      else             { removeSavedEmail(); removeSavedPassword() }
+      if (credentials.remember_me) { setSavedEmail(credentials.identifier); setSavedPassword(credentials.password) }
+      else                          { removeSavedEmail(); removeSavedPassword() }
       toast.success('Login successful!')
+      setLocationPrompt(null)
     } else if (login.rejected.match(result)) {
       const payload = result.payload
-      if (payload?.type === 'ACTIVE_SESSION') {
-        setActiveSessionData({ identifier: data.identifier, password: data.password, sessionInfo: payload.session_info || {}, companyId: payload.company_id || null })
+      if (payload?.type === 'LOCATION_REQUIRED') {
+        setLocationPrompt({
+          message: payload.message,
+          busy: false,
+          denied: false,
+          retry: (loc) => performLogin({ ...credentials, ...loc }),
+        })
+      } else if (payload?.type === 'ACTIVE_SESSION') {
+        setActiveSessionData({ identifier: credentials.identifier, password: credentials.password, sessionInfo: payload.session_info || {}, companyId: payload.company_id || null })
         dispatch(clearError())
       } else if (payload?.email_not_verified) {
         setEmailNotVerified({ email: payload.email, message: payload.message })
@@ -462,6 +575,25 @@ const Login = () => {
         setLoginFailed(typeof payload === 'string' ? payload : 'Login failed. Please try again.')
         dispatch(clearError())
       }
+    }
+  }
+
+  const onSubmit = async (data) => {
+    setLoginFailed(null); setEmailNotVerified(null)
+    setResendSent(false); setInlineError(''); setLocationPrompt(null)
+
+    const geo = await getGeolocationIfAlreadyGranted()
+    await performLogin({ ...data, remember_me: rememberMe, ...getStaticDeviceMeta(), ...(geo || {}) })
+  }
+
+  const handleAllowLocation = async () => {
+    if (!locationPrompt) return
+    setLocationPrompt(p => (p ? { ...p, busy: true, denied: false } : p))
+    try {
+      const loc = await requestGeolocation()
+      await locationPrompt.retry(loc)
+    } catch {
+      setLocationPrompt(p => (p ? { ...p, busy: false, denied: true } : p))
     }
   }
 
@@ -516,6 +648,18 @@ const Login = () => {
             ← Back to Login
           </button>
         </div>
+
+        {locationPrompt && (
+          <ModalPortal isOpen>
+            <LocationRequiredModal
+              message={locationPrompt.message}
+              busy={locationPrompt.busy}
+              denied={locationPrompt.denied}
+              onAllow={handleAllowLocation}
+              onCancel={() => setLocationPrompt(null)}
+            />
+          </ModalPortal>
+        )}
       </div>
     )
   }
@@ -825,6 +969,19 @@ const Login = () => {
             data={activeSessionData}
             rememberMe={rememberMe}
             onClose={() => setActiveSessionData(null)}
+          />
+        </ModalPortal>
+      )}
+
+      {/* Location-required retry modal (only shown for tenants with geo-fence enabled) */}
+      {locationPrompt && (
+        <ModalPortal isOpen>
+          <LocationRequiredModal
+            message={locationPrompt.message}
+            busy={locationPrompt.busy}
+            denied={locationPrompt.denied}
+            onAllow={handleAllowLocation}
+            onCancel={() => setLocationPrompt(null)}
           />
         </ModalPortal>
       )}

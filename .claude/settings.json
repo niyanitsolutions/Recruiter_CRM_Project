@@ -48,7 +48,10 @@
       "Bash(grep -rln \"Kanban\\\\|kanban\" src/pages/tasks/)",
       "Bash(wc -l src/pages/tasks/*.jsx)",
       "Bash(cat frontend/.env.production)",
-      "Bash(cat frontend/.env.example)"
+      "Bash(cat frontend/.env.example)",
+      "Bash(cd /d/crm-project)",
+      "Bash(find . -iname \"*subscription*\" -not -path \"*/node_modules/*\" -not -path \"*/.git/*\")",
+      "Bash(git log *)"
     ]
   }
 }

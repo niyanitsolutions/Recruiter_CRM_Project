@@ -28,6 +28,7 @@ public_router = APIRouter(prefix="/public", tags=["HRM - Employee Onboarding (Pu
 class OnboardingLinkRequest(BaseModel):
     email: Optional[str] = None
     frontend_base_url: Optional[str] = None
+    employee_id: Optional[str] = None
 
 
 # ── Helper: resolve token across all company DBs ──────────────────────────────
@@ -70,21 +71,40 @@ async def generate_employee_onboarding_link(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:employees:manage"])),
 ):
-    """Generate a unique one-time employee self-onboarding URL (expires in 7 days)."""
+    """Generate a unique one-time employee self-onboarding URL (expires in 7 days).
+
+    If `employee_id` is provided, the link is scoped to that single existing
+    employee — opening it lets them (re)complete their own profile rather than
+    creating a brand-new employee record.
+    """
     from app.core.config import settings as _settings
+
+    employee_email = body.email
+    if body.employee_id:
+        emp = await db.hrm_employees.find_one(
+            {"_id": body.employee_id, "company_id": cu["company_id"], "is_deleted": False}
+        )
+        if not emp:
+            raise HTTPException(status_code=404, detail="Employee not found.")
+        employee_email = employee_email or emp.get("email")
+        # Only one active individual link per employee — supersede any prior unused one.
+        await db.employee_onboarding_tokens.update_many(
+            {"company_id": cu["company_id"], "employee_id": body.employee_id, "used": False},
+            {"$set": {"used": True}},
+        )
 
     token = uuid.uuid4().hex
     now = datetime.now(timezone.utc)
     await db.employee_onboarding_tokens.insert_one({
         "_id": token,
         "company_id": cu["company_id"],
-        "employee_email": body.email,
+        "employee_email": employee_email,
         "created_by": cu["id"],
         "created_at": now,
         "expires_at": now + timedelta(days=7),
         "used": False,
         "used_at": None,
-        "employee_id": None,
+        "employee_id": body.employee_id,
     })
 
     base = (body.frontend_base_url or "").rstrip("/")
@@ -301,9 +321,50 @@ async def export_employees(
 @public_router.get("/employee-onboarding/{token}")
 async def validate_employee_onboarding_token(token: str):
     """Validate token — called by the public form on mount to confirm the link is live."""
-    token_doc, _, company_id = await _find_token(token)
+    token_doc, company_db, company_id = await _find_token(token)
     _validate_token_expiry(token_doc)
-    return {"success": True, "token": token, "company_id": company_id}
+
+    employee_id = token_doc.get("employee_id")
+    if not employee_id:
+        return {"success": True, "token": token, "company_id": company_id}
+
+    emp = await company_db.hrm_employees.find_one({"_id": employee_id, "is_deleted": False})
+    if not emp:
+        return {"success": True, "token": token, "company_id": company_id, "employee_id": employee_id}
+
+    from app.models.company.employee import calculate_profile_completion
+    if calculate_profile_completion(emp) == "complete":
+        return {
+            "success": True,
+            "token": token,
+            "company_id": company_id,
+            "already_completed": True,
+            "employee_name": emp.get("full_name"),
+        }
+
+    prefill = {
+        "full_name": emp.get("full_name"),
+        "email": emp.get("email"),
+        "mobile": emp.get("phone"),
+        "gender": emp.get("gender"),
+        "date_of_birth": emp.get("date_of_birth"),
+        "blood_group": emp.get("blood_group"),
+        "pan_number": emp.get("pan_number"),
+        "aadhaar_number": emp.get("aadhaar_number"),
+        "current_address": emp.get("address"),
+        "permanent_address": emp.get("permanent_address"),
+        "address_info": emp.get("address_info"),
+        "emergency_contact": (emp.get("emergency_contacts") or [None])[0],
+        "bank_details": emp.get("bank_details"),
+        "qualifications": emp.get("qualifications"),
+    }
+    return {
+        "success": True,
+        "token": token,
+        "company_id": company_id,
+        "employee_id": employee_id,
+        "prefill": prefill,
+    }
 
 
 # ── Public: Submit Onboarding Form ─────────────────────────────────────────────
@@ -320,11 +381,7 @@ async def submit_employee_onboarding(token: str, data: dict):
     _validate_token_expiry(token_doc)
 
     now = datetime.now(timezone.utc)
-    employee_uuid = str(uuid.uuid4())
-
-    # Auto-generate sequential employee ID
-    count = await company_db.hrm_employees.count_documents({"company_id": company_id})
-    emp_number = f"EMP{(count + 1):04d}"
+    existing_employee_id = token_doc.get("employee_id")
 
     # Emergency contact
     ec = data.get("emergency_contact") or {}
@@ -367,6 +424,51 @@ async def submit_employee_onboarding(token: str, data: dict):
                 "year": int(q["year"]) if q.get("year") else None,
                 "grade": q.get("grade") or "",
             })
+
+    # ── Individual link: update the existing employee record instead of
+    # creating a new one, preserving identity/linkage fields. ──────────────
+    if existing_employee_id:
+        existing_emp = await company_db.hrm_employees.find_one(
+            {"_id": existing_employee_id, "company_id": company_id}
+        )
+        if not existing_emp:
+            raise HTTPException(status_code=404, detail="Linked employee record not found.")
+
+        update_fields = {
+            "full_name": (data.get("full_name") or existing_emp.get("full_name") or "").strip(),
+            "email": (data.get("email") or existing_emp.get("email") or "").strip().lower(),
+            "phone": (data.get("mobile") or data.get("phone") or existing_emp.get("phone") or "").strip(),
+            "gender": data.get("gender") or existing_emp.get("gender"),
+            "date_of_birth": data.get("date_of_birth") or existing_emp.get("date_of_birth"),
+            "blood_group": data.get("blood_group") or existing_emp.get("blood_group"),
+            "address": data.get("current_address") or existing_emp.get("address"),
+            "address_info": address_info or existing_emp.get("address_info"),
+            "permanent_address": data.get("permanent_address") or existing_emp.get("permanent_address"),
+            "emergency_contacts": emergency_contacts or existing_emp.get("emergency_contacts") or [],
+            "pan_number": data.get("pan_number") or existing_emp.get("pan_number"),
+            "aadhaar_number": data.get("aadhaar_number") or existing_emp.get("aadhaar_number"),
+            "bank_details": bank_details or existing_emp.get("bank_details"),
+            "qualifications": qualifications or existing_emp.get("qualifications") or [],
+            "updated_at": now,
+        }
+        await company_db.hrm_employees.update_one(
+            {"_id": existing_employee_id, "company_id": company_id},
+            {"$set": update_fields},
+        )
+        await company_db.employee_onboarding_tokens.update_one(
+            {"_id": token},
+            {"$set": {"used": True, "used_at": now}},
+        )
+        return {
+            "success": True,
+            "employee_id": existing_employee_id,
+            "employee_number": existing_emp.get("employee_id"),
+        }
+
+    # ── General link: create a brand-new employee record. ──────────────────
+    employee_uuid = str(uuid.uuid4())
+    count = await company_db.hrm_employees.count_documents({"company_id": company_id})
+    emp_number = f"EMP{(count + 1):04d}"
 
     emp_doc = {
         "_id": employee_uuid,
@@ -452,6 +554,9 @@ async def upload_onboarding_photo(token: str, file: UploadFile = File(...)):
     if len(contents) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Photo must be under 5 MB.")
 
+    existing = await company_db.hrm_employees.find_one({"_id": employee_id}, {"photo_url": 1})
+    old_photo_url = existing.get("photo_url") if existing else None
+
     from app.utils.s3 import upload_file as s3_upload
     photo_url = await s3_upload(contents, file.filename or f"photo{ext}", folder="profiles", candidate_id=employee_id)
 
@@ -459,6 +564,14 @@ async def upload_onboarding_photo(token: str, file: UploadFile = File(...)):
         {"_id": employee_id},
         {"$set": {"photo_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
     )
+
+    if old_photo_url and old_photo_url != photo_url:
+        from app.utils.s3 import delete_file
+        try:
+            await delete_file(old_photo_url)
+        except Exception:
+            pass
+
     return {"success": True, "photo_url": photo_url}
 
 

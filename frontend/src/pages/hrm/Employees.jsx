@@ -3,11 +3,15 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   Plus, Search, Edit2, Trash2, Eye, Users, UserPlus,
   CheckCircle2, AlertCircle, Building2, TrendingUp, UserMinus,
-  Filter, ChevronLeft, ChevronRight,
+  Filter, ChevronLeft, ChevronRight, ShieldAlert,
   Link2, ArrowUpFromLine, ChevronDown, Mail, Copy, Check, Loader2,
 } from 'lucide-react'
 import hrmService from '../../services/hrmService'
+import subscriptionService from '../../services/subscriptionService'
 import EmployeeAvatar from '../../components/common/EmployeeAvatar'
+import ModalPortal from '../../components/common/ModalPortal'
+import SeatLimitModal from '../../components/subscription/SeatLimitModal'
+import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -121,6 +125,68 @@ function SummaryCard({ label, value, icon: Icon, accent }) {
   )
 }
 
+function DeleteEmployeeDialog({ isOpen, employeeName, onConfirm, onCancel }) {
+  if (!isOpen) return null
+  const willDelete = [
+    'Employee profile', 'HR information', 'Employee documents', 'Employee photo',
+    'Attendance', 'Leave records', 'Salary records',
+    'Employee onboarding records', 'Employee-specific data',
+  ]
+  const willKeep = [
+    'Candidates', 'Clients', 'Jobs', 'Interviews', 'Applications',
+    'Tasks', 'Reports', 'Business records created by this employee', 'Audit Logs',
+  ]
+  return (
+    <ModalPortal isOpen={isOpen}>
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4">
+        <div className="fixed inset-0 bg-black/50" onClick={onCancel} />
+        <div className="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg">
+          <h3 className="text-lg font-bold text-gray-900">Delete Employee</h3>
+          <p className="mt-1.5 text-sm text-gray-600">
+            You are about to permanently delete <strong>{employeeName}</strong>. This cannot be undone.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs font-semibold text-red-600 mb-1.5">Will be deleted</p>
+              <ul className="space-y-1">
+                {willDelete.map(item => (
+                  <li key={item} className="flex items-start gap-1.5 text-xs text-gray-600">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" /> {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-green-600 mb-1.5">Will NOT be deleted</p>
+              <ul className="space-y-1">
+                {willKeep.map(item => (
+                  <li key={item} className="flex items-start gap-1.5 text-xs text-gray-600">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0 mt-0.5" /> {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-xl hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onConfirm}
+              className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl"
+            >
+              Delete Employee
+            </button>
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
+  )
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export default function Employees() {
@@ -134,6 +200,22 @@ export default function Employees() {
   const [loading,   setLoading]   = useState(true)
 
   const [stats, setStats] = useState({ active: null, onLeave: null, terminated: null })
+
+  // ── Subscription seat status ───────────────────────────────────────
+  const [seatStatus,       setSeatStatus]       = useState(null)
+  const [seatModalOpen,    setSeatModalOpen]    = useState(false)
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
+
+  const refreshSeatStatus = () => {
+    subscriptionService.getTenantSeatStatus()
+      .then(res => setSeatStatus(res.data?.data || null))
+      .catch(() => {})
+  }
+
+  useEffect(() => { refreshSeatStatus() }, [])
+
+  // ── Delete confirmation ─────────────────────────────────────────────
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, employee: null })
 
   const PAGE_SIZE = 20
   const totalPages = Math.ceil(total / PAGE_SIZE)
@@ -179,15 +261,23 @@ export default function Employees() {
     fetchStats()
   }, [])
 
-  const handleDelete = async (id, name) => {
-    if (!window.confirm(`Delete employee "${name}"?`)) return
-    await hrmService.deleteEmployee(id)
-    load()
+  const handleDelete = (id, name) => {
+    setDeleteDialog({ open: true, employee: { id, name } })
   }
 
-  // ── Send Form Link ─────────────────────────────────────────────────
+  const confirmDelete = async () => {
+    const emp = deleteDialog.employee
+    if (!emp) return
+    await hrmService.deleteEmployee(emp.id)
+    setDeleteDialog({ open: false, employee: null })
+    load()
+    refreshSeatStatus()
+  }
+
+  // ── Send Form Link (general or per-employee individual link) ────────
   const [linkModal,    setLinkModal]    = useState(false)
   const [linkEmail,    setLinkEmail]    = useState('')
+  const [linkEmployee, setLinkEmployee] = useState(null) // set when opened from a specific employee row
   const [linkSending,  setLinkSending]  = useState(false)
   const [linkResult,   setLinkResult]   = useState(null) // { url, email_sent }
   const [linkCopied,   setLinkCopied]   = useState(false)
@@ -195,6 +285,16 @@ export default function Employees() {
   const openLinkModal = () => {
     setLinkModal(true)
     setLinkEmail('')
+    setLinkEmployee(null)
+    setLinkResult(null)
+    setLinkSending(false)
+    setLinkCopied(false)
+  }
+
+  const openIndividualLinkModal = (emp) => {
+    setLinkModal(true)
+    setLinkEmail(emp.email || '')
+    setLinkEmployee(emp)
     setLinkResult(null)
     setLinkSending(false)
     setLinkCopied(false)
@@ -207,6 +307,7 @@ export default function Employees() {
       const res = await hrmService.generateOnboardingLink({
         email: linkEmail.trim() || undefined,
         frontend_base_url: base,
+        employee_id: linkEmployee?.id || undefined,
       })
       setLinkResult(res.data)
     } catch (err) {
@@ -504,13 +605,24 @@ export default function Employees() {
                       <div className="space-y-1.5">
                         <AccountBadge emp={emp} />
                         {!emp.crm_user_id ? (
-                          <button
-                            onClick={() => navigate(`/users/new?employee_id=${emp.id}`)}
-                            className="inline-flex items-center gap-1 text-xs hover:underline"
-                            style={{ color: 'var(--text-info)' }}
-                          >
-                            <UserPlus className="w-3 h-3" /> Create Account
-                          </button>
+                          seatStatus?.seat_limit_reached ? (
+                            <button
+                              onClick={() => setSeatModalOpen(true)}
+                              className="inline-flex items-center gap-1 text-xs hover:underline"
+                              style={{ color: 'var(--text-danger)' }}
+                              title="No available user seats. Upgrade or extend your subscription to create this user."
+                            >
+                              <ShieldAlert className="w-3 h-3" /> Manage Subscription
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => navigate(`/users/new?employee_id=${emp.id}`)}
+                              className="inline-flex items-center gap-1 text-xs hover:underline"
+                              style={{ color: 'var(--text-info)' }}
+                            >
+                              <UserPlus className="w-3 h-3" /> Create Account
+                            </button>
+                          )
                         ) : (
                           <button
                             onClick={() => navigate(`/users/${emp.crm_user_id}`)}
@@ -545,6 +657,16 @@ export default function Employees() {
                           title="Edit"
                         >
                           <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => openIndividualLinkModal(emp)}
+                          className="p-1.5 rounded-lg transition-colors"
+                          style={{ color: 'var(--text-info)' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-info)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                          title="Send Individual Link"
+                        >
+                          <Link2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(emp.id, emp.full_name)}
@@ -635,9 +757,13 @@ export default function Employees() {
                 <Link2 className="w-5 h-5 text-indigo-600" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-gray-900">Send Onboarding Form Link</h3>
+                <h3 className="text-base font-bold text-gray-900">
+                  {linkEmployee ? `Send Link to ${linkEmployee.full_name}` : 'Send Onboarding Form Link'}
+                </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Generate a one-time link for an employee to fill in their own details.
+                  {linkEmployee
+                    ? 'Generates a link scoped to this employee only — it opens their own onboarding form.'
+                    : 'Generate a one-time link for an employee to fill in their own details.'}
                 </p>
               </div>
             </div>
@@ -654,7 +780,8 @@ export default function Employees() {
                       value={linkEmail}
                       onChange={e => setLinkEmail(e.target.value)}
                       placeholder="employee@example.com"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none"
+                      disabled={!!linkEmployee}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                       onKeyDown={e => e.key === 'Enter' && handleGenerateLink()}
                     />
                     <Mail className="w-4 h-4 text-gray-400 flex-shrink-0" />
@@ -721,7 +848,7 @@ export default function Employees() {
                 </div>
                 <div className="flex justify-end gap-3">
                   <button
-                    onClick={openLinkModal}
+                    onClick={() => linkEmployee ? openIndividualLinkModal(linkEmployee) : openLinkModal()}
                     className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-xl hover:bg-gray-50 text-gray-700"
                   >
                     Generate Another
@@ -738,6 +865,27 @@ export default function Employees() {
           </div>
         </div>
       )}
+
+      {/* ── Delete Employee Confirmation ─────────────────────────────────── */}
+      <DeleteEmployeeDialog
+        isOpen={deleteDialog.open}
+        employeeName={deleteDialog.employee?.name}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteDialog({ open: false, employee: null })}
+      />
+
+      {/* ── Subscription seat-limit modals ───────────────────────────────── */}
+      <SeatLimitModal
+        isOpen={seatModalOpen}
+        onClose={() => setSeatModalOpen(false)}
+        onUpgrade={() => { setSeatModalOpen(false); setUpgradeModalOpen(true) }}
+        seatStatus={seatStatus}
+      />
+      <UpgradeSeatsModal
+        isOpen={upgradeModalOpen}
+        onClose={() => { setUpgradeModalOpen(false); refreshSeatStatus() }}
+        seatStatus={seatStatus}
+      />
     </div>
   )
 }

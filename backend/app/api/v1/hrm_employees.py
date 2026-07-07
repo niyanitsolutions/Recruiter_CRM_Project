@@ -111,7 +111,7 @@ async def upload_employee_photo(
     # there is never a write-then-delete cycle on a filter mismatch.
     emp = await db.hrm_employees.find_one(
         {"_id": employee_id, "company_id": cu["company_id"], "is_deleted": False},
-        {"_id": 1, "crm_user_id": 1},
+        {"_id": 1, "crm_user_id": 1, "photo_url": 1},
     )
     if not emp:
         logger.warning(
@@ -120,13 +120,25 @@ async def upload_employee_photo(
         )
         raise HTTPException(status_code=404, detail="Employee not found")
 
+    old_photo_url = emp.get("photo_url")
+
     from app.utils.s3 import upload_file as s3_upload
     photo_url = await s3_upload(contents, file.filename or f"photo{ext}", folder="profiles", candidate_id=employee_id)
 
-    await db.hrm_employees.update_one(
-        {"_id": employee_id},
+    # Optimistic-concurrency guard: only apply this write if photo_url still
+    # matches what we just read, so a Remove that raced in after our read
+    # can never stomp this upload (whichever request updates last otherwise wins).
+    result = await db.hrm_employees.update_one(
+        {"_id": employee_id, "photo_url": old_photo_url},
         {"$set": {"photo_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
     )
+    if result.modified_count == 0:
+        # photo_url changed since our read (concurrent remove/upload) — this
+        # upload still wins by force, since it's the most recently completed one.
+        await db.hrm_employees.update_one(
+            {"_id": employee_id},
+            {"$set": {"photo_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
+        )
 
     # Sync photo to the linked CRM user so the Users list also shows the avatar
     if emp.get("crm_user_id"):
@@ -134,6 +146,14 @@ async def upload_employee_photo(
             {"_id": emp["crm_user_id"], "is_deleted": False},
             {"$set": {"avatar_url": photo_url, "updated_at": datetime.now(timezone.utc)}},
         )
+
+    # Clean up the previous file now that the new pointer is durably written.
+    if old_photo_url and old_photo_url != photo_url:
+        from app.utils.s3 import delete_file
+        try:
+            await delete_file(old_photo_url)
+        except Exception:
+            pass
 
     logger.info("photo-upload ok — employee=%r file=%s size=%dB", employee_id, photo_url, len(contents))
     return {"photo_url": photo_url}
@@ -154,20 +174,37 @@ async def delete_employee_photo(
 
     emp = await db.hrm_employees.find_one(
         {"_id": employee_id, "company_id": cu["company_id"], "is_deleted": False},
-        {"_id": 1, "crm_user_id": 1},
+        {"_id": 1, "crm_user_id": 1, "photo_url": 1},
     )
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    await db.hrm_employees.update_one(
-        {"_id": employee_id},
+    old_photo_url = emp.get("photo_url")
+    if not old_photo_url:
+        return {"success": True}
+
+    # Optimistic-concurrency guard: only clear photo_url if it still matches
+    # what we just read — if an upload raced in after our read and already
+    # replaced it, skip entirely rather than deleting the newer photo.
+    result = await db.hrm_employees.update_one(
+        {"_id": employee_id, "photo_url": old_photo_url},
         {"$set": {"photo_url": None, "updated_at": datetime.now(timezone.utc)}},
     )
+    if result.modified_count == 0:
+        return {"success": True}
+
     if emp.get("crm_user_id"):
         await db.users.update_one(
             {"_id": emp["crm_user_id"], "is_deleted": False},
             {"$set": {"avatar_url": None, "updated_at": datetime.now(timezone.utc)}},
         )
+
+    from app.utils.s3 import delete_file
+    try:
+        await delete_file(old_photo_url)
+    except Exception:
+        pass
+
     return {"success": True}
 
 

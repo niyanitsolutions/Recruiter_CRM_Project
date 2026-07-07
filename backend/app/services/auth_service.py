@@ -133,7 +133,7 @@ class AuthService:
     """
 
     @staticmethod
-    async def login(identifier: str, password: str, request=None, company_code: Optional[str] = None, force_login: bool = False, device_fingerprint: str = "", latitude: Optional[float] = None, longitude: Optional[float] = None) -> Tuple[Optional[dict], str]:
+    async def login(identifier: str, password: str, request=None, company_code: Optional[str] = None, force_login: bool = False, device_fingerprint: str = "", latitude: Optional[float] = None, longitude: Optional[float] = None, accuracy: Optional[float] = None, timezone_str: Optional[str] = None, browser: Optional[str] = None, os_name: Optional[str] = None, device_type: Optional[str] = None) -> Tuple[Optional[dict], str]:
         """
         Authenticate user and return tokens.
 
@@ -210,7 +210,7 @@ class AuthService:
                 logger.warning("Login failed (wrong password) | company=%s | identifier=%s", company_code, identifier)
                 return None, "Invalid credentials"
 
-            return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint, latitude=latitude, longitude=longitude)
+            return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint, latitude=latitude, longitude=longitude, accuracy=accuracy, timezone_str=timezone_str, browser=browser, os_name=os_name, device_type=device_type)
 
         # GLOBAL PATH (no company_code)
         # ── Fast path: global_users index (O(1), no per-tenant scanning) ─────
@@ -335,7 +335,7 @@ class AuthService:
                     }, ""
 
                 tenant, user = valid_matches[0]
-                return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint, latitude=latitude, longitude=longitude)
+                return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint, latitude=latitude, longitude=longitude, accuracy=accuracy, timezone_str=timezone_str, browser=browser, os_name=os_name, device_type=device_type)
 
         # ── Legacy fallback: O(N) scan for users not yet in global_users ─────
         # Covers tenants registered before the global_users migration was run.
@@ -397,7 +397,7 @@ class AuthService:
                 logger.warning("Login failed (wrong password) owner | identifier=%s", identifier)
                 return None, "Invalid credentials"
 
-            return await AuthService._complete_company_login(owner_tenant, user, ip_address, device_info, force_login=force_login, latitude=latitude, longitude=longitude)
+            return await AuthService._complete_company_login(owner_tenant, user, ip_address, device_info, force_login=force_login, latitude=latitude, longitude=longitude, accuracy=accuracy, timezone_str=timezone_str, browser=browser, os_name=os_name, device_type=device_type)
 
         # Step 2 — scan all company DBs (O(N) — only reached for unmigrated tenants)
         all_matches = await tenant_resolver.find_all_company_user_matches(identifier)
@@ -452,7 +452,7 @@ class AuthService:
             }, ""
 
         tenant, user = valid_matches[0]
-        return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint, latitude=latitude, longitude=longitude)
+        return await AuthService._complete_company_login(tenant, user, ip_address, device_info, force_login=force_login, device_fingerprint=device_fingerprint, latitude=latitude, longitude=longitude, accuracy=accuracy, timezone_str=timezone_str, browser=browser, os_name=os_name, device_type=device_type)
 
     @staticmethod
     async def login_with_tenant(
@@ -464,6 +464,11 @@ class AuthService:
         device_fingerprint: str = "",
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
+        accuracy: Optional[float] = None,
+        timezone_str: Optional[str] = None,
+        browser: Optional[str] = None,
+        os_name: Optional[str] = None,
+        device_type: Optional[str] = None,
     ) -> Tuple[Optional[dict], str]:
         """
         Scoped login after the user has selected a tenant from the picker.
@@ -476,6 +481,8 @@ class AuthService:
             identifier, password, request=request, company_code=company_id,
             force_login=force_login, device_fingerprint=device_fingerprint,
             latitude=latitude, longitude=longitude,
+            accuracy=accuracy, timezone_str=timezone_str,
+            browser=browser, os_name=os_name, device_type=device_type,
         )
 
     @staticmethod
@@ -500,6 +507,11 @@ class AuthService:
         device_fingerprint: str = "",
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
+        accuracy: Optional[float] = None,
+        timezone_str: Optional[str] = None,
+        browser: Optional[str] = None,
+        os_name: Optional[str] = None,
+        device_type: Optional[str] = None,
     ) -> Tuple[Optional[dict], str]:
         """
         Shared finalization for every company-user login path.
@@ -762,6 +774,9 @@ class AuthService:
             full_name=user.get("full_name", ""),
             role="owner" if user.get("is_owner", False) else role_name,
             ip_address=ip_address, device_info=device_info,
+            latitude=latitude, longitude=longitude, accuracy=accuracy,
+            timezone_str=timezone_str, browser=browser, os_name=os_name,
+            device_type=device_type,
         )
 
         return {
@@ -1140,6 +1155,13 @@ class AuthService:
         role: str,
         ip_address: str = "",
         device_info: str = "",
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        accuracy: Optional[float] = None,
+        timezone_str: Optional[str] = None,
+        browser: Optional[str] = None,
+        os_name: Optional[str] = None,
+        device_type: Optional[str] = None,
     ) -> None:
         """Insert a login_logs record into the company database."""
         try:
@@ -1151,6 +1173,13 @@ class AuthService:
                 "login_time": datetime.now(timezone.utc),
                 "ip_address": ip_address,
                 "device": device_info,
+                "latitude": latitude,
+                "longitude": longitude,
+                "accuracy": accuracy,
+                "timezone": timezone_str,
+                "browser": browser,
+                "os": os_name,
+                "device_type": device_type,
             })
         except Exception:
             pass  # Never block login due to logging failure

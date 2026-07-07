@@ -156,7 +156,11 @@ async def validate_login_access(
     if geo_enabled and not bypass_geo:
         geo_locations = settings_doc.get("geo_fence_locations") or []
 
-        if geo_locations and latitude is not None and longitude is not None:
+        if geo_locations and (latitude is None or longitude is None):
+            # Geo fence is configured and mandatory — location must be supplied,
+            # not silently skipped. Frontend prompts for browser location and retries.
+            deny_reason = "LOCATION_REQUIRED|Location access is required by your organization to sign in."
+        elif geo_locations and latitude is not None and longitude is not None:
             inside_any = False
             for zone in geo_locations:
                 zone_lat = zone.get("latitude")
@@ -173,7 +177,7 @@ async def validate_login_access(
                     "You are not in the office location required by your organization. "
                     "Please contact HR if you require remote access approval."
                 )
-        # If no zones configured or lat/lon not provided → geo check skipped (backward compatible)
+        # If no zones configured → geo check skipped (backward compatible)
 
     # IP restriction (only if geo did not already deny)
     if not deny_reason and ip_enabled and not bypass_ip:
