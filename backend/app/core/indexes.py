@@ -38,6 +38,10 @@ async def _ensure_applications_indexes(db) -> None:
         IndexModel([("candidate_id", ASCENDING), ("job_id", ASCENDING)],
                    name="app_cand_job_active", unique=True,
                    partialFilterExpression={"is_deleted": False}),
+        # list_applications() always filters is_deleted and sorts by applied_at —
+        # had no index covering that sort, forcing an in-memory sort on every page.
+        IndexModel([("company_id", ASCENDING), ("is_deleted", ASCENDING), ("applied_at", DESCENDING)],
+                   name="app_deleted_applied_date"),
     ])
 
 
@@ -161,6 +165,11 @@ async def ensure_company_indexes(db) -> None:
                        name="job_status_date"),
             IndexModel([("company_id", ASCENDING), ("client_id", ASCENDING)],
                        name="job_client"),
+            # list_jobs() always sorts [("priority", -1), ("created_at", -1)] —
+            # priority had no index coverage anywhere, forcing an in-memory sort.
+            IndexModel([("company_id", ASCENDING), ("is_deleted", ASCENDING),
+                        ("priority", DESCENDING), ("created_at", DESCENDING)],
+                       name="job_deleted_priority_date"),
         ],
         "interviews": [
             IndexModel([("company_id", ASCENDING), ("status", ASCENDING), ("scheduled_date", DESCENDING)],
@@ -191,6 +200,11 @@ async def ensure_company_indexes(db) -> None:
                        name="user_role"),
             IndexModel([("company_id", ASCENDING), ("email", ASCENDING)],
                        name="user_email"),
+            # Hit by UserService._get_subordinates_depth's per-node BFS, run on
+            # every non-admin dashboard/list request via get_visible_user_ids —
+            # had no index on reporting_to at all.
+            IndexModel([("company_id", ASCENDING), ("reporting_to", ASCENDING)],
+                       name="user_reporting_to"),
         ],
         "audit_logs": [
             IndexModel([("company_id", ASCENDING), ("created_at", DESCENDING)],
@@ -302,6 +316,23 @@ async def ensure_master_indexes(master_db) -> None:
     # ── sellers ────────────────────────────────────────────────────────────────
     await master_db["sellers"].create_indexes([
         IndexModel([("email", ASCENDING)], name="seller_email", unique=True, sparse=True),
+        # Login checks $or[username, email] + is_deleted + status on every
+        # single login attempt (auth_service.py) — username had no coverage.
+        IndexModel([("username", ASCENDING), ("is_deleted", ASCENDING), ("status", ASCENDING)],
+                   name="seller_username_status"),
+        IndexModel([("email", ASCENDING), ("is_deleted", ASCENDING), ("status", ASCENDING)],
+                   name="seller_email_status"),
+    ])
+
+    # ── super_admins ───────────────────────────────────────────────────────────
+    # Checked unconditionally on every single login attempt (auth_service.py's
+    # _authenticate_super_admin), regardless of identifier shape — had zero
+    # index coverage at all.
+    await master_db["super_admins"].create_indexes([
+        IndexModel([("username", ASCENDING), ("is_deleted", ASCENDING), ("status", ASCENDING)],
+                   name="sa_username_status"),
+        IndexModel([("email", ASCENDING), ("is_deleted", ASCENDING), ("status", ASCENDING)],
+                   name="sa_email_status"),
     ])
 
     # ── subscription_queue ─────────────────────────────────────────────────────

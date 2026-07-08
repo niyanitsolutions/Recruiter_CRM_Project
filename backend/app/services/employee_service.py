@@ -1,5 +1,6 @@
 """HRM — Employee Service"""
 import re
+import asyncio
 from datetime import datetime, date, timezone
 from typing import Optional, List
 from bson import ObjectId
@@ -330,11 +331,19 @@ class EmployeeService:
                 {"email": {"$regex": _s, "$options": "i"}},
                 {"employee_id": {"$regex": _s, "$options": "i"}},
             ]
-        total = await self.col.count_documents(query)
         skip = (page - 1) * page_size
-        cursor = self.col.find(query).sort("created_at", -1).skip(skip).limit(page_size)
+        # Count and paginated fetch are independent reads — run them in
+        # parallel to save one round-trip (same pattern as candidate_service).
+        total, docs = await asyncio.gather(
+            self.col.count_documents(query),
+            self.col.find(query)
+                     .sort("created_at", -1)
+                     .skip(skip)
+                     .limit(page_size)
+                     .to_list(length=page_size)
+        )
         items = []
-        async for d in cursor:
+        for d in docs:
             profile_status = calculate_profile_completion(d)
             item = self._serialize(d)
             item["employee_profile_status"] = profile_status

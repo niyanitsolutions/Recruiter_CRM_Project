@@ -2,6 +2,7 @@
 Application Service - Phase 3
 Business logic for candidate applications (Candidate-Job mapping)
 """
+import asyncio
 from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
@@ -326,10 +327,17 @@ class ApplicationService:
                 {"client_name": {"$regex": pattern}},
             ]
         
-        total = await collection.count_documents(query)
         skip = (page - 1) * page_size
-        cursor = collection.find(query).sort("applied_at", -1).skip(skip).limit(page_size)
-        applications = await cursor.to_list(length=page_size)
+        # Count and paginated fetch are independent reads — run them in
+        # parallel to save one round-trip (same pattern as candidate_service).
+        total, applications = await asyncio.gather(
+            collection.count_documents(query),
+            collection.find(query)
+                      .sort("applied_at", -1)
+                      .skip(skip)
+                      .limit(page_size)
+                      .to_list(length=page_size)
+        )
 
         # Fetch interview records for all applications in one query
         app_ids = [app["_id"] for app in applications]

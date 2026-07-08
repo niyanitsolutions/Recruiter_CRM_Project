@@ -97,11 +97,21 @@ async def get_job_stats(
 ):
     """Get job statistics for dashboard"""
     from datetime import datetime, timedelta, timezone as _tz
+    from app.core.redis import get_cache, set_cache
+    cache_key = f"jobs-dashboard-stats:{current_user.get('company_id', '')}:{current_user.get('id', '')}:{days or 0}"
+    cached = await get_cache(cache_key)
+    if cached:
+        return cached
+
     start_date = None
     if days and days > 0:
         start_date = datetime.now(_tz.utc) - timedelta(days=days)
     stats = await JobService.get_dashboard_stats(db, current_user, start_date=start_date)
-    return {"success": True, "data": stats}
+    result = {"success": True, "data": stats}
+    # Short TTL — this endpoint backs a 5s-polled dashboard widget, so keep it
+    # fresh while still absorbing the repeated identical requests each poll tick.
+    await set_cache(cache_key, result, ttl_seconds=30)
+    return result
 
 
 @router.get("/statuses")

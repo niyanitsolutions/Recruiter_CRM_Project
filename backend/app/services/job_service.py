@@ -3,6 +3,7 @@ Job Service - Phase 3
 Business logic for job management with eligibility matching
 """
 import re
+import asyncio
 import logging
 from datetime import datetime, date, timezone
 from typing import Optional, List, Dict, Any
@@ -342,10 +343,17 @@ class JobService:
             if search_params.location_type:
                 query["location_type"] = {"$in": search_params.location_type}
         
-        total = await collection.count_documents(query)
         skip = (page - 1) * page_size
-        cursor = collection.find(query).sort([("priority", -1), ("created_at", -1)]).skip(skip).limit(page_size)
-        jobs = await cursor.to_list(length=page_size)
+        # Count and paginated fetch are independent reads — run them in
+        # parallel to save one round-trip (same pattern as candidate_service).
+        total, jobs = await asyncio.gather(
+            collection.count_documents(query),
+            collection.find(query)
+                      .sort([("priority", -1), ("created_at", -1)])
+                      .skip(skip)
+                      .limit(page_size)
+                      .to_list(length=page_size)
+        )
         
         result = []
         for job in jobs:

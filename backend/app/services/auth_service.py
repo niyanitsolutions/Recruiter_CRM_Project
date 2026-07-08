@@ -621,19 +621,23 @@ class AuthService:
             # Warn admins/owners when expiry is within 7 days
             days_left = (plan_expiry - now_utc).days
             if days_left <= 7 and (user.get("is_owner") or user.get("role") == "admin"):
-                try:
-                    company_id_early = tenant.get("company_id")
-                    company_db_early = get_company_db(company_id_early)
-                    from app.services.notification_service import NotificationService
-                    ns = NotificationService(company_db_early)
-                    await ns.notify_subscription_expiry(
-                        company_id=company_id_early,
-                        days_remaining=days_left,
-                        plan_name=tenant.get("plan_display_name") or tenant.get("plan_name", "Current"),
-                        admin_user_ids=[str(user.get("_id") or user.get("id", ""))],
-                    )
-                except Exception:
-                    pass
+                async def _notify_expiry_soon():
+                    try:
+                        company_id_early = tenant.get("company_id")
+                        company_db_early = get_company_db(company_id_early)
+                        from app.services.notification_service import NotificationService
+                        ns = NotificationService(company_db_early)
+                        await ns.notify_subscription_expiry(
+                            company_id=company_id_early,
+                            days_remaining=days_left,
+                            plan_name=tenant.get("plan_display_name") or tenant.get("plan_name", "Current"),
+                            admin_user_ids=[str(user.get("_id") or user.get("id", ""))],
+                        )
+                    except Exception:
+                        pass
+                # Non-critical, doesn't gate login — background it so the notification
+                # write doesn't add latency to every near-expiry admin/owner login.
+                asyncio.create_task(_notify_expiry_soon())
 
         # ── Permission resolution ─────────────────────────────────────────────
         company_id  = tenant.get("company_id")
@@ -650,24 +654,34 @@ class AuthService:
         except Exception:
             pass
 
-        role_doc = await company_db.roles.find_one({"name": role_name, "is_deleted": False})
-        effective_perms = await _resolve_effective_permissions(user, role_doc, db=company_db)
-
         user_id    = str(user.get("_id") or user.get("id", ""))
         _user_type = "partner" if role_name == "partner" else user.get("user_type", "internal")
+
+        # Role resolution and the HRM auto-link reverse-lookup (path 1 below) are
+        # independent of each other — both only need user_id/role_name, computed
+        # above — so fetch them concurrently instead of one-after-another.
+        hrm_employee_id = user.get("hrm_employee_id")
+        _needs_hrm_lookup = not hrm_employee_id and _user_type != "partner"
+        if _needs_hrm_lookup:
+            role_doc, linked_emp = await asyncio.gather(
+                company_db.roles.find_one({"name": role_name, "is_deleted": False}),
+                company_db.hrm_employees.find_one(
+                    {"crm_user_id": user_id, "is_deleted": False},
+                    {"_id": 1},
+                ),
+            )
+        else:
+            role_doc = await company_db.roles.find_one({"name": role_name, "is_deleted": False})
+            linked_emp = None
+
+        effective_perms = await _resolve_effective_permissions(user, role_doc, db=company_db)
 
         # ── HRM employee link — auto-resolve if missing from user doc ─────────
         # Three-path resolution so the banner shows even when the link was never
         # written back to the user document (e.g. employee created before this fix,
         # or email mismatch during auto-link at employee creation time).
-        hrm_employee_id = user.get("hrm_employee_id")
-        if not hrm_employee_id and _user_type != "partner":
+        if _needs_hrm_lookup:
             import re as _re
-            # Path 1: reverse lookup by crm_user_id field on employee doc
-            linked_emp = await company_db.hrm_employees.find_one(
-                {"crm_user_id": user_id, "is_deleted": False},
-                {"_id": 1},
-            )
             # Path 2: email-based match (handles employees with no crm_user_id set)
             if not linked_emp:
                 _email = (user.get("email") or "").strip()
@@ -768,16 +782,27 @@ class AuthService:
         )
 
         # ── Post-login updates ────────────────────────────────────────────────
-        await AuthService._update_last_login(company_id, user.get("_id") or user.get("id"), user.get("is_owner", False))
-        await AuthService._log_login_activity(
-            company_id=company_id, user_id=user_id,
-            full_name=user.get("full_name", ""),
-            role="owner" if user.get("is_owner", False) else role_name,
-            ip_address=ip_address, device_info=device_info,
-            latitude=latitude, longitude=longitude, accuracy=accuracy,
-            timezone_str=timezone_str, browser=browser, os_name=os_name,
-            device_type=device_type,
-        )
+        # Neither of these gates access or is read before the response below is
+        # built — background them so their write latency doesn't delay the
+        # response. Best-effort bookkeeping only, not security-relevant, matching
+        # the existing fire-and-forget pattern used for punch-out recovery above.
+        async def _post_login_bookkeeping():
+            try:
+                await AuthService._update_last_login(
+                    company_id, user.get("_id") or user.get("id"), user.get("is_owner", False)
+                )
+            except Exception:
+                pass
+            await AuthService._log_login_activity(
+                company_id=company_id, user_id=user_id,
+                full_name=user.get("full_name", ""),
+                role="owner" if user.get("is_owner", False) else role_name,
+                ip_address=ip_address, device_info=device_info,
+                latitude=latitude, longitude=longitude, accuracy=accuracy,
+                timezone_str=timezone_str, browser=browser, os_name=os_name,
+                device_type=device_type,
+            )
+        asyncio.create_task(_post_login_bookkeeping())
 
         return {
             "access_token":   access_token,

@@ -2,6 +2,7 @@
 Interview Service - Phase 3 + Round-Based Extension
 Business logic for interview scheduling, round progression, and feedback
 """
+import asyncio
 from datetime import datetime, date, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from bson import ObjectId
@@ -850,10 +851,17 @@ class InterviewService:
             else:
                 query["scheduled_date"] = {"$lte": _to_dt(date_to)}
 
-        total = await collection.count_documents(query)
         skip = (page - 1) * page_size
-        cursor = collection.find(query).sort("scheduled_date", 1).skip(skip).limit(page_size)
-        interviews = await cursor.to_list(length=page_size)
+        # Count and paginated fetch are independent reads — run them in
+        # parallel to save one round-trip (same pattern as candidate_service).
+        total, interviews = await asyncio.gather(
+            collection.count_documents(query),
+            collection.find(query)
+                      .sort("scheduled_date", 1)
+                      .skip(skip)
+                      .limit(page_size)
+                      .to_list(length=page_size)
+        )
 
         result = [InterviewService._build_list_response(iv) for iv in interviews]
 
@@ -1144,32 +1152,34 @@ class InterviewService:
             if visible_ids is not None:
                 base_query["created_by"] = {"$in": visible_ids}
 
-        total = await collection.count_documents(base_query)
-
-        pipeline = [{"$match": base_query}, {"$group": {"_id": "$status", "count": {"$sum": 1}}}]
-        status_counts = await collection.aggregate(pipeline).to_list(length=20)
-        by_status = {item["_id"]: item["count"] for item in status_counts}
-
         today = _to_dt(date.today())
-        today_count = await collection.count_documents({**base_query, "scheduled_date": today})
-
         today_d = date.today()
         week_start = _to_dt(today_d - timedelta(days=today_d.weekday()))
         week_end = _to_dt(today_d - timedelta(days=today_d.weekday()) + timedelta(days=6))
-        week_count = await collection.count_documents({
-            **base_query,
-            "scheduled_date": {"$gte": week_start, "$lte": week_end}
-        })
 
-        pending_feedback = await collection.count_documents({
-            **base_query,
-            "feedback_submitted": False,
-            "scheduled_date": {"$lt": today}
-        })
-
-        # Counts by overall_status (for summary cards)
+        status_pipeline = [{"$match": base_query}, {"$group": {"_id": "$status", "count": {"$sum": 1}}}]
         overall_pipeline = [{"$match": base_query}, {"$group": {"_id": "$overall_status", "count": {"$sum": 1}}}]
-        overall_counts_raw = await collection.aggregate(overall_pipeline).to_list(length=20)
+
+        # All 6 reads are independent of each other (same base_query, no shared
+        # dependency) — run them concurrently instead of one-after-another.
+        (
+            total, status_counts, today_count, week_count, pending_feedback, overall_counts_raw,
+        ) = await asyncio.gather(
+            collection.count_documents(base_query),
+            collection.aggregate(status_pipeline).to_list(length=20),
+            collection.count_documents({**base_query, "scheduled_date": today}),
+            collection.count_documents({
+                **base_query,
+                "scheduled_date": {"$gte": week_start, "$lte": week_end}
+            }),
+            collection.count_documents({
+                **base_query,
+                "feedback_submitted": False,
+                "scheduled_date": {"$lt": today}
+            }),
+            collection.aggregate(overall_pipeline).to_list(length=20),
+        )
+        by_status = {item["_id"]: item["count"] for item in status_counts}
         by_overall = {item["_id"]: item["count"] for item in overall_counts_raw}
 
         return {
