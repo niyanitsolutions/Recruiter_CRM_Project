@@ -492,6 +492,11 @@ const Login = () => {
   const [showPassword,      setShowPassword]      = useState(false)
   const [activeSessionData, setActiveSessionData] = useState(null)
   const [locationPrompt,    setLocationPrompt]    = useState(null) // { message, busy, denied, retry(loc) }
+  // Flips true synchronously the instant Sign In is clicked — independent of
+  // Redux's isLoading, which only becomes true once dispatch(login(...)) fires.
+  // Without this, any pre-dispatch async work (e.g. the geolocation check
+  // below) leaves the button looking unresponsive for however long that takes.
+  const [isSubmitting,      setIsSubmitting]      = useState(false)
 
   const savedEmail    = getSavedEmail()
   const savedPassword = getSavedPassword()
@@ -579,11 +584,17 @@ const Login = () => {
   }
 
   const onSubmit = async (data) => {
+    if (isSubmitting) return // prevent double-submit from rapid repeat clicks
+    setIsSubmitting(true)
     setLoginFailed(null); setEmailNotVerified(null)
     setResendSent(false); setInlineError(''); setLocationPrompt(null)
 
-    const geo = await getGeolocationIfAlreadyGranted()
-    await performLogin({ ...data, remember_me: rememberMe, ...getStaticDeviceMeta(), ...(geo || {}) })
+    try {
+      const geo = await getGeolocationIfAlreadyGranted()
+      await performLogin({ ...data, remember_me: rememberMe, ...getStaticDeviceMeta(), ...(geo || {}) })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleAllowLocation = async () => {
@@ -934,12 +945,12 @@ const Login = () => {
         {/* Sign In */}
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isSubmitting || isLoading}
           className="glass-btn-primary"
           style={{ marginTop: 6 }}
         >
-          {isLoading
-            ? <><Spinner /> Signing in…</>
+          {(isSubmitting || isLoading)
+            ? <><Spinner /> Signing In...</>
             : <>Sign In <ArrowRight size={17} /></>
           }
         </button>

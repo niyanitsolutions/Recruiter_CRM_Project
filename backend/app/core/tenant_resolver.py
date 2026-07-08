@@ -205,6 +205,13 @@ class TenantResolver:
         """
         Full login resolution flow.
 
+        `identifier` must be an email address or mobile number — username is
+        not an accepted login credential on the global login page. A username
+        can legitimately collide across different tenants in this multi-tenant
+        CRM, so it must never resolve identity here (usernames remain fully
+        supported everywhere else in the system — user profiles, employee
+        records, etc. — this restriction is login-only).
+
         When company_code is provided (recommended path):
           1. Look up the tenant by company_code — fail immediately if not found.
           2. Validate tenant access (status, expiry).
@@ -213,7 +220,7 @@ class TenantResolver:
 
         When company_code is omitted (backward-compatible fallback):
           1. Single $or query in master_db for a tenant whose owner matches
-             username / email / mobile.
+             email / mobile.
           2. If no owner match, single $or query per company database.
           3. Validate tenant access at each step.
 
@@ -238,14 +245,15 @@ class TenantResolver:
             is_valid, error = await TenantResolver.validate_tenant_access(tenant)
             if not is_valid:
                 if error.startswith("SUBSCRIPTION_EXPIRED"):
-                    # Check if this is the owner to set the right error prefix
+                    # Check if this is the owner to set the right error prefix.
+                    # Username is not an accepted login credential (see below) —
+                    # only email/mobile identify the owner here.
                     owner = tenant.get("owner", {})
                     owner_ci = re.compile(
                         f"^{re.escape(identifier)}$", re.IGNORECASE
                     )
                     is_owner_login = (
-                        owner_ci.match(owner.get("username", ""))
-                        or owner_ci.match(owner.get("email", ""))
+                        owner_ci.match(owner.get("email", ""))
                         or owner.get("mobile") == identifier
                     )
                     if is_owner_login:
@@ -255,12 +263,14 @@ class TenantResolver:
             company_id = tenant.get("company_id")
             company_db = await DatabaseManager.resolve_and_get_company_db(company_id)
 
-            # Check if the identifier matches the owner first
+            # Check if the identifier matches the owner first. Username is not
+            # an accepted login credential — only email or mobile authenticate
+            # (a username can collide across tenants in this multi-tenant CRM,
+            # so it must never resolve identity on the global login page).
             owner_basic = tenant.get("owner", {})
             owner_ci = re.compile(f"^{re.escape(identifier)}$", re.IGNORECASE)
             is_owner_match = (
-                owner_ci.match(owner_basic.get("username", ""))
-                or owner_ci.match(owner_basic.get("email", ""))
+                owner_ci.match(owner_basic.get("email", ""))
                 or owner_basic.get("mobile") == identifier
             )
 
@@ -277,13 +287,14 @@ class TenantResolver:
                 user["is_owner"] = True
                 return tenant, user, ""
 
-            # Not the owner — search company users
+            # Not the owner — search company users. Username is not an accepted
+            # login credential (see class docstring / resolve_login_context
+            # docstring) — only email or mobile authenticate.
             user = await company_db.users.find_one({
                 "is_deleted": False,
                 "$or": [
-                    {"username": ci_pattern},
-                    {"email":    ci_pattern},
-                    {"mobile":   identifier},
+                    {"email":  ci_pattern},
+                    {"mobile": identifier},
                 ],
             })
             if not user:
@@ -296,12 +307,12 @@ class TenantResolver:
             return tenant, user, ""
 
         # ── Fallback: global search (backward-compatible, no company_code) ────
-        # Step 1: check tenant owners (single query, all three fields)
+        # Step 1: check tenant owners (email/mobile only — username is not an
+        # accepted login credential, see resolve_login_context docstring)
         tenant = await master_db.tenants.find_one({
             "$or": [
-                {"owner.username": ci_pattern},
-                {"owner.email":    ci_pattern},
-                {"owner.mobile":   identifier},
+                {"owner.email":  ci_pattern},
+                {"owner.mobile": identifier},
             ]
         })
 
@@ -340,12 +351,12 @@ class TenantResolver:
             company_id = tenant.get("company_id")
             company_db = await DatabaseManager.resolve_and_get_company_db(company_id)
 
+            # Username is not an accepted login credential — only email/mobile.
             user = await company_db.users.find_one({
                 "is_deleted": False,
                 "$or": [
-                    {"username": ci_pattern},
-                    {"email":    ci_pattern},
-                    {"mobile":   identifier},
+                    {"email":  ci_pattern},
+                    {"mobile": identifier},
                 ]
             })
             if not user:
@@ -364,7 +375,8 @@ class TenantResolver:
     async def find_all_company_user_matches(identifier: str) -> list:
         """
         Scan every non-cancelled tenant DB and return ALL (tenant, user) pairs
-        whose user document matches identifier (username / email / mobile).
+        whose user document matches identifier (email / mobile — username is
+        not an accepted login credential on the global login page).
 
         Unlike resolve_login_context, this returns every match so the caller
         can verify passwords independently and detect same-password multi-tenant
@@ -388,9 +400,8 @@ class TenantResolver:
             user = await company_db.users.find_one({
                 "is_deleted": False,
                 "$or": [
-                    {"username": ci_pattern},
-                    {"email":    ci_pattern},
-                    {"mobile":   identifier},
+                    {"email":  ci_pattern},
+                    {"mobile": identifier},
                 ],
             })
             if user:

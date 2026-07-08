@@ -137,7 +137,11 @@ class AuthService:
         """
         Authenticate user and return tokens.
 
-        Supports login with: username / email / mobile / full name.
+        Supports login with: email or mobile number only. Username is
+        deliberately not an accepted login credential on this global login
+        page — a username can collide across different tenants in this
+        multi-tenant CRM, so it must never resolve identity here (usernames
+        remain fully supported everywhere else in the system).
 
         Permission resolution order:
           1. User's stored permissions list (pre-computed by frontend).
@@ -348,12 +352,15 @@ class AuthService:
             logger.info("[LOGIN-DIAG] Global user not found — trying legacy path | identifier=%s", identifier_normalized)
         ci = _re.compile(f"^{_re.escape(identifier)}$", _re.IGNORECASE)
 
-        # Step 1 — owner lookup (single-pass across master_db.tenants)
+        # Step 1 — owner lookup (single-pass across master_db.tenants).
+        # Username is not an accepted login credential on the global login
+        # page — only email/mobile authenticate (usernames remain fully
+        # supported everywhere else; this restriction is login-only, since a
+        # username can collide across different tenants in this multi-tenant CRM).
         owner_tenant = await master_db.tenants.find_one({
             "$or": [
-                {"owner.username": ci},
-                {"owner.email":    ci},
-                {"owner.mobile":   identifier},
+                {"owner.email":  ci},
+                {"owner.mobile": identifier},
             ]
         })
 
