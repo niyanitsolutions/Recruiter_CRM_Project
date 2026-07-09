@@ -118,7 +118,7 @@ function LocationRequiredModal({ message, onAllow, onCancel, busy, denied }) {
           <Globe size={22} color="#f59e0b" />
         </div>
         <h3 style={{ color: '#f1f5f9', fontSize: '16px', fontWeight: 700, margin: 0 }}>
-          Location Required
+          Location Permission Required
         </h3>
         <p style={{ color: '#94a3b8', fontSize: '13px', marginTop: 8, lineHeight: 1.5 }}>
           {message}
@@ -531,7 +531,8 @@ const Login = () => {
         return
       }
       if (!(payload && typeof payload === 'object' && payload.type === 'SUBSCRIPTION_EXPIRED')) {
-        setTenantSelectError(typeof payload === 'string' ? payload : 'Login failed. Please try again.')
+        const isObj = payload && typeof payload === 'object'
+        setTenantSelectError(isObj ? (payload.message || 'Login failed. Please try again.') : (typeof payload === 'string' ? payload : 'Login failed. Please try again.'))
       }
     }
   }
@@ -577,7 +578,11 @@ const Login = () => {
       } else if (payload?.type === 'SUBSCRIPTION_EXPIRED') {
         // Redux already set subscriptionExpired
       } else {
-        setLoginFailed(typeof payload === 'string' ? payload : 'Login failed. Please try again.')
+        const isObj = payload && typeof payload === 'object'
+        setLoginFailed({
+          type:    isObj ? payload.type : null,
+          message: isObj ? (payload.message || 'Login failed. Please try again.') : (typeof payload === 'string' ? payload : 'Login failed. Please try again.'),
+        })
         dispatch(clearError())
       }
     }
@@ -679,29 +684,46 @@ const Login = () => {
   // SCREEN: Account not found
   // ─────────────────────────────────────────────────────────────────────────
   if (loginFailed) {
-    const isServerError = loginFailed.includes('server') || loginFailed.includes('connect') || loginFailed.includes('unavailable')
+    const { type: failType, message: failMessage } = loginFailed
+    // Classify off an explicit type tag from the thunk rather than sniffing the
+    // message text for words like "server" — that heuristic could misfire (or
+    // fail to fire) whenever wording changed, and had no way to recognise a
+    // geofence/location denial as anything other than a generic login failure.
+    const isLocationIssue   = failType === 'LOCATION_DENIED'
+    const isConnectionIssue = failType === 'CONNECTION_ERROR' || failType === 'SERVER_ERROR' || failType === 'API_CONFIG_ERROR'
+    const isAmber = isLocationIssue || isConnectionIssue
+
     return (
       <div style={{ animation: 'slideUp 0.35s cubic-bezier(0.16,1,0.3,1) both' }}>
         <ScreenHead
-          icon={isServerError
-            ? <AlertCircle size={22} color="#fbbf24" />
-            : <UserX size={22} color="#f87171" />}
-          iconBg={isServerError ? 'rgba(245,158,11,0.11)' : 'rgba(239,68,68,0.11)'}
-          iconBorder={isServerError ? 'rgba(245,158,11,0.26)' : 'rgba(239,68,68,0.26)'}
-          title={isServerError ? 'Connection Problem' : 'Login Failed'}
-          subtitle={isServerError
-            ? 'Could not reach the server. Please try again.'
-            : 'We couldn\'t find an account matching your details.'}
+          icon={isLocationIssue
+            ? <Globe size={22} color="#f59e0b" />
+            : isConnectionIssue
+              ? <AlertCircle size={22} color="#fbbf24" />
+              : <UserX size={22} color="#f87171" />}
+          iconBg={isAmber ? 'rgba(245,158,11,0.11)' : 'rgba(239,68,68,0.11)'}
+          iconBorder={isAmber ? 'rgba(245,158,11,0.26)' : 'rgba(239,68,68,0.26)'}
+          title={isLocationIssue ? 'Location Permission Required' : isConnectionIssue ? 'Connection Problem' : 'Login Failed'}
+          subtitle={isLocationIssue
+            ? 'This organization requires location verification before signing in.'
+            : isConnectionIssue
+              ? 'Could not reach the server. Please try again.'
+              : 'We couldn\'t find an account matching your details.'}
         />
-        <div className={`glass-alert ${isServerError ? 'glass-alert-amber' : 'glass-alert-red'}`} style={{ marginBottom: 18 }}>
-          <p style={{ color: isServerError ? '#fcd34d' : '#fca5a5', fontWeight: '600', fontSize: '13px', margin: '0 0 5px' }}>{loginFailed}</p>
-          {!isServerError && (
+        <div className={`glass-alert ${isAmber ? 'glass-alert-amber' : 'glass-alert-red'}`} style={{ marginBottom: 18 }}>
+          <p style={{ color: isAmber ? '#fcd34d' : '#fca5a5', fontWeight: '600', fontSize: '13px', margin: '0 0 5px' }}>{failMessage}</p>
+          {isLocationIssue && (
+            <p style={{ color: 'rgba(252,211,77,0.70)', fontSize: '12px', margin: 0 }}>
+              Please allow browser location access and try again.
+            </p>
+          )}
+          {!isLocationIssue && !isConnectionIssue && (
             <p style={{ color: 'rgba(252,165,165,0.70)', fontSize: '12px', margin: 0 }}>
               Double-check your email / mobile number and password, or create a new account.
             </p>
           )}
         </div>
-        {!isServerError && (
+        {!isLocationIssue && !isConnectionIssue && (
           <Link to="/register" style={{ textDecoration: 'none', display: 'block' }}>
             <button className="glass-btn-primary">Create New Account</button>
           </Link>

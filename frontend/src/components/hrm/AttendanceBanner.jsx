@@ -29,6 +29,7 @@ import { selectUser } from '../../store/authSlice'
 import hrmService from '../../services/hrmService'
 import { getTenantTimezone } from '../../utils/format'
 import PunchInModal from './PunchInModal'
+import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
 const DISMISS_KEY = 'attendance_modal_dismissed'
 const todayStr = () => new Date().toISOString().slice(0, 10)
@@ -208,6 +209,7 @@ export default function AttendanceBanner() {
       try {
         await hrmService.checkOut({})
         loadRecord()
+        publish(LIVE_TOPICS.ATTENDANCE); publish(LIVE_TOPICS.DASHBOARD)
         toast('Auto punch-out at midnight', { icon: '🌙' })
       } catch {}
     }, midnight.getTime() - now.getTime())
@@ -239,6 +241,7 @@ export default function AttendanceBanner() {
     // Covers replica-set lag, any edge case where the direct response lacked
     // check_in, and keeps ESS + attendance page in sync without a page refresh.
     setTimeout(() => loadRecord(), 1500)
+    publish(LIVE_TOPICS.ATTENDANCE); publish(LIVE_TOPICS.DASHBOARD)
   }, [loadRecord])
 
   const handlePunchOut = async () => {
@@ -248,6 +251,7 @@ export default function AttendanceBanner() {
       await hrmService.checkOut({ ...geo })
       toast.success('Punched out. See you tomorrow!')
       loadRecord()
+      publish(LIVE_TOPICS.ATTENDANCE); publish(LIVE_TOPICS.DASHBOARD)
     } catch { toast.error('Punch out failed') }
     setLoading(false)
   }

@@ -9,6 +9,7 @@ import {
   setRememberMe, getRememberMe,
   isTokenExpired, parseToken,
 } from '../utils/token'
+import { publish, LIVE_TOPICS } from '../utils/liveUpdateBus'
 
 const _API_BASE = import.meta.env.VITE_API_URL || '/api/v1'
 
@@ -113,6 +114,7 @@ export const loginWithTenant = createAsyncThunk(
         device_fingerprint: getDeviceFingerprint(),
         ...locationMeta,
       })
+      publish(LIVE_TOPICS.AUTH)
       return { ...response.data, remember_me: remember_me !== false }
     } catch (error) {
       if (error.response?.status === 403) {
@@ -137,14 +139,21 @@ export const loginWithTenant = createAsyncThunk(
         })
       }
       if (!error.response)
-        return rejectWithValue('Unable to connect to the server. Please check your connection and try again.')
+        return rejectWithValue({ type: 'CONNECTION_ERROR', message: 'Unable to connect to the server. Please check your connection and try again.' })
       if (error.response.status >= 500) {
         console.error('[AUTH] loginWithTenant THUNK CATCH → Server error:', error.response.status, error.response.data)
-        return rejectWithValue(
-          _extractServerErrorMessage(error, 'The server is temporarily unavailable. Please try again in a moment.')
-        )
+        return rejectWithValue({
+          type:    'SERVER_ERROR',
+          message: _extractServerErrorMessage(error, 'The server is temporarily unavailable. Please try again in a moment.'),
+        })
       }
       const detail = error.response?.data?.detail || 'Login failed. Please try again.'
+      // Geofence denial (location supplied but outside every approved zone) —
+      // tag it so the UI can show a location-specific message instead of a
+      // generic "Login Failed" screen.
+      if (typeof detail === 'string' && /office location|geo.?fence/i.test(detail)) {
+        return rejectWithValue({ type: 'LOCATION_DENIED', message: detail })
+      }
       return rejectWithValue(typeof detail === 'string' ? detail : 'Login failed. Please try again.')
     }
   }
@@ -178,8 +187,12 @@ export const login = createAsyncThunk(
           '[AUTH] Login: response has no access_token', response.status,
           typeof response.data, JSON.stringify(response.data)?.slice(0, 500),
         )
-        return rejectWithValue('Login failed: server returned an unexpected response. Verify API configuration.')
+        return rejectWithValue({
+          type:    'API_CONFIG_ERROR',
+          message: 'Login failed: server returned an unexpected response. Verify API configuration.',
+        })
       }
+      publish(LIVE_TOPICS.AUTH)
       return { ...response.data, remember_me: remember_me !== false }
     } catch (error) {
       if (error.response?.status === 409) {
@@ -225,7 +238,10 @@ export const login = createAsyncThunk(
       // No response at all — backend not reachable / no internet
       if (!error.response) {
         console.error('[AUTH] LOGIN THUNK CATCH → No response:', error.message)
-        return rejectWithValue('Unable to connect to the server. Please check your internet connection and try again.')
+        return rejectWithValue({
+          type:    'CONNECTION_ERROR',
+          message: 'Unable to connect to the server. Please check your internet connection and try again.',
+        })
       }
 
       // 5xx — backend crashed or proxy (nginx) couldn't reach upstream.
@@ -234,9 +250,10 @@ export const login = createAsyncThunk(
       // (once the backend logs/returns one) is never hidden from diagnosis.
       if (error.response.status >= 500) {
         console.error('[AUTH] LOGIN THUNK CATCH → Server error:', error.response.status, error.response.data)
-        return rejectWithValue(
-          _extractServerErrorMessage(error, 'The server is temporarily unavailable. Please try again in a moment.')
-        )
+        return rejectWithValue({
+          type:    'SERVER_ERROR',
+          message: _extractServerErrorMessage(error, 'The server is temporarily unavailable. Please try again in a moment.'),
+        })
       }
 
       // FastAPI validation errors (422): detail is an array of field errors.
@@ -247,6 +264,12 @@ export const login = createAsyncThunk(
           return `${field}: ${e.msg}`
         }).join(', ')
         return rejectWithValue(msg || 'Login failed. Please try again.')
+      }
+      // Geofence denial (location supplied but outside every approved zone) —
+      // tag it so the UI can show a location-specific message instead of a
+      // generic "Login Failed" screen.
+      if (typeof detail === 'string' && /office location|geo.?fence/i.test(detail)) {
+        return rejectWithValue({ type: 'LOCATION_DENIED', message: detail })
       }
       console.error('[AUTH] LOGIN THUNK CATCH →', error.message, '| status:', error.response?.status, '| detail:', detail)
       return rejectWithValue(
@@ -341,6 +364,7 @@ export const logoutUser = createAsyncThunk(
       // Best-effort — never block the client-side logout
     }
     dispatch(logout())
+    publish(LIVE_TOPICS.AUTH)
   }
 )
 

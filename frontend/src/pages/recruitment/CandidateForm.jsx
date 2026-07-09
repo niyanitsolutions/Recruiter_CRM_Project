@@ -7,6 +7,7 @@ import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
 import { useDraftRecovery } from '../../hooks/useDraftRecovery'
 import ImageCropModal from '../../components/common/ImageCropModal'
 import { resolvePhotoUrl } from '../../components/common/EmployeeAvatar'
+import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
 const EMPTY_EDU = () => ({ degree: '', field_of_study: '', institution: '', from_year: '', to_year: '', percentage: '' })
 const EMPTY_EXP = () => ({ company_name: '', designation: '', start_date: '', end_date: '', is_current: false })
@@ -712,6 +713,7 @@ const CandidateForm = () => {
           await candidateService.updateCandidate(id, payload)
           setSubmitted(true)
           toast.success('Candidate updated successfully')
+          publish(LIVE_TOPICS.CANDIDATES); publish(LIVE_TOPICS.DASHBOARD)
           navigate('/candidates')
         } catch (error) {
           console.error('Candidate update error:', error?.response?.data ?? error)
@@ -752,6 +754,7 @@ const CandidateForm = () => {
 
       setSubmitted(true)
       toast.success('Candidate created successfully')
+      publish(LIVE_TOPICS.CANDIDATES); publish(LIVE_TOPICS.DASHBOARD)
       navigate('/candidates')
     } catch (error) {
       console.error('Candidate save error:', error?.response?.data ?? error)

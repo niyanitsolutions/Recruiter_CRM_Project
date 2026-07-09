@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import usePermissions from '../../hooks/usePermissions'
+import { useLivePolling } from '../../hooks/useLivePolling'
 import {
   Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, EyeOff,
   UserCheck, UserX, Key, ChevronLeft, ChevronRight, X, ArrowUpFromLine,
@@ -18,6 +19,7 @@ import SubscriptionBanner from '../../components/subscription/SubscriptionBanner
 import ExportModal from '../../components/common/ExportModal'
 import ModalPortal from '../../components/common/ModalPortal'
 import TableScroll from '../../components/common/TableScroll'
+import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 import { formatDateTime } from '../../utils/format'
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
@@ -595,10 +597,10 @@ const Users = () => {
   }, [activeTab, fetchDeptList, fetchDesigList])
 
   // ── Fetch users (only for active/inactive tabs) ──
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (silent = false) => {
     if (!isUserTab) return
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const params = {
         page: parseInt(searchParams.get('page') || '1'),
         page_size: 10,
@@ -612,15 +614,20 @@ const Users = () => {
       setUsers(response.data || [])
       setPagination(response.pagination || { page: 1, total: 0, totalPages: 0 })
     } catch (err) {
-      toast.error('Failed to load users')
+      if (!silent) toast.error('Failed to load users')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [searchParams, isUserTab, activeTab])
 
   useEffect(() => {
     fetchUsers()
   }, [fetchUsers])
+
+  // Live background refresh: stays current if another admin creates/deletes/
+  // edits a user elsewhere, and refreshes immediately (not after up to 5s)
+  // when this tab's own mutations publish to the 'users' topic.
+  useLivePolling(() => fetchUsers(true), 5000, isUserTab, [LIVE_TOPICS.USERS])
 
   // ── Filters ──
   const applyFilters = () => {
@@ -665,6 +672,7 @@ const Users = () => {
       await userService.deleteUser(deleteDialog.user.id)
       setDeleteDialog({ open: false, user: null })
       fetchUsers()
+      publish(LIVE_TOPICS.USERS); publish(LIVE_TOPICS.DASHBOARD)
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to delete user')
     }
@@ -675,6 +683,7 @@ const Users = () => {
       await userService.updateUserStatus(statusDialog.user.id, statusDialog.status)
       setStatusDialog({ open: false, user: null, status: '' })
       fetchUsers()
+      publish(LIVE_TOPICS.USERS); publish(LIVE_TOPICS.DASHBOARD)
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to update user status')
     }

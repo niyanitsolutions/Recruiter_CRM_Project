@@ -8,6 +8,8 @@ import {
 } from 'lucide-react'
 import hrmService from '../../services/hrmService'
 import subscriptionService from '../../services/subscriptionService'
+import { useLivePolling } from '../../hooks/useLivePolling'
+import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 import ModalPortal from '../../components/common/ModalPortal'
 import SeatLimitModal from '../../components/subscription/SeatLimitModal'
@@ -221,8 +223,8 @@ export default function Employees() {
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
   // ── Fetch employee list ────────────────────────────────────────────
-  const load = async () => {
-    setLoading(true)
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const res = await hrmService.listEmployees({
         page,
@@ -233,7 +235,7 @@ export default function Employees() {
       setEmployees(res.data.items || [])
       setTotal(res.data.total || 0)
     } catch { /* swallow */ }
-    setLoading(false)
+    if (!silent) setLoading(false)
   }
 
   useEffect(() => { load() }, [page, status])
@@ -241,6 +243,10 @@ export default function Employees() {
     const t = setTimeout(load, 400)
     return () => clearTimeout(t)
   }, [search])
+
+  // Live background refresh — reflects another admin's create/delete within
+  // seconds, and refreshes immediately when this tab's own mutation publishes.
+  useLivePolling(() => load(true), 5000, true, [LIVE_TOPICS.EMPLOYEES])
 
   // ── Fetch summary stats in parallel ───────────────────────────────
   useEffect(() => {
@@ -272,6 +278,7 @@ export default function Employees() {
     setDeleteDialog({ open: false, employee: null })
     load()
     refreshSeatStatus()
+    publish(LIVE_TOPICS.EMPLOYEES); publish(LIVE_TOPICS.DASHBOARD)
   }
 
   // ── Send Form Link (general or per-employee individual link) ────────

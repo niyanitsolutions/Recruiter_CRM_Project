@@ -21,6 +21,7 @@ import TableScroll from '../../components/common/TableScroll'
 import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 import ActionMenu, { ActionMenuItem } from '../../components/common/ActionMenu'
 import PublicFormModal from '../../components/recruitment/PublicFormModal'
+import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
 // Module-level cache — survives navigation, resets only on hard reload.
 // Dropdown options (statuses, sources, notice periods) are static reference
@@ -188,8 +189,10 @@ const Candidates = () => {
     }
   }, [filters, pagination.page, activeTab])
 
-  // Live background refresh (Task 8) — silent, no visible reload
-  useLivePolling(() => loadCandidates(undefined, true), 5000)
+  // Live background refresh (Task 8) — silent, no visible reload.
+  // Also refreshes immediately (not after up to 5s) on a 'candidates' event
+  // published by a create/delete, whether from this tab or another.
+  useLivePolling(() => loadCandidates(undefined, true), 5000, true, [LIVE_TOPICS.CANDIDATES])
 
   useEffect(() => { loadDropdowns() }, [loadDropdowns])
 
@@ -234,6 +237,7 @@ const Candidates = () => {
       toast.success('Candidate deleted successfully')
       setSelectedIds(prev => { const n = new Set(prev); n.delete(candidateId); return n })
       loadCandidates()
+      publish(LIVE_TOPICS.CANDIDATES); publish(LIVE_TOPICS.DASHBOARD)
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to delete candidate')
     }

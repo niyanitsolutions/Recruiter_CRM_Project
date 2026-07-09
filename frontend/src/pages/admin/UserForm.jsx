@@ -12,6 +12,7 @@ import OrgTree from '../../components/OrgTree'
 import ModalPortal from '../../components/common/ModalPortal'
 import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
 import { useDraftRecovery } from '../../hooks/useDraftRecovery'
+import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
 // ── Department-based permission system ───────────────────────────────────────
 
@@ -695,6 +696,7 @@ const [errors,       setErrors]       = useState({})
       }
 
       setSubmitted(true)
+      publish(LIVE_TOPICS.USERS); publish(LIVE_TOPICS.DASHBOARD)
       navigate('/users')
     } catch (err) {
       const status = err.response?.status

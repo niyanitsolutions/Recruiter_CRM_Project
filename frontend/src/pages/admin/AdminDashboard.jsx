@@ -29,6 +29,7 @@ import HiringTrend from '../../components/dashboard/HiringTrend'
 import PunchInModal from '../../components/hrm/PunchInModal'
 import { formatDateTime, getTenantTimezone } from '../../utils/format'
 import { useLivePolling } from '../../hooks/useLivePolling'
+import { subscribe, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
 // ── Section-level error boundary — wraps individual grid rows ────────────────
 class WidgetErrorBoundary extends Component {
@@ -399,8 +400,22 @@ const AdminDashboard = () => {
     fetchDashboardData(true)
   }, [period.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Live background refresh (Task 8) — silent, no visible reload
-  useLivePolling(() => fetchDashboardData(true, true), 5000)
+  // Live background refresh (Task 8) — silent, no visible reload.
+  // `force=true` already bypasses the module-level cache on every tick, but
+  // also subscribe so a mutation elsewhere (user/employee/candidate
+  // created/deleted, status change, attendance punch) triggers this refresh
+  // immediately instead of waiting up to 5s for the next tick.
+  useLivePolling(() => fetchDashboardData(true, true), 5000, true, [
+    LIVE_TOPICS.USERS, LIVE_TOPICS.EMPLOYEES, LIVE_TOPICS.CANDIDATES,
+    LIVE_TOPICS.ATTENDANCE, LIVE_TOPICS.DASHBOARD,
+  ])
+
+  // The module-level `_cache` above is keyed by company_id, but if a user
+  // logs out and a different user/tenant logs back in within the 5-minute
+  // TTL, a fresh mount would otherwise serve the previous session's cached
+  // snapshot until the first poll tick corrects it. Invalidate immediately
+  // on any auth transition so the next mount always fetches fresh.
+  useEffect(() => subscribe(LIVE_TOPICS.AUTH, () => { _cache.ts = 0 }), [])
 
   useEffect(() => {
     fetchTrend(period.days)

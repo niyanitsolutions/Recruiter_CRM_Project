@@ -16,6 +16,7 @@ import toast from 'react-hot-toast'
 import ModalPortal from '../../components/common/ModalPortal'
 import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
 import { useDraftRecovery } from '../../hooks/useDraftRecovery'
+import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 import EmployeeAvatar, { resolvePhotoUrl } from '../../components/common/EmployeeAvatar'
 import ImageCropModal from '../../components/common/ImageCropModal'
 
@@ -1193,6 +1194,7 @@ export default function EmployeeForm() {
         if (stagedDocs.length > 0) await uploadStagedDocs(id)
         setSubmitted(true)
         toast.success('Employee updated')
+        publish(LIVE_TOPICS.EMPLOYEES); publish(LIVE_TOPICS.DASHBOARD)
         navigate('/hrm/employees')
         return
       }
@@ -1226,6 +1228,7 @@ export default function EmployeeForm() {
       const hasAccount = createAccount && !linkedUserId && uForm.username && uForm.password
       setSubmitted(true)
       toast.success(hasAccount ? 'Employee and login account created' : 'Employee profile created')
+      publish(LIVE_TOPICS.EMPLOYEES); publish(LIVE_TOPICS.DASHBOARD)
       navigate('/hrm/employees')
     } catch (err) {
       const status = err.response?.status
@@ -1260,6 +1263,7 @@ export default function EmployeeForm() {
       if (newEmpId && stagedDocs.length > 0) await uploadStagedDocs(newEmpId)
       setDuplicateModal({ show: false, fields: {}, overrideChecked: false, overrideTouched: false })
       toast.success('Employee created')
+      publish(LIVE_TOPICS.EMPLOYEES); publish(LIVE_TOPICS.DASHBOARD)
       navigate('/hrm/employees')
     } catch (err) {
       const { title, reason } = parseApiError(err)
