@@ -51,7 +51,26 @@
       "Bash(cat frontend/.env.example)",
       "Bash(cd /d/crm-project)",
       "Bash(find . -iname \"*subscription*\" -not -path \"*/node_modules/*\" -not -path \"*/.git/*\")",
-      "Bash(git log *)"
+      "Bash(git log *)",
+      "Bash(curl -s -o /tmp/resp1.json -w 'HTTP_STATUS:%{http_code}\\\\n' -X POST http://127.0.0.1:8123/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"identifier\":\"doe@techhire.com\",\"password\":\"wrong-password-xyz\"}')",
+      "Bash(curl -s -o /tmp/resp2.json -w 'HTTP_STATUS:%{http_code}\\\\n' -X POST http://127.0.0.1:8123/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"identifier\":\"8262481230\",\"password\":\"wrong-password-xyz\"}')",
+      "Bash(curl -s -o /tmp/resp3.json -w 'HTTP_STATUS:%{http_code}\\\\n' -X POST http://127.0.0.1:8123/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"identifier\":\"doe\",\"password\":\"wrong-password-xyz\"}')",
+      "Bash(curl -s -o /tmp/resp4.json -w 'HTTP_STATUS:%{http_code}\\\\n' -X POST http://127.0.0.1:8123/api/v1/auth/login-with-tenant -H 'Content-Type: application/json' -d '{\"identifier\":\"partner@gmail.com\",\"password\":\"wrong-password-xyz\",\"company_id\":\"2b9fcd93\"}')",
+      "Bash(curl -s -o /tmp/resp5.json -w 'HTTP_STATUS:%{http_code}\\\\n' -X POST http://127.0.0.1:8123/api/v1/auth/login-with-tenant -H 'Content-Type: application/json' -d '{\"identifier\":\"doe@techhire.com\",\"password\":\"wrong-password-xyz\",\"company_id\":\"2b9fcd93\"}')",
+      "Bash(grep -iE \"error|traceback|exception\" /tmp/uvicorn_test.log | grep -v \"bcrypt\\\\|passlib\\\\|_about_\" | head -60)",
+      "Bash(grep -n \"Traceback\" /tmp/uvicorn_test.log)",
+      "Bash(sed -n '1,60p' /tmp/uvicorn_test.log)",
+      "Bash(pkill -f \"uvicorn app.main:app --host 127.0.0.1 --port 8123\")",
+      "Bash(curl -s -o /tmp/owner_resp.json -w 'HTTP_STATUS:%{http_code}\\\\n' -X POST http://127.0.0.1:8124/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"identifier\":\"johndoe@techhire.com\",\"password\":\"anything\"}')",
+      "Bash(curl -s -o /tmp/emp_resp.json -w 'HTTP_STATUS:%{http_code}\\\\n' -X POST http://127.0.0.1:8124/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"identifier\":\"anusha@gmail.com\",\"password\":\"anything\"}')",
+      "Bash(curl -s -o /tmp/emp_mobile_resp.json -w 'HTTP_STATUS:%{http_code}\\\\n' -X POST http://127.0.0.1:8124/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"identifier\":\"9422483698\",\"password\":\"anything\"}')",
+      "Bash(curl -s -w '\\\\nHTTP_STATUS:%{http_code}\\\\n' -X POST http://127.0.0.1:8124/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"identifier\":\"johndoe@techhire.com\",\"password\":\"anything\"}')",
+      "Bash(curl -s -w '\\\\nHTTP_STATUS:%{http_code}\\\\n' -X POST http://127.0.0.1:8124/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"identifier\":\"varun@gmail.com\",\"password\":\"anything\"}')",
+      "Bash(pkill -f \"_test_patched_server.py\")",
+      "Bash(pkill -f \"uvicorn app.main:app\")",
+      "Bash(curl -s -i -X POST http://127.0.0.1:8125/api/v1/auth/login -H 'Content-Type: application/json' -H 'Origin: http://localhost:5173' -d '{\"identifier\":\"doe@techhire.com\",\"password\":\"wrong\"}')",
+      "Bash(curl -s -i -X POST http://127.0.0.1:8125/api/v1/auth/login -H 'Content-Type: application/json' -H 'Origin: http://localhost:5173' -d '{\"identifier\": 12345, \"password\": null}')",
+      "Bash(rm -f /tmp/uvicorn_test.log /tmp/uvicorn_patched.log /tmp/uvicorn_cors.log /tmp/resp*.json /tmp/owner_resp.json /tmp/emp_resp.json /tmp/emp_mobile_resp.json)"
     ]
   }
 }

@@ -12,6 +12,18 @@ import {
 
 const _API_BASE = import.meta.env.VITE_API_URL || '/api/v1'
 
+// A 5xx response should never silently discard whatever the backend actually
+// said — only fall back to a generic message when the backend truly provided
+// no detail (e.g. a raw proxy/gateway error with no JSON body). This keeps the
+// real error visible for diagnosis instead of masking it as "Connection Problem".
+function _extractServerErrorMessage(error, fallback) {
+  const data = error.response?.data
+  const detail = typeof data?.detail === 'string' ? data.detail
+    : typeof data?.message === 'string' ? data.message
+    : null
+  return detail || fallback
+}
+
 // ── Inactivity timeout ────────────────────────────────────────────────────────
 // If the user has been idle for longer than this, clear the session on startup
 // so they are forced to log in again.  The useAutoLogout hook enforces the same
@@ -126,8 +138,12 @@ export const loginWithTenant = createAsyncThunk(
       }
       if (!error.response)
         return rejectWithValue('Unable to connect to the server. Please check your connection and try again.')
-      if (error.response.status >= 500)
-        return rejectWithValue('The server is temporarily unavailable. Please try again in a moment.')
+      if (error.response.status >= 500) {
+        console.error('[AUTH] loginWithTenant THUNK CATCH → Server error:', error.response.status, error.response.data)
+        return rejectWithValue(
+          _extractServerErrorMessage(error, 'The server is temporarily unavailable. Please try again in a moment.')
+        )
+      }
       const detail = error.response?.data?.detail || 'Login failed. Please try again.'
       return rejectWithValue(typeof detail === 'string' ? detail : 'Login failed. Please try again.')
     }
@@ -158,7 +174,10 @@ export const login = createAsyncThunk(
       // Without this check, a 200 from the wrong server (S3/CDN returning index.html)
       // would be treated as a successful login.
       if (!response.data?.access_token) {
-        console.error('[AUTH] Login: response has no access_token', response.status, typeof response.data)
+        console.error(
+          '[AUTH] Login: response has no access_token', response.status,
+          typeof response.data, JSON.stringify(response.data)?.slice(0, 500),
+        )
         return rejectWithValue('Login failed: server returned an unexpected response. Verify API configuration.')
       }
       return { ...response.data, remember_me: remember_me !== false }
@@ -209,10 +228,15 @@ export const login = createAsyncThunk(
         return rejectWithValue('Unable to connect to the server. Please check your internet connection and try again.')
       }
 
-      // 5xx — backend crashed or proxy (nginx) couldn't reach upstream
+      // 5xx — backend crashed or proxy (nginx) couldn't reach upstream.
+      // Surface whatever detail the backend actually returned rather than
+      // always overwriting it with a generic message, so a real root cause
+      // (once the backend logs/returns one) is never hidden from diagnosis.
       if (error.response.status >= 500) {
-        console.error('[AUTH] LOGIN THUNK CATCH → Server error:', error.response.status)
-        return rejectWithValue('The server is temporarily unavailable. Please try again in a moment.')
+        console.error('[AUTH] LOGIN THUNK CATCH → Server error:', error.response.status, error.response.data)
+        return rejectWithValue(
+          _extractServerErrorMessage(error, 'The server is temporarily unavailable. Please try again in a moment.')
+        )
       }
 
       // FastAPI validation errors (422): detail is an array of field errors.
