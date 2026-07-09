@@ -70,7 +70,9 @@
       "Bash(pkill -f \"uvicorn app.main:app\")",
       "Bash(curl -s -i -X POST http://127.0.0.1:8125/api/v1/auth/login -H 'Content-Type: application/json' -H 'Origin: http://localhost:5173' -d '{\"identifier\":\"doe@techhire.com\",\"password\":\"wrong\"}')",
       "Bash(curl -s -i -X POST http://127.0.0.1:8125/api/v1/auth/login -H 'Content-Type: application/json' -H 'Origin: http://localhost:5173' -d '{\"identifier\": 12345, \"password\": null}')",
-      "Bash(rm -f /tmp/uvicorn_test.log /tmp/uvicorn_patched.log /tmp/uvicorn_cors.log /tmp/resp*.json /tmp/owner_resp.json /tmp/emp_resp.json /tmp/emp_mobile_resp.json)"
+      "Bash(rm -f /tmp/uvicorn_test.log /tmp/uvicorn_patched.log /tmp/uvicorn_cors.log /tmp/resp*.json /tmp/owner_resp.json /tmp/emp_resp.json /tmp/emp_mobile_resp.json)",
+      "Bash(cd d:/crm-project/backend && grep -n \"CORSMiddleware\\\\|= FastAPI\\(\\\\|app = FastAPI\" app/main.py *)",
+      "Bash(git check-ignore *)"
     ]
   }
 }
