@@ -242,6 +242,7 @@ class CreateTargetRequest(BaseModel):
     filters: Dict[str, Any] = {}
     notify_on_milestones: bool = True
     notify_on_achievement: bool = True
+    send_email: bool = False  # opt-in email notification to assignee/department; not persisted
 
 
 class UpdateTargetRequest(BaseModel):

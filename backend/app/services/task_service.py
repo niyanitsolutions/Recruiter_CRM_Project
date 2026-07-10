@@ -85,18 +85,35 @@ class TaskService:
             except Exception:
                 pass
 
-        # Send TASK_ASSIGNED email (best-effort)
+        # Resolve creator name: prefer explicit param > DB doc > fallback string
+        _by_name = (creator_name
+                    or (creator.get("full_name") if creator else None)
+                    or "a team member")
+        due_str = data.due_date.strftime("%d %b %Y") if data.due_date else None
+        _assignee_id = data.assigned_to
+
+        # In-app CRM notification — always fires for a distinct assignee (not gated by the email checkbox)
+        if _assignee_id and _assignee_id != created_by and company_id:
+            try:
+                from app.services.notification_service import NotificationService
+                await NotificationService(db).notify_task_assigned(
+                    company_id=company_id,
+                    user_id=_assignee_id,
+                    task_id=doc["_id"],
+                    task_title=data.title,
+                    assigned_by_name=_by_name,
+                    priority=data.priority.value,
+                    due_date_str=due_str,
+                )
+            except Exception as _e:
+                logger.warning("Task assigned notification failed for %s: %s", _assignee_id, _e)
+
+        # Send TASK_ASSIGNED email — only when the "Send Email Notification" checkbox was checked
         # Skip only when no assignee or assignee is the same person who created the task
         _assignee_email = assignee.get("email") if assignee else None
-        _assignee_id = data.assigned_to
-        if _assignee_email and _assignee_id and _assignee_id != created_by:
+        if data.send_email and _assignee_email and _assignee_id and _assignee_id != created_by:
             try:
                 from app.services.email_service import send_task_assigned_email, _fire_email
-                due_str = data.due_date.strftime("%d %b %Y") if data.due_date else None
-                # Resolve creator name: prefer explicit param > DB doc > fallback string
-                _by_name = (creator_name
-                            or (creator.get("full_name") if creator else None)
-                            or "a team member")
                 _fire_email(send_task_assigned_email(
                     to_email=_assignee_email,
                     assignee_name=assignee.get("full_name", ""),
@@ -190,6 +207,8 @@ class TaskService:
                 detail="Access denied: only the task creator or assignee can update this task"
             )
 
+        old_status = doc.get("status")
+
         coll = db[TaskService.COLLECTION]
         updates = {k: v for k, v in data.model_dump(exclude_none=True).items()}
 
@@ -228,6 +247,33 @@ class TaskService:
                 ))
             except Exception:
                 pass
+
+        # Notify the creator of a genuine status transition (started/completed/cancelled).
+        # Guarded against no-op resaves (status unchanged) and self-notification
+        # (creator changing their own task's status) to avoid duplicate/pointless notifications.
+        new_status = updated_doc.get("status")
+        creator_id = updated_doc.get("created_by")
+        if (
+            company_id
+            and "status" in updates
+            and new_status != old_status
+            and creator_id
+            and creator_id != updated_by
+        ):
+            try:
+                from app.services.notification_service import NotificationService
+                actor = await db["users"].find_one({"_id": updated_by})
+                actor_name = (actor.get("full_name") if actor else None) or "Someone"
+                await NotificationService(db).notify_task_status_changed(
+                    company_id=company_id,
+                    creator_id=creator_id,
+                    task_id=task_id,
+                    task_title=updated_doc.get("title", ""),
+                    actor_name=actor_name,
+                    new_status=new_status,
+                )
+            except Exception as _e:
+                logger.warning("Task status-change notification failed for task=%s: %s", task_id, _e)
 
         return TaskService._to_response(updated_doc)
 

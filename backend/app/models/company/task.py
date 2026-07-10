@@ -30,6 +30,7 @@ class TaskCreate(BaseModel):
     assigned_to: Optional[str] = None          # user id
     related_entity_type: Optional[str] = None  # candidate / application / interview / onboard
     related_entity_id: Optional[str] = None
+    send_email: bool = False                   # opt-in email notification to assignee; not persisted
 
 
 class TaskUpdate(BaseModel):

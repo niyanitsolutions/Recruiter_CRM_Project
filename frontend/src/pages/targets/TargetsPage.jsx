@@ -15,12 +15,13 @@ import departmentService from '../../services/departmentService';
 import TargetCard from './components/TargetCard';
 import Leaderboard from './Leaderboard';
 import { useLivePolling } from '../../hooks/useLivePolling';
+import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus';
 import { toast } from 'react-hot-toast';
 
 const TargetsPage = () => {
   const navigate = useNavigate();
   const { targetId } = useParams();
-  const [activeTab, setActiveTab] = useState('my-targets');
+  const [activeTab, setActiveTab] = useState('all-targets');
   const [targets, setTargets] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -91,7 +92,7 @@ const TargetsPage = () => {
   };
 
   // Live background refresh (Task 8) — silent, no visible reload
-  useLivePolling(() => loadData(true), 5000);
+  useLivePolling(() => loadData(true), 5000, true, [LIVE_TOPICS.TARGETS]);
 
   const handleDeleteTarget = async (id) => {
     if (!window.confirm('Are you sure you want to delete this target?')) return;
@@ -467,7 +468,8 @@ const CreateTargetModal = ({ departmentOptions, onClose, onCreated }) => {
     end_date: '',
     department: '',
     assigned_to: '',
-    description: ''
+    description: '',
+    send_email: false
   });
   const [saving, setSaving] = useState(false);
 
@@ -479,6 +481,8 @@ const CreateTargetModal = ({ departmentOptions, onClose, onCreated }) => {
         ...formData,
         target_value: Number(formData.target_value)
       });
+      publish(LIVE_TOPICS.TARGETS);
+      publish(LIVE_TOPICS.NOTIFICATIONS);
       onCreated();
     } catch (error) {
       toast.error(error?.response?.data?.detail || 'Failed to create target');
@@ -597,6 +601,15 @@ const CreateTargetModal = ({ departmentOptions, onClose, onCreated }) => {
               ))}
             </select>
           </div>
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.send_email}
+              onChange={(e) => setFormData({ ...formData, send_email: e.target.checked })}
+            />
+            <span className="text-sm text-gray-700">Send Email Notification</span>
+          </label>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

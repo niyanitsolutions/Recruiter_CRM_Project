@@ -1174,3 +1174,78 @@ class NotificationService:
         ]
         if docs:
             await self.notifications_collection.insert_many(docs)
+
+    async def notify_task_assigned(
+        self,
+        company_id: str,
+        user_id: str,
+        task_id: str,
+        task_title: str,
+        assigned_by_name: str,
+        priority: str,
+        due_date_str: Optional[str] = None,
+    ) -> None:
+        """Task assigned → notify the assignee."""
+        now = datetime.now(timezone.utc)
+        message = f"Task: {task_title}\nAssigned By: {assigned_by_name}\nPriority: {priority.title()}"
+        if due_date_str:
+            message += f"\nDue: {due_date_str}"
+        doc = {
+            "_id": str(ObjectId()),
+            "id": str(ObjectId()),
+            "company_id": company_id,
+            "user_id": user_id,
+            "user_type": "user",
+            "type": "task_assigned",
+            "title": "New Task Assigned",
+            "message": message,
+            "channels": ["in_app"],
+            "channel_status": {"in_app": "delivered"},
+            "is_read": False,
+            "priority": "high" if priority in ("high", "urgent") else "medium",
+            "action_url": f"/tasks?taskId={task_id}",
+            "data": {"task_id": task_id},
+            "created_at": now,
+            "updated_at": now,
+            "is_deleted": False,
+        }
+        await self.notifications_collection.insert_one(doc)
+
+    async def notify_task_status_changed(
+        self,
+        company_id: str,
+        creator_id: str,
+        task_id: str,
+        task_title: str,
+        actor_name: str,
+        new_status: str,
+    ) -> None:
+        """Task status changed (started / completed / cancelled) → notify the creator."""
+        verb = {
+            "in_progress": "started working on",
+            "completed": "completed",
+            "cancelled": "cancelled",
+        }.get(new_status)
+        if not verb:
+            return
+        now = datetime.now(timezone.utc)
+        doc = {
+            "_id": str(ObjectId()),
+            "id": str(ObjectId()),
+            "company_id": company_id,
+            "user_id": creator_id,
+            "user_type": "user",
+            "type": "task_status_changed",
+            "title": "Task Update",
+            "message": f'{actor_name} {verb} "{task_title}".',
+            "channels": ["in_app"],
+            "channel_status": {"in_app": "delivered"},
+            "is_read": False,
+            "priority": "low",
+            "action_url": f"/tasks?taskId={task_id}",
+            "data": {"task_id": task_id, "status": new_status},
+            "created_at": now,
+            "updated_at": now,
+            "is_deleted": False,
+        }
+        await self.notifications_collection.insert_one(doc)

@@ -11,6 +11,7 @@ import userService from '../../services/userService'
 import { selectUser } from '../../store/authSlice'
 import { useLivePolling } from '../../hooks/useLivePolling'
 import { useCRMEvents } from '../../context/CRMSocketContext'
+import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
 const PRIORITIES = ['low', 'medium', 'high', 'urgent']
 const STATUSES   = ['pending', 'in_progress', 'completed', 'cancelled']
@@ -614,7 +615,7 @@ function EditTaskModal({ task, users, onClose, onSave, isDark }) {
 
 // ── Create Modal ──────────────────────────────────────────────────────────────
 function CreateModal({ users, onClose, onCreate, isDark }) {
-  const [form, setForm] = useState({ title: '', description: '', priority: 'medium', status: 'pending', due_date: '', assigned_to: '' })
+  const [form, setForm] = useState({ title: '', description: '', priority: 'medium', status: 'pending', due_date: '', assigned_to: '', send_email: false })
   const [saving, setSaving] = useState(false)
 
   const submit = async (e) => {
@@ -683,6 +684,10 @@ function CreateModal({ users, onClose, onCreate, isDark }) {
               {users.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
             </select>
           </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.send_email} onChange={e => setForm(p => ({ ...p, send_email: e.target.checked }))} />
+            <span style={{ fontSize: 13, color: isDark ? '#cbd5e1' : '#374151' }}>Send Email Notification</span>
+          </label>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
             <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
             <button type="submit" disabled={saving} style={{ background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', boxShadow: '0 0 20px rgba(124,58,237,0.5)', color: '#fff', border: 'none', borderRadius: 24, padding: '10px 20px', fontWeight: 600, fontSize: 14, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.7 : 1 }}>
@@ -749,13 +754,19 @@ export default function Tasks() {
 
   useEffect(() => { userService.getUsers({ page_size: 100 }).then(r => setUsers(r.data || [])).catch(() => {}) }, [])
 
-  const handleCreate = async (data) => { await taskService.createTask(data); toast.success('Task created'); load() }
+  const handleCreate = async (data) => {
+    await taskService.createTask(data)
+    toast.success('Task created')
+    load()
+    publish(LIVE_TOPICS.TASKS); publish(LIVE_TOPICS.NOTIFICATIONS)
+  }
 
   const handleStatusChange = async (id, status) => {
     try {
       await taskService.updateTask(id, { status })
       setTasks(prev => prev.map(t => t.id === id ? { ...t, status, is_overdue: status === 'completed' ? false : t.is_overdue } : t))
       if (openTask?.id === id) setOpenTask(t => t ? { ...t, status } : null)
+      publish(LIVE_TOPICS.NOTIFICATIONS)
     } catch {
       toast.error('Failed to update status')
     }

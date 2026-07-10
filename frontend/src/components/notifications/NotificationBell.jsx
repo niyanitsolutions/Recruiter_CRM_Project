@@ -6,6 +6,7 @@ import {
   Clock, AlertCircle, Calendar, Users2, RefreshCw, CreditCard, Megaphone, CheckCircle,
 } from 'lucide-react'
 import { notificationService } from '../../services'
+import { subscribe, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
 const TYPE_ICONS = {
   offer_released:       UserPlus,
@@ -20,6 +21,7 @@ const TYPE_ICONS = {
   day_30_reminder:      Clock,
   interview_scheduled:  Calendar,
   task_assigned:        FileText,
+  task_status_changed:  CheckCircle,
   system_alert:         AlertCircle,
   // HRM / Attendance / Leave
   hrm_user_created:     UserPlus,
@@ -50,6 +52,7 @@ const TYPE_COLORS = {
   day_30_reminder:      { bg: 'rgba(245,158,11,0.15)',  color: '#F59E0B' },
   interview_scheduled:  { bg: 'rgba(79,172,254,0.15)',  color: '#4FACFE' },
   task_assigned:        { bg: 'rgba(56,249,215,0.15)',  color: '#38F9D7' },
+  task_status_changed:  { bg: 'rgba(67,233,123,0.15)',  color: '#43E97B' },
   system_alert:         { bg: 'rgba(255,71,87,0.15)',   color: '#FF4757' },
   // HRM / Attendance / Leave
   hrm_user_created:     { bg: 'rgba(79,172,254,0.15)',  color: '#4FACFE' },
@@ -117,6 +120,12 @@ const NotificationBell = () => {
     refreshCount()
     pollRef.current = setInterval(refreshCount, POLL_INTERVAL)
     return () => clearInterval(pollRef.current)
+  }, [refreshCount])
+
+  // ── Instant nudge on task/target mutations — additive, doesn't touch the
+  //    polling timer above, just runs an extra refresh right away ──────────
+  useEffect(() => {
+    return subscribe(LIVE_TOPICS.NOTIFICATIONS, refreshCount)
   }, [refreshCount])
 
   // ── Load items when dropdown opens ────────────────────────────────────────

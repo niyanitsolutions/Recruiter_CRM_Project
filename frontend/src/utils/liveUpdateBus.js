@@ -30,11 +30,14 @@ export function subscribe(topic, cb) {
 }
 
 export const LIVE_TOPICS = {
-  USERS:      'users',
-  EMPLOYEES:  'employees',
-  CANDIDATES: 'candidates',
-  ATTENDANCE: 'attendance',
-  AUTH:       'auth',
-  DASHBOARD:  'dashboard',
-  CALENDAR:   'calendar',
+  USERS:         'users',
+  EMPLOYEES:     'employees',
+  CANDIDATES:    'candidates',
+  ATTENDANCE:    'attendance',
+  AUTH:          'auth',
+  DASHBOARD:     'dashboard',
+  CALENDAR:      'calendar',
+  TASKS:         'tasks',
+  TARGETS:       'targets',
+  NOTIFICATIONS: 'notifications',
 }

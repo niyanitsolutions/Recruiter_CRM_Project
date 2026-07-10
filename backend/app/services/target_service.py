@@ -74,8 +74,9 @@ class TargetService:
         
         await self.targets.insert_one(target)
 
-        # Send TARGET_ASSIGNED email for individual targets (best-effort)
-        if data.scope.value == "individual" and data.assigned_to and data.assigned_to != user_id:
+        # Send TARGET_ASSIGNED email for individual targets (best-effort) —
+        # only when the "Send Email Notification" checkbox was checked
+        if data.send_email and data.scope.value == "individual" and data.assigned_to and data.assigned_to != user_id:
             try:
                 assignee_doc = await self.db.users.find_one({"_id": data.assigned_to})
                 if assignee_doc and assignee_doc.get("email"):
@@ -101,14 +102,25 @@ class TargetService:
                 import logging as _logging
                 _logging.getLogger(__name__).warning("Target email scheduling failed: %s", _e)
 
-        # In-app notifications for department-scoped targets (best-effort)
+        # In-app notifications (always) + optional email (checkbox-gated) for
+        # department-scoped targets — every active user in the department.
         if data.department:
             try:
                 from app.services.notification_service import NotificationService
                 from app.models.company.notification import NotificationCreate, NotificationType, NotificationChannel
+
+                dept_by_name = creator_name
+                if not dept_by_name:
+                    creator_doc = await self.db.users.find_one({"_id": user_id}, {"full_name": 1})
+                    dept_by_name = (creator_doc.get("full_name") if creator_doc else None) or "a manager"
+
+                # NOTE: no company_id filter here — `self.db` is already the
+                # tenant's own per-company database (tenant isolation is the
+                # database boundary itself), and user documents don't reliably
+                # carry a populated company_id field to filter on.
                 dept_users_cursor = self.db.users.find(
-                    {"company_id": company_id, "department": data.department, "status": "active"},
-                    {"_id": 1},
+                    {"department": data.department, "status": "active"},
+                    {"_id": 1, "full_name": 1, "email": 1},
                 )
                 notif_svc = NotificationService(self.db)
                 async for dept_user in dept_users_cursor:
@@ -120,11 +132,36 @@ class TargetService:
                             user_id=dept_uid,
                             type=NotificationType.SYSTEM_ALERT,
                             title="New Department Target",
-                            message=f"A new target '{data.name}' has been set for the {data.department} department.",
+                            message=(
+                                f"Department: {data.department}\n"
+                                f"Target: {data.target_value:g} {data.unit}\n"
+                                f"Created By: {dept_by_name}"
+                            ),
                             channels=[NotificationChannel.IN_APP],
                         ),
                         company_id=company_id,
                     )
+                    if data.send_email and dept_user.get("email"):
+                        try:
+                            from app.services.email_service import send_target_assigned_email, _fire_email
+                            _fire_email(send_target_assigned_email(
+                                to_email=dept_user["email"],
+                                assignee_name=dept_user.get("full_name", ""),
+                                target_name=data.name,
+                                target_value=data.target_value,
+                                unit=data.unit,
+                                period=data.period.value,
+                                start_date=str(data.start_date),
+                                end_date=str(data.end_date),
+                                assigned_by_name=dept_by_name,
+                                company_name=company_name or company_id,
+                                company_id=company_id,
+                            ))
+                        except Exception as _email_e:
+                            import logging as _logging
+                            _logging.getLogger(__name__).warning(
+                                "Department target email failed for %s: %s", dept_uid, _email_e
+                            )
             except Exception as _e:
                 import logging as _logging
                 _logging.getLogger(__name__).warning("Department target notification failed: %s", _e)
