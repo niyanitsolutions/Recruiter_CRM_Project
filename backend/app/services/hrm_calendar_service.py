@@ -69,7 +69,12 @@ class HrmCalendarService:
                     "date_start": h_date,
                     "date_end": h_date,
                     "title": h.get("name", "Holiday"),
-                    "meta": {"holiday_type": h.get("holiday_type")},
+                    "meta": {
+                        "holiday_type": h.get("holiday_type"),
+                        "description": h.get("description"),
+                        "is_paid": h.get("is_paid"),
+                        "is_recurring": h.get("is_recurring"),
+                    },
                 })
         return out
 

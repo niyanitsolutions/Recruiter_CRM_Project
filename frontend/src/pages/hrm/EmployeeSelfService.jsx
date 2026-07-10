@@ -19,7 +19,7 @@ import { formatDate, formatTimeOnly } from '../../utils/format'
 import { useLivePolling } from '../../hooks/useLivePolling'
 import { LIVE_TOPICS, publish } from '../../utils/liveUpdateBus'
 import ModalPortal from '../../components/common/ModalPortal'
-import CompanyCalendar from '../../components/calendar/CompanyCalendar'
+import CompanyCalendar, { toDateKey } from '../../components/calendar/CompanyCalendar'
 import { PayslipDocument } from './Payroll'
 
 const TABS = [
@@ -1192,7 +1192,7 @@ function EssCalendarTab() {
   const range = useMemo(() => {
     const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 })
     const end = endOfWeek(endOfMonth(month), { weekStartsOn: 1 })
-    return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) }
+    return { from: toDateKey(start), to: toDateKey(end) }
   }, [month])
 
   const load = useCallback(async (silent = false) => {
@@ -1207,14 +1207,15 @@ function EssCalendarTab() {
   useEffect(() => { load() }, [load])
   useLivePolling(() => load(true), 20000, true, [LIVE_TOPICS.CALENDAR])
 
-  const upcomingHolidays = events
-    .filter(e => e.type === 'holiday' && e.date_start >= new Date().toISOString().slice(0, 10))
+  const today = toDateKey(new Date())
+  const upcoming = (type) => events
+    .filter(e => e.type === type && e.date_start >= today)
     .sort((a, b) => a.date_start.localeCompare(b.date_start))
     .slice(0, 5)
-  const upcomingLeave = events
-    .filter(e => e.type === 'leave' && e.date_start >= new Date().toISOString().slice(0, 10))
-    .sort((a, b) => a.date_start.localeCompare(b.date_start))
-    .slice(0, 5)
+  const upcomingHolidays = upcoming('holiday')
+  const upcomingLeave = upcoming('leave')
+  const upcomingWfh = upcoming('wfh')
+  const upcomingShiftChanges = upcoming('shift_change')
 
   return (
     <div className="p-6 grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
@@ -1250,6 +1251,34 @@ function EssCalendarTab() {
               {upcomingLeave.map(l => (
                 <li key={l.id} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
                   <span className="font-medium" style={{ color: 'var(--text-heading)' }}>{formatDate(l.date_start)}</span> — {l.title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-heading)' }}>Upcoming WFH</h3>
+          {upcomingWfh.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No upcoming work-from-home.</p>
+          ) : (
+            <ul className="space-y-2">
+              {upcomingWfh.map(w => (
+                <li key={w.id} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  <span className="font-medium" style={{ color: 'var(--text-heading)' }}>{formatDate(w.date_start)}</span> — {w.title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-heading)' }}>Upcoming Shift Changes</h3>
+          {upcomingShiftChanges.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No upcoming shift changes.</p>
+          ) : (
+            <ul className="space-y-2">
+              {upcomingShiftChanges.map(s => (
+                <li key={s.id} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  <span className="font-medium" style={{ color: 'var(--text-heading)' }}>{formatDate(s.date_start)}</span> — {s.title}
                 </li>
               ))}
             </ul>

@@ -16,7 +16,7 @@ import { getTenantTimezone, formatTimeOnly, formatDateTime } from '../../utils/f
 import { useLivePolling } from '../../hooks/useLivePolling'
 import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 import TableScroll from '../../components/common/TableScroll'
-import CompanyCalendar from '../../components/calendar/CompanyCalendar'
+import CompanyCalendar, { toDateKey } from '../../components/calendar/CompanyCalendar'
 import HolidayManagement from './HolidayManagement'
 import LeavePolicyManagement from './LeavePolicyManagement'
 import ShiftManagement from './ShiftManagement'
@@ -1019,7 +1019,7 @@ function CalendarTab() {
   const range = useMemo(() => {
     const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 })
     const end = endOfWeek(endOfMonth(month), { weekStartsOn: 1 })
-    return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) }
+    return { from: toDateKey(start), to: toDateKey(end) }
   }, [month])
 
   const load = useCallback(async (silent = false) => {
