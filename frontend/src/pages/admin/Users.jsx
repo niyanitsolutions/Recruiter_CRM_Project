@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import usePermissions from '../../hooks/usePermissions'
+import { useTranslation } from 'react-i18next'
 import { useLivePolling } from '../../hooks/useLivePolling'
 import {
   Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, EyeOff,
@@ -502,6 +503,7 @@ const DesignationModal = ({ desig, deptList, onClose, onSaved }) => {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const Users = () => {
+  const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { has } = usePermissions()
@@ -614,7 +616,7 @@ const Users = () => {
       setUsers(response.data || [])
       setPagination(response.pagination || { page: 1, total: 0, totalPages: 0 })
     } catch (err) {
-      if (!silent) toast.error('Failed to load users')
+      if (!silent) toast.error(t('users.toast.load_failed'))
     } finally {
       if (!silent) setLoading(false)
     }
@@ -731,7 +733,7 @@ const Users = () => {
         <div className="flex items-center gap-2">
           {has('exports:create') && (
             <button onClick={() => setExportOpen(true)} className="btn-secondary flex items-center gap-2">
-              <ArrowUpFromLine className="w-4 h-4" /> Export
+              <ArrowUpFromLine className="w-4 h-4" /> {t('users.export')}
             </button>
           )}
           {has('users:create') && (
@@ -742,7 +744,7 @@ const Users = () => {
               className="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Add User
+              {t('users.add_user')}
               {seatStatus?.seat_limit_reached && (
                 <span className="ml-1 text-xs bg-white/20 px-1.5 py-0.5 rounded">
                   {seatStatus.current_active_users}/{seatStatus.total_user_seats}
@@ -1081,13 +1083,13 @@ const Users = () => {
               <table className="w-full">
                 <thead className="bg-surface-50 border-b border-surface-200">
                   <tr>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '25%' }}>User</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '14%' }}>Designation</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '14%' }}>Department</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '10%' }}>Status</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '16%' }}>Employee Profile</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '13%' }}>Last Login</th>
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '8%' }}>Actions</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '25%' }}>{t('users.table.user')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '14%' }}>{t('users.table.designation')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '14%' }}>{t('users.table.department')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '10%' }}>{t('users.table.status')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '16%' }}>{t('users.table.employee_profile')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '13%' }}>{t('users.table.last_login')}</th>
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-surface-600 uppercase tracking-wider" style={{ width: '8%' }}>{t('users.table.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-100">

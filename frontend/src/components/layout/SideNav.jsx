@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import {
   LayoutDashboard,
@@ -52,68 +53,71 @@ import EmployeeAvatar from '../common/EmployeeAvatar'
 // `permissions` is an array — the nav item shows if the user has ANY one of them.
 // This ensures sub-permissions (e.g. interviews:settings, onboards:create) also
 // reveal the parent nav link even when the broad :view permission wasn't granted.
+// `label`/`section` hold i18n keys (resolved via t() at render time in
+// NavItem/QueryNavItem and the section header below), not display text —
+// this constant lives outside the component so it has no hook access.
 const PERMISSION_NAV_MAP = [
   // Main
   { permissions: ['dashboard:view'],
-    path: '/dashboard',    icon: LayoutDashboard, label: 'Dashboard',         section: 'Main', exact: true },
+    path: '/dashboard',    icon: LayoutDashboard, label: 'nav.dashboard',         section: 'nav.section.main', exact: true },
   // Recruitment — Candidates → Jobs → Interviews → Applications → Clients → Onboarding
   { permissions: ['candidates:view'],
-    path: '/candidates',   icon: Users2,          label: 'Candidates',        section: 'Recruitment' },
+    path: '/candidates',   icon: Users2,          label: 'nav.candidates',        section: 'nav.section.recruitment' },
   { permissions: ['jobs:view'],
-    path: '/jobs',         icon: Briefcase,       label: 'Jobs',              section: 'Recruitment' },
+    path: '/jobs',         icon: Briefcase,       label: 'nav.jobs',              section: 'nav.section.recruitment' },
   { permissions: ['interviews:view'],
-    path: '/interviews',   icon: Calendar,        label: 'Interviews',        section: 'Recruitment' },
+    path: '/interviews',   icon: Calendar,        label: 'nav.interviews',        section: 'nav.section.recruitment' },
   { permissions: ['candidates:view'],
-    path: '/applications', icon: ClipboardList,   label: 'Applications',      section: 'Recruitment' },
+    path: '/applications', icon: ClipboardList,   label: 'nav.applications',      section: 'nav.section.recruitment' },
   { permissions: ['clients:view'],
-    path: '/clients',      icon: Building2,       label: 'Clients',           section: 'Recruitment' },
+    path: '/clients',      icon: Building2,       label: 'nav.clients',           section: 'nav.section.recruitment' },
   { permissions: ['onboards:view'],
-    path: '/onboards',     icon: UserCheck,       label: 'Onboarding',        section: 'Recruitment' },
+    path: '/onboards',     icon: UserCheck,       label: 'nav.onboarding',        section: 'nav.section.recruitment' },
   // Admin Management (section kept for other items that may exist)
   // Users and Sourcing Partners are now part of the HRM section for unified people management
   // Operations
   { permissions: ['tasks:view'],
-    path: '/tasks',        icon: FileCheck,       label: 'Tasks',             section: 'Operations' },
+    path: '/tasks',        icon: FileCheck,       label: 'nav.tasks',             section: 'nav.section.operations' },
   { permissions: ['targets:view', 'targets:create', 'targets:edit'],
-    path: '/targets',      icon: Target,          label: 'Targets',           section: 'Operations' },
+    path: '/targets',      icon: Target,          label: 'nav.targets',           section: 'nav.section.operations' },
   { permissions: ['reports:view'],
-    path: '/reports',      icon: FileText,        label: 'Reports',           section: 'Operations' },
+    path: '/reports',      icon: FileText,        label: 'nav.reports',           section: 'nav.section.operations' },
   { permissions: ['analytics:view'],
-    path: '/analytics',    icon: BarChart2,       label: 'Analytics',         section: 'Operations' },
+    path: '/analytics',    icon: BarChart2,       label: 'nav.analytics',         section: 'nav.section.operations' },
   // System
   { permissions: ['audit:view'],
-    path: '/audit-logs',   icon: History,         label: 'Audit Logs',        section: 'System' },
+    path: '/audit-logs',   icon: History,         label: 'nav.audit_logs',        section: 'nav.section.system' },
   { permissions: ['audit:view'],
-    path: '/trash',        icon: Trash2,          label: 'Deleted Records',   section: 'System' },
+    path: '/trash',        icon: Trash2,          label: 'nav.deleted_records',   section: 'nav.section.system' },
   { permissions: ['crm_settings:view', 'crm_settings:edit'],
-    path: '/integrations', icon: Plug,            label: 'Integrations',      section: 'System' },
+    path: '/integrations', icon: Plug,            label: 'nav.integrations',      section: 'nav.section.system' },
   { permissions: ['crm_settings:view', 'crm_settings:edit'],
-    path: '/settings',     icon: Settings,        label: 'Settings',          section: 'System' },
+    path: '/settings',     icon: Settings,        label: 'nav.settings',          section: 'nav.section.system' },
   // HRM — shown only when hrm_enabled (filtered separately in getMenuSections)
   { permissions: ['hrm:dashboard:view'],
-    path: '/hrm',                   icon: LayoutDashboard, label: 'HRM Dashboard',    section: 'HRM', hrmOnly: true },
+    path: '/hrm',                   icon: LayoutDashboard, label: 'nav.hrm_dashboard',    section: 'nav.section.hrm', hrmOnly: true },
   { permissions: ['hrm:employees:view', 'hrm:employees:manage'],
-    path: '/hrm/employees',         icon: UserCog,         label: 'Employees',        section: 'HRM', hrmOnly: true },
+    path: '/hrm/employees',         icon: UserCog,         label: 'nav.employees',        section: 'nav.section.hrm', hrmOnly: true },
   // Users and Sourcing Partners live under HRM for unified people management
   { permissions: ['users:view'],
-    path: '/users',                  icon: Users,           label: 'Users',            section: 'HRM', hrmOnly: true },
+    path: '/users',                  icon: Users,           label: 'nav.users',            section: 'nav.section.hrm', hrmOnly: true },
   { permissions: ['partners:view', 'accounts:payouts', 'accounts:invoices'],
-    path: '/partners',               icon: Link2,           label: 'Sourcing Partners', section: 'HRM', hrmOnly: true },
+    path: '/partners',               icon: Link2,           label: 'nav.sourcing_partners', section: 'nav.section.hrm', hrmOnly: true },
   { permissions: ['hrm:attendance:self', 'hrm:attendance:team', 'hrm:attendance:manage'],
-    path: '/hrm/attendance',        icon: Clock,           label: 'Attendance',       section: 'HRM', hrmOnly: true },
+    path: '/hrm/attendance',        icon: Clock,           label: 'nav.attendance',       section: 'nav.section.hrm', hrmOnly: true },
   { permissions: ['hrm:leave:apply', 'hrm:leave:team_approve', 'hrm:leave:manage'],
-    path: '/hrm/leaves',            icon: Calendar,        label: 'Leave Management', section: 'HRM', hrmOnly: true },
+    path: '/hrm/leaves',            icon: Calendar,        label: 'nav.leave_management', section: 'nav.section.hrm', hrmOnly: true },
   { permissions: ['hrm:hiring:view', 'hrm:hiring:manage'],
-    path: '/hrm/hiring',               icon: PersonStanding,  label: 'Hiring',          section: 'Internal Hiring', hrmOnly: true },
+    path: '/hrm/hiring',               icon: PersonStanding,  label: 'nav.hiring',          section: 'nav.section.internal_hiring', hrmOnly: true },
   // Employee Self-Service
   { permissions: ['hrm:attendance:self', 'hrm:leave:apply', 'hrm:payroll:view_self'],
-    path: '/hrm/ess',                  icon: LayoutGrid,      label: 'My Portal',       section: 'HRM', hrmOnly: true },
+    path: '/hrm/ess',                  icon: LayoutGrid,      label: 'nav.my_portal',       section: 'nav.section.hrm', hrmOnly: true },
   // Emp Resources — single page with Documents / Assets / Exit tabs
   { permissions: ['hrm:documents:manage', 'hrm:employees:view', 'hrm:assets:view', 'hrm:assets:manage', 'hrm:exit:manage', 'hrm:exit:view'],
-    path: '/hrm/emp-resources',        icon: Layers,          label: 'Emp Resources',   section: 'HRM', hrmOnly: true },
+    path: '/hrm/emp-resources',        icon: Layers,          label: 'nav.emp_resources',   section: 'nav.section.hrm', hrmOnly: true },
   // Document Center
   { permissions: ['docs:view', 'docs:create', 'docs:manage'],
-    path: '/hrm/doc-center',           icon: BookOpen,        label: 'Document Center', section: 'HRM', hrmOnly: true },
+    path: '/hrm/doc-center',           icon: BookOpen,        label: 'nav.document_center', section: 'nav.section.hrm', hrmOnly: true },
 ]
 
 /**
@@ -144,6 +148,7 @@ const buildPermissionMenu = (permissions, isOwner = false, isAdmin = false, user
 }
 
 const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
+  const { t }        = useTranslation()
   const dispatch     = useDispatch()
   const user         = useSelector(selectUser)
   const isSuperAdmin = useSelector(selectIsSuperAdmin)
@@ -230,18 +235,18 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
     if (isSuperAdmin) {
       return {
         flat: [
-          { path: '/super-admin',               icon: LayoutDashboard, label: 'Dashboard',     exact: true },
-          { path: '/super-admin/tenants',       icon: Building2,       label: 'Tenants' },
-          { path: '/super-admin/sellers',       icon: Users,           label: 'Sellers' },
-          { path: '/super-admin/plans',         icon: CreditCard,      label: 'Plans' },
-          { path: '/super-admin/discounts',     icon: Tag,             label: 'Discounts' },
-          { path: '/super-admin/subscriptions', icon: FileText,        label: 'Subscriptions' },
-          { path: '/super-admin/payments',      icon: DollarSign,      label: 'Payments' },
-          { path: '/super-admin/reports',       icon: BarChart2,       label: 'Reports' },
-          { path: '/super-admin/ai-provider',      icon: Brain,      label: 'AI Provider' },
-          { path: '/super-admin/payment-provider', icon: CreditCard, label: 'Payment Provider' },
-          { path: '/super-admin/communication',    icon: Megaphone,  label: 'Communication' },
-          { path: '/super-admin/settings',         icon: Settings,   label: 'Settings' },
+          { path: '/super-admin',               icon: LayoutDashboard, label: 'nav.dashboard',     exact: true },
+          { path: '/super-admin/tenants',       icon: Building2,       label: 'nav.tenants' },
+          { path: '/super-admin/sellers',       icon: Users,           label: 'nav.sellers' },
+          { path: '/super-admin/plans',         icon: CreditCard,      label: 'nav.plans' },
+          { path: '/super-admin/discounts',     icon: Tag,             label: 'nav.discounts' },
+          { path: '/super-admin/subscriptions', icon: FileText,        label: 'nav.subscriptions' },
+          { path: '/super-admin/payments',      icon: DollarSign,      label: 'nav.payments' },
+          { path: '/super-admin/reports',       icon: BarChart2,       label: 'nav.reports' },
+          { path: '/super-admin/ai-provider',      icon: Brain,      label: 'nav.ai_provider' },
+          { path: '/super-admin/payment-provider', icon: CreditCard, label: 'nav.payment_provider' },
+          { path: '/super-admin/communication',    icon: Megaphone,  label: 'nav.communication' },
+          { path: '/super-admin/settings',         icon: Settings,   label: 'nav.settings' },
         ],
         sections: [],
       }
@@ -251,13 +256,13 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
     if (isSeller) {
       return {
         flat: [
-          { path: '/seller',                 icon: LayoutDashboard, label: 'Dashboard',     exact: true },
-          { path: '/seller/tenants',         icon: Building2,       label: 'Tenants' },
-          { path: '/seller/subscriptions',   icon: FileText,        label: 'Subscriptions' },
-          { path: '/seller/payments',        icon: Wallet,          label: 'Payments' },
-          { path: '/seller/commissions',     icon: Award,           label: 'Commissions' },
-          { path: '/seller/notifications',   icon: Bell,            label: 'Notifications' },
-          { path: '/seller/profile',         icon: UserCircle,      label: 'My Profile' },
+          { path: '/seller',                 icon: LayoutDashboard, label: 'nav.dashboard',     exact: true },
+          { path: '/seller/tenants',         icon: Building2,       label: 'nav.tenants' },
+          { path: '/seller/subscriptions',   icon: FileText,        label: 'nav.subscriptions' },
+          { path: '/seller/payments',        icon: Wallet,          label: 'nav.payments' },
+          { path: '/seller/commissions',     icon: Award,           label: 'nav.commissions' },
+          { path: '/seller/notifications',   icon: Bell,            label: 'nav.notifications' },
+          { path: '/seller/profile',         icon: UserCircle,      label: 'nav.my_profile' },
         ],
         sections: [],
       }
@@ -268,15 +273,15 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       return {
         flat: [],
         sections: [
-          { section: 'My Work', items: [
-            { path: '/my-candidates',     icon: Users2,    label: 'My Candidates' },
-            { path: '/my-candidates/new', icon: UserPlus,  label: 'Add Candidate' },
-            { path: '/available-jobs',    icon: Briefcase, label: 'Available Jobs' },
+          { section: 'nav.section.my_work', items: [
+            { path: '/my-candidates',     icon: Users2,    label: 'nav.my_candidates' },
+            { path: '/my-candidates/new', icon: UserPlus,  label: 'nav.add_candidate' },
+            { path: '/available-jobs',    icon: Briefcase, label: 'nav.available_jobs' },
           ]},
-          { section: 'Earnings', items: [
-            { path: '/my-payouts',    icon: DollarSign, label: 'My Payouts' },
-            { path: '/my-invoices',   icon: Receipt,    label: 'My Invoices' },
-            { path: '/raise-invoice', icon: FileCheck,  label: 'Raise Invoice' },
+          { section: 'nav.section.earnings', items: [
+            { path: '/my-payouts',    icon: DollarSign, label: 'nav.my_payouts' },
+            { path: '/my-invoices',   icon: Receipt,    label: 'nav.my_invoices' },
+            { path: '/raise-invoice', icon: FileCheck,  label: 'nav.raise_invoice' },
           ]},
         ],
       }
@@ -291,7 +296,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       flat: [],
       sections: sections.length > 0
         ? sections
-        : [{ section: 'Info', items: [{ path: '/recruitment', icon: LayoutDashboard, label: 'Home' }] }],
+        : [{ section: 'nav.section.info', items: [{ path: '/recruitment', icon: LayoutDashboard, label: 'nav.home' }] }],
     }
   }
 
@@ -311,7 +316,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
         <NavLink
           to={item.path}
           end={item.exact}
-          title={isCollapsed ? item.label : undefined}
+          title={isCollapsed ? t(item.label) : undefined}
           className={({ isActive }) =>
             clsx('nav-item', isActive && 'nav-item-active', isCollapsed && 'justify-center px-3')
           }
@@ -326,7 +331,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
           </span>
           {!isCollapsed && (
             <span className="flex items-center gap-2 flex-1">
-              {item.label}
+              {t(item.label)}
               {badge > 0 && (
                 <span className="ml-auto min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
                   {badge > 99 ? '99+' : badge}
@@ -355,11 +360,11 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       <li>
         <NavLink
           to={`${path}?${qKey}=${qVal}`}
-          title={isCollapsed ? label : undefined}
+          title={isCollapsed ? t(label) : undefined}
           className={clsx('nav-item', isActive && 'nav-item-active', isCollapsed && 'justify-center px-3')}
         >
           <Icon className="w-5 h-5 flex-shrink-0" />
-          {!isCollapsed && <span>{label}</span>}
+          {!isCollapsed && <span>{t(label)}</span>}
         </NavLink>
       </li>
     )
@@ -471,7 +476,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
           <div key={sec.section} className={idx > 0 ? 'mt-6' : ''}>
             {!isCollapsed && (
               <p className="px-5 mb-1 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--nav-text)', opacity: 0.6 }}>
-                {sec.section}
+                {t(sec.section)}
               </p>
             )}
             <ul className="space-y-1 px-3">
@@ -493,7 +498,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
             <li>
               <NavLink
                 to="/notifications"
-                title={isCollapsed ? `Notifications${unreadCount ? ` (${unreadCount})` : ''}` : undefined}
+                title={isCollapsed ? `${t('nav.notifications')}${unreadCount ? ` (${unreadCount})` : ''}` : undefined}
                 className={({ isActive }) =>
                   clsx('nav-item', isActive && 'nav-item-active', isCollapsed && 'justify-center px-3')
                 }
@@ -508,7 +513,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
                 </span>
                 {!isCollapsed && (
                   <span className="flex items-center gap-2">
-                    Notifications
+                    {t('nav.notifications')}
                     {unreadCount > 0 && (
                       <span className="ml-auto min-w-[20px] h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
                         {unreadCount > 99 ? '99+' : unreadCount}
@@ -521,13 +526,13 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
             <li>
               <NavLink
                 to="/my-profile"
-                title={isCollapsed ? 'My Profile' : undefined}
+                title={isCollapsed ? t('nav.my_profile') : undefined}
                 className={({ isActive }) =>
                   clsx('nav-item', isActive && 'nav-item-active', isCollapsed && 'justify-center px-3')
                 }
               >
                 <UserCircle className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && <span>My Profile</span>}
+                {!isCollapsed && <span>{t('nav.my_profile')}</span>}
               </NavLink>
             </li>
           </ul>
@@ -565,11 +570,11 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
               <LogOut size={15} />
-              Logout
+              {t('nav.logout')}
             </button>
           </div>
         ) : (
-          <button onClick={handleLogout} className="w-full flex justify-center p-2 rounded-lg transition-colors" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171' }} title="Logout">
+          <button onClick={handleLogout} className="w-full flex justify-center p-2 rounded-lg transition-colors" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#f87171' }} title={t('nav.logout')}>
             <LogOut className="w-5 h-5" />
           </button>
         )}

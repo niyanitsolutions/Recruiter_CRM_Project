@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import {
   Search,
@@ -25,6 +26,7 @@ import hrmService from '../../services/hrmService'
 
 
 const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
+  const { t } = useTranslation()
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const location = useLocation()
@@ -85,15 +87,15 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
 
   const profileMenuItems = isSuperAdmin
     ? [
-        { icon: User,       label: 'Profile',  onClick: () => navigate('/super-admin/profile') },
-        { icon: Settings,   label: 'Settings', onClick: () => navigate('/super-admin/settings') },
-        { icon: HelpCircle, label: 'Help',     onClick: () => window.open('mailto:support@niyanhireflow.com') },
+        { icon: User,       label: t('topbar.profile'),  onClick: () => navigate('/super-admin/profile') },
+        { icon: Settings,   label: t('topbar.settings'), onClick: () => navigate('/super-admin/settings') },
+        { icon: HelpCircle, label: t('topbar.help'),     onClick: () => window.open('mailto:support@niyanhireflow.com') },
       ]
     : [
-        { icon: User,       label: 'Edit Profile',     onClick: () => navigate('/profile') },
-        { icon: Building2,  label: 'Company Settings', onClick: () => navigate('/company-settings') },
-        { icon: CreditCard, label: 'Billing & Plans',  onClick: () => navigate('/upgrade-plan') },
-        { icon: HelpCircle, label: 'Help',             onClick: () => window.open('mailto:support@niyanhireflow.com') },
+        { icon: User,       label: t('topbar.edit_profile'),     onClick: () => navigate('/profile') },
+        { icon: Building2,  label: t('topbar.company_settings'), onClick: () => navigate('/company-settings') },
+        { icon: CreditCard, label: t('topbar.billing_plans'),    onClick: () => navigate('/upgrade-plan') },
+        { icon: HelpCircle, label: t('topbar.help'),             onClick: () => window.open('mailto:support@niyanhireflow.com') },
       ]
 
   // Detect OS for shortcut hint
@@ -116,7 +118,7 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
             style={{ color: 'var(--text-secondary)' }}
             onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
             onMouseLeave={e => e.currentTarget.style.background = ''}
-            aria-label="Open menu"
+            aria-label={t('topbar.menu_aria')}
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -139,10 +141,10 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
           }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-strong)'; e.currentTarget.style.color = 'var(--text-primary)' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
-          title="Global search (Ctrl+K)"
+          title={t('topbar.search_hint')}
         >
           <Search className="w-4 h-4 flex-shrink-0" />
-          <span className="flex-1 text-left text-sm">Search...</span>
+          <span className="flex-1 text-left text-sm">{t('topbar.search_placeholder')}</span>
           <kbd className="text-xs px-1.5 py-0.5 rounded border font-mono flex-shrink-0"
             style={{ borderColor: 'var(--border)', background: 'var(--bg-card)', color: 'var(--text-disabled)' }}>
             {isMac ? '⌘K' : 'Ctrl K'}
@@ -156,7 +158,7 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
           style={{ color: 'var(--text-muted)' }}
           onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
           onMouseLeave={e => e.currentTarget.style.background = ''}
-          aria-label="Search"
+          aria-label={t('topbar.search_aria')}
         >
           <Search className="w-5 h-5" />
         </button>
@@ -167,7 +169,7 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
             onClick={() => setThemeOpen(o => !o)}
             className="relative p-2 rounded-lg transition-all duration-200"
             style={{ color: 'var(--text-muted)' }}
-            title="Change theme"
+            title={t('topbar.theme_hint')}
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)' }}
             onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'var(--text-muted)' }}
           >
@@ -180,9 +182,9 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
           {themeOpen && (
             <div className="dropdown right-0 animate-slide-up" style={{ minWidth: 140 }}>
               {[
-                { mode: 'dark',   icon: Moon,    label: 'Dark' },
-                { mode: 'light',  icon: Sun,     label: 'Light' },
-                { mode: 'system', icon: Monitor, label: 'System' },
+                { mode: 'dark',   icon: Moon,    label: t('topbar.theme_dark') },
+                { mode: 'light',  icon: Sun,     label: t('topbar.theme_light') },
+                { mode: 'system', icon: Monitor, label: t('topbar.theme_system') },
               ].map(({ mode, icon: Icon, label }) => (
                 <button
                   key={mode}
@@ -259,7 +261,7 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
                   onMouseLeave={e => e.currentTarget.style.background = ''}
                 >
                   <LogOut className="w-4 h-4" />
-                  Logout
+                  {t('topbar.logout')}
                 </button>
               </div>
             </div>

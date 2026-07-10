@@ -13,6 +13,7 @@ import {
   Scissors,
 } from 'lucide-react'
 import documentCenterService from '../../../services/documentCenterService'
+import { formatDate } from '../../../utils/format'
 
 // ─── Paper dimensions px at 96 dpi ──────────────────────────────────────────
 const PAPER_PX = { A4: [794, 1123], letter: [816, 1056], legal: [816, 1369] }
@@ -1486,7 +1487,7 @@ function PaginatedDocPreview({ header, footer, paper, watermark, docTitle, bodyH
     }}>
       <span>
         {footer.show_date
-          ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+          ? formatDate(new Date())
           : ''}
       </span>
       <span>{footer.text || ''}{footer.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
@@ -2106,7 +2107,7 @@ export default function QuickBuilder() {
 ${buildHeaderHtmlBlock(h)}
 <div style="padding:${contentTopPad} ${mr} ${mb} ${ml};">${titleBlock}${html}${sigBlock}</div>
 ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padding_bottom}px ${f.padding_left}px;border-top:${f.border_top ? `${f.border_width}px solid ${f.border_color}` : 'none'};font-size:${f.font_size}px;color:${f.font_color};display:flex;justify-content:space-between;align-items:center;min-height:${f.footer_height}px;">
-  <span>${f.show_date ? new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''}</span>
+  <span>${f.show_date ? formatDate(new Date()) : ''}</span>
   <span>${f.text || ''}${f.confidential_label ? ' | CONFIDENTIAL' : ''}</span>
   <span>${f.show_page_numbers ? 'Page 1' : ''}</span>
 </div>` : ''}

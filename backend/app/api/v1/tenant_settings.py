@@ -8,6 +8,7 @@ Complete settings module for tenant admins covering:
   Interview Settings (extended), Storage Settings
 """
 import asyncio
+import logging
 import re
 from datetime import datetime, timezone
 from typing import List, Optional, Any, Dict
@@ -16,6 +17,8 @@ from pydantic import BaseModel, Field
 from bson import ObjectId
 
 from app.core.dependencies import get_current_user, get_company_db, require_permissions
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tenant-settings", tags=["Tenant Settings"])
 
@@ -755,6 +758,10 @@ async def save_invoice_settings(
 
 # ── Currency & Localization ───────────────────────────────────────────────────
 
+# Languages supported by the frontend i18n system (frontend/src/locales/*).
+_VALID_LANGUAGES = {"en", "ta", "hi", "te", "kn", "ml", "fr", "de", "es", "ar"}
+
+
 class LocalizationRequest(BaseModel):
     currency: str = "INR"
     currency_symbol: str = "₹"
@@ -783,6 +790,8 @@ async def save_localization(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
+    if data.language not in _VALID_LANGUAGES:
+        raise HTTPException(status_code=400, detail=f"Unsupported language code. Allowed: {sorted(_VALID_LANGUAGES)}")
     saved = await _save_setting(db, company_id, "localization", data.model_dump(), current_user["id"])
     # Mirror into CompanySettings too — some backend consumers (e.g. the
     # login-analytics day/hour bucketing) still read CompanySettings.timezone
@@ -800,7 +809,14 @@ async def save_localization(
             upsert=True,
         )
     except Exception:
-        pass  # best-effort mirror — the canonical tenant_settings save above already succeeded
+        # Canonical tenant_settings save above already succeeded — this mirror
+        # only feeds server-side consumers that still read CompanySettings
+        # directly (e.g. login-analytics day/hour bucketing). Log so a failure
+        # here is observable instead of silently leaving those consumers stale.
+        logger.warning(
+            "Failed to mirror localization settings into company_settings for company_id=%s",
+            company_id, exc_info=True,
+        )
     return {"success": True, "data": saved, "message": "Localization settings saved"}
 
 

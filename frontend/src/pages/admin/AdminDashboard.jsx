@@ -27,7 +27,7 @@ import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 import KpiCard from '../../components/dashboard/KpiCard'
 import HiringTrend from '../../components/dashboard/HiringTrend'
 import PunchInModal from '../../components/hrm/PunchInModal'
-import { formatDateTime, getTenantTimezone } from '../../utils/format'
+import { formatDateTime, formatDate, formatTimeOnly, getTenantTimezone } from '../../utils/format'
 import { useLivePolling } from '../../hooks/useLivePolling'
 import { subscribe, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
@@ -222,7 +222,7 @@ const formatTrendData = (raw) => {
   if (!Array.isArray(items)) return []
   return items.map(item => ({
     label: item.date
-      ? new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: getTenantTimezone() })
+      ? formatDate(item.date, 'dd MMM')
       : (item.label || ''),
     value: item.count ?? item.value ?? item.actions ?? 0,
   }))
@@ -667,7 +667,7 @@ const AdminDashboard = () => {
                   {seatStatus.plan_expiry && (
                     <div className="text-center hidden xl:block">
                       <p className="text-xs font-bold leading-tight whitespace-nowrap" style={{ color: 'var(--text-heading)' }}>
-                        {new Date(seatStatus.plan_expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: getTenantTimezone() })}
+                        {formatDate(seatStatus.plan_expiry, 'dd MMM')}
                       </p>
                       <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>Expiry</p>
                     </div>
@@ -1053,7 +1053,7 @@ const AdminDashboard = () => {
                         </div>
                         {dt && (
                           <p className="text-[9px] mt-0.5 font-medium leading-tight" style={{ color: 'var(--text-muted)' }}>
-                            {new Date(dt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: getTenantTimezone() })}
+                            {formatTimeOnly(dt)}
                           </p>
                         )}
                       </div>

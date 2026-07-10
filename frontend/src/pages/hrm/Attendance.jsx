@@ -11,7 +11,7 @@ import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
 import { usePermissions } from '../../hooks/usePermissions'
 import hrmService from '../../services/hrmService'
-import { getTenantTimezone } from '../../utils/format'
+import { getTenantTimezone, formatTimeOnly, formatDateTime } from '../../utils/format'
 import TableScroll from '../../components/common/TableScroll'
 import HolidayManagement from './HolidayManagement'
 import LeavePolicyManagement from './LeavePolicyManagement'
@@ -111,7 +111,7 @@ function RecoveryModal({ record, onClose, onSuccess }) {
 
   const fmtTime = (dt) => {
     if (!dt) return '—'
-    return new Date(dt.endsWith('Z') ? dt : dt + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() })
+    return formatTimeOnly(dt.endsWith('Z') ? dt : dt + 'Z')
   }
 
   return (
@@ -571,7 +571,7 @@ function DashboardTab() {
   }
   const fmtTime = (dt) => {
     if (!dt) return '—'
-    return new Date(dt.endsWith('Z') ? dt : dt + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() })
+    return formatTimeOnly(dt.endsWith('Z') ? dt : dt + 'Z')
   }
 
   const handleCheckIn    = async (empId) => { setChecking(empId+'_in');    try { await hrmService.checkIn({ employee_id: empId });    load(1) } catch (err) { toast.error(err?.response?.data?.detail || 'Check-in failed') }    setChecking(null) }
@@ -1738,10 +1738,10 @@ function ExceptionsTab() {
                       <td className="px-3 py-2 text-xs max-w-48 truncate" style={{ color: 'var(--text-muted)' }}
                           title={ex.reason}>{ex.reason}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>
-                        {new Date(ex.from_datetime).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', timeZone: getTenantTimezone() })}
+                        {formatDateTime(ex.from_datetime)}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-xs" style={{ color: 'var(--text-body)' }}>
-                        {new Date(ex.to_datetime).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', timeZone: getTenantTimezone() })}
+                        {formatDateTime(ex.to_datetime)}
                       </td>
                       <td className="px-3 py-2 text-center">
                         {ex.allow_login

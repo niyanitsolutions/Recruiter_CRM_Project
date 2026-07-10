@@ -1016,21 +1016,12 @@ class UserService:
             "last_login": {"$gte": day_ago}
         })
 
-        # Online now — reuses the same "truly active" session definition as the
-        # session-management API (heartbeat within SESSION_TRULY_ACTIVE_THRESHOLD_SECONDS).
+        # Online now — single shared presence definition (see presence_service.py)
+        # also used by /auth/login-summary so both agree on who's online.
         online_users = 0
         if company_id:
-            from app.services.auth_service import SESSION_TRULY_ACTIVE_THRESHOLD_SECONDS
-            now = datetime.now(timezone.utc)
-            cutoff = now - timedelta(seconds=SESSION_TRULY_ACTIVE_THRESHOLD_SECONDS)
-            master_db = get_master_db()
-            online_user_ids = await master_db.sessions.distinct("user_id", {
-                "company_id": company_id,
-                "is_active": True,
-                "expires_at": {"$gt": now},
-                "last_activity_at": {"$gte": cutoff},
-            })
-            online_users = len(online_user_ids)
+            from app.services.presence_service import get_online_user_ids
+            online_users = len(await get_online_user_ids(company_id))
 
         return {
             "total_users": total,

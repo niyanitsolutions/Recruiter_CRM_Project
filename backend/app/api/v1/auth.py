@@ -1165,6 +1165,7 @@ async def get_login_summary(
     from datetime import datetime, timezone, timedelta
     from app.core.database import get_company_db as _get_company_db
     from app.core.database import get_master_db as _get_master_db
+    from app.services.presence_service import get_online_user_ids
 
     company_db = _get_company_db(auth.company_id)
     now = datetime.now(timezone.utc)
@@ -1199,20 +1200,21 @@ async def get_login_summary(
         {"$sort": {"last_login": -1}},
     ]
 
+    def _iso(dt):
+        if not dt:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
     rows = []
     async for doc in company_db.login_logs.aggregate(pipeline):
-        last_login = doc.get("last_login")
-        if last_login:
-            if last_login.tzinfo is None:
-                last_login = last_login.replace(tzinfo=timezone.utc)
-            doc["last_login"] = last_login.isoformat()
-
         # Check if user has an active session in master_db
         rows.append({
             "user_id":     doc["_id"],
             "full_name":   doc.get("full_name") or "Unknown",
             "role":        doc.get("role") or "—",
-            "last_login":  doc.get("last_login"),
+            "last_login":  _iso(doc.get("last_login")),
             "last_ip":     doc.get("last_ip") or "—",
             "last_device": doc.get("last_device") or "—",
             "total_all":   doc.get("total_all", 0),
@@ -1221,15 +1223,37 @@ async def get_login_summary(
             "total_month": doc.get("total_month", 0),
         })
 
-    # Annotate active sessions from master_db
     master_db = _get_master_db()
     user_ids = [r["user_id"] for r in rows]
-    active_sessions = set()
-    async for sess in master_db.sessions.find(
-        {"user_id": {"$in": user_ids}, "is_active": True},
-        {"user_id": 1}
+
+    # Last Login must always agree with what the Users page shows — that page
+    # reads `users.last_login` (or the tenant owner's `owner.last_login`, which
+    # is updated separately and never lands in `company_db.users`) directly, so
+    # override the login_logs-derived value here with those same canonical
+    # fields wherever available, keeping the login_logs-derived value only as a
+    # fallback (e.g. a user deleted after logging in).
+    canonical_last_login = {}
+    async for u in company_db.users.find(
+        {"_id": {"$in": user_ids}}, {"_id": 1, "last_login": 1}
     ):
-        active_sessions.add(sess["user_id"])
+        canonical_last_login[u["_id"]] = _iso(u.get("last_login"))
+
+    tenant_doc = await master_db.tenants.find_one(
+        {"company_id": auth.company_id}, {"owner": 1}
+    )
+    owner = (tenant_doc or {}).get("owner") or {}
+    owner_id = str(owner.get("_id", ""))
+    if owner_id:
+        canonical_last_login[owner_id] = _iso(owner.get("last_login"))
+
+    for row in rows:
+        canonical = canonical_last_login.get(row["user_id"])
+        if canonical is not None:
+            row["last_login"] = canonical
+
+    # Online status must also agree everywhere — same "truly active" session
+    # definition used by the dashboard's Online Users KPI (presence_service).
+    active_sessions = await get_online_user_ids(auth.company_id)
 
     for row in rows:
         row["is_active"] = row["user_id"] in active_sessions

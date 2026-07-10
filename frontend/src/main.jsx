@@ -3,9 +3,11 @@ import ReactDOM from 'react-dom/client'
 import { Provider } from 'react-redux'
 import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
+import { I18nextProvider } from 'react-i18next'
 import App from './App'
 import { store } from './store/store'
 import { ThemeProvider } from './contexts/ThemeContext'
+import i18n from './i18n'
 import './styles/index.css'
 
 // Task 11 — numeric input cleanup: block mouse-wheel from changing the value
@@ -19,6 +21,7 @@ window.addEventListener('wheel', () => {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <Provider store={store}>
+      <I18nextProvider i18n={i18n}>
       <ThemeProvider>
       <BrowserRouter>
         <App />
@@ -41,6 +44,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         />
       </BrowserRouter>
       </ThemeProvider>
+      </I18nextProvider>
     </Provider>
   </React.StrictMode>,
 )

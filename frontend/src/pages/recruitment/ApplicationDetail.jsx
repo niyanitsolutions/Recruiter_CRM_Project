@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import applicationService from '../../services/applicationService'
-import { getTenantTimezone } from '../../utils/format'
+import { formatDate, formatTimeOnly } from '../../utils/format'
 
 // ── Status color map ──────────────────────────────────────────────────────────
 const STATUS_COLORS = {
@@ -66,8 +66,8 @@ function StageTimeline({ history }) {
         const isLast = idx === history.length - 1
         const c = STATUS_COLORS[entry.to_stage] || STATUS_COLORS.applied
         const dt = entry.changed_at ? new Date(entry.changed_at) : null
-        const dateStr = dt ? dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: getTenantTimezone() }) : ''
-        const timeStr = dt ? dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() }) : ''
+        const dateStr = dt ? formatDate(dt) : ''
+        const timeStr = dt ? formatTimeOnly(dt) : ''
 
         return (
           <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: isLast ? 0 : '24px', position: 'relative' }}>
@@ -368,13 +368,13 @@ const ApplicationDetail = () => {
                   <InfoRow icon={Award} label="Offered Designation" value={app.offered_designation} />
                 )}
                 {app.offer_date && (
-                  <InfoRow icon={Calendar} label="Offer Date" value={new Date(app.offer_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} />
+                  <InfoRow icon={Calendar} label="Offer Date" value={formatDate(app.offer_date)} />
                 )}
                 {app.expected_joining_date && (
-                  <InfoRow icon={Calendar} label="Expected Joining" value={new Date(app.expected_joining_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} />
+                  <InfoRow icon={Calendar} label="Expected Joining" value={formatDate(app.expected_joining_date)} />
                 )}
                 {app.actual_joining_date && (
-                  <InfoRow icon={CheckCircle} label="Actual Joining" value={new Date(app.actual_joining_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} />
+                  <InfoRow icon={CheckCircle} label="Actual Joining" value={formatDate(app.actual_joining_date)} />
                 )}
               </div>
             </Card>
@@ -453,7 +453,7 @@ const ApplicationDetail = () => {
 
           {/* Application meta */}
           <Card title="Details">
-            <InfoRow icon={Calendar} label="Applied On" value={app.applied_at ? new Date(app.applied_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''} />
+            <InfoRow icon={Calendar} label="Applied On" value={app.applied_at ? formatDate(app.applied_at) : ''} />
             {app.source && (
               <InfoRow icon={FileText} label="Source" value={app.source.charAt(0).toUpperCase() + app.source.slice(1)} />
             )}

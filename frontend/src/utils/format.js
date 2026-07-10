@@ -1,5 +1,10 @@
 import { format, formatDistance, isValid, parseISO } from 'date-fns'
 import { store } from '../store/store'
+import {
+  formatDate as _tenantFormatDate,
+  formatDateTime as _tenantFormatDateTime,
+  formatTime as _tenantFormatTime,
+} from './dateFormatter'
 
 // All timestamps from the backend are UTC ISO strings. They are always
 // rendered in the tenant's saved Localization timezone (Company Settings →
@@ -14,6 +19,20 @@ export const getTenantTimezone = () => {
     return store.getState().localization?.settings?.timezone || FALLBACK_TZ
   } catch {
     return FALLBACK_TZ
+  }
+}
+
+/**
+ * Full tenant localization settings (date_format, time_format, timezone,
+ * language), read live from Redux. This is the one place `formatDate`/
+ * `formatDateTime`/`formatTimeOnly` below read tenant format from — do not
+ * add another copy of this lookup elsewhere.
+ */
+const getTenantSettings = () => {
+  try {
+    return store.getState().localization?.settings || undefined
+  } catch {
+    return undefined
   }
 }
 
@@ -52,11 +71,23 @@ export const formatNumber = (num) => {
 
 /**
  * Format date (date-only, no time component).
- * For plain date strings ("2024-01-15") timezone is irrelevant.
- * For full UTC datetimes the date is resolved in IST (+05:30).
+ *
+ * Centralized formatter (Task: centralized localization) — this is the one
+ * date/time formatting entry point almost every page already imports. With
+ * no `formatStr` override it delegates to `dateFormatter.js`'s tenant-aware
+ * engine so it respects the tenant's saved Date Format, not just timezone.
+ *
+ * Passing an explicit `formatStr` (a date-fns pattern) opts out of the tenant
+ * format for that one call — used by a handful of call sites that
+ * deliberately want a fixed, non-tenant-configurable shape (e.g. "dd MMM").
+ * That path is unchanged from before this consolidation.
  */
-export const formatDate = (date, formatStr = 'dd MMM yyyy') => {
+export const formatDate = (date, formatStr) => {
   if (!date) return '-'
+
+  if (formatStr === undefined) {
+    return _tenantFormatDate(date, getTenantSettings())
+  }
 
   const str = typeof date === 'string' ? date : date.toISOString()
 
@@ -80,38 +111,20 @@ export const formatDate = (date, formatStr = 'dd MMM yyyy') => {
 }
 
 /**
- * Format date with time in the tenant's saved Localization timezone.
- * Handles UTC ISO strings from the backend correctly regardless of the
- * browser's local timezone.
+ * Format date with time in the tenant's saved Localization timezone, date
+ * format, and time format (12h/24h). Delegates to `dateFormatter.js`.
  */
 export const formatDateTime = (date) => {
   if (!date) return '-'
-  const d = typeof date === 'string' ? new Date(date) : date
-  if (isNaN(d.getTime())) return '-'
-  return d.toLocaleString('en-IN', {
-    timeZone: getTenantTimezone(),
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  })
+  return _tenantFormatDateTime(date, getTenantSettings())
 }
 
 /**
- * Format time only (no date) in the tenant's saved Localization timezone.
+ * Format time only (no date), respecting tenant timezone and time format.
  */
 export const formatTimeOnly = (date) => {
   if (!date) return '-'
-  const d = typeof date === 'string' ? new Date(date) : date
-  if (isNaN(d.getTime())) return '-'
-  return d.toLocaleTimeString('en-IN', {
-    timeZone: getTenantTimezone(),
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  })
+  return _tenantFormatTime(date, getTenantSettings())
 }
 
 /**

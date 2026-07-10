@@ -8,7 +8,8 @@ import {
   selectIsInitializing, selectProfileCompleted, selectForcePasswordChange,
   initAuth, setProfileCompleted, clearForcePasswordChange, refreshToken, logoutUser,
 } from './store/authSlice'
-import { fetchLocalization } from './store/localizationSlice'
+import { fetchLocalization, selectLocalization } from './store/localizationSlice'
+import i18n, { RTL_LANGUAGES } from './i18n'
 import { useAutoLogout } from './hooks/useAutoLogout'
 import { MY_PORTAL_ALLOWED_ROLES } from './config/portalConfig'
 import { useSessionWebSocket } from './hooks/useSessionWebSocket'
@@ -952,6 +953,7 @@ const AuthInitializer = ({ children }) => {
   const isSeller        = useSelector(selectIsSeller)
   const didInit         = useRef(false)
   const didLocale       = useRef(false)
+  const language        = useSelector(state => selectLocalization(state)?.language)
 
   useEffect(() => {
     if (isInitializing && !didInit.current) {
@@ -970,6 +972,16 @@ const AuthInitializer = ({ children }) => {
       didLocale.current = false
     }
   }, [isAuthenticated, isSuperAdmin, isSeller, dispatch])
+
+  // Live language switch — fires on initial load (once tenant localization is
+  // fetched) and again immediately whenever Save Localization changes it, with
+  // no reload/logout (mirrors how timezone already propagates via Redux).
+  useEffect(() => {
+    if (!language) return
+    i18n.changeLanguage(language)
+    document.documentElement.lang = language
+    document.documentElement.dir = RTL_LANGUAGES.includes(language) ? 'rtl' : 'ltr'
+  }, [language])
 
   if (isInitializing) {
     return (

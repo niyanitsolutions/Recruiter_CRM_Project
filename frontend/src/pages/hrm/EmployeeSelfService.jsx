@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
-import { getTenantTimezone } from '../../utils/format'
+import { formatDate, formatTimeOnly } from '../../utils/format'
 import ModalPortal from '../../components/common/ModalPortal'
 import { PayslipDocument } from './Payroll'
 
@@ -132,7 +132,7 @@ function ProfileTab({ employeeId }) {
         <Field label="Designation"       value={emp.designation_name} />
         <Field label="Reporting Manager" value={emp.reporting_manager_name} />
         <Field label="Employment Type"   value={emp.employment_type?.replace(/_/g, ' ')} />
-        <Field label="Date of Joining"   value={emp.date_of_joining ? new Date(emp.date_of_joining).toLocaleDateString('en-IN') : null} />
+        <Field label="Date of Joining"   value={emp.date_of_joining ? formatDate(emp.date_of_joining) : null} />
         <Field label="Work Location"     value={emp.work_location} />
         <Field label="Shift"             value={emp.shift_start_time && emp.shift_end_time ? `${emp.shift_start_time} – ${emp.shift_end_time}` : null} />
       </div>
@@ -518,8 +518,7 @@ function PunchInPanel({ todayCtx, onPunchIn, onPunchOut, activeSession, elapsed,
             Active — {fmtSecs(elapsed)}
           </span>
           <span className="text-xs ml-auto" style={{ color: 'var(--text-muted)' }}>
-            In since {new Date(activeSession.check_in.endsWith('Z') ? activeSession.check_in : activeSession.check_in + 'Z')
-              .toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() })}
+            In since {formatTimeOnly(activeSession.check_in.endsWith('Z') ? activeSession.check_in : activeSession.check_in + 'Z')}
           </span>
         </div>
       )}
@@ -1012,10 +1011,12 @@ function AttendanceTab() {
                 <tbody>
                   {records.map((rec, i) => {
                     const cfg = STATUS_COLORS[rec.status] || { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' }
-                    const checkIn  = rec.check_in  ? new Date(rec.check_in.endsWith('Z')  ? rec.check_in  : rec.check_in  + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() }) : '—'
-                    const checkOut = rec.check_out ? new Date(rec.check_out.endsWith('Z') ? rec.check_out : rec.check_out + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: getTenantTimezone() }) : '—'
-                    // rec.date is a plain calendar date — build from Y/M/D parts
-                    // so display never shifts due to a timezone conversion.
+                    const checkIn  = rec.check_in  ? formatTimeOnly(rec.check_in.endsWith('Z')  ? rec.check_in  : rec.check_in  + 'Z') : '—'
+                    const checkOut = rec.check_out ? formatTimeOnly(rec.check_out.endsWith('Z') ? rec.check_out : rec.check_out + 'Z') : '—'
+                    // rec.date is a plain calendar date — build from Y/M/D parts so
+                    // display never shifts due to a timezone conversion. Includes a
+                    // weekday name, which the centralized formatter doesn't support,
+                    // so this stays a documented exception rather than using it.
                     const dateStr  = rec.date
                       ? (() => {
                           const [y, m, d] = rec.date.split('-').map(Number)
@@ -1578,9 +1579,9 @@ function LeaveTab({ employeeId }) {
                   </span>
                 </div>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                  {new Date(l.from_date + 'T00:00:00').toLocaleDateString('en-IN')}
+                  {formatDate(l.from_date)}
                   {' – '}
-                  {new Date(l.to_date + 'T00:00:00').toLocaleDateString('en-IN')}
+                  {formatDate(l.to_date)}
                   {l.total_days ? ` · ${l.total_days} day${l.total_days > 1 ? 's' : ''}` : ''}
                 </p>
                 {l.reason && (
@@ -1709,7 +1710,7 @@ function DocumentsTab() {
               </div>
               <p className="text-xs capitalize mt-0.5" style={{ color: 'var(--text-muted)' }}>
                 {doc.doc_type?.replace(/_/g, ' ')}
-                {doc.uploaded_at ? ` · ${new Date(doc.uploaded_at).toLocaleDateString('en-IN')}` : ''}
+                {doc.uploaded_at ? ` · ${formatDate(doc.uploaded_at)}` : ''}
               </p>
               {doc.status === 'rejected' && doc.rejection_reason && (
                 <p className="text-xs mt-1 font-medium" style={{ color: '#ef4444' }}>
@@ -1774,7 +1775,7 @@ function AssetsTab() {
       .finally(() => setLoading(false))
   }, [])
 
-  const fmtDate = (dt) => dt ? new Date(dt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : null
+  const fmtDate = (dt) => dt ? formatDate(dt) : null
 
   if (loading) return (
     <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>Loading…</div>

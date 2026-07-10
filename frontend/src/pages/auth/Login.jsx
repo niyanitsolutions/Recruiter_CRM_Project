@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { useForm } from 'react-hook-form'
+import { useTranslation } from 'react-i18next'
 import toast from 'react-hot-toast'
 import {
   Mail, Lock, ArrowRight, AlertCircle, Calendar, XCircle,
@@ -477,6 +478,7 @@ function ScreenHead({ icon, iconColor, iconBg, iconBorder, title, subtitle }) {
 // LOGIN PAGE
 // ═══════════════════════════════════════════════════════════════════════════════
 const Login = () => {
+  const { t }       = useTranslation()
   const dispatch    = useDispatch()
   const navigate    = useNavigate()
   const { isLoading } = useSelector(selectAuth)
@@ -517,7 +519,7 @@ const Login = () => {
     if (loginWithTenant.fulfilled.match(result)) {
       if (credentials.remember_me) { setSavedEmail(credentials.identifier); setSavedPassword(credentials.password) }
       else                          { removeSavedEmail(); removeSavedPassword() }
-      toast.success('Login successful!')
+      toast.success(t('login.success_toast'))
       setLocationPrompt(null)
     } else if (loginWithTenant.rejected.match(result)) {
       const payload = result.payload
@@ -559,7 +561,7 @@ const Login = () => {
       if (result.payload.tenant_selection_required) return
       if (credentials.remember_me) { setSavedEmail(credentials.identifier); setSavedPassword(credentials.password) }
       else                          { removeSavedEmail(); removeSavedPassword() }
-      toast.success('Login successful!')
+      toast.success(t('login.success_toast'))
       setLocationPrompt(null)
     } else if (login.rejected.match(result)) {
       const payload = result.payload
@@ -880,10 +882,10 @@ const Login = () => {
           margin: '0 0 8px',
           lineHeight: 1.1,
         }}>
-          Welcome Back
+          {t('login.heading')}
         </h2>
         <p style={{ color: 'rgba(255,255,255,0.52)', fontSize: '14px', margin: 0 }}>
-          Manage Hiring Smarter. Build Teams Faster.
+          {t('login.subheading')}
         </p>
       </div>
 
@@ -900,14 +902,14 @@ const Login = () => {
 
         {/* Email / Mobile */}
         <GlassField
-          label="Email / Mobile Number"
+          label={t('login.identifier_label')}
           htmlFor="identifier"
           icon={<Mail size={16} />}
           error={errors.identifier?.message}
         >
           <input
             id="identifier"
-            placeholder="Enter email or mobile number"
+            placeholder={t('login.identifier_placeholder')}
             autoComplete="email"
             className="glass-input"
             {...register('identifier', {
@@ -919,7 +921,7 @@ const Login = () => {
 
         {/* Password */}
         <GlassField
-          label="Password"
+          label={t('login.password_label')}
           htmlFor="password"
           icon={<Lock size={16} />}
           error={errors.password?.message}
@@ -927,7 +929,7 @@ const Login = () => {
           <input
             id="password"
             type={showPassword ? 'text' : 'password'}
-            placeholder="Enter your password"
+            placeholder={t('login.password_placeholder')}
             autoComplete="current-password"
             className="glass-input glass-input-pr"
             {...register('password', { required: 'Password is required' })}
@@ -951,7 +953,7 @@ const Login = () => {
               onChange={e => setRememberMeState(e.target.checked)}
               style={{ width: 15, height: 15, accentColor: '#6366f1', cursor: 'pointer' }}
             />
-            <span style={{ color: 'rgba(255,255,255,0.48)', fontSize: '13px' }}>Remember me</span>
+            <span style={{ color: 'rgba(255,255,255,0.48)', fontSize: '13px' }}>{t('login.remember_me')}</span>
           </label>
           <a
             href="/forgot-password"
@@ -960,7 +962,7 @@ const Login = () => {
             onMouseOver={e => e.target.style.color = '#a5b4fc'}
             onMouseOut={e  => e.target.style.color = '#818cf8'}
           >
-            Forgot password?
+            {t('login.forgot_password')}
           </a>
         </div>
 
@@ -972,8 +974,8 @@ const Login = () => {
           style={{ marginTop: 6 }}
         >
           {(isSubmitting || isLoading)
-            ? <><Spinner /> Signing In...</>
-            : <>Sign In <ArrowRight size={17} /></>
+            ? <><Spinner /> {t('login.signing_in')}</>
+            : <>{t('login.sign_in')} <ArrowRight size={17} /></>
           }
         </button>
       </form>
