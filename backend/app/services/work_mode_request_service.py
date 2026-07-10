@@ -220,10 +220,13 @@ class WorkModeRequestService:
             query["status"] = status
         # Date-range overlap filter (calendar aggregation) — optional, additive,
         # existing callers that don't pass date_from/date_to are unaffected.
+        # from_date/to_date are stored as "YYYY-MM-DD" strings (model field
+        # WorkModeRequestCreate.from_date: str) — Motor also cannot encode a
+        # bare datetime.date at all, so these must be compared as strings.
         if date_from is not None:
-            query["to_date"] = {"$gte": date_from}
+            query["to_date"] = {"$gte": date_from.isoformat()}
         if date_to is not None:
-            query["from_date"] = {"$lte": date_to}
+            query["from_date"] = {"$lte": date_to.isoformat()}
         total = await self.col.count_documents(query)
         skip = (page - 1) * page_size
         cursor = self.col.find(query).sort("created_at", -1).skip(skip).limit(page_size)

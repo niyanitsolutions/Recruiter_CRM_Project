@@ -74,7 +74,11 @@
       "Bash(cd d:/crm-project/backend && grep -n \"CORSMiddleware\\\\|= FastAPI\\(\\\\|app = FastAPI\" app/main.py *)",
       "Bash(git check-ignore *)",
       "Bash(git --no-pager diff -- frontend/src/store/authSlice.js)",
-      "Bash(git diff *)"
+      "Bash(git diff *)",
+      "Bash(rm -f /d/tmp/diag_calendar*.py && echo \"cleaned up scratch diagnostic scripts\")"
+    ],
+    "additionalDirectories": [
+      "D:\\tmp"
     ]
   }
 }
