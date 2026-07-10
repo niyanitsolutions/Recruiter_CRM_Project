@@ -211,6 +211,9 @@ const exportHolidaysCsv = (year) => api.get(`${BASE}/holidays/export/csv`, { par
 const copyHolidaysToNextYear = () => api.post(`${BASE}/holidays/copy-next-year`)
 const importHolidaysCsv = (formData) => api.post(`${BASE}/holidays/import`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 
+// ── Company Calendar ─────────────────────────────────────────────────────────
+const getCalendarEvents = (from, to) => api.get(`${BASE}/calendar/events`, { params: { from, to } })
+
 // ── Leave Policies ─────────────────────────────────────────────────────────
 const listLeavePolicies = (params) => api.get(`${BASE}/leave-policies`, { params })
 const createLeavePolicy = (data) => api.post(`${BASE}/leave-policies`, data)
@@ -288,6 +291,7 @@ const hrmService = {
   toggleChecklistItem, cancelExitRequest,
   listHolidays, createHoliday, updateHoliday, deleteHoliday,
   checkHoliday, exportHolidaysCsv, copyHolidaysToNextYear, importHolidaysCsv,
+  getCalendarEvents,
   listLeavePolicies, createLeavePolicy, getLeavePolicy, updateLeavePolicy, deleteLeavePolicy, seedDefaultLeavePolicies,
   listShifts, createShift, updateShift, deleteShift, seedDefaultShifts, assignShift,
   createShiftAssignment, listShiftAssignments, listMyShiftAssignments,

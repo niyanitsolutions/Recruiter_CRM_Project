@@ -92,6 +92,7 @@ from app.api.v1 import (
     hrm_doc_upload_tokens,
     hrm_employee_onboarding,
     hrm_work_mode, hrm_exceptions, hrm_shift_assignments,
+    hrm_calendar,
 )
 
 # ============== Document Center ==============
@@ -477,6 +478,7 @@ app.include_router(hrm_shift_assignments.router,   prefix=API_V1_PREFIX, tags=["
 app.include_router(hrm_doc_upload_tokens.router,   prefix=API_V1_PREFIX, tags=["HRM - Doc Upload Tokens"])
 app.include_router(hrm_work_mode.router,           prefix=API_V1_PREFIX, tags=["HRM - Work Mode Requests"])
 app.include_router(hrm_exceptions.router,          prefix=API_V1_PREFIX, tags=["HRM - Attendance Exceptions"])
+app.include_router(hrm_calendar.router,            prefix=API_V1_PREFIX, tags=["HRM - Calendar"])
 app.include_router(document_center.router,       prefix=API_V1_PREFIX, tags=["Document Center"])
 
 

@@ -36,4 +36,5 @@ export const LIVE_TOPICS = {
   ATTENDANCE: 'attendance',
   AUTH:       'auth',
   DASHBOARD:  'dashboard',
+  CALENDAR:   'calendar',
 }

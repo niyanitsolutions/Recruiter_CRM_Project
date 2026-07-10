@@ -6,6 +6,7 @@ import {
 import toast from 'react-hot-toast'
 import hrmService from '../../services/hrmService'
 import usePermissions from '../../hooks/usePermissions'
+import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
 const HOLIDAY_TYPES = [
   { value: 'national', label: 'National Holiday',  color: '#ef4444' },
@@ -149,6 +150,7 @@ export default function HolidayManagement() {
       }
       setModal(null)
       load()
+      publish(LIVE_TOPICS.CALENDAR)
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to save holiday')
     }
@@ -162,6 +164,7 @@ export default function HolidayManagement() {
       await hrmService.deleteHoliday(h.id)
       toast.success('Holiday deleted')
       load()
+      publish(LIVE_TOPICS.CALENDAR)
     } catch { toast.error('Failed to delete holiday') }
     setDeleting(null)
   }
@@ -170,6 +173,7 @@ export default function HolidayManagement() {
     try {
       const res = await hrmService.copyHolidaysToNextYear()
       toast.success(`${res.data.created} holidays copied to ${res.data.year}`)
+      publish(LIVE_TOPICS.CALENDAR)
     } catch { toast.error('Copy failed') }
   }
 
@@ -196,6 +200,7 @@ export default function HolidayManagement() {
         toast.error(`${d.errors.length} row(s) had errors — check console`)
       }
       load()
+      publish(LIVE_TOPICS.CALENDAR)
     } catch { toast.error('Import failed') }
     e.target.value = ''
   }

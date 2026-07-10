@@ -210,12 +210,20 @@ class WorkModeRequestService:
         status: Optional[str] = None,
         page: int = 1,
         page_size: int = 50,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
     ) -> dict:
         query: dict = {"company_id": company_id}
         if employee_id:
             query["employee_id"] = employee_id
         if status:
             query["status"] = status
+        # Date-range overlap filter (calendar aggregation) — optional, additive,
+        # existing callers that don't pass date_from/date_to are unaffected.
+        if date_from is not None:
+            query["to_date"] = {"$gte": date_from}
+        if date_to is not None:
+            query["from_date"] = {"$lte": date_to}
         total = await self.col.count_documents(query)
         skip = (page - 1) * page_size
         cursor = self.col.find(query).sort("created_at", -1).skip(skip).limit(page_size)

@@ -9,6 +9,7 @@ import ModalPortal from '../../components/common/ModalPortal'
 import TableScroll from '../../components/common/TableScroll'
 import { useSelector } from 'react-redux'
 import { selectUser, selectUserPermissions } from '../../store/authSlice'
+import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -223,6 +224,7 @@ function RejectModal({ leave, onClose, onSuccess }) {
       toast.success('Leave rejected')
       onClose()
       onSuccess()
+      publish(LIVE_TOPICS.CALENDAR)
     } catch (ex) {
       const raw = ex?.response?.data
       toast.error(raw?.detail || raw?.message || 'Failed to reject leave')
@@ -333,6 +335,7 @@ export default function LeaveManagement() {
       toast.success('Leave approved')
       load(page)
       loadBalances()
+      publish(LIVE_TOPICS.CALENDAR)
     } catch (ex) {
       const raw = ex?.response?.data
       toast.error(raw?.detail || raw?.message || 'Failed to approve')

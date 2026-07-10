@@ -218,12 +218,24 @@ class ShiftAssignmentService:
         status: Optional[str] = None,
         page: int = 1,
         page_size: int = 20,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
     ) -> dict:
         query: dict = {"company_id": company_id, "is_deleted": False}
         if employee_id:
             query["employee_id"] = employee_id
         if status:
             query["status"] = status
+        # Date-range overlap filter (calendar aggregation) — effective_from/to
+        # are stored as "YYYY-MM-DD" strings, which compare correctly as
+        # strings. Optional, additive — existing callers are unaffected.
+        if date_from is not None:
+            query["$or"] = [
+                {"effective_to": None},
+                {"effective_to": {"$gte": date_from}},
+            ]
+        if date_to is not None:
+            query["effective_from"] = {"$lte": date_to}
         total = await self.db[self.CHANGE_COL].count_documents(query)
         cursor = self.db[self.CHANGE_COL].find(query).sort("created_at", -1).skip((page - 1) * page_size).limit(page_size)
         items = [self._serialize(d) async for d in cursor]

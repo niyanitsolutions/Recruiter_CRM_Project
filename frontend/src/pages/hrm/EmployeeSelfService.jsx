@@ -3,24 +3,29 @@
  * Employee ID is resolved dynamically via /me/today (server-side), NOT from JWT.
  * This ensures the portal works even when the JWT was issued before employee linking.
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSelector } from 'react-redux'
 import { selectUser } from '../../store/authSlice'
 import {
-  User, Clock, Calendar, Banknote, Plus, UserX, X,
+  User, Clock, Calendar, CalendarDays, Banknote, Plus, UserX, X,
   Loader2, FolderOpen, Package, FileText, Download, Eye,
   ChevronLeft, ChevronRight, History, MapPin, Wifi, Home,
   Briefcase, CheckCircle, XCircle, AlertCircle, LogIn, LogOut, RotateCcw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns'
 import hrmService from '../../services/hrmService'
 import { formatDate, formatTimeOnly } from '../../utils/format'
+import { useLivePolling } from '../../hooks/useLivePolling'
+import { LIVE_TOPICS, publish } from '../../utils/liveUpdateBus'
 import ModalPortal from '../../components/common/ModalPortal'
+import CompanyCalendar from '../../components/calendar/CompanyCalendar'
 import { PayslipDocument } from './Payroll'
 
 const TABS = [
   { key: 'profile',    label: 'My Profile',  icon: User },
   { key: 'attendance', label: 'Attendance',   icon: Clock },
+  { key: 'calendar',   label: 'Calendar',     icon: CalendarDays },
   { key: 'payslips',   label: 'Payslips',     icon: Banknote },
   { key: 'leaves',     label: 'Leave',        icon: Calendar },
   { key: 'documents',  label: 'Documents',    icon: FolderOpen },
@@ -857,75 +862,9 @@ function AttendanceTab() {
         </div>
       )}
 
-      {/* ── Work Mode Requests ──────────────────────────────────────────────── */}
-      <div className="rounded-xl border overflow-hidden"
-           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
-        <div className="flex items-center justify-between px-4 py-3 border-b"
-             style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
-          <div className="flex items-center gap-2">
-            <Home className="w-4 h-4" style={{ color: 'var(--accent)' }} />
-            <span className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>Work Mode Requests</span>
-          </div>
-          <button
-            onClick={() => setShowWMRModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
-            style={{ background: 'var(--accent)' }}>
-            <Plus className="w-3.5 h-3.5" /> Apply Work Mode
-          </button>
-        </div>
-
-        {wmrLoading ? (
-          <div className="py-6 flex justify-center" style={{ color: 'var(--text-muted)' }}>
-            <Loader2 className="w-5 h-5 animate-spin" />
-          </div>
-        ) : wmrList.length === 0 ? (
-          <div className="py-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
-            No work mode requests. Click <strong>Apply Work Mode</strong> to submit one.
-          </div>
-        ) : (
-          <div>
-            {wmrList.map(req => {
-              const sc = WMR_STATUS_COLOR[req.status] || { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' }
-              const canCancel = req.status === 'pending' || req.status === 'approved'
-              return (
-                <div key={req.id} className="flex items-center gap-3 px-4 py-3 border-b"
-                     style={{ borderColor: 'var(--border-subtle)' }}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium" style={{ color: 'var(--text-heading)' }}>
-                        {WMR_MODE_LABEL[req.work_mode] || req.work_mode}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full text-xs font-medium capitalize"
-                            style={{ background: sc.bg, color: sc.color }}>
-                        {req.status}
-                      </span>
-                    </div>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                      {req.from_date} – {req.to_date} · {req.reason}
-                    </p>
-                    {req.rejected_reason && (
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-danger)' }}>
-                        Rejected: {req.rejected_reason}
-                      </p>
-                    )}
-                  </div>
-                  {canCancel && (
-                    <button
-                      onClick={() => handleCancelWMR(req.id)}
-                      disabled={cancellingId === req.id}
-                      className="text-xs px-2.5 py-1 rounded-lg"
-                      style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)',
-                        opacity: cancellingId === req.id ? 0.5 : 1, cursor: cancellingId === req.id ? 'not-allowed' : 'pointer' }}>
-                      {cancellingId === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Cancel'}
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
+      {/* ── Main column (history) + sidebar (requests) ──────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5 items-start">
+      <div>
       {/* ── Attendance History ──────────────────────────────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -1092,6 +1031,77 @@ function AttendanceTab() {
           </div>
         )}
       </div>
+      </div>{/* /main column */}
+
+      <div className="flex flex-col gap-5">
+      {/* ── Work Mode Requests ──────────────────────────────────────────────── */}
+      <div className="rounded-xl border overflow-hidden"
+           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
+        <div className="flex items-center justify-between px-4 py-3 border-b"
+             style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-alt)' }}>
+          <div className="flex items-center gap-2">
+            <Home className="w-4 h-4" style={{ color: 'var(--accent)' }} />
+            <span className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>Work Mode Requests</span>
+          </div>
+          <button
+            onClick={() => setShowWMRModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white"
+            style={{ background: 'var(--accent)' }}>
+            <Plus className="w-3.5 h-3.5" /> Apply Work Mode
+          </button>
+        </div>
+
+        {wmrLoading ? (
+          <div className="py-6 flex justify-center" style={{ color: 'var(--text-muted)' }}>
+            <Loader2 className="w-5 h-5 animate-spin" />
+          </div>
+        ) : wmrList.length === 0 ? (
+          <div className="py-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+            No work mode requests. Click <strong>Apply Work Mode</strong> to submit one.
+          </div>
+        ) : (
+          <div>
+            {wmrList.map(req => {
+              const sc = WMR_STATUS_COLOR[req.status] || { bg: 'rgba(139,143,168,0.12)', color: '#8B8FA8' }
+              const canCancel = req.status === 'pending' || req.status === 'approved'
+              return (
+                <div key={req.id} className="flex items-center gap-3 px-4 py-3 border-b"
+                     style={{ borderColor: 'var(--border-subtle)' }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium" style={{ color: 'var(--text-heading)' }}>
+                        {WMR_MODE_LABEL[req.work_mode] || req.work_mode}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium capitalize"
+                            style={{ background: sc.bg, color: sc.color }}>
+                        {req.status}
+                      </span>
+                    </div>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      {req.from_date} – {req.to_date} · {req.reason}
+                    </p>
+                    {req.rejected_reason && (
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--text-danger)' }}>
+                        Rejected: {req.rejected_reason}
+                      </p>
+                    )}
+                  </div>
+                  {canCancel && (
+                    <button
+                      onClick={() => handleCancelWMR(req.id)}
+                      disabled={cancellingId === req.id}
+                      className="text-xs px-2.5 py-1 rounded-lg"
+                      style={{ background: 'var(--bg-danger)', color: 'var(--text-danger)',
+                        opacity: cancellingId === req.id ? 0.5 : 1, cursor: cancellingId === req.id ? 'not-allowed' : 'pointer' }}>
+                      {cancellingId === req.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Cancel'}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       {/* ── Shift Change Requests ──────────────────────────────────────────── */}
       <div className="rounded-xl border overflow-hidden"
@@ -1148,6 +1158,8 @@ function AttendanceTab() {
           </div>
         )}
       </div>
+      </div>{/* /sidebar */}
+      </div>{/* /grid */}
 
       {/* Work Mode Request Modal */}
       {showWMRModal && (
@@ -1165,6 +1177,85 @@ function AttendanceTab() {
           onSuccess={() => { loadSCR() }}
         />
       )}
+    </div>
+  )
+}
+
+// ── Calendar Tab ───────────────────────────────────────────────────────────────
+
+function EssCalendarTab() {
+  const [month, setMonth] = useState(new Date())
+  const [view, setView] = useState('month')
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const range = useMemo(() => {
+    const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 })
+    const end = endOfWeek(endOfMonth(month), { weekStartsOn: 1 })
+    return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) }
+  }, [month])
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    try {
+      const res = await hrmService.getCalendarEvents(range.from, range.to)
+      setEvents(res.data?.data || [])
+    } catch { /* silent — calendar is supplementary, not business-critical */ }
+    if (!silent) setLoading(false)
+  }, [range.from, range.to])
+
+  useEffect(() => { load() }, [load])
+  useLivePolling(() => load(true), 20000, true, [LIVE_TOPICS.CALENDAR])
+
+  const upcomingHolidays = events
+    .filter(e => e.type === 'holiday' && e.date_start >= new Date().toISOString().slice(0, 10))
+    .sort((a, b) => a.date_start.localeCompare(b.date_start))
+    .slice(0, 5)
+  const upcomingLeave = events
+    .filter(e => e.type === 'leave' && e.date_start >= new Date().toISOString().slice(0, 10))
+    .sort((a, b) => a.date_start.localeCompare(b.date_start))
+    .slice(0, 5)
+
+  return (
+    <div className="p-6 grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+      <CompanyCalendar
+        events={events}
+        loading={loading}
+        month={month}
+        onMonthChange={setMonth}
+        view={view}
+        onViewChange={setView}
+      />
+      <div className="flex flex-col gap-4">
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-heading)' }}>Upcoming Holidays</h3>
+          {upcomingHolidays.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No upcoming holidays.</p>
+          ) : (
+            <ul className="space-y-2">
+              {upcomingHolidays.map(h => (
+                <li key={h.id} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  <span className="font-medium" style={{ color: 'var(--text-heading)' }}>{formatDate(h.date_start)}</span> — {h.title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-heading)' }}>Upcoming Leave</h3>
+          {upcomingLeave.length === 0 ? (
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No upcoming leave.</p>
+          ) : (
+            <ul className="space-y-2">
+              {upcomingLeave.map(l => (
+                <li key={l.id} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                  <span className="font-medium" style={{ color: 'var(--text-heading)' }}>{formatDate(l.date_start)}</span> — {l.title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -1429,6 +1520,7 @@ function LeaveTab({ employeeId }) {
       toast.success('Leave cancelled')
       load()
       loadBalances()
+      publish(LIVE_TOPICS.CALENDAR)
     } catch (ex) {
       toast.error(ex?.response?.data?.detail || 'Failed to cancel leave')
     }
@@ -1879,7 +1971,7 @@ export default function EmployeeSelfService() {
   }, [user?.hrmEmployeeId])
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-7xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold" style={{ color: 'var(--text-heading)' }}>My ESS Portal</h1>
         <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>Employee Self-Service</p>
@@ -1944,6 +2036,7 @@ export default function EmployeeSelfService() {
 
           {activeTab === 'profile'    && <ProfileTab    employeeId={employeeId} />}
           {activeTab === 'attendance' && <AttendanceTab  employeeId={employeeId} />}
+          {activeTab === 'calendar'   && <EssCalendarTab />}
           {activeTab === 'payslips'   && <PayslipsTab />}
           {activeTab === 'leaves'     && <LeaveTab       employeeId={employeeId} />}
           {activeTab === 'documents'  && <DocumentsTab />}

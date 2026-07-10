@@ -8,11 +8,15 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useSelector } from 'react-redux'
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns'
 import { selectUser } from '../../store/authSlice'
 import { usePermissions } from '../../hooks/usePermissions'
 import hrmService from '../../services/hrmService'
 import { getTenantTimezone, formatTimeOnly, formatDateTime } from '../../utils/format'
+import { useLivePolling } from '../../hooks/useLivePolling'
+import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 import TableScroll from '../../components/common/TableScroll'
+import CompanyCalendar from '../../components/calendar/CompanyCalendar'
 import HolidayManagement from './HolidayManagement'
 import LeavePolicyManagement from './LeavePolicyManagement'
 import ShiftManagement from './ShiftManagement'
@@ -1004,10 +1008,51 @@ function DashboardTab() {
 }
 
 
+// ── Calendar Tab ───────────────────────────────────────────────────────────────
+
+function CalendarTab() {
+  const [month, setMonth] = useState(new Date())
+  const [view, setView] = useState('month')
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const range = useMemo(() => {
+    const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 })
+    const end = endOfWeek(endOfMonth(month), { weekStartsOn: 1 })
+    return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) }
+  }, [month])
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    try {
+      const res = await hrmService.getCalendarEvents(range.from, range.to)
+      setEvents(res.data?.data || [])
+    } catch { /* silent — calendar is supplementary, not business-critical */ }
+    if (!silent) setLoading(false)
+  }, [range.from, range.to])
+
+  useEffect(() => { load() }, [load])
+  useLivePolling(() => load(true), 20000, true, [LIVE_TOPICS.CALENDAR])
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto">
+      <CompanyCalendar
+        events={events}
+        loading={loading}
+        month={month}
+        onMonthChange={setMonth}
+        view={view}
+        onViewChange={setView}
+      />
+    </div>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 const TABS = [
   { key: 'dashboard',    label: 'Dashboard',        icon: Activity },
+  { key: 'calendar',     label: 'Calendar',         icon: CalendarDays },
   { key: 'holidays',     label: 'Holidays',         icon: CalendarDays,      perm: 'hrm:attendance:team' },
   { key: 'leave_policy', label: 'Leave Policies',   icon: FileText,          perm: 'hrm:attendance:team' },
   { key: 'shifts',       label: 'Shifts',           icon: Clock,             perm: 'hrm:attendance:team' },
@@ -1302,7 +1347,7 @@ function ShiftChangesTab() {
 
   const handleApprove = async (id) => {
     setActionId(id)
-    try { await hrmService.approveShiftChangeRequest(id); toast.success('Request approved'); load(page) }
+    try { await hrmService.approveShiftChangeRequest(id); toast.success('Request approved'); load(page); publish(LIVE_TOPICS.CALENDAR) }
     catch (e) { toast.error(e?.response?.data?.detail || 'Failed') }
     setActionId(null)
   }
@@ -1312,7 +1357,7 @@ function ShiftChangesTab() {
     setActionId(rejectModal)
     try {
       await hrmService.rejectShiftChangeRequest(rejectModal, { review_reason: rejectReason })
-      toast.success('Request rejected'); setRejectModal(null); setRejectReason(''); load(page)
+      toast.success('Request rejected'); setRejectModal(null); setRejectReason(''); load(page); publish(LIVE_TOPICS.CALENDAR)
     } catch (e) { toast.error(e?.response?.data?.detail || 'Failed') }
     setActionId(null)
   }
@@ -1465,6 +1510,7 @@ function WorkModeTab() {
       await hrmService.approveWorkModeRequest(id)
       toast.success('Request approved')
       load(page)
+      publish(LIVE_TOPICS.CALENDAR)
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to approve')
     }
@@ -1479,6 +1525,7 @@ function WorkModeTab() {
       toast.success('Request rejected')
       setRejectModal(null); setRejectReason('')
       load(page)
+      publish(LIVE_TOPICS.CALENDAR)
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to reject')
     }
@@ -2216,6 +2263,7 @@ export default function Attendance() {
 
       <div className="flex-1 overflow-auto">
         {activeTab === 'dashboard'    && <DashboardTab />}
+        {activeTab === 'calendar'     && <CalendarTab />}
         {activeTab === 'holidays'     && <HolidayManagement />}
         {activeTab === 'leave_policy' && <LeavePolicyManagement />}
         {activeTab === 'shifts'       && <ShiftsPage />}

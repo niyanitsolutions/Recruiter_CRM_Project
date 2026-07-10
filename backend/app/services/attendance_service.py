@@ -103,6 +103,30 @@ class AttendanceService:
         doc = await self.db["hrm_holidays"].find_one(query)
         return doc["name"] if doc else None
 
+    async def _tenant_localized_time_str(self, company_id: str, dt_utc_naive: datetime) -> str:
+        """Format a naive-UTC instant as a time-of-day string using the tenant's
+        actual Company Localization settings (timezone + 12h/24h), matching the
+        centralized frontend formatter (dateFormatter.js) byte-for-byte.
+
+        Reads `tenant_settings` (key="localization") — the same canonical store
+        the frontend's Redux `localization` slice is backed by — rather than the
+        `company_settings` doc used for attendance/geo-fence config, which can be
+        stale or absent for tenants that never explicitly saved Localization.
+        """
+        doc = await self.db.tenant_settings.find_one({"company_id": company_id, "key": "localization"}) or {}
+        tz_name = doc.get("timezone") or "Asia/Kolkata"
+        time_format = doc.get("time_format") or "12h"
+        aware_utc = dt_utc_naive.replace(tzinfo=timezone.utc)
+        try:
+            from zoneinfo import ZoneInfo
+            local_dt = aware_utc.astimezone(ZoneInfo(tz_name))
+        except Exception:
+            # Last-resort fallback that doesn't depend on the IANA tz database
+            # being available at all — a fixed IST offset, matching the app's
+            # own frontend/backend default timezone (Asia/Kolkata).
+            local_dt = aware_utc.astimezone(timezone(timedelta(hours=5, minutes=30)))
+        return local_dt.strftime("%H:%M") if time_format == "24h" else local_dt.strftime("%I:%M %p")
+
     @staticmethod
     def _local_now(settings: dict) -> datetime:
         """Current time in the tenant's timezone, as a naive datetime.
@@ -602,14 +626,12 @@ class AttendanceService:
         if crm_user_id:
             try:
                 from app.services.notification_service import NotificationService
-                from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-                _tz_name = settings.get("timezone", "UTC")
-                try:
-                    _tz = ZoneInfo(_tz_name)
-                    _now_aware = datetime.now(timezone.utc)
-                    check_in_str = _now_aware.astimezone(_tz).strftime("%I:%M %p")
-                except (ZoneInfoNotFoundError, Exception):
-                    check_in_str = datetime.now(timezone.utc).strftime("%I:%M %p")
+                # Use the actual attendance check-in instant (`now`, already
+                # stored on the record above) and the tenant's real Company
+                # Localization settings — never a freshly-recomputed timestamp
+                # or the attendance-config `company_settings` timezone, which
+                # can be stale/absent for tenants that never saved Localization.
+                check_in_str = await self._tenant_localized_time_str(company_id, now)
                 await NotificationService(self.db).notify_punch_in(
                     company_id=company_id,
                     user_id=crm_user_id,
