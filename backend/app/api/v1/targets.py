@@ -115,9 +115,12 @@ async def get_my_targets(
     any department-scoped targets whose department matches the user's department."""
     service = TargetService(db)
 
-    # Resolve caller's department from users collection (not in JWT)
-    user_doc = await db.users.find_one({"_id": current_user["id"]}, {"department": 1})
-    user_department = (user_doc or {}).get("department") if user_doc else None
+    # Resolve caller's permission-department bucket. Target's Department field
+    # reuses the Users → Permissions → Department option set (role slugs), and
+    # `role` is the field reliably populated on every user record (unlike
+    # primary_department), so a user's own role is what's matched against a
+    # department-scoped target's `department` value.
+    user_department = current_user.get("role")
 
     return await service.list_my_targets(
         company_id=current_user["company_id"],

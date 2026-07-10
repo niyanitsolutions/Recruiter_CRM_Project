@@ -13,6 +13,7 @@ import ModalPortal from '../../components/common/ModalPortal'
 import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
 import { useDraftRecovery } from '../../hooks/useDraftRecovery'
 import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
+import { PERM_DEPT_OPTIONS } from '../../constants/permissionDepartments'
 
 // ── Department-based permission system ───────────────────────────────────────
 
@@ -113,17 +114,6 @@ const DEPT_MODULES = {
   accounts:             { full: ['accounts','payouts','invoices','imports','exports','tasks'], view_only: ['clients','partners','reports','targets_view'] },
   partner:              { full: ['candidates'], view_only: ['jobs','interviews'] },
 }
-
-const PERM_DEPT_OPTIONS = [
-  { value: 'owner',                 label: 'Owner' },
-  { value: 'admin',                 label: 'Admin' },
-  { value: 'client_coordinator',    label: 'Client Coordinator' },
-  { value: 'candidate_coordinator', label: 'Candidate Coordinator' },
-  { value: 'recruiter',             label: 'Recruiter' },
-  { value: 'hr',                    label: 'HR' },
-  { value: 'accounts',              label: 'Accounts' },
-  { value: 'partner',               label: 'Partner' },
-]
 
 const DEPT_TO_ROLE = {
   owner:                'admin',

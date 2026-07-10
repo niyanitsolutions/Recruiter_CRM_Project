@@ -109,17 +109,30 @@ class TargetService:
                 from app.services.notification_service import NotificationService
                 from app.models.company.notification import NotificationCreate, NotificationType, NotificationChannel
 
+                from app.models.company.user import get_role_display_name
+
                 dept_by_name = creator_name
                 if not dept_by_name:
                     creator_doc = await self.db.users.find_one({"_id": user_id}, {"full_name": 1})
                     dept_by_name = (creator_doc.get("full_name") if creator_doc else None) or "a manager"
+                dept_label = get_role_display_name(data.department)
 
                 # NOTE: no company_id filter here — `self.db` is already the
                 # tenant's own per-company database (tenant isolation is the
                 # database boundary itself), and user documents don't reliably
                 # carry a populated company_id field to filter on.
+                # Matches on `role` — the Target Department dropdown reuses the
+                # same option set as Users → Permissions → Department
+                # (PERM_DEPT_OPTIONS), whose values are role slugs. Verified
+                # against real data that `primary_department` (the field the
+                # Permissions dropdown notionally writes) is not populated on
+                # any existing user record, whereas `role` always is — so role
+                # is the field that actually identifies a user's permission
+                # department in practice. "owner" has no corresponding role
+                # (tenant owners are role="admin"), so it folds to "admin".
+                _role_filter = "admin" if data.department == "owner" else data.department
                 dept_users_cursor = self.db.users.find(
-                    {"department": data.department, "status": "active"},
+                    {"role": _role_filter, "status": "active"},
                     {"_id": 1, "full_name": 1, "email": 1},
                 )
                 notif_svc = NotificationService(self.db)
@@ -133,7 +146,7 @@ class TargetService:
                             type=NotificationType.SYSTEM_ALERT,
                             title="New Department Target",
                             message=(
-                                f"Department: {data.department}\n"
+                                f"Department: {dept_label}\n"
                                 f"Target: {data.target_value:g} {data.unit}\n"
                                 f"Created By: {dept_by_name}"
                             ),

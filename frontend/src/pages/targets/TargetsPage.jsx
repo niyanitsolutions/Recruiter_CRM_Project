@@ -11,7 +11,7 @@ import {
   CheckCircle, Clock, AlertCircle, Award
 } from 'lucide-react';
 import targetService from '../../services/targetService';
-import departmentService from '../../services/departmentService';
+import { PERM_DEPT_OPTIONS } from '../../constants/permissionDepartments';
 import TargetCard from './components/TargetCard';
 import Leaderboard from './Leaderboard';
 import { useLivePolling } from '../../hooks/useLivePolling';
@@ -34,24 +34,15 @@ const TargetsPage = () => {
   });
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
-  const [departmentOptions, setDepartmentOptions] = useState([]);
+  // Department dropdown reuses the exact same Department options as
+  // Users → Permissions → Department (single source of truth — see
+  // constants/permissionDepartments.js). Not the free-form org Department
+  // master, and not fetched from an API — same static list Users uses.
+  const departmentOptions = PERM_DEPT_OPTIONS;
 
   useEffect(() => {
     loadData();
   }, [activeTab, filters]);
-
-  // Department dropdown reflects the org's current Departments list — dynamic,
-  // deduped, sorted, no hardcoded values, updates as departments are added.
-  useEffect(() => {
-    departmentService.getDepartments()
-      .then(res => {
-        const names = (res.data || [])
-          .map(d => (d.name || '').trim())
-          .filter(Boolean);
-        setDepartmentOptions([...new Set(names)].sort((a, b) => a.localeCompare(b)));
-      })
-      .catch(() => {});
-  }, []);
 
   // Open edit modal when navigated to /targets/edit/:targetId
   useEffect(() => {
@@ -248,8 +239,8 @@ const TargetsPage = () => {
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Departments</option>
-            {departmentOptions.map(name => (
-              <option key={name} value={name}>{name}</option>
+            {departmentOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
 
@@ -418,8 +409,8 @@ const EditTargetModal = ({ target, departmentOptions, onClose, onUpdated }) => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Select Department</option>
-              {departmentOptions.map(name => (
-                <option key={name} value={name}>{name}</option>
+              {departmentOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
           </div>
@@ -596,8 +587,8 @@ const CreateTargetModal = ({ departmentOptions, onClose, onCreated }) => {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Select Department</option>
-              {departmentOptions.map(name => (
-                <option key={name} value={name}>{name}</option>
+              {departmentOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
           </div>
