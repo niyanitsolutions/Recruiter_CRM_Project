@@ -14,7 +14,7 @@ const FunnelChart = ({ data = [], height = 280, showPercentage = true, showConve
   }
 
   const maxValue = Math.max(...data.map(d => d.value || d.count || 0));
-  const colors = ['#2196F3', '#0d9488', '#22c55e', '#F59E0B', '#8B5CF6', '#EC4899'];
+  const colors = ['#167CFB', '#0d9488', '#22c55e', '#F59E0B', '#8B5CF6', '#EC4899'];
 
   return (
     <div style={{ height }} className="flex flex-col justify-center space-y-3">

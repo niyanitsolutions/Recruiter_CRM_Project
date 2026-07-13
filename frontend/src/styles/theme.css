@@ -20,16 +20,16 @@
   --bg-card:           #161426;           /* stat cards / panels */
   --bg-card-alt:       #1a1730;           /* alternate card / inner panels */
   --bg-topbar:         #110f1f;
-  --bg-hover:          rgba(56, 189, 248, 0.08);
-  --bg-active:         rgba(56, 189, 248, 0.15);
+  --bg-hover:          rgba(22, 124, 251, 0.08);
+  --bg-active:         rgba(22, 124, 251, 0.15);
   --bg-overlay:        rgba(0, 0, 10, 0.80);
-  --row-selected-bg:   rgba(56, 189, 248, 0.10);
+  --row-selected-bg:   rgba(22, 124, 251, 0.10);
 
-  /* ── Brand / Accent — Sky Blue (dark theme) ── */
-  --accent:            #38BDF8;
-  --accent-hover:      #0EA5E9;
-  --accent-pressed:    #0284C7;
-  --accent-light:      rgba(56, 189, 248, 0.18);
+  /* ── Brand / Accent — Vivid Blue (dark theme) ── */
+  --accent:            #167CFB;
+  --accent-hover:      #45A0FF;
+  --accent-pressed:    #0267F9;
+  --accent-light:      rgba(22, 124, 251, 0.18);
   --accent-2:          #4facfe;
 
   /* ── Text ── */
@@ -39,7 +39,7 @@
   --text-disabled:     #3d3860;
   --text-heading:      #f5f3ff;           /* was #f1f0ff — near-white headings */
   --text-label:        #9e98c8;           /* was #7c75b8 — matches muted */
-  --text-link:         #38BDF8;
+  --text-link:         #167CFB;
   --text-danger:       #f87171;
 
   /* ── Borders ── */
@@ -53,8 +53,8 @@
   --input-text:         #dbd8f8;
   --input-placeholder:  #7068a0;           /* was #5a5585 — more readable placeholder */
   --input-border:       #2d2b55;
-  --input-focus-border: #38BDF8;
-  --input-focus-shadow: rgba(56, 189, 248, 0.25);
+  --input-focus-border: #167CFB;
+  --input-focus-shadow: rgba(22, 124, 251, 0.28);
   --input-autofill:     #1e1b4b;
   --input-autofill-text: #dbd8f8;
   --input-disabled-bg:  #13112a;
@@ -76,21 +76,21 @@
 
   /* ── Navigation — left-border accent style ── */
   --nav-text:          #a8a3ce;           /* was #7c75b8 — clearly readable inactive items */
-  --nav-text-active:   #7dd3fc;
-  --nav-bg-active:     rgba(56, 189, 248, 0.15);
-  --nav-border-active: #38BDF8;
-  --nav-hover-bg:      rgba(56, 189, 248, 0.08);
-  --nav-glow-active:   rgba(56, 189, 248, 0.40);
+  --nav-text-active:   #45A0FF;
+  --nav-bg-active:     rgba(22, 124, 251, 0.15);
+  --nav-border-active: #167CFB;
+  --nav-hover-bg:      rgba(22, 124, 251, 0.08);
+  --nav-glow-active:   rgba(22, 124, 251, 0.40);
 
   /* ── UI elements ── */
   --scrollbar-track:        #0d0b1a;
   --scrollbar-thumb:        #2d2b55;
   --scrollbar-thumb-hover:  #3d3b70;
-  --selection-bg:           rgba(56, 189, 248, 0.35);
-  --selection-text:         #7dd3fc;
+  --selection-bg:           rgba(22, 124, 251, 0.35);
+  --selection-text:         #45A0FF;
   --dropdown-bg:            #161426;
   --dropdown-border:        #2d2b55;
-  --dropdown-hover:         rgba(56, 189, 248, 0.10);
+  --dropdown-hover:         rgba(22, 124, 251, 0.10);
   --skeleton-from:          #0f2137;
   --skeleton-via:           #13293f;
   --skeleton-to:            #0f2137;
@@ -132,16 +132,16 @@
   --bg-card:           #ffffff;
   --bg-card-alt:       #f8f7ff;
   --bg-topbar:         #ffffff;
-  --bg-hover:          #EAF4FE;
-  --bg-active:         #E8F4FF;
+  --bg-hover:          #DCEEFF;
+  --bg-active:         #EAF4FF;
   --bg-overlay:        rgba(0, 0, 0, 0.45);
-  --row-selected-bg:   #EEF7FF;
+  --row-selected-bg:   #EAF4FF;
 
-  /* ── Brand / Accent — Sky Blue (light theme) ── */
-  --accent:            #2196F3;
-  --accent-hover:      #1E88E5;
-  --accent-pressed:    #1976D2;
-  --accent-light:      rgba(33, 150, 243, 0.18);
+  /* ── Brand / Accent — Vivid Blue (light theme) ── */
+  --accent:            #167CFB;
+  --accent-hover:      #0267F9;
+  --accent-pressed:    #005BEA;
+  --accent-light:      rgba(22, 124, 251, 0.18);
   --accent-2:          #4facfe;
 
   /* ── Text ── */
@@ -151,7 +151,7 @@
   --text-disabled:     #acaccc;
   --text-heading:      #0d0d1e;           /* was #0f0f1a — deeper heading */
   --text-label:        #3a3a5a;           /* was #4a4a6a */
-  --text-link:         #2196F3;
+  --text-link:         #167CFB;
   --text-danger:       #dc2626;
 
   /* ── Borders ── */
@@ -165,8 +165,8 @@
   --input-text:         #1a1a2e;
   --input-placeholder:  #8a8aaa;           /* was #7a7a9a — more visible placeholder */
   --input-border:       #d0cdf5;
-  --input-focus-border: #2196F3;
-  --input-focus-shadow: rgba(33, 150, 243, 0.15);
+  --input-focus-border: #167CFB;
+  --input-focus-shadow: rgba(22, 124, 251, 0.28);
   --input-autofill:     #f3f1ff;
   --input-autofill-text: #1a1a2e;
   --input-disabled-bg:  #eeecff;
@@ -187,31 +187,31 @@
   --text-danger:  #dc2626;
   --text-info:    #4f46e5;
 
-  /* ── Navigation — Sky Blue sidebar, left-border active style ── */
+  /* ── Navigation — Vivid Blue sidebar, left-border active style ── */
   --nav-text:          #5A82A8;           /* muted blue inactive items */
-  --nav-text-active:   #1565C0;           /* vivid blue active */
-  --nav-bg-active:     #E8F4FF;           /* light sky-blue active bg */
-  --nav-border-active: #2196F3;           /* left-border accent color */
-  --nav-hover-bg:      #EAF4FE;
-  --nav-glow-active:   rgba(33, 150, 243, 0.12);
+  --nav-text-active:   #0267F9;           /* vivid blue active */
+  --nav-bg-active:     #EAF4FF;           /* light vivid-blue active bg */
+  --nav-border-active: #167CFB;           /* left-border accent color */
+  --nav-hover-bg:      #DCEEFF;
+  --nav-glow-active:   rgba(22, 124, 251, 0.12);
 
   /* ── UI elements ── */
-  --scrollbar-track:        #EAF4FE;
+  --scrollbar-track:        #DCEEFF;
   --scrollbar-thumb:        #bcdcf7;
   --scrollbar-thumb-hover:  #93c8ef;
-  --selection-bg:           rgba(33, 150, 243, 0.15);
-  --selection-text:         #1565C0;
+  --selection-bg:           rgba(22, 124, 251, 0.15);
+  --selection-text:         #0267F9;
   --dropdown-bg:            #ffffff;
   --dropdown-border:        #e0dffe;
-  --dropdown-hover:         #EAF4FE;
-  --skeleton-from:          #EAF4FE;
+  --dropdown-hover:         #DCEEFF;
+  --skeleton-from:          #DCEEFF;
   --skeleton-via:           #F3F9FF;
-  --skeleton-to:            #EAF4FE;
+  --skeleton-to:            #DCEEFF;
 
   /* ── Shadows ── */
-  --shadow-card:     0 2px 8px rgba(33, 150, 243, 0.06), 0 1px 3px rgba(33, 150, 243, 0.04);
-  --shadow-soft:     0 4px 16px rgba(33, 150, 243, 0.10);
-  --shadow-elevated: 0 20px 60px rgba(33, 150, 243, 0.12);
+  --shadow-card:     0 2px 8px rgba(22, 124, 251, 0.06), 0 1px 3px rgba(22, 124, 251, 0.04);
+  --shadow-soft:     0 4px 16px rgba(22, 124, 251, 0.10);
+  --shadow-elevated: 0 20px 60px rgba(22, 124, 251, 0.12);
 
   /* ── Stat card left-border accent colors ── */
   --stat-border-green:  #059669;

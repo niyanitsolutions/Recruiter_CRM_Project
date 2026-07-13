@@ -237,7 +237,7 @@ const formatTrendData = (raw) => {
 
 // Validated categorical palette (node scripts/validate_palette.js from the
 // dataviz skill) — lightness band, chroma floor and CVD-separation all pass.
-const SRC_COLORS = ['#2196F3', '#0d9488', '#22c55e', '#FA8231', '#FF6B9D', '#8b5cf6', '#F6D365']
+const SRC_COLORS = ['#167CFB', '#0d9488', '#22c55e', '#FA8231', '#FF6B9D', '#8b5cf6', '#F6D365']
 
 // ─────────────────────────────────────────────────────────────────────────────
 const AdminDashboard = () => {
@@ -524,7 +524,7 @@ const AdminDashboard = () => {
 
   // ── Funnel data ───────────────────────────────────────────────────────────────
   const funnelData = recruitStats ? [
-    { stage: 'Applied',     value: recruitStats.applied     || 0, fill: '#2196F3', icon: UserPlus },
+    { stage: 'Applied',     value: recruitStats.applied     || 0, fill: '#167CFB', icon: UserPlus },
     { stage: 'Screening',   value: recruitStats.screening   || 0, fill: '#4FACFE', icon: ListChecks },
     { stage: 'Shortlisted', value: recruitStats.shortlisted || 0, fill: '#0d9488', icon: FileCheck },
     { stage: 'Interview',   value: recruitStats.interview   || 0, fill: '#22c55e', icon: Calendar },
@@ -548,7 +548,7 @@ const AdminDashboard = () => {
   const barData    = trendData.slice(-6).map((d, i, arr) => ({
     label: d.label,
     value: d.value,
-    fill:  i === arr.length - 1 ? '#2196F3' : '#2196F355',
+    fill:  i === arr.length - 1 ? '#167CFB' : '#167CFB55',
   }))
 
   // ── AI insights ───────────────────────────────────────────────────────────────
@@ -954,9 +954,9 @@ const AdminDashboard = () => {
                     boxShadow: 'var(--shadow-card)',
                   }}
                 >
-                  <div className="absolute top-0 left-0 right-0" style={{ height: '2px', background: 'linear-gradient(90deg, #2196F3, #38BDF8)' }} />
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-2" style={{ background: '#2196F318' }}>
-                    <Users className="w-[15px] h-[15px]" style={{ color: '#2196F3' }} />
+                  <div className="absolute top-0 left-0 right-0" style={{ height: '2px', background: 'linear-gradient(90deg, #167CFB, #45A0FF)' }} />
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-2" style={{ background: '#167CFB18' }}>
+                    <Users className="w-[15px] h-[15px]" style={{ color: '#167CFB' }} />
                   </div>
                   <div className="flex items-center gap-3">
                     <div>

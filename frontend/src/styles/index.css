@@ -429,10 +429,10 @@ h1, h2, h3, h4, h5, h6 {
 .bg-gray-100             { background-color: var(--bg-gray-100) !important; }
 .bg-gray-200             { background-color: var(--bg-gray-200) !important; }
 
-/* Light mode: card hover adds sky-blue shadow */
+/* Light mode: card hover adds vivid-blue shadow */
 [data-theme="light"] .card-hover:hover {
-  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.08), 0 4px 16px rgba(33, 150, 243, 0.06) !important;
-  border-color: #bcdcf7 !important;
+  box-shadow: 0 2px 8px rgba(22, 124, 251, 0.08), 0 4px 16px rgba(22, 124, 251, 0.06) !important;
+  border-color: #b3d4fc !important;
 }
 
 /* Light mode: sidebar border */
@@ -538,12 +538,12 @@ html[data-theme="dark"] .card-hover:hover {
    only ~3.4:1 contrast on dark card backgrounds (#161426 / #0c1526) and fail
    WCAG AA. Override them to bright/vivid variants in dark contexts.
    ─────────────────────────────────────────────────────────────────────────── */
-[data-theme="dark"] .text-accent-600 { color: #7dd3fc !important; }   /* bright sky blue — good contrast on dark bg */
-[data-theme="dark"] .text-accent-500 { color: #bae6fd !important; }   /* light sky blue */
-[data-theme="dark"] .text-accent-700 { color: #7dd3fc !important; }   /* same as 600 — both need boosting */
-[data-theme="dark"] .text-accent-400 { color: #e0f2fe !important; }
-[data-theme="dark"] .border-accent-500 { border-color: #7dd3fc !important; }  /* contrast as active indicator */
-[data-theme="dark"] .border-accent-300 { border-color: #0EA5E9 !important; }
+[data-theme="dark"] .text-accent-600 { color: #45A0FF !important; }   /* bright vivid blue — good contrast on dark bg */
+[data-theme="dark"] .text-accent-500 { color: #7EB8FF !important; }   /* light vivid blue */
+[data-theme="dark"] .text-accent-700 { color: #45A0FF !important; }   /* same as 600 — both need boosting */
+[data-theme="dark"] .text-accent-400 { color: #B3D9FF !important; }
+[data-theme="dark"] .border-accent-500 { border-color: #45A0FF !important; }  /* contrast as active indicator */
+[data-theme="dark"] .border-accent-300 { border-color: #0267F9 !important; }
 
 /* System (Blue Tint) — orange accent family */
 [data-theme="system"] .text-accent-600 { color: #FF6B35 !important; }
