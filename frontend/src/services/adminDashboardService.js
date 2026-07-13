@@ -38,6 +38,14 @@ const adminDashboardService = {
     const response = await api.get('/admin/dashboard/system-health')
     return response.data
   },
+
+  // Small additive dashboard-only enrichment — recruiter avatar/department
+  // lookup for the given user ids, plus a few cross-domain counts.
+  getDashboardInsights: async (userIds = []) => {
+    const params = userIds.length ? { user_ids: userIds.join(',') } : {}
+    const response = await api.get('/admin/dashboard/insights', { params })
+    return response.data
+  },
 }
 
 export default adminDashboardService

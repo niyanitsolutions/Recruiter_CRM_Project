@@ -1101,7 +1101,21 @@ class InterviewService:
 
         cursor = collection.find(query).sort("scheduled_time", 1)
         interviews = await cursor.to_list(length=50)
-        return [InterviewService._build_list_response(iv) for iv in interviews]
+        responses = [InterviewService._build_list_response(iv) for iv in interviews]
+
+        # Dashboard-only enrichment: attach candidate_id + photo for avatar
+        # display. Batched single query, additive fields only — does not
+        # touch _build_list_response (shared by other callers).
+        cand_ids = [iv.get("candidate_id") for iv in interviews if iv.get("candidate_id")]
+        photo_map: Dict[str, Any] = {}
+        if cand_ids:
+            async for c in db["candidates"].find({"_id": {"$in": cand_ids}}, {"_id": 1, "photo_url": 1}):
+                photo_map[c["_id"]] = c.get("photo_url")
+        for iv, resp in zip(interviews, responses):
+            resp.candidate_id = iv.get("candidate_id")
+            resp.candidate_photo_url = photo_map.get(iv.get("candidate_id"))
+
+        return responses
 
     # ── get_pending_feedback ─────────────────────────────────────────────────
 

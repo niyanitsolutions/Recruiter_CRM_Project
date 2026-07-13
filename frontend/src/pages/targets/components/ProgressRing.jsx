@@ -4,9 +4,9 @@
  */
 import React from 'react';
 
-const ProgressRing = ({ 
-  progress = 0, 
-  size = 120, 
+const ProgressRing = ({
+  progress = 0,
+  size = 120,
   strokeWidth = 8,
   color = '#3B82F6',
   bgColor = '#E5E7EB',
@@ -14,7 +14,9 @@ const ProgressRing = ({
   showValue = false,
   value,
   target,
-  label
+  label,
+  textColor,
+  labelColor,
 }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
@@ -62,18 +64,18 @@ const ProgressRing = ({
       {/* Center content */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         {showPercentage && (
-          <span className="text-2xl font-bold text-gray-900">
+          <span className={`text-2xl font-bold ${textColor ? '' : 'text-gray-900'}`} style={textColor ? { color: textColor } : undefined}>
             {Math.round(progress)}%
           </span>
         )}
         {showValue && value !== undefined && (
           <>
-            <span className="text-xl font-bold text-gray-900">{value}</span>
-            <span className="text-xs text-gray-500">of {target}</span>
+            <span className={`text-xl font-bold ${textColor ? '' : 'text-gray-900'}`} style={textColor ? { color: textColor } : undefined}>{value}</span>
+            <span className={`text-xs ${labelColor ? '' : 'text-gray-500'}`} style={labelColor ? { color: labelColor } : undefined}>of {target}</span>
           </>
         )}
         {label && (
-          <span className="text-xs text-gray-500 mt-1">{label}</span>
+          <span className={`text-xs mt-1 ${labelColor ? '' : 'text-gray-500'}`} style={labelColor ? { color: labelColor } : undefined}>{label}</span>
         )}
       </div>
     </div>

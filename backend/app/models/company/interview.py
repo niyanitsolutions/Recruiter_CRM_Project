@@ -384,6 +384,8 @@ class InterviewListResponse(BaseModel):
     """Simplified interview for lists"""
     id: str
 
+    candidate_id: Optional[str] = None
+    candidate_photo_url: Optional[str] = None
     candidate_name: Optional[str] = None
     job_title: Optional[str] = None
     client_name: Optional[str] = None

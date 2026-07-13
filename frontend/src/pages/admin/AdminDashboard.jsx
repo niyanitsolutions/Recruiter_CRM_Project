@@ -7,6 +7,7 @@ import {
   RefreshCw, Users2, DollarSign, Target, Bot,
   BarChart2, Clock, CheckCircle2,
   AlertTriangle, Trophy, Zap, ChevronRight, Bell, Plus, ChevronDown,
+  Video, Phone, MapPin, FileCheck, Home, ListChecks, UserCheck,
 } from 'lucide-react'
 import {
   Tooltip as RechartTooltip, ResponsiveContainer,
@@ -27,7 +28,9 @@ import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 import KpiCard from '../../components/dashboard/KpiCard'
 import HiringTrend from '../../components/dashboard/HiringTrend'
 import PunchInModal from '../../components/hrm/PunchInModal'
-import { formatDateTime, formatDate, formatTimeOnly, getTenantTimezone } from '../../utils/format'
+import EmployeeAvatar from '../../components/common/EmployeeAvatar'
+import ProgressRing from '../targets/components/ProgressRing'
+import { formatDateTime, formatDate, getTenantTimezone } from '../../utils/format'
 import { useLivePolling } from '../../hooks/useLivePolling'
 import { subscribe, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
@@ -101,20 +104,6 @@ const _cache = {
   ts: 0, company_id: null,
 }
 
-// ── Time-based greeting ───────────────────────────────────────────────────────
-const getGreeting = () => {
-  // Hour must be resolved in the tenant's saved Localization timezone, not
-  // the browser/OS clock — otherwise the greeting can disagree with every
-  // other time display on the page.
-  const h = parseInt(
-    new Intl.DateTimeFormat('en-GB', { timeZone: getTenantTimezone(), hour: '2-digit', hour12: false }).format(new Date()),
-    10,
-  )
-  if (h < 12) return 'Good morning'
-  if (h < 17) return 'Good afternoon'
-  return 'Good evening'
-}
-
 // ── Card wrapper ──────────────────────────────────────────────────────────────
 const Card = ({ children, className = '', style = {} }) => (
   <div
@@ -168,6 +157,10 @@ const PERIODS = [
   { key: 'half_year', label: 'Last 6 Months', days: 180 },
   { key: 'all_time',  label: 'All Time',      days: 0   },
 ]
+
+// Activity Trend has its own independent Today/Week/Month toggle — a subset
+// of PERIODS, never the page-wide date selector.
+const TREND_PERIODS = PERIODS.filter(p => ['today', 'week', 'month'].includes(p.key))
 
 const PeriodFilter = ({ value, onChange }) => {
   const [open, setOpen] = useState(false)
@@ -228,8 +221,9 @@ const formatTrendData = (raw) => {
   }))
 }
 
-const PIE_COLORS = ['#7c3aed', '#4FACFE', '#43E97B', '#FA8231', '#FF4757', '#FF6B9D', '#38F9D7']
-const SRC_COLORS = ['#7c3aed', '#4FACFE', '#43E97B', '#FA8231', '#FF6B9D', '#38F9D7', '#F6D365', '#FF4757']
+// Validated categorical palette (node scripts/validate_palette.js from the
+// dataviz skill) — lightness band, chroma floor and CVD-separation all pass.
+const SRC_COLORS = ['#7c3aed', '#4FACFE', '#22c55e', '#FA8231', '#FF6B9D', '#0d9488', '#F6D365']
 
 // ─────────────────────────────────────────────────────────────────────────────
 const AdminDashboard = () => {
@@ -257,6 +251,8 @@ const AdminDashboard = () => {
   const [period,           setPeriod]           = useState(PERIODS.find(p => p.key === 'today'))
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [showQuickAction,  setShowQuickAction]  = useState(false)
+  const [insights,         setInsights]         = useState(null)
+  const [trendPeriod,      setTrendPeriod]      = useState(PERIODS.find(p => p.key === 'week'))
 
   // Attendance warning: show card if user dismissed the punch-in modal today.
   // Do NOT gate on hrmEmployeeId — show for all non-partner internal users.
@@ -391,7 +387,7 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     fetchDashboardData()
-    fetchTrend(period.days)
+    fetchTrend(trendPeriod.days)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-fetch main stats when period changes (skip on initial mount)
@@ -418,8 +414,23 @@ const AdminDashboard = () => {
   useEffect(() => subscribe(LIVE_TOPICS.AUTH, () => { _cache.ts = 0 }), [])
 
   useEffect(() => {
-    fetchTrend(period.days)
-  }, [period, fetchTrend])
+    fetchTrend(trendPeriod.days)
+  }, [trendPeriod, fetchTrend])
+
+  // Dashboard-only enrichment (recruiter avatar/department + a few cross-domain
+  // counts) — fired once the top-recruiter ids are known, independent of and
+  // never blocking the main fetch above. A failure here is caught locally so
+  // it can never affect any other widget.
+  const topRecruiterIds = (dashboardData?.activity_stats?.top_users || [])
+    .slice(0, 5).map(u => u.user_id).filter(Boolean).join(',')
+  useEffect(() => {
+    if (!topRecruiterIds) return
+    let cancelled = false
+    adminDashboardService.getDashboardInsights(topRecruiterIds.split(','))
+      .then(res => { if (!cancelled) setInsights(res?.data ?? res) })
+      .catch(() => { if (!cancelled) setInsights(null) })
+    return () => { cancelled = true }
+  }, [topRecruiterIds])
 
   // Close quick-action dropdown on outside click
   useEffect(() => {
@@ -499,12 +510,12 @@ const AdminDashboard = () => {
 
   // ── Funnel data ───────────────────────────────────────────────────────────────
   const funnelData = recruitStats ? [
-    { stage: 'Applied',     value: recruitStats.applied     || 0, fill: '#7c3aed' },
-    { stage: 'Screening',   value: recruitStats.screening   || 0, fill: '#4FACFE' },
-    { stage: 'Shortlisted', value: recruitStats.shortlisted || 0, fill: '#38F9D7' },
-    { stage: 'Interview',   value: recruitStats.interview   || 0, fill: '#43E97B' },
-    { stage: 'Offered',     value: recruitStats.offered     || 0, fill: '#F6A535' },
-    { stage: 'Joined',      value: recruitStats.joined      || 0, fill: '#FA8231' },
+    { stage: 'Applied',     value: recruitStats.applied     || 0, fill: '#7c3aed', icon: UserPlus },
+    { stage: 'Screening',   value: recruitStats.screening   || 0, fill: '#4FACFE', icon: ListChecks },
+    { stage: 'Shortlisted', value: recruitStats.shortlisted || 0, fill: '#0d9488', icon: FileCheck },
+    { stage: 'Interview',   value: recruitStats.interview   || 0, fill: '#22c55e', icon: Calendar },
+    { stage: 'Offered',     value: recruitStats.offered     || 0, fill: '#F6A535', icon: Award },
+    { stage: 'Hired',       value: recruitStats.joined      || 0, fill: '#FA8231', icon: UserCheck },
   ] : []
 
   // ── Source analytics ──────────────────────────────────────────────────────────
@@ -526,23 +537,17 @@ const AdminDashboard = () => {
     fill:  i === arr.length - 1 ? '#7c3aed' : '#7c3aed55',
   }))
 
-  // ── Users by role pie ─────────────────────────────────────────────────────────
-  const roleData = user_stats?.users_by_role
-    ? Object.entries(user_stats.users_by_role)
-        .filter(([, v]) => v > 0)
-        .map(([role, count], i) => ({
-          name:  role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-          value: count,
-          fill:  PIE_COLORS[i % PIE_COLORS.length],
-        }))
-    : []
-
   // ── AI insights ───────────────────────────────────────────────────────────────
   const aiInsights = [
     recruitStats?.recent_week > 0 && {
       color: '#7c3aed', icon: Zap,
       text: `${recruitStats.recent_week} new application${recruitStats.recent_week > 1 ? 's' : ''} this week`,
       tag: 'New',
+    },
+    Array.isArray(todayIvs) && todayIvs.length > 0 && {
+      color: '#4FACFE', icon: Calendar,
+      text: `${todayIvs.length} interview${todayIvs.length > 1 ? 's' : ''} scheduled today`,
+      tag: 'Today',
     },
     offerRate !== null && {
       color: offerRate >= 30 ? '#22c55e' : '#f59e0b', icon: TrendingUp,
@@ -564,7 +569,32 @@ const AdminDashboard = () => {
       text: `${onLeaveToday} employee${onLeaveToday > 1 ? 's' : ''} on leave today`,
       tag: 'Info',
     },
-  ].filter(Boolean).slice(0, 4)
+    hrmStats?.absent_today > 0 && {
+      color: '#FF4757', icon: AlertTriangle,
+      text: `${hrmStats.absent_today} employee${hrmStats.absent_today > 1 ? 's' : ''} absent today`,
+      tag: 'Info',
+    },
+    insights?.jobs_without_applications > 0 && {
+      color: '#f59e0b', icon: Briefcase,
+      text: `${insights.jobs_without_applications} open job${insights.jobs_without_applications > 1 ? 's' : ''} with no applications yet`,
+      tag: 'Watch',
+    },
+    insights?.overdue_tasks > 0 && {
+      color: '#FF4757', icon: AlertTriangle,
+      text: `${insights.overdue_tasks} task${insights.overdue_tasks > 1 ? 's' : ''} overdue`,
+      tag: 'Action',
+    },
+    insights?.targets_due_soon > 0 && {
+      color: '#7c3aed', icon: Target,
+      text: `${insights.targets_due_soon} target${insights.targets_due_soon > 1 ? 's' : ''} due within 7 days`,
+      tag: 'Upcoming',
+    },
+    seatStatus?.is_trial && seatStatus?.plan_expiry && {
+      color: '#f59e0b', icon: AlertTriangle,
+      text: `Trial plan expires ${formatDate(seatStatus.plan_expiry, 'dd MMM yyyy')}`,
+      tag: 'Plan',
+    },
+  ].filter(Boolean).slice(0, 6)
 
   // ── Pending approval items ────────────────────────────────────────────────────
   const pendingItems = [
@@ -572,6 +602,14 @@ const AdminDashboard = () => {
     pendingFeedback > 0 && { label: 'Interview Feedback Needed', count: pendingFeedback,             color: '#FF4757', icon: Calendar, path: '/interviews'   },
     hrmStats?.pending_leaves > 0 && { label: 'Leave Requests',  count: hrmStats.pending_leaves,     color: '#7c3aed', icon: Building, path: '/hrm/leaves'   },
     hrmStats?.pending_exits > 0  && { label: 'Exit Requests',   count: hrmStats.pending_exits,      color: '#FF6B9D', icon: Users,    path: '/hrm/exit'     },
+    insights?.document_approvals_pending > 0 && {
+      label: 'Document Approvals', count: insights.document_approvals_pending,
+      color: '#0d9488', icon: FileCheck, path: '/hrm/doc-center',
+    },
+    insights?.wfh_requests_pending > 0 && {
+      label: 'WFH Requests', count: insights.wfh_requests_pending,
+      color: '#4FACFE', icon: Home, path: '/hrm/attendance',
+    },
     // Sync pending items — show actual names from preview, fall back to count
     syncStatus?.unlinked_users > 0 && {
       label: 'Users Without Employee Profile',
@@ -583,7 +621,7 @@ const AdminDashboard = () => {
       label: 'Employees Without User Account',
       count: syncStatus.unlinked_employees,
       names: syncPreview?.unlinked_employees || [],
-      color: '#38F9D7', icon: UserPlus, path: '/hrm/sync',
+      color: '#0d9488', icon: UserPlus, path: '/hrm/sync',
     },
   ].filter(Boolean)
 
@@ -594,6 +632,9 @@ const AdminDashboard = () => {
     { label: 'Screening Rate', value: screenRate, color: '#7c3aed', target: 70 },
     { label: 'Interview Rate', value: ivRate,     color: '#F6A535', target: 50 },
   ].filter(m => m.value !== null)
+  const overallHealth = healthMetrics.length > 0
+    ? Math.round(healthMetrics.reduce((sum, m) => sum + Math.min(m.value / m.target, 1), 0) / healthMetrics.length * 100)
+    : null
 
   const dateStr = new Date().toLocaleDateString('en-IN', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: getTenantTimezone(),
@@ -615,17 +656,7 @@ const AdminDashboard = () => {
       {/* Responsive: all controls always visible; wraps to 2 rows if needed.  */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <Card style={{ padding: '12px 16px' }}>
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-
-          {/* Left — Greeting */}
-          <div className="flex-shrink-0" style={{ minWidth: '180px' }}>
-            <h1 className="text-lg font-bold" style={{ color: 'var(--text-heading)' }}>
-              {getGreeting()}, {user?.fullName || 'User'}! 👋
-            </h1>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-              Here's what's happening with your recruitment today.
-            </p>
-          </div>
+        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-3">
 
           {/* Right — Subscription widget + all controls (always visible) */}
           <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
@@ -963,38 +994,45 @@ const AdminDashboard = () => {
             />
             {funnelData.some(d => d.value > 0) ? (
               <>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {funnelData.map((item, i) => {
-                    const maxVal = Math.max(...funnelData.map(d => d.value), 1)
-                    const pct    = Math.max(Math.round((item.value / maxVal) * 100), 5)
-                    const prev   = i > 0 ? funnelData[i - 1].value : null
-                    const conv   = prev && prev > 0 ? Math.round((item.value / prev) * 100) : null
+                    const maxVal  = Math.max(...funnelData.map(d => d.value), 1)
+                    // Tapering funnel width — min 30% so the last stage never collapses to nothing visually.
+                    const widthPct = Math.max(Math.round((item.value / maxVal) * 100), item.value > 0 ? 30 : 12)
+                    const prev    = i > 0 ? funnelData[i - 1].value : null
+                    const conv    = prev && prev > 0 ? Math.round((item.value / prev) * 100) : null
+                    const StageIcon = item.icon
                     return (
-                      <div key={item.stage}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{item.stage}</span>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold" style={{ color: 'var(--text-heading)' }}>
-                              {item.value.toLocaleString('en-IN')}
-                            </span>
-                            {conv !== null && (
-                              <span
-                                className="text-[9px] font-semibold px-1 py-0.5 rounded-full"
-                                style={{
-                                  background: conv >= 50 ? 'rgba(34,197,94,0.10)' : 'rgba(255,71,87,0.10)',
-                                  color: conv >= 50 ? '#22c55e' : '#ef4444',
-                                }}
-                              >
-                                {conv}%
-                              </span>
-                            )}
-                          </div>
+                      <div key={item.stage} className="flex items-center gap-2.5">
+                        <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${item.fill}18` }}>
+                          <StageIcon className="w-3.5 h-3.5" style={{ color: item.fill }} />
                         </div>
-                        <div className="h-1.5 rounded-full" style={{ background: 'var(--bg-hover)' }}>
-                          <div
-                            className="h-1.5 rounded-full transition-all duration-700"
-                            style={{ width: `${pct}%`, background: item.fill }}
-                          />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{item.stage}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold" style={{ color: 'var(--text-heading)' }}>
+                                {item.value.toLocaleString('en-IN')}
+                              </span>
+                              {conv !== null && (
+                                <span
+                                  className="text-[9px] font-semibold px-1 py-0.5 rounded-full"
+                                  style={{
+                                    background: conv >= 50 ? 'rgba(34,197,94,0.10)' : 'rgba(255,71,87,0.10)',
+                                    color: conv >= 50 ? '#22c55e' : '#ef4444',
+                                  }}
+                                >
+                                  {conv}%
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-hover)' }}>
+                            <div
+                              className="h-2 rounded-full transition-all duration-700"
+                              style={{ width: `${widthPct}%`, background: item.fill }}
+                            />
+                          </div>
                         </div>
                       </div>
                     )
@@ -1013,6 +1051,7 @@ const AdminDashboard = () => {
               <div className="flex flex-col items-center justify-center py-6 gap-2">
                 <BarChart2 className="w-8 h-8" style={{ color: 'var(--text-disabled)' }} />
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No pipeline data yet</p>
+                <p className="text-xs text-center" style={{ color: 'var(--text-disabled)' }}>Candidates will appear here once applications start coming in</p>
               </div>
             )}
           </Card>
@@ -1033,50 +1072,66 @@ const AdminDashboard = () => {
             />
             {Array.isArray(todayIvs) && todayIvs.length > 0
               ? todayIvs.slice(0, 5).map((iv, i) => {
-                  const dt = iv.scheduled_at || iv.interview_time || iv.scheduled_time
-                  const roundNum = iv.round
-                  const roundLabel = roundNum === 1 ? 'Technical' : roundNum === 2 ? 'HR Round' : roundNum ? `Round ${roundNum}` : null
-                  const rStyle = roundLabel === 'Technical'
-                    ? { bg: 'rgba(124,58,237,0.10)', color: '#7c3aed' }
-                    : roundLabel === 'HR Round'
+                  const roundLabel = iv.current_round_name || iv.stage_name || null
+                  const modeKey = (iv.interview_mode || '').toLowerCase()
+                  const ModeIcon = modeKey === 'phone' ? Phone : modeKey === 'in_person' || modeKey === 'onsite' || modeKey === 'walk_in' ? MapPin : Video
+                  const statusKey = (iv.status || '').toLowerCase()
+                  const statusStyle = statusKey === 'confirmed'
                     ? { bg: 'rgba(34,197,94,0.10)', color: '#22c55e' }
-                    : { bg: 'var(--bg-hover)', color: 'var(--text-muted)' }
+                    : statusKey === 'cancelled'
+                    ? { bg: 'rgba(255,71,87,0.10)', color: '#ef4444' }
+                    : { bg: 'rgba(124,58,237,0.10)', color: '#7c3aed' }
+                  const canOpenProfile = has('candidates:view') && iv.candidate_id
+                  const RowTag = canOpenProfile ? Link : 'div'
+                  const rowProps = canOpenProfile ? { to: `/candidates/${iv.candidate_id}` } : {}
                   return (
-                    <div
-                      key={iv._id || iv.id || i}
-                      className="flex items-start gap-3 py-2"
+                    <RowTag
+                      key={iv.id || i}
+                      {...rowProps}
+                      className="flex items-center gap-3 py-2 block"
                       style={{ borderBottom: i < Math.min(todayIvs.length, 5) - 1 ? '1px solid var(--border-subtle)' : 'none' }}
                     >
-                      <div className="flex-shrink-0 text-center w-10">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(124,58,237,0.10)' }}>
-                          <Clock className="w-3.5 h-3.5" style={{ color: '#7c3aed' }} />
+                      <div className="relative flex-shrink-0">
+                        <EmployeeAvatar name={iv.candidate_name} photoUrl={iv.candidate_photo_url} size={36} />
+                        <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+                          <ModeIcon className="w-2.5 h-2.5" style={{ color: '#7c3aed' }} />
                         </div>
-                        {dt && (
-                          <p className="text-[9px] mt-0.5 font-medium leading-tight" style={{ color: 'var(--text-muted)' }}>
-                            {formatTimeOnly(dt)}
-                          </p>
-                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-heading)' }}>
-                          {iv.candidate_name || iv.candidate?.name || 'Candidate'}
+                          {iv.candidate_name || 'Candidate'}
                         </p>
                         <p className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
-                          {iv.job_title || iv.job?.title || iv.position || 'Position'}
+                          {iv.job_title || 'Position'}
+                          {iv.interviewer_names?.length > 0 && <span className="opacity-70"> · {iv.interviewer_names.join(', ')}</span>}
                         </p>
                       </div>
-                      {roundLabel && (
-                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 self-center whitespace-nowrap" style={{ background: rStyle.bg, color: rStyle.color }}>
-                          {roundLabel}
-                        </span>
-                      )}
-                    </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        {iv.scheduled_time && (
+                          // scheduled_time is stored as a plain "HH:MM" wall-clock string (the
+                          // time the recruiter picked), not a UTC instant — render as-is rather
+                          // than through formatTimeOnly, which expects an ISO/UTC value.
+                          <span className="text-xs font-semibold" style={{ color: 'var(--text-heading)' }}>{iv.scheduled_time}</span>
+                        )}
+                        <div className="flex items-center gap-1">
+                          {roundLabel && (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)' }}>
+                              {roundLabel}
+                            </span>
+                          )}
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap" style={{ background: statusStyle.bg, color: statusStyle.color }}>
+                            {iv.status_display || iv.status}
+                          </span>
+                        </div>
+                      </div>
+                    </RowTag>
                   )
                 })
               : (
                 <div className="flex flex-col items-center justify-center py-6 gap-2">
                   <CheckCircle2 className="w-8 h-8" style={{ color: 'var(--text-disabled)' }} />
                   <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No interviews today</p>
+                  <p className="text-xs text-center" style={{ color: 'var(--text-disabled)' }}>Scheduled interviews for today will show up here</p>
                 </div>
               )
             }
@@ -1231,6 +1286,9 @@ const AdminDashboard = () => {
             <div className="space-y-1.5">
               {topRecruiters.map((r, i) => {
                 const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null
+                const meta  = insights?.recruiter_meta?.[r.user_id]
+                const topCount = topRecruiters[0]?.action_count || 1
+                const pct = Math.max(Math.round(((r.action_count || 0) / topCount) * 100), 4)
                 return (
                   <div
                     key={i}
@@ -1240,19 +1298,23 @@ const AdminDashboard = () => {
                       border: i === 0 ? '1px solid rgba(246,165,53,0.22)' : '1px solid transparent',
                     }}
                   >
-                    <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
+                    <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
                       {medal
                         ? <span className="text-base leading-none">{medal}</span>
                         : (
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: '#7c3aed' }}>
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: '#7c3aed' }}>
                             {i + 1}
                           </div>
                         )
                       }
                     </div>
+                    <EmployeeAvatar name={r.user_name || r.name} photoUrl={meta?.avatar_url} size={32} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-heading)' }}>{r.user_name || r.name}</p>
-                      {r.role && <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{r.role}</p>}
+                      {meta?.department && <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{meta.department}</p>}
+                      <div className="h-1 rounded-full mt-1" style={{ background: 'var(--bg-card)' }}>
+                        <div className="h-1 rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: '#7c3aed' }} />
+                      </div>
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="text-sm font-bold" style={{ color: '#7c3aed' }}>{(r.action_count || 0).toLocaleString('en-IN')}</p>
@@ -1287,47 +1349,47 @@ const AdminDashboard = () => {
             }
           />
           {sourceData.length > 0 ? (
-            <>
-              {roleData.length > 0 && (
-                <div className="mb-1.5 -mx-1">
-                  <ResponsiveContainer width="100%" height={80}>
-                    <PieChart>
-                      <Pie
-                        data={roleData}
-                        cx="50%" cy="50%"
-                        innerRadius={28} outerRadius={46}
-                        paddingAngle={3}
-                        dataKey="value"
-                        animationBegin={0}
-                        animationDuration={700}
-                      >
-                        {roleData.map((entry, i) => (
-                          <Cell key={i} fill={entry.fill} stroke="transparent" />
-                        ))}
-                      </Pie>
-                      <RechartTooltip content={<ChartTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
+            (() => {
+              const total = sourceData.reduce((s, [, v]) => s + v, 0) || 1
+              const donutData = sourceData.map(([src, count], i) => ({ name: src, value: count, fill: SRC_COLORS[i % SRC_COLORS.length] }))
+              return (
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0" style={{ width: 92, height: 92 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={donutData}
+                          cx="50%" cy="50%"
+                          innerRadius={30} outerRadius={44}
+                          paddingAngle={2}
+                          dataKey="value"
+                          animationBegin={0}
+                          animationDuration={700}
+                        >
+                          {donutData.map((entry, i) => (
+                            <Cell key={i} fill={entry.fill} stroke="var(--bg-card)" strokeWidth={2} />
+                          ))}
+                        </Pie>
+                        <RechartTooltip content={<ChartTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    {sourceData.map(([src, count], i) => {
+                      const pct = Math.round((count / total) * 100)
+                      return (
+                        <div key={src} className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: SRC_COLORS[i % SRC_COLORS.length] }} />
+                          <span className="text-xs truncate flex-1" style={{ color: 'var(--text-secondary)' }}>{src}</span>
+                          <span className="text-xs font-bold flex-shrink-0" style={{ color: 'var(--text-heading)' }}>{count}</span>
+                          <span className="text-[10px] flex-shrink-0 w-8 text-right" style={{ color: 'var(--text-muted)' }}>{pct}%</span>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-              )}
-              <div className="space-y-2">
-                {sourceData.map(([src, count], i) => {
-                  const maxSrc = sourceData[0][1]
-                  const pct = Math.max(Math.round((count / maxSrc) * 100), 5)
-                  return (
-                    <div key={src}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs truncate" style={{ color: 'var(--text-secondary)', maxWidth: '65%' }}>{src}</span>
-                        <span className="text-xs font-bold" style={{ color: 'var(--text-heading)' }}>{count}</span>
-                      </div>
-                      <div className="h-1.5 rounded-full" style={{ background: 'var(--bg-hover)' }}>
-                        <div className="h-1.5 rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: SRC_COLORS[i % SRC_COLORS.length] }} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
+              )
+            })()
           ) : (
             <div className="flex flex-col items-center justify-center py-6 gap-2">
               <Target className="w-8 h-8" style={{ color: 'var(--text-disabled)' }} />
@@ -1343,7 +1405,22 @@ const AdminDashboard = () => {
               icon={BarChart2}
               title="Activity Trend"
               subtitle="Platform activity"
-              action={<PeriodFilter value={period.key} onChange={setPeriod} />}
+              action={
+                <div className="flex items-center gap-1 rounded-lg p-0.5" style={{ background: 'var(--bg-hover)' }}>
+                  {TREND_PERIODS.map(p => (
+                    <button
+                      key={p.key}
+                      onClick={() => setTrendPeriod(p)}
+                      className="px-2 py-1 rounded-md text-[10px] font-semibold transition-all"
+                      style={p.key === trendPeriod.key
+                        ? { background: 'var(--bg-card)', color: '#7c3aed', boxShadow: 'var(--shadow-card)' }
+                        : { color: 'var(--text-muted)' }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              }
             />
             {barData.length > 0 ? (
               <ResponsiveContainer width="100%" height={120}>
@@ -1383,27 +1460,41 @@ const AdminDashboard = () => {
             subtitle="Pipeline efficiency"
           />
           {healthMetrics.length > 0 ? (
-            <div className="space-y-2.5">
-              {healthMetrics.map(m => (
-                <div key={m.label}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{m.label}</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold" style={{ color: m.value >= m.target ? '#22c55e' : '#f59e0b' }}>{m.value}%</span>
-                      <span className="text-[9px]" style={{ color: 'var(--text-disabled)' }}>/ {m.target}%</span>
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0">
+                <ProgressRing
+                  progress={overallHealth ?? 0}
+                  size={76}
+                  strokeWidth={7}
+                  color={overallHealth >= 80 ? '#22c55e' : overallHealth >= 50 ? '#f59e0b' : '#ef4444'}
+                  bgColor="var(--bg-hover)"
+                  textColor="var(--text-heading)"
+                  labelColor="var(--text-muted)"
+                  label="Overall"
+                />
+              </div>
+              <div className="flex-1 min-w-0 space-y-2">
+                {healthMetrics.map(m => (
+                  <div key={m.label}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{m.label}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold" style={{ color: m.value >= m.target ? '#22c55e' : '#f59e0b' }}>{m.value}%</span>
+                        <span className="text-[9px]" style={{ color: 'var(--text-disabled)' }}>/ {m.target}%</span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 rounded-full" style={{ background: 'var(--bg-hover)' }}>
+                      <div
+                        className="h-1.5 rounded-full transition-all duration-700"
+                        style={{
+                          width: `${Math.min(m.value, 100)}%`,
+                          background: m.value >= m.target ? '#22c55e' : m.value >= m.target * 0.6 ? m.color : '#ef4444',
+                        }}
+                      />
                     </div>
                   </div>
-                  <div className="h-2 rounded-full" style={{ background: 'var(--bg-hover)' }}>
-                    <div
-                      className="h-2 rounded-full transition-all duration-700"
-                      style={{
-                        width: `${Math.min(m.value, 100)}%`,
-                        background: m.value >= m.target ? '#22c55e' : m.value >= m.target * 0.6 ? m.color : '#ef4444',
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-6 gap-2">
@@ -1458,18 +1549,19 @@ const AdminDashboard = () => {
                   return (
                     <div
                       key={a.id || i}
-                      className="flex items-start gap-3 py-2"
+                      className="flex items-center gap-3 py-2"
                       style={{ borderBottom: i < Math.min(recent_activity.length, 7) - 1 ? '1px solid var(--border-subtle)' : 'none' }}
                     >
-                      <span className="px-2 py-0.5 rounded text-[9px] font-bold flex-shrink-0 mt-0.5 uppercase" style={{ background: cfg.bg, color: cfg.color }}>
-                        {a.action_display || a.action}
-                      </span>
+                      <EmployeeAvatar name={a.user_name} size={28} />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{a.description}</p>
                         <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
                           {a.user_name} · {formatDateTime(a.created_at)}
                         </p>
                       </div>
+                      <span className="px-2 py-0.5 rounded text-[9px] font-bold flex-shrink-0 uppercase" style={{ background: cfg.bg, color: cfg.color }}>
+                        {a.action_display || a.action}
+                      </span>
                     </div>
                   )
                 })
@@ -1477,6 +1569,7 @@ const AdminDashboard = () => {
                 <div className="flex flex-col items-center justify-center py-6 gap-2">
                   <History className="w-8 h-8" style={{ color: 'var(--text-disabled)' }} />
                   <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No recent activity</p>
+                  <p className="text-xs text-center" style={{ color: 'var(--text-disabled)' }}>Actions across the platform will show up here</p>
                 </div>
               )
             }
@@ -1494,34 +1587,41 @@ const AdminDashboard = () => {
             }
           />
           {Array.isArray(announcements) && announcements.length > 0 ? (
-            <div className="space-y-2">
+            <div className="space-y-0">
               {announcements.slice(0, 3).map((ann, i) => {
-                const isHigh = ann.priority === 'high' || ann.priority === 'urgent'
+                const prioStyle = {
+                  critical: { bg: 'rgba(255,71,87,0.12)', color: '#ef4444', label: 'CRITICAL' },
+                  urgent:   { bg: 'rgba(255,71,87,0.12)', color: '#ef4444', label: 'URGENT' },
+                  high:     { bg: 'rgba(246,165,53,0.12)', color: '#f59e0b', label: 'HIGH' },
+                  normal:   { bg: 'rgba(79,172,254,0.10)', color: '#4FACFE', label: 'NORMAL' },
+                  low:      { bg: 'var(--bg-hover)', color: 'var(--text-muted)', label: 'LOW' },
+                }[ann.priority] || null
+                const isLast = i === Math.min(announcements.length, 3) - 1
                 return (
-                  <div
-                    key={ann._id || ann.id || i}
-                    className="p-2.5 rounded-xl"
-                    style={{
-                      background: isHigh ? 'rgba(255,71,87,0.05)' : 'var(--bg-hover)',
-                      border: isHigh ? '1px solid rgba(255,71,87,0.20)' : '1px solid var(--border-subtle)',
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <p className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>{ann.title}</p>
-                      {isHigh && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap" style={{ background: 'rgba(255,71,87,0.12)', color: '#ef4444' }}>
-                          HIGH PRIORITY
-                        </span>
-                      )}
+                  <div key={ann._id || ann.id || i} className="relative flex gap-3 pb-3">
+                    {/* Timeline rail */}
+                    <div className="flex flex-col items-center flex-shrink-0">
+                      <span className="w-2.5 h-2.5 rounded-full mt-1" style={{ background: prioStyle?.color || '#7c3aed' }} />
+                      {!isLast && <span className="flex-1 w-px mt-1" style={{ background: 'var(--border-subtle)' }} />}
                     </div>
-                    <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                      {ann.body || ann.content || ann.message || ann.description}
-                    </p>
-                    {ann.created_at && (
-                      <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-disabled)' }}>
-                        {formatDateTime(ann.created_at)}
+                    <div className="flex-1 min-w-0 pb-1">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <p className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>{ann.title}</p>
+                        {prioStyle && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap" style={{ background: prioStyle.bg, color: prioStyle.color }}>
+                            {prioStyle.label}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        {ann.body || ann.content || ann.message || ann.description}
                       </p>
-                    )}
+                      <p className="text-[10px] mt-1.5" style={{ color: 'var(--text-disabled)' }}>
+                        {ann.created_by_name && <>By {ann.created_by_name}</>}
+                        {ann.created_by_name && ann.created_at && ' · '}
+                        {ann.created_at && formatDateTime(ann.created_at)}
+                      </p>
+                    </div>
                   </div>
                 )
               })}

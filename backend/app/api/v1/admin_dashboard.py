@@ -4,7 +4,7 @@ Handles company admin dashboard data
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, List
 import asyncio
 
 from app.services.user_service import UserService
@@ -246,5 +246,78 @@ async def get_system_health(
             "actions_today": actions_today,
             "suspended_users": suspended_users,
             "last_checked": now.isoformat()
+        }
+    }
+
+
+@router.get("/insights")
+async def get_dashboard_insights(
+    user_ids: Optional[str] = Query(None, description="Comma-separated user ids to enrich (e.g. top recruiters)"),
+    current_user: dict = Depends(require_permissions(["dashboard:view"])),
+    db = Depends(get_company_db),
+):
+    """Small additive dashboard-only aggregation — recruiter avatar/department
+    lookup plus a few cross-domain counts (jobs without applications, overdue
+    tasks, targets due soon, pending document/WFH approvals) that don't belong
+    to any single existing dashboard-stats endpoint. Read-only, does not call
+    into or change any existing service's behavior."""
+    today_dt = datetime.now(timezone.utc)
+    today_iso = today_dt.date().isoformat()
+    soon_iso = (today_dt + timedelta(days=7)).date().isoformat()
+
+    ids: List[str] = [u.strip() for u in (user_ids or "").split(",") if u.strip()]
+
+    async def _recruiter_meta():
+        meta = {}
+        if not ids:
+            return meta
+        async for u in db.users.find({"_id": {"$in": ids}}, {"_id": 1, "department": 1, "avatar_url": 1}):
+            meta[u["_id"]] = {"department": u.get("department"), "avatar_url": u.get("avatar_url")}
+        return meta
+
+    async def _jobs_without_applications():
+        try:
+            applied_job_ids = await db.applications.distinct("job_id")
+            return await db.jobs.count_documents({
+                "_id": {"$nin": applied_job_ids},
+                "status": "open",
+                "is_deleted": False,
+            })
+        except Exception:
+            return 0
+
+    (
+        recruiter_meta,
+        jobs_without_applications,
+        overdue_tasks,
+        targets_due_soon,
+        document_approvals_pending,
+        wfh_requests_pending,
+    ) = await asyncio.gather(
+        _recruiter_meta(),
+        _jobs_without_applications(),
+        _safe_count(db.tasks, {
+            "due_date": {"$lt": today_dt},
+            "status": {"$nin": ["completed", "cancelled"]},
+            "is_deleted": False,
+        }),
+        _safe_count(db.targets, {
+            "end_date": {"$gte": today_iso, "$lte": soon_iso},
+            "status": {"$nin": ["achieved", "exceeded"]},
+            "is_deleted": False,
+        }),
+        _safe_count(db.doc_approvals, {"status": "pending"}),
+        _safe_count(db.hrm_work_mode_requests, {"status": "pending"}),
+    )
+
+    return {
+        "success": True,
+        "data": {
+            "recruiter_meta": recruiter_meta,
+            "jobs_without_applications": jobs_without_applications,
+            "overdue_tasks": overdue_tasks,
+            "targets_due_soon": targets_due_soon,
+            "document_approvals_pending": document_approvals_pending,
+            "wfh_requests_pending": wfh_requests_pending,
         }
     }
