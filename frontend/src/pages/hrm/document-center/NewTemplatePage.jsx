@@ -29,9 +29,9 @@ const CARDS = [
   {
     id: 'quick',
     icon: Zap,
-    iconBg: 'from-violet-500 to-purple-600',
+    iconBg: 'from-[#167CFB] to-[#0267F9]',
     badge: 'RECOMMENDED',
-    badgeColor: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+    badgeColor: 'bg-accent-100 text-accent-700 dark:bg-accent-900/40 dark:text-accent-300',
     title: 'Quick Builder',
     subtitle: 'Step-by-step form wizard — done in minutes',
     description: 'Fill in simple form fields for header, body, signature, and footer. The live preview updates instantly as you type — no design skills needed.',
@@ -90,16 +90,16 @@ export default function NewTemplatePage() {
             key={card.id}
             className={`relative flex flex-col rounded-2xl border transition-all duration-200 overflow-hidden group hover:shadow-xl hover:-translate-y-1 cursor-pointer ${
               card.best
-                ? 'ring-2 ring-violet-500 shadow-lg shadow-violet-100 dark:shadow-violet-900/20'
+                ? 'ring-2 ring-accent-500 shadow-lg shadow-accent-100 dark:shadow-accent-900/20'
                 : ''
             }`}
-            style={{ background: 'var(--bg-card, var(--bg-secondary))', borderColor: card.best ? '#7c3aed' : 'var(--border)' }}
+            style={{ background: 'var(--bg-card, var(--bg-secondary))', borderColor: card.best ? '#167CFB' : 'var(--border)' }}
             onClick={() => navigate(card.path)}
           >
             {/* Best badge ribbon */}
             {card.best && (
               <div className="absolute top-4 right-4 z-10">
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-violet-600 text-white">
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-accent-600 text-white">
                   Most Popular
                 </span>
               </div>
@@ -131,7 +131,7 @@ export default function NewTemplatePage() {
               <ul className="space-y-2 flex-1">
                 {card.features.map((f, i) => (
                   <li key={i} className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-body)' }}>
-                    <f.icon className="w-3.5 h-3.5 flex-shrink-0 text-violet-500" />
+                    <f.icon className="w-3.5 h-3.5 flex-shrink-0 text-accent-500" />
                     {f.text}
                   </li>
                 ))}
@@ -143,10 +143,10 @@ export default function NewTemplatePage() {
                 className={`mt-6 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
                   card.best
                     ? 'text-white hover:opacity-90'
-                    : 'hover:bg-violet-50 dark:hover:bg-violet-900/20 border'
+                    : 'hover:bg-accent-50 dark:hover:bg-accent-900/20 border'
                 }`}
                 style={card.best
-                  ? { background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }
+                  ? { background: 'linear-gradient(135deg, #167CFB, #0267F9)' }
                   : { borderColor: 'var(--border)', color: 'var(--text-body)' }
                 }
               >
@@ -164,7 +164,7 @@ export default function NewTemplatePage() {
           Already have a template you like?{' '}
           <button
             onClick={() => navigate('/hrm/doc-center/templates?tab=prebuilt')}
-            className="font-semibold text-violet-600 hover:underline"
+            className="font-semibold text-accent-600 hover:underline"
           >
             Browse 16 pre-built templates →
           </button>

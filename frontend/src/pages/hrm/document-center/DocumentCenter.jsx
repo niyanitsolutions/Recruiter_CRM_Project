@@ -25,7 +25,7 @@ const NAV_ITEMS = [
 
 const Spinner = () => (
   <div className="flex items-center justify-center h-64">
-    <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
+    <div className="w-8 h-8 border-4 border-accent-600 border-t-transparent rounded-full animate-spin" />
   </div>
 )
 
@@ -87,7 +87,7 @@ export default function DocumentCenter() {
               onClick={() => goto('new')}
               title="New Template"
               className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+              style={{ background: 'linear-gradient(135deg, #167CFB, #0267F9)' }}
             >
               <Plus className="w-3.5 h-3.5" />
               New
@@ -98,7 +98,7 @@ export default function DocumentCenter() {
               onClick={() => goto('new')}
               title="New Template"
               className="w-8 h-8 flex items-center justify-center rounded-lg text-white transition-all hover:opacity-90 mx-auto"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+              style={{ background: 'linear-gradient(135deg, #167CFB, #0267F9)' }}
             >
               <Plus className="w-4 h-4" />
             </button>
@@ -118,8 +118,8 @@ export default function DocumentCenter() {
                   'w-full flex items-center rounded-lg text-sm transition-all',
                   collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-3 py-2.5 text-left',
                   isActive
-                    ? 'bg-violet-600 text-white font-medium'
-                    : 'hover:bg-violet-50 dark:hover:bg-violet-900/20 font-normal',
+                    ? 'bg-accent-600 text-white font-medium'
+                    : 'hover:bg-accent-50 dark:hover:bg-accent-900/20 font-normal',
                 )}
                 style={isActive ? {} : { color: 'var(--text-body)' }}
               >
@@ -135,7 +135,7 @@ export default function DocumentCenter() {
           onClick={toggle}
           className="absolute -right-3 top-20 w-6 h-6 rounded-full flex items-center justify-center z-10 shadow-lg transition-all duration-200"
           style={{
-            background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+            background: 'linear-gradient(135deg, #167CFB, #0267F9)',
             border: '1px solid rgba(124,58,237,0.4)',
             boxShadow: '0 0 10px rgba(124,58,237,0.4)',
           }}

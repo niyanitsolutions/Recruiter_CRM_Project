@@ -220,11 +220,11 @@ const Panel = ({ title, children, open, onToggle }) => (
 
 const Lbl = ({ children }) => <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>{children}</p>
 const Inp = (props) => (
-  <input {...props} className="w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-violet-500"
+  <input {...props} className="w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-accent-500"
     style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
 )
 const Sel = ({ children, ...props }) => (
-  <select {...props} className="w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-violet-500"
+  <select {...props} className="w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-accent-500"
     style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}>
     {children}
   </select>
@@ -232,7 +232,7 @@ const Sel = ({ children, ...props }) => (
 const Tog = ({ label, checked, onChange }) => (
   <label className="flex items-center gap-2 cursor-pointer">
     <div onClick={() => onChange(!checked)}
-      className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${checked ? 'bg-violet-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
+      className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${checked ? 'bg-accent-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
       <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
     </div>
     <span className="text-xs" style={{ color: 'var(--text-body)' }}>{label}</span>
@@ -257,7 +257,7 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
 
   if (block.type === 'divider') {
     return (
-      <div onClick={() => onSelect(block.id)} className={`py-2 cursor-pointer ${isSelected ? 'ring-2 ring-violet-500 ring-inset rounded' : ''}`}>
+      <div onClick={() => onSelect(block.id)} className={`py-2 cursor-pointer ${isSelected ? 'ring-2 ring-accent-500 ring-inset rounded' : ''}`}>
         <hr style={{ border: 'none', borderTop: `${s.thickness || 2}px solid ${s.color || '#e5e7eb'}` }} />
       </div>
     )
@@ -265,9 +265,9 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
 
   if (block.type === 'spacer') {
     return (
-      <div onClick={() => onSelect(block.id)} className={`relative cursor-pointer ${isSelected ? 'ring-2 ring-violet-500 ring-inset rounded' : ''}`}
-        style={{ height: block.height || 24, background: isSelected ? 'rgba(124,58,237,0.05)' : 'transparent' }}>
-        {isSelected && <span className="absolute inset-0 flex items-center justify-center text-xs text-violet-400">Spacer ({block.height || 24}px)</span>}
+      <div onClick={() => onSelect(block.id)} className={`relative cursor-pointer ${isSelected ? 'ring-2 ring-accent-500 ring-inset rounded' : ''}`}
+        style={{ height: block.height || 24, background: isSelected ? 'rgba(22,124,251,0.05)' : 'transparent' }}>
+        {isSelected && <span className="absolute inset-0 flex items-center justify-center text-xs text-accent-400">Spacer ({block.height || 24}px)</span>}
       </div>
     )
   }
@@ -275,7 +275,7 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
   if (block.type === 'pagebreak') {
     return (
       <div onClick={() => onSelect(block.id)}
-        className={`py-3 text-center cursor-pointer ${isSelected ? 'ring-2 ring-violet-500 ring-inset rounded' : ''}`}
+        className={`py-3 text-center cursor-pointer ${isSelected ? 'ring-2 ring-accent-500 ring-inset rounded' : ''}`}
         style={{ borderTop: '2px dashed #d1d5db', borderBottom: '2px dashed #d1d5db', margin: '4px 0' }}>
         <span className="text-xs" style={{ color: 'var(--text-muted)' }}>— Page Break —</span>
       </div>
@@ -284,7 +284,7 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
 
   if (block.type === 'qrcode') {
     return (
-      <div onClick={() => onSelect(block.id)} className={`text-center py-2 ${isSelected ? 'ring-2 ring-violet-500 ring-inset rounded' : ''}`}>
+      <div onClick={() => onSelect(block.id)} className={`text-center py-2 ${isSelected ? 'ring-2 ring-accent-500 ring-inset rounded' : ''}`}>
         <div className="inline-flex flex-col items-center gap-1">
           <div className="flex items-center justify-center border rounded"
             style={{ width: block.size || 100, height: block.size || 100, background: '#f3f4f6', borderColor: '#e5e7eb' }}>
@@ -301,15 +301,15 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
 
   if (block.type === 'columns2') {
     return (
-      <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-violet-500 ring-inset rounded' : ''}`}>
-        <div className="grid grid-cols-2 gap-4 border rounded p-2" style={{ borderColor: isSelected ? '#7c3aed' : '#e5e7eb', borderStyle: 'dashed' }}>
+      <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-accent-500 ring-inset rounded' : ''}`}>
+        <div className="grid grid-cols-2 gap-4 border rounded p-2" style={{ borderColor: isSelected ? '#167CFB' : '#e5e7eb', borderStyle: 'dashed' }}>
           {['col1', 'col2'].map((col, i) => (
             <div key={col}
               contentEditable
               suppressContentEditableWarning
               onBlur={e => onChange({ ...block, [col]: e.target.innerHTML })}
               className="min-h-[40px] p-1 rounded text-sm outline-none"
-              style={{ background: 'rgba(124,58,237,0.03)', color: 'var(--text-body)' }}
+              style={{ background: 'rgba(22,124,251,0.03)', color: 'var(--text-body)' }}
               dangerouslySetInnerHTML={{ __html: block[col] || `Column ${i + 1}` }}
             />
           ))}
@@ -321,15 +321,15 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
 
   if (block.type === 'columns3') {
     return (
-      <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-violet-500 ring-inset rounded' : ''}`}>
-        <div className="grid grid-cols-3 gap-3 border rounded p-2" style={{ borderColor: isSelected ? '#7c3aed' : '#e5e7eb', borderStyle: 'dashed' }}>
+      <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-accent-500 ring-inset rounded' : ''}`}>
+        <div className="grid grid-cols-3 gap-3 border rounded p-2" style={{ borderColor: isSelected ? '#167CFB' : '#e5e7eb', borderStyle: 'dashed' }}>
           {['col1', 'col2', 'col3'].map((col, i) => (
             <div key={col}
               contentEditable
               suppressContentEditableWarning
               onBlur={e => onChange({ ...block, [col]: e.target.innerHTML })}
               className="min-h-[40px] p-1 rounded text-sm outline-none"
-              style={{ background: 'rgba(124,58,237,0.03)', color: 'var(--text-body)' }}
+              style={{ background: 'rgba(22,124,251,0.03)', color: 'var(--text-body)' }}
               dangerouslySetInnerHTML={{ __html: block[col] || `Column ${i + 1}` }}
             />
           ))}
@@ -344,7 +344,7 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
     const hdrBg = block.style?.headerBg || '#7c3aed'
     const bdr = block.style?.borderColor || '#e5e7eb'
     return (
-      <div onClick={() => onSelect(block.id)} className={`overflow-x-auto ${isSelected ? 'ring-2 ring-violet-500 ring-inset rounded' : ''}`}>
+      <div onClick={() => onSelect(block.id)} className={`overflow-x-auto ${isSelected ? 'ring-2 ring-accent-500 ring-inset rounded' : ''}`}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <tbody>
             {rows.map((row, ri) => (
@@ -381,7 +381,7 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
               { label: '- Column', fn: () => rows[0]?.length > 1 && onChange({ ...block, rows: rows.map(r => r.slice(0, -1)) }) },
             ].map(btn => (
               <button key={btn.label} onClick={e => { e.stopPropagation(); btn.fn() }}
-                className="text-xs px-2 py-1 rounded border hover:bg-violet-50 dark:hover:bg-violet-900/20"
+                className="text-xs px-2 py-1 rounded border hover:bg-accent-50 dark:hover:bg-accent-900/20"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
                 {btn.label}
               </button>
@@ -394,11 +394,11 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
 
   if (block.type === 'image') {
     return (
-      <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-violet-500 ring-inset rounded' : ''}`}>
+      <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-accent-500 ring-inset rounded' : ''}`}>
         {block.src ? (
           <img src={block.src} alt={block.alt || 'image'} style={{ width: block.width || '100%', maxWidth: '100%' }} />
         ) : (
-          <label className="flex flex-col items-center justify-center py-8 rounded-lg border-2 border-dashed cursor-pointer hover:bg-violet-50 dark:hover:bg-violet-900/20"
+          <label className="flex flex-col items-center justify-center py-8 rounded-lg border-2 border-dashed cursor-pointer hover:bg-accent-50 dark:hover:bg-accent-900/20"
             style={{ borderColor: 'var(--border)' }}>
             <ImageIcon className="w-8 h-8 mb-2" style={{ color: 'var(--text-muted)' }} />
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Click to upload image</p>
@@ -419,7 +419,7 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
   if (block.type === 'signature') {
     const sigs = block.signers || []
     return (
-      <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-violet-500 ring-inset rounded' : ''}`}>
+      <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-accent-500 ring-inset rounded' : ''}`}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <tbody>
             <tr>
@@ -449,7 +449,7 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
   if (block.type === 'bulletlist' || block.type === 'numberedlist') {
     const Tag = block.type === 'bulletlist' ? 'ul' : 'ol'
     return (
-      <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-violet-500 ring-inset rounded' : ''}`}>
+      <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-accent-500 ring-inset rounded' : ''}`}>
         <Tag style={{ paddingLeft: 20, margin: 0, ...baseStyle }}>
           {(block.items || []).map((item, i) => (
             <li key={i} contentEditable suppressContentEditableWarning
@@ -465,7 +465,7 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
         {isSelected && (
           <div className="flex gap-2 mt-2">
             <button onClick={e => { e.stopPropagation(); onChange({ ...block, items: [...(block.items || []), 'New item'] }) }}
-              className="text-xs px-2 py-1 rounded border hover:bg-violet-50"
+              className="text-xs px-2 py-1 rounded border hover:bg-accent-50"
               style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>+ Item</button>
             <button onClick={e => { e.stopPropagation(); (block.items || []).length > 1 && onChange({ ...block, items: block.items.slice(0, -1) }) }}
               className="text-xs px-2 py-1 rounded border hover:bg-red-50 text-red-500"
@@ -478,7 +478,7 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
 
   if (block.type === 'quote') {
     return (
-      <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-violet-500 ring-inset rounded' : ''}`}
+      <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-accent-500 ring-inset rounded' : ''}`}
         style={{ borderLeft: '4px solid #7c3aed', paddingLeft: 12, margin: '4px 0' }}>
         <p contentEditable suppressContentEditableWarning
           onBlur={e => onChange({ ...block, content: e.target.innerHTML })}
@@ -495,7 +495,7 @@ function BlockRenderer({ block, isSelected, onSelect, onChange, onDelete }) {
   const fwMap   = { heading1: 'bold', heading2: 'bold', heading3: '600', paragraph: 'normal', richtext: 'normal' }
 
   return (
-    <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-violet-500 ring-inset rounded p-0.5' : ''}`}>
+    <div onClick={() => onSelect(block.id)} className={`${isSelected ? 'ring-2 ring-accent-500 ring-inset rounded p-0.5' : ''}`}>
       <Tag
         contentEditable
         suppressContentEditableWarning
@@ -598,7 +598,7 @@ function PropsPanel({ block, onChange, onDelete }) {
             <div className="flex gap-1">
               {['left','center','right','justify'].map(a => (
                 <button key={a} onClick={() => setStyle('textAlign', a)}
-                  className={`flex-1 py-1 rounded text-xs border transition-colors ${s.textAlign === a ? 'bg-violet-600 text-white border-violet-600' : ''}`}
+                  className={`flex-1 py-1 rounded text-xs border transition-colors ${s.textAlign === a ? 'bg-accent-600 text-white border-accent-600' : ''}`}
                   style={s.textAlign !== a ? { borderColor: 'var(--border)', color: 'var(--text-body)' } : {}}>
                   {a.charAt(0).toUpperCase() + a.slice(1)}
                 </button>
@@ -1191,7 +1191,7 @@ ${footer.show ? `<div class="doc-footer">
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
-      <Loader2 className="w-8 h-8 animate-spin text-violet-600" />
+      <Loader2 className="w-8 h-8 animate-spin text-accent-600" />
     </div>
   )
 
@@ -1255,7 +1255,7 @@ ${footer.show ? `<div class="doc-footer">
             <Maximize2 className="w-4 h-4" /> <span className="hidden sm:inline">Preview</span>
           </button>
           <button onClick={() => setPreview(p => !p)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border ${preview ? 'bg-violet-600 text-white border-violet-600' : ''}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border ${preview ? 'bg-accent-600 text-white border-accent-600' : ''}`}
             style={preview ? {} : { borderColor: 'var(--border)', color: 'var(--text-body)' }}>
             <Eye className="w-4 h-4" />
             {preview ? 'Edit' : 'Quick View'}
@@ -1281,9 +1281,9 @@ ${footer.show ? `<div class="doc-footer">
                   { label: 'Print',       icon: Printer,  fn: handlePrint      },
                 ].map(item => (
                   <button key={item.label} onClick={item.fn}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors text-left"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-accent-50 dark:hover:bg-accent-900/20 transition-colors text-left"
                     style={{ color: 'var(--text-body)' }}>
-                    <item.icon className="w-3.5 h-3.5 text-violet-500" />
+                    <item.icon className="w-3.5 h-3.5 text-accent-500" />
                     {item.label}
                   </button>
                 ))}
@@ -1300,7 +1300,7 @@ ${footer.show ? `<div class="doc-footer">
           )}
           <button onClick={handleSave} disabled={saving}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold text-white"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}>
+            style={{ background: 'linear-gradient(135deg, #167CFB, #0267F9)' }}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {saving ? 'Saving…' : 'Save'}
           </button>
@@ -1317,7 +1317,7 @@ ${footer.show ? `<div class="doc-footer">
           <div className="flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0"
             style={{ borderColor: 'var(--border)' }}>
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded-md bg-violet-600 flex items-center justify-center">
+              <div className="w-5 h-5 rounded-md bg-accent-600 flex items-center justify-center">
                 <Layers className="w-3 h-3 text-white" />
               </div>
               <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
@@ -1325,7 +1325,7 @@ ${footer.show ? `<div class="doc-footer">
               </span>
             </div>
             <button onClick={toggleLeftPanel} title="Collapse Panel"
-              className="p-1.5 rounded-lg border transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+              className="p-1.5 rounded-lg border transition-colors hover:bg-accent-600 hover:text-white hover:border-accent-600"
               style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
               <PanelLeftClose className="w-3.5 h-3.5" />
             </button>
@@ -1342,9 +1342,9 @@ ${footer.show ? `<div class="doc-footer">
                   <div className="grid grid-cols-2 gap-1.5">
                     {items.map(item => (
                       <button key={item.type} onClick={() => addBlock(item.type)}
-                        className="flex items-center gap-2 px-2.5 py-2 rounded-lg border text-xs transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:border-violet-400 text-left"
+                        className="flex items-center gap-2 px-2.5 py-2 rounded-lg border text-xs transition-colors hover:bg-accent-50 dark:hover:bg-accent-900/20 hover:border-accent-400 text-left"
                         style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
-                        <item.icon className="w-3.5 h-3.5 flex-shrink-0 text-violet-500" />
+                        <item.icon className="w-3.5 h-3.5 flex-shrink-0 text-accent-500" />
                         <span className="truncate">{item.label}</span>
                       </button>
                     ))}
@@ -1363,7 +1363,7 @@ ${footer.show ? `<div class="doc-footer">
                 <div className="flex flex-wrap gap-1">
                   {fields.map(f => (
                     <button key={f.field} onClick={() => insertField(f.field)}
-                      className="text-[11px] px-2 py-0.5 rounded-full border font-mono transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+                      className="text-[11px] px-2 py-0.5 rounded-full border font-mono transition-colors hover:bg-accent-600 hover:text-white hover:border-accent-600"
                       style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
                         {f.label}
                       </button>
@@ -1376,7 +1376,7 @@ ${footer.show ? `<div class="doc-footer">
           <Panel title="Template Info" open={openSection === 'info'} onToggle={() => toggleSection('info')}>
             <div><Lbl>Description</Lbl>
               <textarea value={description} onChange={e => { setDescription(e.target.value); scheduleAutoSave() }} rows={2}
-                className="w-full px-2.5 py-1.5 text-sm rounded-lg border resize-none focus:outline-none focus:ring-1 focus:ring-violet-500"
+                className="w-full px-2.5 py-1.5 text-sm rounded-lg border resize-none focus:outline-none focus:ring-1 focus:ring-accent-500"
                 style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
             </div>
             <div><Lbl>Category</Lbl>
@@ -1517,7 +1517,7 @@ ${footer.show ? `<div class="doc-footer">
               <div className="flex flex-wrap gap-1">
                 {WATERMARK_PRESETS.map(p => (
                   <button key={p} onClick={() => setWatermark(w => ({ ...w, text: p }))}
-                    className={`text-xs px-2 py-0.5 rounded-full border ${watermark.text === p ? 'bg-violet-600 text-white border-violet-600' : ''}`}
+                    className={`text-xs px-2 py-0.5 rounded-full border ${watermark.text === p ? 'bg-accent-600 text-white border-accent-600' : ''}`}
                     style={watermark.text !== p ? { borderColor: 'var(--border)', color: 'var(--text-body)' } : {}}>
                     {p}
                   </button>
@@ -1539,13 +1539,13 @@ ${footer.show ? `<div class="doc-footer">
           style={{ width: 12, background: 'var(--bg-secondary)', borderLeft: '1px solid var(--border)' }}>
           {leftCollapsed && (
             <button onClick={toggleLeftPanel} title="Expand Panel"
-              className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-7 h-7 rounded-full border shadow-sm flex items-center justify-center transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+              className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-7 h-7 rounded-full border shadow-sm flex items-center justify-center transition-colors hover:bg-accent-600 hover:text-white hover:border-accent-600"
               style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
               <PanelLeftOpen className="w-3.5 h-3.5" />
             </button>
           )}
           {!leftCollapsed && (
-            <div className="mt-2 flex-1 cursor-col-resize hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors"
+            <div className="mt-2 flex-1 cursor-col-resize hover:bg-accent-200 dark:hover:bg-accent-800 transition-colors"
               onMouseDown={e => {
                 e.preventDefault()
                 const startX = e.clientX, startW = leftWidth
@@ -1710,7 +1710,7 @@ ${footer.show ? `<div class="doc-footer">
                         {pageIndex === pages.length - 1 && (
                           <div className="flex justify-center mt-4 pl-7 pr-7">
                             <button onClick={() => toggleSection('blocks')}
-                              className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-dashed text-sm transition-colors hover:border-violet-500 hover:text-violet-600"
+                              className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-dashed text-sm transition-colors hover:border-accent-500 hover:text-accent-600"
                               style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
                               <Plus className="w-4 h-4" /> Add Block
                             </button>
@@ -1734,13 +1734,13 @@ ${footer.show ? `<div class="doc-footer">
             style={{ width: 12, background: 'var(--bg-secondary)', borderRight: '1px solid var(--border)' }}>
             {rightCollapsed && (
               <button onClick={toggleRightPanel} title="Expand Properties"
-                className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-7 h-7 rounded-full border shadow-sm flex items-center justify-center transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+                className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-7 h-7 rounded-full border shadow-sm flex items-center justify-center transition-colors hover:bg-accent-600 hover:text-white hover:border-accent-600"
                 style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
                 <PanelRightOpen className="w-3.5 h-3.5" />
               </button>
             )}
             {!rightCollapsed && (
-              <div className="mt-2 flex-1 cursor-col-resize hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors"
+              <div className="mt-2 flex-1 cursor-col-resize hover:bg-accent-200 dark:hover:bg-accent-800 transition-colors"
                 onMouseDown={e => {
                   e.preventDefault()
                   const startX = e.clientX, startW = rightWidth
@@ -1764,7 +1764,7 @@ ${footer.show ? `<div class="doc-footer">
               style={{ borderColor: 'var(--border)' }}>
               <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Properties</span>
               <button onClick={toggleRightPanel} title="Collapse Properties"
-                className="p-1.5 rounded-lg border transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+                className="p-1.5 rounded-lg border transition-colors hover:bg-accent-600 hover:text-white hover:border-accent-600"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
                 <PanelRightClose className="w-3.5 h-3.5" />
               </button>

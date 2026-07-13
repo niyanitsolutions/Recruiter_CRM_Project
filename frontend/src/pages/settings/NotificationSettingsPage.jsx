@@ -123,7 +123,7 @@ const NotificationSettingsPage = () => {
 
       <SectionCard title="Notification Matrix" icon={Bell} className="[&_.p-6]:p-0">
         {/* Header */}
-        <div className="grid grid-cols-[1fr_100px_100px] gap-2 px-6 py-3 bg-surface-50 border-b border-surface-100">
+        <div className="grid grid-cols-[1fr_100px_100px] gap-2 px-6 py-3 bg-[#EAF4FF] border-b border-surface-100">
           <span className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Event</span>
           <div className="flex flex-col items-center gap-1">
             <span className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Email</span>
@@ -145,13 +145,13 @@ const NotificationSettingsPage = () => {
 
         {NOTIFICATION_EVENTS.map(sec => (
           <div key={sec.section}>
-            <div className="px-6 py-2 bg-surface-50 border-y border-surface-100">
+            <div className="px-6 py-2 bg-[#EAF4FF] border-y border-surface-100">
               <p className="text-xs font-semibold text-surface-600 uppercase tracking-wide">{sec.section}</p>
             </div>
             {sec.events.map(({ key, label }) => {
               const prefs = matrix[key] || { email: true, in_app: true }
               return (
-                <div key={key} className="grid grid-cols-[1fr_100px_100px] gap-2 items-center px-6 py-3 hover:bg-surface-50 transition-colors border-b border-surface-50 last:border-0">
+                <div key={key} className="grid grid-cols-[1fr_100px_100px] gap-2 items-center px-6 py-3 hover:bg-[#EAF4FF] transition-colors border-b border-surface-50 last:border-0">
                   <span className="text-sm text-surface-800">{label}</span>
                   <div className="flex justify-center">
                     <ToggleCell checked={!!prefs.email} onChange={() => toggle(key, 'email')} />

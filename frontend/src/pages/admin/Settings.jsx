@@ -90,13 +90,13 @@ const SettingsHub = () => {
                   <button
                     key={item.label}
                     onClick={() => navigate(item.path)}
-                    className="w-full flex items-center gap-4 px-6 py-4 hover:bg-surface-50 transition-colors text-left"
+                    className="group w-full flex items-center gap-4 px-6 py-4 border border-transparent hover:bg-[#EAF4FF] hover:border-[#167CFB] transition-colors text-left"
                   >
                     <div className={`p-2 rounded-lg ${section.color}`}>
-                      <item.icon className={`w-5 h-5 ${section.iconColor}`} />
+                      <item.icon className={`w-5 h-5 ${section.iconColor} group-hover:text-[#167CFB]`} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-surface-900 text-sm">{item.label}</p>
+                      <p className="font-medium text-surface-900 text-sm group-hover:text-[#0267F9]">{item.label}</p>
                       <p className="text-xs text-surface-500 mt-0.5 truncate">{item.description}</p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-surface-400 flex-shrink-0" />

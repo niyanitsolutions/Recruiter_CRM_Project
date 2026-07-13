@@ -190,7 +190,7 @@
   /* ── Navigation — Vivid Blue sidebar, left-border active style ── */
   --nav-text:          #5A82A8;           /* muted blue inactive items */
   --nav-text-active:   #0267F9;           /* vivid blue active */
-  --nav-bg-active:     #EAF4FF;           /* light vivid-blue active bg */
+  --nav-bg-active:     #DCEEFF;           /* light vivid-blue active bg — strengthened for visibility */
   --nav-border-active: #167CFB;           /* left-border accent color */
   --nav-hover-bg:      #DCEEFF;
   --nav-glow-active:   rgba(22, 124, 251, 0.12);

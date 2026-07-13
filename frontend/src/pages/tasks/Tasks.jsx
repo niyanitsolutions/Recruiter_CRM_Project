@@ -35,7 +35,7 @@ function PriorityBadge({ priority }) {
 function EntityTag({ label }) {
   if (!label) return null
   return (
-    <span style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.4)', color: '#a5b4fc', borderRadius: 999, padding: '2px 10px', fontSize: 12, fontWeight: 500 }}>
+    <span style={{ background: 'rgba(22,124,251,0.15)', border: '1px solid rgba(22,124,251,0.4)', color: '#0267F9', borderRadius: 999, padding: '2px 10px', fontSize: 12, fontWeight: 500 }}>
       {label}
     </span>
   )
@@ -78,7 +78,7 @@ function StatusDropdown({ status, onStatusChange, loading, isDark }) {
     return () => document.removeEventListener('mousedown', close)
   }, [open])
 
-  if (loading) return <Loader2 size={14} color="#7c3aed" style={{ animation: 'spin 0.8s linear infinite' }} />
+  if (loading) return <Loader2 size={14} color="#167CFB" style={{ animation: 'spin 0.8s linear infinite' }} />
 
   const s = STATUS_COLORS[status] || STATUS_COLORS.pending
 
@@ -96,7 +96,7 @@ function StatusDropdown({ status, onStatusChange, loading, isDark }) {
         <div style={{
           position: 'absolute', top: '110%', left: 0, zIndex: 100,
           background: isDark ? 'rgba(10,14,42,0.97)' : '#ffffff',
-          border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(108,99,255,0.15)'}`,
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(22,124,251,0.15)'}`,
           borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
           overflow: 'hidden', minWidth: 150,
         }}>
@@ -109,7 +109,7 @@ function StatusDropdown({ status, onStatusChange, loading, isDark }) {
                 style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px',
                   background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
                   color: o.text, transition: 'background 0.15s' }}
-                onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(108,99,255,0.06)'}
+                onMouseEnter={e => e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(22,124,251,0.06)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'none'}
               >
                 Move to {opt.replace('_', ' ')}
@@ -170,7 +170,7 @@ function TaskCard({ task, onStatusChange, onDelete, onOpen, onEdit, isDark }) {
             onClick={() => onEdit(task)}
             title="Edit task"
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedColor, padding: 2 }}
-            onMouseEnter={e => e.currentTarget.style.color = '#7c3aed'}
+            onMouseEnter={e => e.currentTarget.style.color = '#167CFB'}
             onMouseLeave={e => e.currentTarget.style.color = mutedColor}
           >
             <Pencil size={13} />
@@ -188,7 +188,7 @@ function TaskCard({ task, onStatusChange, onDelete, onOpen, onEdit, isDark }) {
       </div>
       {(dueDateStr || task.assigned_to_name) && (
         <>
-          <div style={{ height: 1, background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(108,99,255,0.08)', margin: '10px 0' }} />
+          <div style={{ height: 1, background: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(22,124,251,0.08)', margin: '10px 0' }} />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             {dueDateStr && (
               <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: task.is_overdue ? '#f87171' : (isDark ? '#94a3b8' : 'var(--text-muted)') }}>
@@ -271,11 +271,11 @@ function CalendarView({ tasks, onOpen, isDark }) {
     minHeight: 90,
     borderRadius: 10,
     padding: '6px 8px',
-    border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(108,99,255,0.10)'}`,
+    border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(22,124,251,0.10)'}`,
     background: isToday(day)
-      ? (isDark ? 'rgba(124,58,237,0.18)' : 'rgba(99,102,241,0.08)')
+      ? (isDark ? 'rgba(22,124,251,0.18)' : 'rgba(22,124,251,0.08)')
       : (isDark ? 'rgba(14,20,55,0.30)' : '#f8f9ff'),
-    boxShadow: isToday(day) ? '0 0 0 2px #7c3aed' : 'none',
+    boxShadow: isToday(day) ? '0 0 0 2px #167CFB' : 'none',
   })
 
   return (
@@ -283,12 +283,12 @@ function CalendarView({ tasks, onOpen, isDark }) {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <button onClick={() => setCurrent(new Date(year, month - 1, 1))}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7c3aed', padding: 6 }}>
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#167CFB', padding: 6 }}>
           <ChevronLeft size={20} />
         </button>
         <span style={{ fontSize: 18, fontWeight: 700, color: isDark ? '#e2e8f0' : '#1a1a2e' }}>{monthName}</span>
         <button onClick={() => setCurrent(new Date(year, month + 1, 1))}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7c3aed', padding: 6 }}>
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#167CFB', padding: 6 }}>
           <ChevronRight size={20} />
         </button>
       </div>
@@ -306,7 +306,7 @@ function CalendarView({ tasks, onOpen, isDark }) {
           <div key={i} style={day ? cellStyle(day) : { minHeight: 90, borderRadius: 10 }}>
             {day && (
               <>
-                <div style={{ fontSize: 13, fontWeight: isToday(day) ? 700 : 500, color: isToday(day) ? '#7c3aed' : (isDark ? '#94a3b8' : '#475569'), marginBottom: 4 }}>
+                <div style={{ fontSize: 13, fontWeight: isToday(day) ? 700 : 500, color: isToday(day) ? '#167CFB' : (isDark ? '#94a3b8' : '#475569'), marginBottom: 4 }}>
                   {day}
                 </div>
                 {(byDay[day] || []).slice(0, 3).map(t => (
@@ -374,16 +374,16 @@ function TaskDetailModal({ task: initialTask, onClose, onStatusChange, onDelete,
     borderRadius: 20, width: '100%', maxWidth: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column',
     boxShadow: '0 25px 60px rgba(0,0,0,0.80)',
   } : {
-    background: '#ffffff', border: '1px solid rgba(108,99,255,0.15)',
+    background: '#ffffff', border: '1px solid rgba(22,124,251,0.15)',
     borderRadius: 20, width: '100%', maxWidth: 560, maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-    boxShadow: '0 20px 60px rgba(108,99,255,0.15)',
+    boxShadow: '0 20px 60px rgba(22,124,251,0.15)',
   }
 
   const statusColors = { pending: '#94a3b8', in_progress: '#f59e0b', completed: '#22c55e', cancelled: '#64748b' }
   const textColor = isDark ? '#e2e8f0' : '#1a1a2e'
   const mutedColor = isDark ? '#64748b' : '#9ca3af'
-  const dividerColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(108,99,255,0.08)'
-  const inputStyle = { width: '100%', background: isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc', border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(108,99,255,0.15)'}`, borderRadius: 10, padding: '10px 14px', fontSize: 14, color: textColor, outline: 'none', resize: 'none', fontFamily: 'inherit' }
+  const dividerColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(22,124,251,0.08)'
+  const inputStyle = { width: '100%', background: isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc', border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(22,124,251,0.15)'}`, borderRadius: 10, padding: '10px 14px', fontSize: 14, color: textColor, outline: 'none', resize: 'none', fontFamily: 'inherit' }
 
   const dueDateStr = task.due_date
     ? new Date(task.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -408,7 +408,7 @@ function TaskDetailModal({ task: initialTask, onClose, onStatusChange, onDelete,
               onClick={() => { onEdit(task); onClose() }}
               title="Edit task"
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: mutedColor, padding: 4, borderRadius: 6 }}
-              onMouseEnter={e => e.currentTarget.style.color = '#7c3aed'}
+              onMouseEnter={e => e.currentTarget.style.color = '#167CFB'}
               onMouseLeave={e => e.currentTarget.style.color = mutedColor}
             >
               <Pencil size={15} />
@@ -462,7 +462,7 @@ function TaskDetailModal({ task: initialTask, onClose, onStatusChange, onDelete,
           {/* Comments */}
           <div style={{ borderTop: `1px solid ${dividerColor}`, paddingTop: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-              <MessageSquare size={15} color="#7c3aed" />
+              <MessageSquare size={15} color="#167CFB" />
               <span style={{ fontSize: 14, fontWeight: 600, color: textColor }}>Comments ({task.comments?.length || 0})</span>
             </div>
 
@@ -473,7 +473,7 @@ function TaskDetailModal({ task: initialTask, onClose, onStatusChange, onDelete,
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
               {(task.comments || []).map(c => (
                 <div key={c.id} style={{ display: 'flex', gap: 10 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 12, fontWeight: 700, color: '#fff' }}>
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg,#167CFB,#0267F9)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 12, fontWeight: 700, color: '#fff' }}>
                     {c.author_name?.charAt(0)?.toUpperCase() || '?'}
                   </div>
                   <div style={{ flex: 1 }}>
@@ -503,7 +503,7 @@ function TaskDetailModal({ task: initialTask, onClose, onStatusChange, onDelete,
               <button
                 type="submit"
                 disabled={posting || !comment.trim()}
-                style={{ background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', border: 'none', borderRadius: 10, padding: '10px 14px', cursor: posting || !comment.trim() ? 'not-allowed' : 'pointer', opacity: posting || !comment.trim() ? 0.5 : 1, color: '#fff', display: 'flex', alignItems: 'center' }}
+                style={{ background: 'linear-gradient(135deg,#167CFB,#0267F9)', border: 'none', borderRadius: 10, padding: '10px 14px', cursor: posting || !comment.trim() ? 'not-allowed' : 'pointer', opacity: posting || !comment.trim() ? 0.5 : 1, color: '#fff', display: 'flex', alignItems: 'center' }}
               >
                 {posting ? <Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Send size={16} />}
               </button>
@@ -553,8 +553,8 @@ function EditTaskModal({ task, users, onClose, onSave, isDark }) {
     background: 'rgba(10,14,42,0.88)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
     borderRadius: 20, padding: '32px', width: '100%', maxWidth: 480, boxShadow: '0 25px 60px rgba(0,0,0,0.75)',
   } : {
-    background: '#ffffff', border: '1px solid rgba(108,99,255,0.15)',
-    borderRadius: 20, padding: '32px', width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(108,99,255,0.15)',
+    background: '#ffffff', border: '1px solid rgba(22,124,251,0.15)',
+    borderRadius: 20, padding: '32px', width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(22,124,251,0.15)',
   }
   const labelStyle = { fontSize: 12, fontWeight: 500, color: isDark ? '#94a3b8' : '#6b7280', display: 'block', marginBottom: 4 }
 
@@ -601,7 +601,7 @@ function EditTaskModal({ task, users, onClose, onSave, isDark }) {
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
             <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
-            <button type="submit" disabled={saving} style={{ background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', boxShadow: '0 0 20px rgba(124,58,237,0.5)', color: '#fff', border: 'none', borderRadius: 24, padding: '10px 20px', fontWeight: 600, fontSize: 14, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.7 : 1 }}>
+            <button type="submit" disabled={saving} style={{ background: 'linear-gradient(135deg,#167CFB,#0267F9)', boxShadow: '0 0 20px rgba(22,124,251,0.5)', color: '#fff', border: 'none', borderRadius: 24, padding: '10px 20px', fontWeight: 600, fontSize: 14, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.7 : 1 }}>
               {saving ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Pencil size={14} />}
               {saving ? 'Saving…' : 'Save Changes'}
             </button>
@@ -638,8 +638,8 @@ function CreateModal({ users, onClose, onCreate, isDark }) {
     background: 'rgba(10,14,42,0.88)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
     borderRadius: 20, padding: '32px', width: '100%', maxWidth: 480, boxShadow: '0 25px 60px rgba(0,0,0,0.75)',
   } : {
-    background: '#ffffff', border: '1px solid rgba(108,99,255,0.15)',
-    borderRadius: 20, padding: '32px', width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(108,99,255,0.15)',
+    background: '#ffffff', border: '1px solid rgba(22,124,251,0.15)',
+    borderRadius: 20, padding: '32px', width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(22,124,251,0.15)',
   }
   const labelStyle = { fontSize: 12, fontWeight: 500, color: isDark ? '#94a3b8' : '#6b7280', display: 'block', marginBottom: 4 }
 
@@ -690,7 +690,7 @@ function CreateModal({ users, onClose, onCreate, isDark }) {
           </label>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
             <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
-            <button type="submit" disabled={saving} style={{ background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', boxShadow: '0 0 20px rgba(124,58,237,0.5)', color: '#fff', border: 'none', borderRadius: 24, padding: '10px 20px', fontWeight: 600, fontSize: 14, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.7 : 1 }}>
+            <button type="submit" disabled={saving} style={{ background: 'linear-gradient(135deg,#167CFB,#0267F9)', boxShadow: '0 0 20px rgba(22,124,251,0.5)', color: '#fff', border: 'none', borderRadius: 24, padding: '10px 20px', fontWeight: 600, fontSize: 14, cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.7 : 1 }}>
               {saving ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Plus size={14} />}
               {saving ? 'Creating…' : 'Create Task'}
             </button>
@@ -791,8 +791,8 @@ export default function Tasks() {
     cancelled:   tasks.filter(t => t.status === 'cancelled'),
   }
 
-  const addBtnStyle = { background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', boxShadow: '0 0 20px rgba(124,58,237,0.5)', color: '#ffffff', border: 'none', borderRadius: 24, padding: '10px 20px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }
-  const toggleBtn = (active) => ({ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 500, transition: 'all 0.2s', ...(active ? { background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', boxShadow: '0 0 16px rgba(124,58,237,0.6)', color: '#fff' } : { background: 'transparent', color: '#94a3b8' }) })
+  const addBtnStyle = { background: 'linear-gradient(135deg,#167CFB,#0267F9)', boxShadow: '0 0 20px rgba(22,124,251,0.5)', color: '#ffffff', border: 'none', borderRadius: 24, padding: '10px 20px', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }
+  const toggleBtn = (active) => ({ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 500, transition: 'all 0.2s', ...(active ? { background: 'linear-gradient(135deg,#167CFB,#0267F9)', boxShadow: '0 0 16px rgba(22,124,251,0.6)', color: '#fff' } : { background: 'transparent', color: '#94a3b8' }) })
 
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
@@ -803,13 +803,13 @@ export default function Tasks() {
           <p style={{ fontSize: 14, color: '#64748b', margin: '4px 0 0' }}>Manage your tasks and schedule</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', background: isDark ? 'rgba(14,20,55,0.38)' : 'rgba(108,99,255,0.08)', border: isDark ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(108,99,255,0.15)', borderRadius: 24, padding: 4 }}>
+          <div style={{ display: 'flex', background: isDark ? 'rgba(14,20,55,0.38)' : 'rgba(22,124,251,0.08)', border: isDark ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(22,124,251,0.15)', borderRadius: 24, padding: 4 }}>
             <button style={toggleBtn(view === 'list')} onClick={() => setView('list')}><List size={15} /> List</button>
             <button style={toggleBtn(view === 'calendar')} onClick={() => setView('calendar')}><Calendar size={15} /> Calendar</button>
           </div>
           <button style={addBtnStyle} onClick={() => setShowCreate(true)}
-            onMouseEnter={e => e.currentTarget.style.boxShadow = '0 0 30px rgba(124,58,237,0.7)'}
-            onMouseLeave={e => e.currentTarget.style.boxShadow = '0 0 20px rgba(124,58,237,0.5)'}
+            onMouseEnter={e => e.currentTarget.style.boxShadow = '0 0 30px rgba(22,124,251,0.7)'}
+            onMouseLeave={e => e.currentTarget.style.boxShadow = '0 0 20px rgba(22,124,251,0.5)'}
           >
             <Plus size={16} /> Add Task
           </button>
@@ -826,7 +826,7 @@ export default function Tasks() {
           <option value="">All Priorities</option>
           {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
         </select>
-        <button onClick={() => setMyOnly(p => !p)} style={{ padding: '10px 16px', borderRadius: 8, fontSize: 13, cursor: 'pointer', border: `1px solid ${myOnly ? 'rgba(124,58,237,0.4)' : 'rgba(255,255,255,0.10)'}`, background: myOnly ? 'rgba(124,58,237,0.18)' : 'transparent', color: myOnly ? '#a78bfa' : '#94a3b8' }}>
+        <button onClick={() => setMyOnly(p => !p)} style={{ padding: '10px 16px', borderRadius: 8, fontSize: 13, cursor: 'pointer', border: `1px solid ${myOnly ? 'rgba(22,124,251,0.4)' : 'rgba(255,255,255,0.10)'}`, background: myOnly ? 'rgba(22,124,251,0.18)' : 'transparent', color: myOnly ? '#45A0FF' : '#94a3b8' }}>
           My Tasks
         </button>
         <button onClick={load} style={{ padding: '10px', borderRadius: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer', color: '#64748b' }}>
@@ -838,7 +838,7 @@ export default function Tasks() {
       {/* Board / Calendar */}
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
-          <Loader2 size={36} color="#7c3aed" style={{ animation: 'spin 0.8s linear infinite' }} />
+          <Loader2 size={36} color="#167CFB" style={{ animation: 'spin 0.8s linear infinite' }} />
         </div>
       ) : view === 'calendar' ? (
         <CalendarView tasks={tasks} onOpen={setOpenTask} isDark={isDark} />

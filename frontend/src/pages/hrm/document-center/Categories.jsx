@@ -88,7 +88,7 @@ function CategoryModal({ category, onClose, onSaved }) {
               onChange={e => setName(e.target.value)}
               placeholder="e.g. HR Letters, Legal Documents…"
               autoFocus
-              className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500"
               style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
             />
           </div>
@@ -101,7 +101,7 @@ function CategoryModal({ category, onClose, onSaved }) {
               onChange={e => setDescription(e.target.value)}
               rows={2}
               placeholder="Optional description…"
-              className="w-full px-3 py-2 text-sm rounded-lg border resize-none focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="w-full px-3 py-2 text-sm rounded-lg border resize-none focus:outline-none focus:ring-2 focus:ring-accent-500"
               style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
             />
           </div>
@@ -145,7 +145,7 @@ function CategoryModal({ category, onClose, onSaved }) {
                   value={color}
                   onChange={e => setColor(e.target.value)}
                   placeholder="#7c3aed"
-                  className="flex-1 px-2 py-1 text-xs rounded border font-mono focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  className="flex-1 px-2 py-1 text-xs rounded border font-mono focus:outline-none focus:ring-1 focus:ring-accent-500"
                   style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
                 />
               </div>
@@ -160,7 +160,7 @@ function CategoryModal({ category, onClose, onSaved }) {
               value={sortOrder}
               onChange={e => setSortOrder(+e.target.value)}
               min={0}
-              className="w-24 px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="w-24 px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500"
               style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
             />
           </div>
@@ -179,7 +179,7 @@ function CategoryModal({ category, onClose, onSaved }) {
             onClick={handleSave}
             disabled={saving}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+            style={{ background: 'linear-gradient(135deg, #167CFB, #0267F9)' }}
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             {saving ? 'Saving…' : category ? 'Update' : 'Create'}
@@ -249,7 +249,7 @@ function CategoryCard({ category, onEdit, onDelete }) {
         <div className="flex gap-2 mt-auto">
           <button
             onClick={() => navigate(`/hrm/doc-center/templates?category=${id}`)}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20"
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors hover:bg-accent-50 dark:hover:bg-accent-900/20"
             style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}
           >
             <FileText className="w-3 h-3" /> View Templates
@@ -332,7 +332,7 @@ export default function Categories() {
             <button
               onClick={openCreate}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+              style={{ background: 'linear-gradient(135deg, #167CFB, #0267F9)' }}
             >
               <Plus className="w-4 h-4" /> New Category
             </button>
@@ -346,7 +346,7 @@ export default function Categories() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search categories…"
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500"
             style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
           />
           {search && (
@@ -361,7 +361,7 @@ export default function Categories() {
       <div className="flex-1 overflow-auto p-6">
         {loading ? (
           <div className="flex items-center justify-center h-48">
-            <Loader2 className="w-8 h-8 animate-spin text-violet-600" />
+            <Loader2 className="w-8 h-8 animate-spin text-accent-600" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -378,7 +378,7 @@ export default function Categories() {
               <button
                 onClick={openCreate}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
-                style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+                style={{ background: 'linear-gradient(135deg, #167CFB, #0267F9)' }}
               >
                 <Plus className="w-4 h-4" /> Create First Category
               </button>

@@ -63,7 +63,7 @@ const LoginActivityPage = () => {
         <div className="flex justify-end mb-4">
           <button
             onClick={() => load(page)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-surface-600 border border-surface-200 rounded-lg hover:bg-surface-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-accent-600 border border-accent-500/30 rounded-lg hover:bg-[#EAF4FF] transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
@@ -76,7 +76,7 @@ const LoginActivityPage = () => {
             <div className="overflow-x-auto rounded-lg border border-surface-100">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-surface-50 text-left">
+                  <tr className="bg-[#EAF4FF] text-left">
                     <th className="px-4 py-3 font-medium text-surface-600">User</th>
                     <th className="px-4 py-3 font-medium text-surface-600">Role</th>
                     <th className="px-4 py-3 font-medium text-surface-600">Login Time</th>
@@ -93,7 +93,7 @@ const LoginActivityPage = () => {
                     </tr>
                   ) : (
                     logs.map((log) => (
-                      <tr key={log.id} className="hover:bg-surface-50 transition-colors">
+                      <tr key={log.id} className="hover:bg-[#EAF4FF] transition-colors">
                         <td className="px-4 py-3 font-medium text-surface-800">{log.full_name || log.user_id}</td>
                         <td className="px-4 py-3">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-accent-50 text-accent-700 capitalize">

@@ -104,7 +104,7 @@ function GenerateModal({ template, onClose, onDone }) {
             <input
               value={docName}
               onChange={e => setDocName(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500"
               style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
             />
           </div>
@@ -116,7 +116,7 @@ function GenerateModal({ template, onClose, onDone }) {
               placeholder="Search employee..."
               value={empSearch}
               onChange={e => setEmpSearch(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500 mb-1"
+              className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500 mb-1"
               style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
             />
             {empLoading ? (
@@ -125,7 +125,7 @@ function GenerateModal({ template, onClose, onDone }) {
               <select
                 value={empId}
                 onChange={e => setEmpId(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500"
+                className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500"
                 style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
                 size={Math.min(filteredEmps.length + 1, 5)}
               >
@@ -140,11 +140,11 @@ function GenerateModal({ template, onClose, onDone }) {
           </div>
           <div className="flex gap-4">
             <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--text-body)' }}>
-              <input type="checkbox" checked={genPdf} onChange={e => setGenPdf(e.target.checked)} className="accent-violet-600" />
+              <input type="checkbox" checked={genPdf} onChange={e => setGenPdf(e.target.checked)} className="accent-[#167CFB]" />
               Generate PDF
             </label>
             <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--text-body)' }}>
-              <input type="checkbox" checked={genDocx} onChange={e => setGenDocx(e.target.checked)} className="accent-violet-600" />
+              <input type="checkbox" checked={genDocx} onChange={e => setGenDocx(e.target.checked)} className="accent-[#167CFB]" />
               Generate DOCX
             </label>
           </div>
@@ -161,7 +161,7 @@ function GenerateModal({ template, onClose, onDone }) {
             onClick={handleGenerate}
             disabled={busy}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+            style={{ background: 'linear-gradient(135deg, #167CFB, #0267F9)' }}
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
             {busy ? 'Generating…' : 'Generate'}
@@ -213,7 +213,7 @@ function VersionModal({ template, onClose }) {
         </div>
         <div className="p-6 max-h-96 overflow-y-auto">
           {loading ? (
-            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-violet-600" /></div>
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-accent-600" /></div>
           ) : versions.length === 0 ? (
             <p className="text-center text-sm py-8" style={{ color: 'var(--text-muted)' }}>No versions found</p>
           ) : (
@@ -240,7 +240,7 @@ function VersionModal({ template, onClose }) {
                     <button
                       onClick={() => restore(v._id)}
                       disabled={!!restoring}
-                      className="flex-shrink-0 flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20"
+                      className="flex-shrink-0 flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-colors hover:bg-accent-50 dark:hover:bg-accent-900/20"
                       style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}
                     >
                       {restoring === v._id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
@@ -415,7 +415,7 @@ function TemplateCard({ template, onRefresh, onGenerate }) {
           <div className="flex gap-2 mt-auto">
             <button
               onClick={() => navigate(editPath)}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors hover:bg-accent-50 dark:hover:bg-accent-900/20"
               style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}
             >
               <Edit2 className="w-3 h-3" /> Edit
@@ -423,7 +423,7 @@ function TemplateCard({ template, onRefresh, onGenerate }) {
             <button
               onClick={() => onGenerate(template)}
               className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-colors"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+              style={{ background: 'linear-gradient(135deg, #167CFB, #0267F9)' }}
             >
               <Wand2 className="w-3 h-3" /> Generate
             </button>
@@ -521,7 +521,7 @@ function PrebuiltCard({ item, onCreated }) {
       <div className="flex items-start gap-3 mb-3">
         <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
           style={{ background: 'var(--bg-primary)' }}>
-          <BookOpen className="w-4 h-4 text-violet-600" />
+          <BookOpen className="w-4 h-4 text-accent-600" />
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-sm" style={{ color: 'var(--text-heading)' }}>{item.name}</h3>
@@ -535,7 +535,7 @@ function PrebuiltCard({ item, onCreated }) {
         onClick={create}
         disabled={busy}
         className="mt-auto w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-90"
-        style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+        style={{ background: 'linear-gradient(135deg, #167CFB, #0267F9)' }}
       >
         {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
         {busy ? 'Creating…' : 'Use Template'}
@@ -617,7 +617,7 @@ export default function Templates() {
           <button
             onClick={() => navigate('/hrm/doc-center/new')}
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+            style={{ background: 'linear-gradient(135deg, #167CFB, #0267F9)' }}
           >
             <Plus className="w-4 h-4" /> New Template
           </button>
@@ -633,7 +633,7 @@ export default function Templates() {
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === t.key ? 'bg-white dark:bg-gray-800 shadow text-violet-700 dark:text-violet-400' : ''
+                activeTab === t.key ? 'bg-white dark:bg-gray-800 shadow text-accent-700 dark:text-accent-400' : ''
               }`}
               style={activeTab !== t.key ? { color: 'var(--text-muted)' } : {}}
             >
@@ -654,7 +654,7 @@ export default function Templates() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search templates..."
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500"
+                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500"
                 style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
               />
               {search && (
@@ -666,7 +666,7 @@ export default function Templates() {
             <select
               value={typeFilter}
               onChange={e => setTypeFilter(e.target.value)}
-              className="px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500"
               style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
             >
               <option value="">All Types</option>
@@ -690,7 +690,7 @@ export default function Templates() {
           <div className="flex-1 overflow-auto p-6">
             {loading ? (
               <div className="flex items-center justify-center h-48">
-                <Loader2 className="w-8 h-8 animate-spin text-violet-600" />
+                <Loader2 className="w-8 h-8 animate-spin text-accent-600" />
               </div>
             ) : templates.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -707,7 +707,7 @@ export default function Templates() {
                   <button
                     onClick={() => navigate('/hrm/doc-center/new')}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white"
-                    style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}
+                    style={{ background: 'linear-gradient(135deg, #167CFB, #0267F9)' }}
                   >
                     <Plus className="w-4 h-4" /> Create Template
                   </button>
@@ -739,7 +739,7 @@ export default function Templates() {
                 value={prebuiltSearch}
                 onChange={e => setPrebuiltSearch(e.target.value)}
                 placeholder="Search prebuilt templates..."
-                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500"
+                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500"
                 style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
               />
             </div>
@@ -751,7 +751,7 @@ export default function Templates() {
           {Object.entries(prebuiltByCategory).map(([cat, items]) => (
             <div key={cat} className="mb-8">
               <h2 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: 'var(--text-heading)' }}>
-                <Tag className="w-3.5 h-3.5 text-violet-500" />
+                <Tag className="w-3.5 h-3.5 text-accent-500" />
                 {cat}
                 <span className="text-xs font-normal px-2 py-0.5 rounded-full" style={{ background: 'var(--bg-secondary)', color: 'var(--text-muted)' }}>
                   {items.length}

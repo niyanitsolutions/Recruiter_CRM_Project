@@ -86,12 +86,12 @@ const Lbl = ({ children }) => (
 )
 const Inp = (props) => (
   <input {...props}
-    className="w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-violet-500"
+    className="w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-accent-500"
     style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
 )
 const Sel = ({ children, ...props }) => (
   <select {...props}
-    className="w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-violet-500"
+    className="w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-accent-500"
     style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}>
     {children}
   </select>
@@ -99,7 +99,7 @@ const Sel = ({ children, ...props }) => (
 const Tog = ({ label, checked, onChange }) => (
   <label className="flex items-center gap-2 cursor-pointer select-none">
     <div onClick={() => onChange(!checked)}
-      className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${checked ? 'bg-violet-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
+      className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${checked ? 'bg-accent-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
       <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
     </div>
     <span className="text-xs" style={{ color: 'var(--text-body)' }}>{label}</span>
@@ -112,10 +112,10 @@ function Section({ id, title, icon: Icon, open, onToggle, children, badge, keepM
   return (
     <div className="border-b last:border-b-0" style={{ borderColor: 'var(--border)' }}>
       <button type="button" onClick={() => onToggle(id)}
-        className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/10"
+        className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-accent-50 dark:hover:bg-accent-900/10"
         style={{ background: open ? 'rgba(124,58,237,0.06)' : 'transparent' }}>
         {Icon && (
-          <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${open ? 'bg-violet-600' : 'bg-gray-200 dark:bg-gray-700'}`}>
+          <div className={`w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 ${open ? 'bg-accent-600' : 'bg-gray-200 dark:bg-gray-700'}`}>
             <Icon className={`w-3.5 h-3.5 ${open ? 'text-white' : ''}`} style={open ? {} : { color: 'var(--text-muted)' }} />
           </div>
         )}
@@ -177,7 +177,7 @@ function TableDialog({ onInsert, onClose }) {
 
   const previewR = Math.min(rows, 4)
   const previewC = Math.min(cols, 5)
-  const inputClass = "w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-violet-500"
+  const inputClass = "w-full px-2.5 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-1 focus:ring-accent-500"
   const inputStyle = { background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }
 
   const handleKey = (e) => {
@@ -294,7 +294,7 @@ function ImageResizeToolbar({ img, onClose }) {
           style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />px
       </label>
       <button onClick={() => setLock(v => !v)}
-        className={`px-2 py-0.5 rounded text-xs border transition-colors ${lock ? 'bg-violet-600 text-white border-violet-600' : ''}`}
+        className={`px-2 py-0.5 rounded text-xs border transition-colors ${lock ? 'bg-accent-600 text-white border-accent-600' : ''}`}
         style={lock ? {} : { borderColor: 'var(--border)', color: 'var(--text-muted)' }}
         title="Lock aspect ratio">
         {lock ? '🔒' : '🔓'}
@@ -302,7 +302,7 @@ function ImageResizeToolbar({ img, onClose }) {
       <div className="w-px h-4 bg-gray-300 dark:bg-gray-600" />
       {['left', 'center', 'right'].map(a => (
         <button key={a} onClick={() => handleAlign(a)}
-          className="px-2 py-0.5 rounded text-xs border transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20"
+          className="px-2 py-0.5 rounded text-xs border transition-colors hover:bg-accent-50 dark:hover:bg-accent-900/20"
           style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
           {a[0].toUpperCase() + a.slice(1)}
         </button>
@@ -601,7 +601,7 @@ function BodyEditor({ editorRef, onInput, initialHtml }) {
                 {fields.map(f => (
                   <button key={f.field} type="button" onMouseDown={saveSel} onClick={() => insertField(f.field)}
                     title={f.field}
-                    className="text-[10px] px-2 py-0.5 rounded-full border font-mono transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+                    className="text-[10px] px-2 py-0.5 rounded-full border font-mono transition-colors hover:bg-accent-600 hover:text-white hover:border-accent-600"
                     style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
                     {f.label}
                   </button>
@@ -1856,7 +1856,7 @@ export default function QuickBuilder() {
           <span className="text-xs text-gray-500">Saved {new Date(draft.savedAt).toLocaleString()}</span>
           <div className="flex gap-2">
             <button onClick={() => { restoreFromDraft(draft); toast.dismiss(t.id); toast.success('Draft restored successfully') }}
-              className="px-3 py-1 rounded bg-violet-600 text-white text-xs font-semibold">Restore</button>
+              className="px-3 py-1 rounded bg-accent-600 text-white text-xs font-semibold">Restore</button>
             <button onClick={() => { localStorage.removeItem(draftKey); toast.dismiss(t.id) }}
               className="px-3 py-1 rounded border text-xs">Discard</button>
           </div>
@@ -2154,7 +2154,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
-      <Loader2 className="w-8 h-8 animate-spin text-violet-600" />
+      <Loader2 className="w-8 h-8 animate-spin text-accent-600" />
     </div>
   )
 
@@ -2202,9 +2202,9 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
                 { label: 'Print',       fn: handlePrint       },
               ].map(item => (
                 <button key={item.label} onClick={item.fn}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors text-left"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-accent-50 dark:hover:bg-accent-900/20 transition-colors text-left"
                   style={{ color: 'var(--text-body)' }}>
-                  <FileText className="w-3.5 h-3.5 text-violet-500" />{item.label}
+                  <FileText className="w-3.5 h-3.5 text-accent-500" />{item.label}
                 </button>
               ))}
             </div>
@@ -2242,7 +2242,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
             {/* Panel header with collapse button */}
             <div className="flex items-center gap-3 px-5 py-3 border-b flex-shrink-0"
               style={{ borderColor: 'var(--border)' }}>
-              <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center flex-shrink-0">
+              <div className="w-7 h-7 rounded-lg bg-accent-600 flex items-center justify-center flex-shrink-0">
                 <LayoutTemplate className="w-4 h-4 text-white" />
               </div>
               <div className="flex-1 min-w-0">
@@ -2252,7 +2252,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
               {/* Collapse button at top-right of panel */}
               <button type="button" onClick={toggleLeftPanel}
                 title="Collapse Builder"
-                className="flex-shrink-0 p-1.5 rounded-lg border transition-colors hover:bg-violet-600 hover:text-white hover:border-violet-600"
+                className="flex-shrink-0 p-1.5 rounded-lg border transition-colors hover:bg-accent-600 hover:text-white hover:border-accent-600"
                 style={{ borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
                 <PanelLeftClose className="w-4 h-4" />
               </button>
@@ -2267,7 +2267,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
               <div><Lbl>Description</Lbl>
                 <textarea value={description} onChange={e => { setDescription(e.target.value); scheduleAutoSave() }}
                   rows={2} placeholder="Brief description…"
-                  className="w-full px-2.5 py-1.5 text-sm rounded-lg border resize-none focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  className="w-full px-2.5 py-1.5 text-sm rounded-lg border resize-none focus:outline-none focus:ring-1 focus:ring-accent-500"
                   style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
               </div>
               <div><Lbl>Category</Lbl>
@@ -2541,7 +2541,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
                     ].map(t => (
                       <button key={t.key} type="button"
                         onClick={() => setSigCfg(s => ({ ...s, type: t.key }))}
-                        className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors ${sigCfg.type === t.key ? 'bg-violet-600 text-white border-violet-600' : ''}`}
+                        className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors ${sigCfg.type === t.key ? 'bg-accent-600 text-white border-accent-600' : ''}`}
                         style={sigCfg.type !== t.key ? { borderColor: 'var(--border)', color: 'var(--text-body)' } : {}}>
                         {t.label}
                       </button>
@@ -2606,7 +2606,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
                     {['left','center','right'].map(p => (
                       <button key={p} type="button"
                         onClick={() => setSigCfg(s => ({ ...s, position: p }))}
-                        className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors capitalize ${sigCfg.position === p ? 'bg-violet-600 text-white border-violet-600' : ''}`}
+                        className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors capitalize ${sigCfg.position === p ? 'bg-accent-600 text-white border-accent-600' : ''}`}
                         style={sigCfg.position !== p ? { borderColor: 'var(--border)', color: 'var(--text-body)' } : {}}>
                         {p}
                       </button>
@@ -2670,7 +2670,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
                   <div className="flex flex-wrap gap-1">
                     {WATERMARK_PRESETS.map(p => (
                       <button key={p} type="button" onClick={() => setWatermark(w => ({ ...w, text: p }))}
-                        className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${watermark.text === p ? 'bg-violet-600 text-white border-violet-600' : ''}`}
+                        className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${watermark.text === p ? 'bg-accent-600 text-white border-accent-600' : ''}`}
                         style={watermark.text !== p ? { borderColor: 'var(--border)', color: 'var(--text-body)' } : {}}>
                         {p}
                       </button>
@@ -2741,7 +2741,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
               </p>
               <div className="flex gap-2 flex-wrap">
                 <button onClick={saveDraft}
-                  className="flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20"
+                  className="flex-1 py-2 rounded-lg text-xs font-semibold border transition-colors hover:bg-accent-50 dark:hover:bg-accent-900/20"
                   style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
                   Save Draft Now
                 </button>
@@ -2788,7 +2788,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
               <div className="grid grid-cols-2 gap-2 pt-1">
                 {DOCUMENT_PRESETS.map(preset => (
                   <button key={preset.id} type="button" onClick={() => applyPreset(preset)}
-                    className="py-2 px-3 rounded-lg text-xs font-semibold border transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:border-violet-400 text-left"
+                    className="py-2 px-3 rounded-lg text-xs font-semibold border transition-colors hover:bg-accent-50 dark:hover:bg-accent-900/20 hover:border-accent-400 text-left"
                     style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
                     {preset.name}
                   </button>
@@ -2805,7 +2805,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
           {/* Toggle button */}
           <button onClick={toggleLeftPanel}
             title={leftCollapsed ? 'Expand Builder' : 'Collapse Builder'}
-            className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-7 h-7 rounded-full border shadow-sm flex items-center justify-center transition-all hover:bg-violet-600 hover:text-white hover:border-violet-600"
+            className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-7 h-7 rounded-full border shadow-sm flex items-center justify-center transition-all hover:bg-accent-600 hover:text-white hover:border-accent-600"
             style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)', color: 'var(--text-muted)' }}>
             {leftCollapsed
               ? <PanelLeftOpen className="w-3.5 h-3.5" />
@@ -2814,7 +2814,7 @@ ${f.show ? `<div style="padding:${f.padding_top}px ${f.padding_right}px ${f.padd
           </button>
           {/* Resize drag area */}
           {!leftCollapsed && (
-            <div className="mt-12 flex-1 cursor-col-resize hover:bg-violet-200 dark:hover:bg-violet-800 transition-colors"
+            <div className="mt-12 flex-1 cursor-col-resize hover:bg-accent-200 dark:hover:bg-accent-800 transition-colors"
               onMouseDown={handleResizeMouseDown}
             />
           )}

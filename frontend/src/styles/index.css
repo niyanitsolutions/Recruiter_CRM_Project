@@ -802,11 +802,13 @@ html[data-theme="system"] header {
 [data-theme="light"] .text-surface-500 { color: #64748b !important; }
 [data-theme="light"] .text-surface-400 { color: #94a3b8 !important; }
 
+[data-theme="light"] .bg-surface-50      { background-color: #F8FBFF !important; }
 [data-theme="light"] .bg-surface-100     { background-color: #f1f5f9 !important; }
 [data-theme="light"] .bg-surface-200     { background-color: #e2e8f0 !important; }
 [data-theme="light"] .border-surface-200 { border-color: #e2e8f0   !important; }
 [data-theme="light"] .border-surface-300 { border-color: #cbd5e1   !important; }
 [data-theme="light"] .hover\:text-surface-700:hover { color: #334155 !important; }
+[data-theme="light"] .hover\:bg-surface-50:hover    { background-color: #F8FBFF !important; }
 [data-theme="light"] .hover\:bg-surface-100:hover   { background-color: #f1f5f9 !important; }
 
 /* ══════════════════════════════════════════════════════════════════════════════

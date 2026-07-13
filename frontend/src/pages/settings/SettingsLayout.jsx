@@ -28,7 +28,7 @@ export const PageHeader = ({ title, description }) => (
 )
 
 export const SectionCard = ({ title, icon: Icon, children, className = '' }) => (
-  <div className={`rounded-xl border border-surface-200/50 shadow-card ${className}`} style={{ backgroundColor: '#1e293b' }}>
+  <div className={`rounded-xl border border-surface-200/50 shadow-card ${className}`} style={{ backgroundColor: 'var(--bg-card)' }}>
     {title && (
       <div className="flex items-center gap-3 px-6 py-4 border-b border-surface-200/30">
         {Icon && (
@@ -36,7 +36,7 @@ export const SectionCard = ({ title, icon: Icon, children, className = '' }) => 
             <Icon className="w-5 h-5 text-accent-400" />
           </div>
         )}
-        <h2 className="text-base font-semibold text-white">{title}</h2>
+        <h2 className="text-base font-semibold" style={{ color: 'var(--text-heading)' }}>{title}</h2>
       </div>
     )}
     <div className="p-6">{children}</div>
@@ -58,7 +58,7 @@ export const Input = ({ className = '', ...props }) => (
   <input
     {...props}
     className={`w-full px-3 py-2 text-sm border border-surface-200/70 rounded-lg
-               focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500
+               focus:outline-none focus:ring-2 focus:ring-accent-500/20 focus:border-accent-500
                transition-colors ${className}`}
   />
 )
@@ -67,7 +67,7 @@ export const Textarea = ({ className = '', ...props }) => (
   <textarea
     {...props}
     className={`w-full px-3 py-2 text-sm border border-surface-200/70 rounded-lg
-               focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500
+               focus:outline-none focus:ring-2 focus:ring-accent-500/20 focus:border-accent-500
                transition-colors resize-y ${className}`}
   />
 )
@@ -76,7 +76,7 @@ export const SelectField = ({ children, className = '', ...props }) => (
   <select
     {...props}
     className={`w-full px-3 py-2 text-sm border border-surface-200/70 rounded-lg
-               focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500
+               focus:outline-none focus:ring-2 focus:ring-accent-500/20 focus:border-accent-500
                transition-colors ${className}`}
   >
     {children}
@@ -89,7 +89,7 @@ export const SaveBtn = ({ saving, onClick, label = 'Save Changes', className = '
     disabled={saving}
     className={`inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg
                disabled:opacity-60 transition-colors ${className}`}
-    style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
+    style={{ background: 'linear-gradient(135deg, #167CFB, #0267F9)' }}
   >
     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
     {saving ? 'Saving…' : label}
@@ -113,7 +113,7 @@ export const CancelBtn = ({ onClick }) => {
 export const Toggle = ({ checked, onChange, label, description, disabled = false }) => (
   <div className={`flex items-center justify-between py-3 ${disabled ? 'opacity-50' : ''}`}>
     <div>
-      <p className="text-sm font-medium text-white">{label}</p>
+      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{label}</p>
       {description && <p className="text-xs text-surface-400 mt-0.5">{description}</p>}
     </div>
     <button
