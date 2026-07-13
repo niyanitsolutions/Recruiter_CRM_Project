@@ -104,6 +104,20 @@ const _cache = {
   ts: 0, company_id: null,
 }
 
+// ── Time-based greeting ───────────────────────────────────────────────────────
+const getGreeting = () => {
+  // Hour must be resolved in the tenant's saved Localization timezone, not
+  // the browser/OS clock — otherwise the greeting can disagree with every
+  // other time display on the page.
+  const h = parseInt(
+    new Intl.DateTimeFormat('en-GB', { timeZone: getTenantTimezone(), hour: '2-digit', hour12: false }).format(new Date()),
+    10,
+  )
+  if (h < 12) return 'Good Morning'
+  if (h < 17) return 'Good Afternoon'
+  return 'Good Evening'
+}
+
 // ── Card wrapper ──────────────────────────────────────────────────────────────
 const Card = ({ children, className = '', style = {} }) => (
   <div
@@ -656,7 +670,17 @@ const AdminDashboard = () => {
       {/* Responsive: all controls always visible; wraps to 2 rows if needed.  */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <Card style={{ padding: '12px 16px' }}>
-        <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+
+          {/* Left — Compact greeting (plain text, no separate card) */}
+          <div className="flex-shrink-0" style={{ minWidth: '180px' }}>
+            <h1 className="text-lg font-bold" style={{ color: 'var(--text-heading)' }}>
+              {getGreeting()}, {user?.fullName || 'User'}! 👋
+            </h1>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+              Here's what's happening with your recruitment today.
+            </p>
+          </div>
 
           {/* Right — Subscription widget + all controls (always visible) */}
           <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
