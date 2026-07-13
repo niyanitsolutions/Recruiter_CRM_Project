@@ -106,7 +106,7 @@ export const FunnelChart = ({ data = [], height = 280 }) => {
   }
 
   const maxValue = Math.max(...data.map(d => d.value || d.count || 0));
-  const colors = ['#3B82F6', '#6366F1', '#8B5CF6', '#A855F7', '#D946EF'];
+  const colors = ['#2196F3', '#0d9488', '#22c55e', '#F59E0B', '#8B5CF6'];
 
   return (
     <div style={{ height }} className="flex flex-col justify-center space-y-2">

@@ -43,13 +43,13 @@
   }
   .btn-primary {
     @apply btn text-white active:scale-[0.98];
-    background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-    box-shadow: 0 0 16px rgba(124,58,237,0.45);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+    box-shadow: 0 0 16px var(--accent-light);
     border-radius: 10px;
   }
   .btn-primary:hover {
-    background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 100%);
-    box-shadow: 0 0 24px rgba(124,58,237,0.65);
+    background: linear-gradient(135deg, var(--accent-hover) 0%, var(--accent-pressed, var(--accent-hover)) 100%);
+    box-shadow: 0 0 24px var(--accent-light);
   }
   .btn-secondary {
     @apply btn border;
@@ -429,10 +429,10 @@ h1, h2, h3, h4, h5, h6 {
 .bg-gray-100             { background-color: var(--bg-gray-100) !important; }
 .bg-gray-200             { background-color: var(--bg-gray-200) !important; }
 
-/* Light mode: card hover adds purple shadow */
+/* Light mode: card hover adds sky-blue shadow */
 [data-theme="light"] .card-hover:hover {
-  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.08), 0 4px 16px rgba(124, 58, 237, 0.06) !important;
-  border-color: #c8c4f0 !important;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.08), 0 4px 16px rgba(33, 150, 243, 0.06) !important;
+  border-color: #bcdcf7 !important;
 }
 
 /* Light mode: sidebar border */
@@ -538,12 +538,12 @@ html[data-theme="dark"] .card-hover:hover {
    only ~3.4:1 contrast on dark card backgrounds (#161426 / #0c1526) and fail
    WCAG AA. Override them to bright/vivid variants in dark contexts.
    ─────────────────────────────────────────────────────────────────────────── */
-[data-theme="dark"] .text-accent-600 { color: #a78bfa !important; }   /* bright violet — 4.9:1 */
-[data-theme="dark"] .text-accent-500 { color: #c4b5fd !important; }   /* light violet */
-[data-theme="dark"] .text-accent-700 { color: #a78bfa !important; }   /* same as 600 — both need boosting */
-[data-theme="dark"] .text-accent-400 { color: #ddd6fe !important; }
-[data-theme="dark"] .border-accent-500 { border-color: #a78bfa !important; }  /* 4.9:1 as active indicator */
-[data-theme="dark"] .border-accent-300 { border-color: #6d28d9 !important; }
+[data-theme="dark"] .text-accent-600 { color: #7dd3fc !important; }   /* bright sky blue — good contrast on dark bg */
+[data-theme="dark"] .text-accent-500 { color: #bae6fd !important; }   /* light sky blue */
+[data-theme="dark"] .text-accent-700 { color: #7dd3fc !important; }   /* same as 600 — both need boosting */
+[data-theme="dark"] .text-accent-400 { color: #e0f2fe !important; }
+[data-theme="dark"] .border-accent-500 { border-color: #7dd3fc !important; }  /* contrast as active indicator */
+[data-theme="dark"] .border-accent-300 { border-color: #0EA5E9 !important; }
 
 /* System (Blue Tint) — orange accent family */
 [data-theme="system"] .text-accent-600 { color: #FF6B35 !important; }

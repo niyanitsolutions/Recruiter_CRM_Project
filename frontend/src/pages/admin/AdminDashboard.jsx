@@ -79,7 +79,7 @@ class DashboardPageBoundary extends Component {
                 window.location.reload()
               }}
               className="px-5 py-2 rounded-xl text-sm font-semibold text-white"
-              style={{ background: '#7c3aed' }}
+              style={{ background: 'var(--accent)' }}
             >
               Reload Dashboard
             </button>
@@ -207,7 +207,7 @@ const PeriodFilter = ({ value, onChange }) => {
               key={p.key}
               onClick={() => { onChange(p); setOpen(false) }}
               className="w-full text-left px-3 py-2 text-xs font-medium transition-colors"
-              style={p.key === value ? { background: 'rgba(124,58,237,0.1)', color: '#7c3aed' } : { color: 'var(--text-secondary)' }}
+              style={p.key === value ? { background: 'var(--accent-light)', color: 'var(--accent)' } : { color: 'var(--text-secondary)' }}
               onMouseEnter={e => { if (p.key !== value) e.currentTarget.style.background = 'var(--bg-hover)' }}
               onMouseLeave={e => { if (p.key !== value) e.currentTarget.style.background = 'transparent' }}
             >
@@ -237,7 +237,7 @@ const formatTrendData = (raw) => {
 
 // Validated categorical palette (node scripts/validate_palette.js from the
 // dataviz skill) — lightness band, chroma floor and CVD-separation all pass.
-const SRC_COLORS = ['#7c3aed', '#4FACFE', '#22c55e', '#FA8231', '#FF6B9D', '#0d9488', '#F6D365']
+const SRC_COLORS = ['#2196F3', '#0d9488', '#22c55e', '#FA8231', '#FF6B9D', '#8b5cf6', '#F6D365']
 
 // ─────────────────────────────────────────────────────────────────────────────
 const AdminDashboard = () => {
@@ -524,7 +524,7 @@ const AdminDashboard = () => {
 
   // ── Funnel data ───────────────────────────────────────────────────────────────
   const funnelData = recruitStats ? [
-    { stage: 'Applied',     value: recruitStats.applied     || 0, fill: '#7c3aed', icon: UserPlus },
+    { stage: 'Applied',     value: recruitStats.applied     || 0, fill: '#2196F3', icon: UserPlus },
     { stage: 'Screening',   value: recruitStats.screening   || 0, fill: '#4FACFE', icon: ListChecks },
     { stage: 'Shortlisted', value: recruitStats.shortlisted || 0, fill: '#0d9488', icon: FileCheck },
     { stage: 'Interview',   value: recruitStats.interview   || 0, fill: '#22c55e', icon: Calendar },
@@ -548,13 +548,13 @@ const AdminDashboard = () => {
   const barData    = trendData.slice(-6).map((d, i, arr) => ({
     label: d.label,
     value: d.value,
-    fill:  i === arr.length - 1 ? '#7c3aed' : '#7c3aed55',
+    fill:  i === arr.length - 1 ? '#2196F3' : '#2196F355',
   }))
 
   // ── AI insights ───────────────────────────────────────────────────────────────
   const aiInsights = [
     recruitStats?.recent_week > 0 && {
-      color: '#7c3aed', icon: Zap,
+      color: 'var(--accent)', icon: Zap,
       text: `${recruitStats.recent_week} new application${recruitStats.recent_week > 1 ? 's' : ''} this week`,
       tag: 'New',
     },
@@ -599,7 +599,7 @@ const AdminDashboard = () => {
       tag: 'Action',
     },
     insights?.targets_due_soon > 0 && {
-      color: '#7c3aed', icon: Target,
+      color: 'var(--accent)', icon: Target,
       text: `${insights.targets_due_soon} target${insights.targets_due_soon > 1 ? 's' : ''} due within 7 days`,
       tag: 'Upcoming',
     },
@@ -614,7 +614,7 @@ const AdminDashboard = () => {
   const pendingItems = [
     offersPending > 0 && { label: 'Offers Awaiting Response',   count: offersPending,              color: '#F6A535', icon: Award,    path: '/applications' },
     pendingFeedback > 0 && { label: 'Interview Feedback Needed', count: pendingFeedback,             color: '#FF4757', icon: Calendar, path: '/interviews'   },
-    hrmStats?.pending_leaves > 0 && { label: 'Leave Requests',  count: hrmStats.pending_leaves,     color: '#7c3aed', icon: Building, path: '/hrm/leaves'   },
+    hrmStats?.pending_leaves > 0 && { label: 'Leave Requests',  count: hrmStats.pending_leaves,     color: 'var(--accent)', icon: Building, path: '/hrm/leaves'   },
     hrmStats?.pending_exits > 0  && { label: 'Exit Requests',   count: hrmStats.pending_exits,      color: '#FF6B9D', icon: Users,    path: '/hrm/exit'     },
     insights?.document_approvals_pending > 0 && {
       label: 'Document Approvals', count: insights.document_approvals_pending,
@@ -643,7 +643,7 @@ const AdminDashboard = () => {
   const healthMetrics = [
     { label: 'Offer Rate',     value: offerRate,  color: '#22c55e', target: 30 },
     { label: 'Join Rate',      value: joinRate,   color: '#4FACFE', target: 60 },
-    { label: 'Screening Rate', value: screenRate, color: '#7c3aed', target: 70 },
+    { label: 'Screening Rate', value: screenRate, color: 'var(--accent)', target: 70 },
     { label: 'Interview Rate', value: ivRate,     color: '#F6A535', target: 50 },
   ].filter(m => m.value !== null)
   const overallHealth = healthMetrics.length > 0
@@ -689,11 +689,11 @@ const AdminDashboard = () => {
             {isAdminOrOwner && seatStatus && (
               <div
                 className="flex items-center gap-2 px-3 py-2 rounded-xl flex-shrink-0"
-                style={{ border: '1.5px dashed rgba(124,58,237,0.30)', background: 'rgba(124,58,237,0.03)' }}
+                style={{ border: '1.5px dashed var(--accent-light)', background: 'var(--accent-light)' }}
               >
                 {/* Plan name */}
                 <div className="flex-shrink-0">
-                  <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#7c3aed' }}>Plan</p>
+                  <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>Plan</p>
                   <p className="text-xs font-bold mt-0.5 leading-tight whitespace-nowrap" style={{ color: 'var(--text-heading)' }}>
                     {seatStatus.plan_display_name || seatStatus.plan_name}
                     {seatStatus.is_trial && (
@@ -732,8 +732,8 @@ const AdminDashboard = () => {
                 <button
                   onClick={() => setShowUpgradeModal(true)}
                   className="flex-shrink-0 text-[10px] font-semibold px-2 py-1 rounded-lg transition-all whitespace-nowrap ml-1"
-                  style={{ color: '#7c3aed', border: '1px solid rgba(124,58,237,0.40)', background: 'transparent' }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.08)'}
+                  style={{ color: 'var(--accent)', border: '1px solid var(--accent-light)', background: 'transparent' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-light)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
                   Manage
@@ -764,9 +764,9 @@ const AdminDashboard = () => {
                 <button
                   onClick={() => setShowQuickAction(v => !v)}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition-all whitespace-nowrap"
-                  style={{ background: '#7c3aed' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#6d28d9'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#7c3aed'}
+                  style={{ background: 'var(--accent)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-hover)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'var(--accent)'}
                 >
                   <Plus className="w-3.5 h-3.5" /> Quick Action
                   <ChevronDown className="w-3 h-3 opacity-80" />
@@ -785,7 +785,7 @@ const AdminDashboard = () => {
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                         onClick={() => setShowQuickAction(false)}
                       >
-                        <UserPlus className="w-4 h-4" style={{ color: '#7c3aed' }} /> Add Candidate
+                        <UserPlus className="w-4 h-4" style={{ color: 'var(--accent)' }} /> Add Candidate
                       </Link>
                     )}
                     {has('jobs:create') && (
@@ -865,7 +865,7 @@ const AdminDashboard = () => {
                 title="Total Candidates"
                 value={totalCandidates}
                 icon={Users2}
-                color="purple"
+                color="blue"
                 trend={recruitStats?.recent_week > 0
                   ? { value: `+${recruitStats.recent_week} this week`, dir: 'up' }
                   : undefined}
@@ -954,9 +954,9 @@ const AdminDashboard = () => {
                     boxShadow: 'var(--shadow-card)',
                   }}
                 >
-                  <div className="absolute top-0 left-0 right-0" style={{ height: '2px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)' }} />
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-2" style={{ background: '#6366f118' }}>
-                    <Users className="w-[15px] h-[15px]" style={{ color: '#6366f1' }} />
+                  <div className="absolute top-0 left-0 right-0" style={{ height: '2px', background: 'linear-gradient(90deg, #2196F3, #38BDF8)' }} />
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-2" style={{ background: '#2196F318' }}>
+                    <Users className="w-[15px] h-[15px]" style={{ color: '#2196F3' }} />
                   </div>
                   <div className="flex items-center gap-3">
                     <div>
@@ -1011,7 +1011,7 @@ const AdminDashboard = () => {
               title="Hiring Pipeline"
               subtitle={recruitStats?.total > 0 ? `${recruitStats.total.toLocaleString('en-IN')} total` : 'Recruitment funnel'}
               action={
-                <Link to="/applications" className="text-xs font-medium" style={{ color: '#7c3aed' }}>
+                <Link to="/applications" className="text-xs font-medium" style={{ color: 'var(--accent)' }}>
                   View all
                 </Link>
               }
@@ -1089,7 +1089,7 @@ const AdminDashboard = () => {
               title="Interviews Today"
               subtitle={`${interviewsToday ?? 0} scheduled`}
               action={
-                <Link to="/interviews" className="text-xs font-medium flex items-center gap-0.5" style={{ color: '#7c3aed' }}>
+                <Link to="/interviews" className="text-xs font-medium flex items-center gap-0.5" style={{ color: 'var(--accent)' }}>
                   Full Schedule <ChevronRight className="w-3 h-3" />
                 </Link>
               }
@@ -1104,7 +1104,7 @@ const AdminDashboard = () => {
                     ? { bg: 'rgba(34,197,94,0.10)', color: '#22c55e' }
                     : statusKey === 'cancelled'
                     ? { bg: 'rgba(255,71,87,0.10)', color: '#ef4444' }
-                    : { bg: 'rgba(124,58,237,0.10)', color: '#7c3aed' }
+                    : { bg: 'var(--accent-light)', color: 'var(--accent)' }
                   const canOpenProfile = has('candidates:view') && iv.candidate_id
                   const RowTag = canOpenProfile ? Link : 'div'
                   const rowProps = canOpenProfile ? { to: `/candidates/${iv.candidate_id}` } : {}
@@ -1118,7 +1118,7 @@ const AdminDashboard = () => {
                       <div className="relative flex-shrink-0">
                         <EmployeeAvatar name={iv.candidate_name} photoUrl={iv.candidate_photo_url} size={36} />
                         <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
-                          <ModeIcon className="w-2.5 h-2.5" style={{ color: '#7c3aed' }} />
+                          <ModeIcon className="w-2.5 h-2.5" style={{ color: 'var(--accent)' }} />
                         </div>
                       </div>
                       <div className="flex-1 min-w-0">
@@ -1160,7 +1160,7 @@ const AdminDashboard = () => {
               )
             }
             {todayIvs.length > 5 && (
-              <Link to="/interviews" className="flex items-center gap-1 text-xs font-medium mt-2 pt-2" style={{ borderTop: '1px solid var(--border)', color: '#7c3aed' }}>
+              <Link to="/interviews" className="flex items-center gap-1 text-xs font-medium mt-2 pt-2" style={{ borderTop: '1px solid var(--border)', color: 'var(--accent)' }}>
                 +{todayIvs.length - 5} more <ArrowRight className="w-3 h-3" />
               </Link>
             )}
@@ -1173,7 +1173,6 @@ const AdminDashboard = () => {
             icon={Bot}
             title="AI Hiring Assistant"
             subtitle="Smart recommendations"
-            iconColor="#7c3aed"
           />
           {aiInsights.length > 0 ? (
             <div className="space-y-2">
@@ -1303,7 +1302,7 @@ const AdminDashboard = () => {
               subtitle="By activity (7 days)"
               action={
                 has('users:view') && (
-                  <Link to="/users" className="text-xs font-medium" style={{ color: '#7c3aed' }}>View All</Link>
+                  <Link to="/users" className="text-xs font-medium" style={{ color: 'var(--accent)' }}>View All</Link>
                 )
               }
             />
@@ -1326,7 +1325,7 @@ const AdminDashboard = () => {
                       {medal
                         ? <span className="text-base leading-none">{medal}</span>
                         : (
-                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: '#7c3aed' }}>
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: 'var(--accent)' }}>
                             {i + 1}
                           </div>
                         )
@@ -1337,11 +1336,11 @@ const AdminDashboard = () => {
                       <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-heading)' }}>{r.user_name || r.name}</p>
                       {meta?.department && <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{meta.department}</p>}
                       <div className="h-1 rounded-full mt-1" style={{ background: 'var(--bg-card)' }}>
-                        <div className="h-1 rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: '#7c3aed' }} />
+                        <div className="h-1 rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: 'var(--accent)' }} />
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-bold" style={{ color: '#7c3aed' }}>{(r.action_count || 0).toLocaleString('en-IN')}</p>
+                      <p className="text-sm font-bold" style={{ color: 'var(--accent)' }}>{(r.action_count || 0).toLocaleString('en-IN')}</p>
                       <p className="text-[9px]" style={{ color: 'var(--text-muted)' }}>actions</p>
                     </div>
                   </div>
@@ -1368,7 +1367,7 @@ const AdminDashboard = () => {
             subtitle="Candidates by source"
             action={
               has('candidates:view') && (
-                <Link to="/candidates" className="text-xs font-medium" style={{ color: '#7c3aed' }}>View all</Link>
+                <Link to="/candidates" className="text-xs font-medium" style={{ color: 'var(--accent)' }}>View all</Link>
               )
             }
           />
@@ -1437,7 +1436,7 @@ const AdminDashboard = () => {
                       onClick={() => setTrendPeriod(p)}
                       className="px-2 py-1 rounded-md text-[10px] font-semibold transition-all"
                       style={p.key === trendPeriod.key
-                        ? { background: 'var(--bg-card)', color: '#7c3aed', boxShadow: 'var(--shadow-card)' }
+                        ? { background: 'var(--bg-card)', color: 'var(--accent)', boxShadow: 'var(--shadow-card)' }
                         : { color: 'var(--text-muted)' }}
                     >
                       {p.label}
@@ -1559,7 +1558,7 @@ const AdminDashboard = () => {
               title="Recent Activity"
               subtitle="Latest platform actions"
               action={
-                <Link to="/audit-logs" className="text-xs font-medium" style={{ color: '#7c3aed' }}>View all</Link>
+                <Link to="/audit-logs" className="text-xs font-medium" style={{ color: 'var(--accent)' }}>View all</Link>
               }
             />
             {Array.isArray(recent_activity) && recent_activity.length > 0
@@ -1607,7 +1606,7 @@ const AdminDashboard = () => {
             title="Announcements"
             subtitle="Latest from your team"
             action={
-              <Link to="/hrm" className="text-xs font-medium" style={{ color: '#7c3aed' }}>View all</Link>
+              <Link to="/hrm" className="text-xs font-medium" style={{ color: 'var(--accent)' }}>View all</Link>
             }
           />
           {Array.isArray(announcements) && announcements.length > 0 ? (
@@ -1625,7 +1624,7 @@ const AdminDashboard = () => {
                   <div key={ann._id || ann.id || i} className="relative flex gap-3 pb-3">
                     {/* Timeline rail */}
                     <div className="flex flex-col items-center flex-shrink-0">
-                      <span className="w-2.5 h-2.5 rounded-full mt-1" style={{ background: prioStyle?.color || '#7c3aed' }} />
+                      <span className="w-2.5 h-2.5 rounded-full mt-1" style={{ background: prioStyle?.color || 'var(--accent)' }} />
                       {!isLast && <span className="flex-1 w-px mt-1" style={{ background: 'var(--border-subtle)' }} />}
                     </div>
                     <div className="flex-1 min-w-0 pb-1">

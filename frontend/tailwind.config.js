@@ -28,18 +28,18 @@ export default {
           800: '#0c0a1b',
           900: '#090815',
         },
-        // Accent violet for buttons
+        // Accent — Sky Blue for buttons (brand primary)
         accent: {
-          50: '#f5f3ff',
-          100: '#ede9fe',
-          200: '#ddd6fe',
-          300: '#c4b5fd',
-          400: '#a78bfa',
-          500: '#8b5cf6', // Primary button color
-          600: '#7c3aed',
-          700: '#6d28d9',
-          800: '#5b21b6',
-          900: '#4c1d95',
+          50: '#E3F2FD',
+          100: '#BBDEFB',
+          200: '#90CAF9',
+          300: '#64B5F6',
+          400: '#42A5F5',
+          500: '#2196F3', // Primary button color
+          600: '#1E88E5', // Hover
+          700: '#1976D2', // Pressed
+          800: '#1565C0',
+          900: '#0D47A1',
         },
         // Status colors
         success: {
@@ -83,9 +83,9 @@ export default {
         'soft': '0 2px 15px -3px rgba(0,0,0,0.4), 0 10px 20px -2px rgba(0,0,0,0.3)',
         'card': '0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -2px rgba(0,0,0,0.2)',
         'elevated': '0 20px 60px -10px rgba(0,0,0,0.6)',
-        'glow': '0 0 20px rgba(124, 58, 237, 0.4)',
-        'glow-sm': '0 0 10px rgba(124, 58, 237, 0.3)',
-        'glow-lg': '0 0 40px rgba(124, 58, 237, 0.35)',
+        'glow': '0 0 20px rgba(33, 150, 243, 0.4)',
+        'glow-sm': '0 0 10px rgba(33, 150, 243, 0.3)',
+        'glow-lg': '0 0 40px rgba(33, 150, 243, 0.35)',
         'purple-glow': '0 0 20px rgba(124,58,237,0.5)',
         'purple-glow-sm': '0 0 12px rgba(124,58,237,0.35)',
       },

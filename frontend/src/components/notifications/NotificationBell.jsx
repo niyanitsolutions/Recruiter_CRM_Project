@@ -43,7 +43,7 @@ const TYPE_COLORS = {
   offer_released:       { bg: 'rgba(79,172,254,0.15)',  color: '#4FACFE' },
   offer_accepted:       { bg: 'rgba(67,233,123,0.15)',  color: '#43E97B' },
   candidate_joined:     { bg: 'rgba(67,233,123,0.15)',  color: '#43E97B' },
-  payout_eligible:      { bg: 'rgba(108,99,255,0.15)',  color: '#A78BFA' },
+  payout_eligible:      { bg: 'rgba(14,165,233,0.15)',  color: '#0EA5E9' },
   invoice_raised:       { bg: 'rgba(245,158,11,0.15)',  color: '#F59E0B' },
   invoice_approved:     { bg: 'rgba(67,233,123,0.15)',  color: '#43E97B' },
   invoice_rejected:     { bg: 'rgba(255,71,87,0.15)',   color: '#FF4757' },
@@ -62,7 +62,7 @@ const TYPE_COLORS = {
   attendance_punch_in:  { bg: 'rgba(67,233,123,0.15)',  color: '#43E97B' },
   attendance_punch_out: { bg: 'rgba(245,158,11,0.15)',  color: '#F59E0B' },
   attendance_pending:   { bg: 'rgba(255,71,87,0.15)',   color: '#FF4757' },
-  sync_pending:         { bg: 'rgba(124,58,237,0.15)',  color: '#7c3aed' },
+  sync_pending:         { bg: 'rgba(56,189,248,0.15)',  color: '#38BDF8' },
   // Subscription
   subscription_expiry:  { bg: 'rgba(255,107,157,0.15)', color: '#FF6B9D' },
   seat_limit_reached:   { bg: 'rgba(255,71,87,0.15)',   color: '#FF4757' },

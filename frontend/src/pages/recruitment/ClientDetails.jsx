@@ -140,8 +140,8 @@ const ClientDetails = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2">
           <InfoRow icon={Mail}     label="Email"    value={client.email}   href={`mailto:${client.email}`}      iconColor="text-accent-500" />
           <InfoRow icon={Phone}    label="Phone"    value={client.phone}   href={`tel:${client.phone}`}         iconColor="text-success-500" />
-          <InfoRow icon={Globe}    label="Website"  value={client.website} href={client.website}                iconColor="text-indigo-500" />
-          <InfoRow icon={MapPin}   label="Address"  value={address}                                             iconColor="text-purple-500" />
+          <InfoRow icon={Globe}    label="Website"  value={client.website} href={client.website}                iconColor="text-blue-500" />
+          <InfoRow icon={MapPin}   label="Address"  value={address}                                             iconColor="text-sky-600" />
           <InfoRow icon={Hash}     label="GSTIN"    value={client.gstin}                                        iconColor="text-surface-400" />
           <InfoRow icon={FileText} label="PAN"      value={client.pan}                                          iconColor="text-surface-400" />
         </div>
@@ -308,8 +308,8 @@ const ClientDetails = () => {
             <p className="text-2xl font-bold text-accent-600">{filledJobs}</p>
             <p className="text-xs text-surface-500 mt-0.5">Filled</p>
           </div>
-          <div className="text-center p-4 bg-purple-50 rounded-xl">
-            <p className="text-2xl font-bold text-purple-600">{(client.contact_persons || []).length}</p>
+          <div className="text-center p-4 bg-teal-50 rounded-xl">
+            <p className="text-2xl font-bold text-teal-600">{(client.contact_persons || []).length}</p>
             <p className="text-xs text-surface-500 mt-0.5">Contacts</p>
           </div>
         </div>
@@ -347,7 +347,7 @@ const ClientDetails = () => {
       {/* ── Client hero ───────────────────────────────────────────────────── */}
       <div className="bg-white border border-surface-200 rounded-xl p-6 mb-6">
         <div className="flex items-start gap-5 flex-wrap">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-md flex-shrink-0">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xl font-bold shadow-md flex-shrink-0">
             {getInitials(client.name)}
           </div>
           <div className="flex-1 min-w-0">
@@ -377,7 +377,7 @@ const ClientDetails = () => {
         <MetricCard label="Total Jobs"  value={totalJobs}  icon={Briefcase}   color="text-surface-900"  bg="bg-surface-50"  iconBg="bg-surface-100" />
         <MetricCard label="Open Jobs"   value={openJobs}   icon={TrendingUp}  color="text-success-600"  bg="bg-success-50"  iconBg="bg-success-100" />
         <MetricCard label="Filled Jobs" value={filledJobs} icon={CheckCircle} color="text-accent-600"   bg="bg-accent-50"   iconBg="bg-accent-100"  />
-        <MetricCard label="Contacts"    value={(client.contact_persons || []).length} icon={Users} color="text-purple-600" bg="bg-purple-50" iconBg="bg-purple-100" />
+        <MetricCard label="Contacts"    value={(client.contact_persons || []).length} icon={Users} color="text-teal-600" bg="bg-teal-50" iconBg="bg-teal-100" />
       </div>
 
       {/* ── Tabs ──────────────────────────────────────────────────────────── */}

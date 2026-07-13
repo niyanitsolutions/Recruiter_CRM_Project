@@ -179,7 +179,7 @@ const CandidateDetails = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
           <SidebarField icon={Building2}   label="Company"     value={candidate.current_company}     iconColor="text-accent-500" />
           <SidebarField icon={Briefcase}   label="Designation" value={candidate.current_designation} iconColor="text-primary-500" />
-          <SidebarField icon={MapPin}      label="Location"    value={location}                      iconColor="text-purple-500" />
+          <SidebarField icon={MapPin}      label="Location"    value={location}                      iconColor="text-sky-600" />
           <SidebarField icon={Clock}       label="Work Mode"   value={candidate.work_mode_preference} iconColor="text-orange-500" />
         </div>
       </div>
@@ -269,8 +269,8 @@ const CandidateDetails = () => {
           <div className="space-y-3">
             {candidate.education.map((edu, i) => (
               <div key={i} className="flex items-start gap-4 p-4 bg-surface-50 rounded-xl border border-surface-100">
-                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                  <GraduationCap className="w-5 h-5 text-indigo-600" />
+                <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0">
+                  <GraduationCap className="w-5 h-5 text-sky-600" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-surface-900">
@@ -376,7 +376,7 @@ const CandidateDetails = () => {
         ? [{ dot: 'bg-primary-400', date: candidate.updated_at, title: 'Profile Updated', desc: 'Candidate profile was modified' }]
         : []),
       ...applications.map(app => ({
-        dot: 'bg-purple-400',
+        dot: 'bg-teal-400',
         date: app.applied_at,
         title: `Applied — ${app.job_title}`,
         desc: app.client_name,
@@ -498,9 +498,9 @@ const CandidateDetails = () => {
             <div className="space-y-3">
               <SidebarField icon={Mail}        label="Email"    value={candidate.email}  href={`mailto:${candidate.email}`}  iconColor="text-accent-500" />
               <SidebarField icon={Phone}       label="Mobile"   value={candidate.mobile} href={`tel:${candidate.mobile}`}    iconColor="text-success-500" />
-              <SidebarField icon={MapPin}      label="Location" value={location}                                              iconColor="text-purple-500" />
+              <SidebarField icon={MapPin}      label="Location" value={location}                                              iconColor="text-sky-600" />
               {candidate.linkedin_url && (
-                <SidebarField icon={ExternalLink} label="LinkedIn" value="View Profile" href={candidate.linkedin_url} iconColor="text-indigo-500" />
+                <SidebarField icon={ExternalLink} label="LinkedIn" value="View Profile" href={candidate.linkedin_url} iconColor="text-blue-500" />
               )}
               {candidate.portfolio_url && (
                 <SidebarField icon={Globe}     label="Portfolio" value="View Portfolio" href={candidate.portfolio_url} iconColor="text-teal-500" />

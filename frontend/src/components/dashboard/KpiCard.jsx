@@ -43,7 +43,7 @@ const useCounter = (target, duration = 900) => {
 }
 
 const PALETTES = {
-  blue:   { a: '#4FACFE', b: '#00F2FE', glow: 'rgba(79,172,254,0.20)'   },
+  blue:   { a: '#2196F3', b: '#38BDF8', glow: 'rgba(33,150,243,0.20)'   },
   purple: { a: '#7c3aed', b: '#9C4DFF', glow: 'rgba(124,58,237,0.20)'   },
   green:  { a: '#22c55e', b: '#38F9D7', glow: 'rgba(34,197,94,0.20)'    },
   orange: { a: '#FA8231', b: '#F6D365', glow: 'rgba(250,130,49,0.20)'   },

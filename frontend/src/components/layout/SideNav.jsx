@@ -383,8 +383,8 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
             ? 'inset -8px 0 32px rgba(14,165,233,0.15), 4px 0 24px rgba(0,0,0,0.40)'
             : '2px 0 12px rgba(14,165,233,0.08)'
           : isDark
-          ? 'inset -8px 0 32px rgba(124,58,237,0.18), 4px 0 24px rgba(0,0,0,0.40)'
-          : '2px 0 12px rgba(124,58,237,0.06)',
+          ? 'inset -8px 0 32px rgba(56,189,248,0.18), 4px 0 24px rgba(0,0,0,0.40)'
+          : '2px 0 12px rgba(33,150,243,0.06)',
       }}>
       {/* Logo */}
       <div
@@ -548,7 +548,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
                 name={user?.fullName || user?.full_name || 'U'}
                 photoUrl={employeePhotoUrl}
                 size={36}
-                style={{ boxShadow: '0 0 10px rgba(124,58,237,0.3)' }}
+                style={{ boxShadow: '0 0 10px rgba(33,150,243,0.3)' }}
               />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate" style={{ color: 'var(--text-heading)' }}>{user?.fullName || user?.full_name || 'User'}</p>
@@ -584,7 +584,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
       <button
         onClick={onToggle}
         className="absolute -right-3 top-20 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg"
-        style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', border: '1px solid rgba(124,58,237,0.4)', boxShadow: '0 0 10px rgba(124,58,237,0.4)' }}
+        style={{ background: 'linear-gradient(135deg, #2196F3, #1565C0)', border: '1px solid rgba(33,150,243,0.4)', boxShadow: '0 0 10px rgba(33,150,243,0.4)' }}
       >
         {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
       </button>

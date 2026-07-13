@@ -20,9 +20,17 @@
   --bg-card:           #161426;           /* stat cards / panels */
   --bg-card-alt:       #1a1730;           /* alternate card / inner panels */
   --bg-topbar:         #110f1f;
-  --bg-hover:          rgba(124, 58, 237, 0.08);
-  --bg-active:         rgba(124, 58, 237, 0.15);
+  --bg-hover:          rgba(56, 189, 248, 0.08);
+  --bg-active:         rgba(56, 189, 248, 0.15);
   --bg-overlay:        rgba(0, 0, 10, 0.80);
+  --row-selected-bg:   rgba(56, 189, 248, 0.10);
+
+  /* ── Brand / Accent — Sky Blue (dark theme) ── */
+  --accent:            #38BDF8;
+  --accent-hover:      #0EA5E9;
+  --accent-pressed:    #0284C7;
+  --accent-light:      rgba(56, 189, 248, 0.18);
+  --accent-2:          #4facfe;
 
   /* ── Text ── */
   --text-primary:      #dbd8f8;           /* was #c4c0e8 — clean lavender-white, 8:1 contrast */
@@ -31,7 +39,7 @@
   --text-disabled:     #3d3860;
   --text-heading:      #f5f3ff;           /* was #f1f0ff — near-white headings */
   --text-label:        #9e98c8;           /* was #7c75b8 — matches muted */
-  --text-link:         #a78bfa;
+  --text-link:         #38BDF8;
   --text-danger:       #f87171;
 
   /* ── Borders ── */
@@ -45,8 +53,8 @@
   --input-text:         #dbd8f8;
   --input-placeholder:  #7068a0;           /* was #5a5585 — more readable placeholder */
   --input-border:       #2d2b55;
-  --input-focus-border: #7c3aed;
-  --input-focus-shadow: rgba(124, 58, 237, 0.25);
+  --input-focus-border: #38BDF8;
+  --input-focus-shadow: rgba(56, 189, 248, 0.25);
   --input-autofill:     #1e1b4b;
   --input-autofill-text: #dbd8f8;
   --input-disabled-bg:  #13112a;
@@ -68,24 +76,24 @@
 
   /* ── Navigation — left-border accent style ── */
   --nav-text:          #a8a3ce;           /* was #7c75b8 — clearly readable inactive items */
-  --nav-text-active:   #c4b5fd;
-  --nav-bg-active:     rgba(124, 58, 237, 0.15);
-  --nav-border-active: #7c3aed;
-  --nav-hover-bg:      rgba(124, 58, 237, 0.08);
-  --nav-glow-active:   rgba(124, 58, 237, 0.40);
+  --nav-text-active:   #7dd3fc;
+  --nav-bg-active:     rgba(56, 189, 248, 0.15);
+  --nav-border-active: #38BDF8;
+  --nav-hover-bg:      rgba(56, 189, 248, 0.08);
+  --nav-glow-active:   rgba(56, 189, 248, 0.40);
 
   /* ── UI elements ── */
   --scrollbar-track:        #0d0b1a;
   --scrollbar-thumb:        #2d2b55;
   --scrollbar-thumb-hover:  #3d3b70;
-  --selection-bg:           rgba(124, 58, 237, 0.35);
-  --selection-text:         #c4b5fd;
+  --selection-bg:           rgba(56, 189, 248, 0.35);
+  --selection-text:         #7dd3fc;
   --dropdown-bg:            #161426;
   --dropdown-border:        #2d2b55;
-  --dropdown-hover:         rgba(124, 58, 237, 0.10);
-  --skeleton-from:          #1a1730;
-  --skeleton-via:           #201d3a;
-  --skeleton-to:            #1a1730;
+  --dropdown-hover:         rgba(56, 189, 248, 0.10);
+  --skeleton-from:          #0f2137;
+  --skeleton-via:           #13293f;
+  --skeleton-to:            #0f2137;
 
   /* ── Shadows ── */
   --shadow-card:     0 2px 8px rgba(0, 0, 0, 0.40), 0 1px 0 rgba(255,255,255,0.03);
@@ -124,9 +132,17 @@
   --bg-card:           #ffffff;
   --bg-card-alt:       #f8f7ff;
   --bg-topbar:         #ffffff;
-  --bg-hover:          #e4e2ff;
-  --bg-active:         #ede9ff;
+  --bg-hover:          #EAF4FE;
+  --bg-active:         #E8F4FF;
   --bg-overlay:        rgba(0, 0, 0, 0.45);
+  --row-selected-bg:   #EEF7FF;
+
+  /* ── Brand / Accent — Sky Blue (light theme) ── */
+  --accent:            #2196F3;
+  --accent-hover:      #1E88E5;
+  --accent-pressed:    #1976D2;
+  --accent-light:      rgba(33, 150, 243, 0.18);
+  --accent-2:          #4facfe;
 
   /* ── Text ── */
   --text-primary:      #1a1a2e;
@@ -135,7 +151,7 @@
   --text-disabled:     #acaccc;
   --text-heading:      #0d0d1e;           /* was #0f0f1a — deeper heading */
   --text-label:        #3a3a5a;           /* was #4a4a6a */
-  --text-link:         #7c3aed;
+  --text-link:         #2196F3;
   --text-danger:       #dc2626;
 
   /* ── Borders ── */
@@ -149,8 +165,8 @@
   --input-text:         #1a1a2e;
   --input-placeholder:  #8a8aaa;           /* was #7a7a9a — more visible placeholder */
   --input-border:       #d0cdf5;
-  --input-focus-border: #7c3aed;
-  --input-focus-shadow: rgba(124, 58, 237, 0.15);
+  --input-focus-border: #2196F3;
+  --input-focus-shadow: rgba(33, 150, 243, 0.15);
   --input-autofill:     #f3f1ff;
   --input-autofill-text: #1a1a2e;
   --input-disabled-bg:  #eeecff;
@@ -171,31 +187,31 @@
   --text-danger:  #dc2626;
   --text-info:    #4f46e5;
 
-  /* ── Navigation — lavender sidebar, left-border active style ── */
-  --nav-text:          #6d4ac7;           /* medium purple inactive items */
-  --nav-text-active:   #7c3aed;           /* vivid purple active */
-  --nav-bg-active:     #ede9ff;           /* light lavender active bg */
-  --nav-border-active: #7c3aed;           /* left-border accent color */
-  --nav-hover-bg:      #e4e2ff;
-  --nav-glow-active:   rgba(124, 58, 237, 0.12);
+  /* ── Navigation — Sky Blue sidebar, left-border active style ── */
+  --nav-text:          #5A82A8;           /* muted blue inactive items */
+  --nav-text-active:   #1565C0;           /* vivid blue active */
+  --nav-bg-active:     #E8F4FF;           /* light sky-blue active bg */
+  --nav-border-active: #2196F3;           /* left-border accent color */
+  --nav-hover-bg:      #EAF4FE;
+  --nav-glow-active:   rgba(33, 150, 243, 0.12);
 
   /* ── UI elements ── */
-  --scrollbar-track:        #f0eeff;
-  --scrollbar-thumb:        #d0cbf0;
-  --scrollbar-thumb-hover:  #b8b2e0;
-  --selection-bg:           rgba(124, 58, 237, 0.15);
-  --selection-text:         #5b21b6;
+  --scrollbar-track:        #EAF4FE;
+  --scrollbar-thumb:        #bcdcf7;
+  --scrollbar-thumb-hover:  #93c8ef;
+  --selection-bg:           rgba(33, 150, 243, 0.15);
+  --selection-text:         #1565C0;
   --dropdown-bg:            #ffffff;
   --dropdown-border:        #e0dffe;
-  --dropdown-hover:         #f0eeff;
-  --skeleton-from:          #eeecff;
-  --skeleton-via:           #f5f3ff;
-  --skeleton-to:            #eeecff;
+  --dropdown-hover:         #EAF4FE;
+  --skeleton-from:          #EAF4FE;
+  --skeleton-via:           #F3F9FF;
+  --skeleton-to:            #EAF4FE;
 
   /* ── Shadows ── */
-  --shadow-card:     0 2px 8px rgba(124, 58, 237, 0.06), 0 1px 3px rgba(124, 58, 237, 0.04);
-  --shadow-soft:     0 4px 16px rgba(124, 58, 237, 0.10);
-  --shadow-elevated: 0 20px 60px rgba(124, 58, 237, 0.12);
+  --shadow-card:     0 2px 8px rgba(33, 150, 243, 0.06), 0 1px 3px rgba(33, 150, 243, 0.04);
+  --shadow-soft:     0 4px 16px rgba(33, 150, 243, 0.10);
+  --shadow-elevated: 0 20px 60px rgba(33, 150, 243, 0.12);
 
   /* ── Stat card left-border accent colors ── */
   --stat-border-green:  #059669;
@@ -473,13 +489,10 @@
   }
 }
 
-/* ── Brand / Accent — identical in both themes ───────────────────────────────── */
+/* ── Decorative gradients — shared across themes; purple stays available here
+   as the spec's optional secondary accent (stat-card variety, not the brand
+   accent itself — that's set per-theme above via --accent/--accent-hover). ── */
 :root {
-  --accent:           #7c3aed;
-  --accent-hover:     #6d28d9;
-  --accent-light:     rgba(124, 58, 237, 0.18);
-  --accent-2:         #4facfe;
-
   /* ── Gradients used across app ── */
   --gradient-1: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
   --gradient-2: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);

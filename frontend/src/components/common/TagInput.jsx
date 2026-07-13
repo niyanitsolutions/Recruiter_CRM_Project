@@ -67,7 +67,7 @@ const TagInput = ({
             key={`${tag}-${i}`}
             className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full
               text-xs font-medium select-none"
-            style={{ background: 'rgba(108,99,255,0.18)', color: '#A78BFA' }}
+            style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}
           >
             {tag}
             <button
