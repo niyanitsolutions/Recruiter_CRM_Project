@@ -33,7 +33,7 @@ const getMonthlyAttendance = (employeeId, year, month) =>
 const getTeamToday = () => api.get(`${BASE}/attendance/team/today`)
 const manualAttendance = (data) => api.post(`${BASE}/attendance/manual`, data)
 const recoverAttendance = (attendanceId, data) => api.post(`${BASE}/attendance/${attendanceId}/recover`, data)
-const getAttendanceTodayStats = () => api.get(`${BASE}/attendance/stats/today`)
+const getAttendanceTodayStats = (params) => api.get(`${BASE}/attendance/stats/today`, { params })
 const getAttendanceSettings = () => api.get(`${BASE}/attendance/settings`)
 const updateAttendanceSettings = (data) => api.put(`${BASE}/attendance/settings`, data)
 

@@ -378,6 +378,9 @@ async def get_team_today(
 
 @router.get("/stats/today")
 async def get_stats_today(
+    status:    Optional[str] = None,
+    work_mode: Optional[str] = None,
+    search:    Optional[str] = None,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_any_permission([["hrm:attendance:team"], ["hrm:attendance:view"]])),
@@ -386,23 +389,48 @@ async def get_stats_today(
 
     Used by the Attendance page summary cards.  Requires team-view permission
     so managers and HR can see aggregated numbers.
+
+    Optional status / work_mode / search filters mirror the ones applied to
+    the "today" table (`/team/today`) so the cards always describe exactly
+    the same filtered dataset as the table.
     """
     svc = AttendanceService(db)
-    stats = await svc.get_today_stats(cu["company_id"])
+    stats = await svc.get_today_stats(cu["company_id"], status=status, work_mode=work_mode, search=search)
 
-    total_employees = await db["hrm_employees"].count_documents({
+    emp_query: dict = {
         "company_id": cu["company_id"],
         "is_deleted": False,
         "employment_status": "active",
-    })
+    }
+    if search:
+        import re as _re
+        emp_query["full_name"] = {"$regex": _re.escape(search), "$options": "i"}
+    total_employees = await db["hrm_employees"].count_documents(emp_query)
+
+    # on_leave / absent come from hrm_leaves / a headcount subtraction rather
+    # than the attendance collection itself, so they only stay meaningful
+    # when the active status/work_mode filter is compatible with a leave or
+    # absent row — otherwise the filtered table can show zero such rows, and
+    # the card must agree.
     today_str = date.today().isoformat()
-    on_leave = await db["hrm_leaves"].count_documents({
-        "company_id": cu["company_id"],
-        "status": "approved",
-        "from_date": {"$lte": today_str},
-        "to_date": {"$gte": today_str},
-    })
-    absent = max(0, total_employees - stats["present"] - on_leave)
+    if (status and status != "on_leave") or work_mode:
+        on_leave = 0
+    else:
+        leave_query: dict = {
+            "company_id": cu["company_id"],
+            "status": "approved",
+            "from_date": {"$lte": today_str},
+            "to_date": {"$gte": today_str},
+        }
+        if search:
+            emp_ids = await db["hrm_employees"].find(emp_query, {"_id": 1}).to_list(length=None)
+            leave_query["employee_id"] = {"$in": [e["_id"] for e in emp_ids]}
+        on_leave = await db["hrm_leaves"].count_documents(leave_query)
+
+    if (status and status != "absent") or work_mode:
+        absent = 0
+    else:
+        absent = max(0, total_employees - stats["present"] - on_leave)
 
     return {
         "total_employees":   total_employees,
@@ -462,11 +490,20 @@ def _flatten_row(r: dict, include_employee: bool = True) -> dict:
 async def get_stats_range(
     start_date: str,
     end_date:   str,
+    employee_id: Optional[str] = None,
+    status:      Optional[str] = None,
+    work_mode:   Optional[str] = None,
+    search:      Optional[str] = None,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_any_permission([["hrm:attendance:team"], ["hrm:attendance:view"]])),
 ):
-    """Return aggregated attendance counters + daily trend for any date range."""
+    """Return aggregated attendance counters + daily trend for any date range.
+
+    Optional employee_id / status / work_mode / search filters mirror those
+    accepted by `/history` so the summary cards and trend chart always
+    reflect exactly the same filtered dataset as the attendance table.
+    """
     try:
         sd = _parse_date_param(start_date)
         ed = _parse_date_param(end_date)
@@ -474,7 +511,10 @@ async def get_stats_range(
         raise HTTPException(status_code=422, detail="Invalid date format. Use YYYY-MM-DD.")
     if (ed - sd).days > 366:
         raise HTTPException(status_code=422, detail="Date range cannot exceed 366 days.")
-    return await AttendanceService(db).get_range_stats(cu["company_id"], sd, ed)
+    return await AttendanceService(db).get_range_stats(
+        cu["company_id"], sd, ed,
+        employee_id=employee_id, status=status, work_mode=work_mode, search=search,
+    )
 
 
 # ── Historical range — team view ──────────────────────────────────────────────
@@ -551,17 +591,25 @@ async def export_team_csv(
     end_date:   str,
     employee_id: Optional[str] = None,
     status:      Optional[str] = None,
+    work_mode:   Optional[str] = None,
+    search:      Optional[str] = None,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_any_permission([["hrm:attendance:team"], ["hrm:attendance:view"]])),
 ):
-    """Download team attendance as CSV for the specified date range."""
+    """Download team attendance as CSV for the specified date range.
+
+    Accepts the same filters as `/history` so the export always matches
+    exactly what is currently shown in the attendance table.
+    """
     try:
         sd = _parse_date_param(start_date)
         ed = _parse_date_param(end_date)
     except (ValueError, TypeError):
         raise HTTPException(status_code=422, detail="Invalid date format.")
-    rows = await AttendanceService(db).export_data(cu["company_id"], sd, ed, employee_id, status)
+    rows = await AttendanceService(db).export_data(
+        cu["company_id"], sd, ed, employee_id, status, work_mode=work_mode, search=search,
+    )
     flat = [_flatten_row(r, include_employee=True) for r in rows]
     return _csv_response(flat, _TEAM_FIELDS, f"attendance_{start_date}_{end_date}.csv")
 

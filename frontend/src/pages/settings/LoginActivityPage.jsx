@@ -3,17 +3,7 @@ import { Activity, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { Breadcrumb, PageHeader, SectionCard, SkeletonLoader } from './SettingsLayout'
 import api from '../../services/api'
-
-const formatDate = (iso) => {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return '—'
-  return d.toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: true,
-  })
-}
+import { formatDateTime } from '../../utils/format'
 
 const LoginActivityPage = () => {
   const [logs, setLogs]       = useState([])
@@ -25,20 +15,21 @@ const LoginActivityPage = () => {
   const load = useCallback(async (p = 1) => {
     try {
       setLoading(true)
-      // Use the existing audit-logs endpoint filtered to login/logout actions
-      const res = await api.get(`/audit-logs/?action=login&page=${p}&page_size=${PAGE_SIZE}`)
-      // Normalize audit log shape → what the table expects
+      // Reuse the existing auth login-activity endpoint, backed by the same
+      // login_logs collection written on every successful authentication
+      // (AuthService._log_login_activity) — newest first.
+      const res = await api.get('/auth/login-activity', { params: { page: p, page_size: PAGE_SIZE } })
       const raw = res.data.data || []
       const mapped = raw.map(log => ({
-        id: log.id || log._id,
-        full_name: log.user_name,
-        role: log.user_role,
-        login_time: log.created_at,
+        id: log.id,
+        full_name: log.full_name,
+        role: log.role,
+        login_time: log.login_time,
         ip_address: log.ip_address,
-        device: log.user_agent,
+        device: log.device,
       }))
       setLogs(mapped)
-      setTotal(res.data.pagination?.total || res.data.total || 0)
+      setTotal(res.data.total || 0)
       setPage(p)
     } catch {
       toast.error('Failed to load login activity')
@@ -100,7 +91,7 @@ const LoginActivityPage = () => {
                             {log.role}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-surface-600">{formatDate(log.login_time)}</td>
+                        <td className="px-4 py-3 text-surface-600">{formatDateTime(log.login_time)}</td>
                         <td className="px-4 py-3 font-mono text-surface-600 text-xs">{log.ip_address || '—'}</td>
                         <td className="px-4 py-3 text-surface-500 text-xs truncate max-w-xs hidden md:table-cell">
                           {log.device ? log.device.substring(0, 80) : '—'}

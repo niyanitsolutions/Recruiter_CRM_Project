@@ -1281,7 +1281,7 @@ class AttendanceService:
             "check_out": None,
         })
 
-    async def count_on_break(self, company_id: str) -> int:
+    async def count_on_break(self, company_id: str, extra_match: Optional[dict] = None) -> int:
         """Count employees currently on a break (break started, not ended)."""
         today = _today_dt()
         pipeline = [
@@ -1290,6 +1290,7 @@ class AttendanceService:
                 "date": today,
                 "check_in": {"$ne": None},
                 "check_out": None,
+                **(extra_match or {}),
             }},
             {"$project": {"last_break": {"$arrayElemAt": ["$breaks", -1]}}},
             {"$match": {
@@ -1425,6 +1426,8 @@ class AttendanceService:
         end_date: datetime,
         employee_id: Optional[str] = None,
         status: Optional[str] = None,
+        work_mode: Optional[str] = None,
+        search: Optional[str] = None,
     ) -> List[dict]:
         """Return all rows in a date range (no pagination) for CSV export.
 
@@ -1446,13 +1449,42 @@ class AttendanceService:
             query["employee_id"] = employee_id
         if status:
             query["status"] = status
+        if work_mode:
+            query["work_mode"] = work_mode
+        if search:
+            import re as _re
+            query["employee_name"] = {"$regex": _re.escape(search), "$options": "i"}
         cursor = self.col.find(query).sort([("date", 1), ("employee_name", 1)])
         return [self._serialize(dict(d)) async for d in cursor]
 
-    async def get_range_stats(self, company_id: str, start_date: datetime, end_date: datetime) -> dict:
-        """Aggregated attendance counters + daily trend for a date range."""
+    async def get_range_stats(
+        self,
+        company_id: str,
+        start_date: datetime,
+        end_date: datetime,
+        employee_id: Optional[str] = None,
+        status: Optional[str] = None,
+        work_mode: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> dict:
+        """Aggregated attendance counters + daily trend for a date range.
+
+        The same filters (employee_id / status / work_mode / search) applied to
+        the record list (`get_history`) are applied here so the summary cards
+        and trend chart always reflect exactly the same filtered dataset as
+        the attendance table.
+        """
         end_inclusive = end_date + timedelta(days=1)
         match: dict = {"company_id": company_id, "date": {"$gte": start_date, "$lt": end_inclusive}}
+        if employee_id:
+            match["employee_id"] = employee_id
+        if status:
+            match["status"] = status
+        if work_mode:
+            match["work_mode"] = work_mode
+        if search:
+            import re as _re
+            match["employee_name"] = {"$regex": _re.escape(search), "$options": "i"}
 
         # Statuses that mean the employee attended work (present in any form)
         _ATTENDED = ["present", "late", "half_day", "wfh", "hybrid", "field_work"]
@@ -1505,30 +1537,51 @@ class AttendanceService:
 
         return {**totals, "trend": trend}
 
-    async def get_today_stats(self, company_id: str) -> dict:
-        """All today's attendance counters in parallel for efficiency."""
-        today = _today_dt()
+    async def get_today_stats(
+        self,
+        company_id: str,
+        status: Optional[str] = None,
+        work_mode: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> dict:
+        """All today's attendance counters in parallel for efficiency.
 
-        present, currently_working, late, half_day, wfh, on_break = await asyncio.gather(
+        Optional status / work_mode / search filters are applied identically
+        to every counter so the summary cards always reflect the same
+        filtered dataset shown in the "today" attendance table.
+        """
+        today = _today_dt()
+        base: dict = {"company_id": company_id, "date": today}
+        if status:
+            base["status"] = status
+        if work_mode:
+            base["work_mode"] = work_mode
+        if search:
+            import re as _re
+            base["employee_name"] = {"$regex": _re.escape(search), "$options": "i"}
+
+        # wfh count forces work_mode="wfh" — if the caller already filtered to a
+        # different work_mode, no records can match, so short-circuit to zero
+        # instead of silently overriding the caller's filter.
+        wfh_conflicts = bool(work_mode) and work_mode != "wfh"
+        wfh_query = {**base, "work_mode": "wfh", "check_in": {"$ne": None}}
+
+        present, currently_working, late, half_day, on_break = await asyncio.gather(
             self.col.count_documents({
-                "company_id": company_id, "date": today, "check_in": {"$ne": None},
+                **base, "check_in": {"$ne": None},
             }),
             self.col.count_documents({
-                "company_id": company_id, "date": today,
-                "check_in": {"$ne": None}, "check_out": None,
+                **base, "check_in": {"$ne": None}, "check_out": None,
             }),
             self.col.count_documents({
-                "company_id": company_id, "date": today, "is_late": True,
+                **base, "is_late": True,
             }),
             self.col.count_documents({
-                "company_id": company_id, "date": today, "is_half_day": True,
+                **base, "is_half_day": True,
             }),
-            self.col.count_documents({
-                "company_id": company_id, "date": today,
-                "work_mode": "wfh", "check_in": {"$ne": None},
-            }),
-            self.count_on_break(company_id),
+            self.count_on_break(company_id, extra_match={k: v for k, v in base.items() if k not in ("company_id", "date")}),
         )
+        wfh = 0 if wfh_conflicts else await self.col.count_documents(wfh_query)
         return {
             "present":           present,
             "currently_working": currently_working,

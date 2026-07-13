@@ -521,9 +521,13 @@ function DashboardTab() {
     setLoading(true); setError(null)
     try {
       if (isToday) {
+        const statsParams = {}
+        if (search)       statsParams.search    = search
+        if (statusFilter) statsParams.status    = statusFilter
+        if (modeFilter)   statsParams.work_mode = modeFilter
         const [recRes, statsRes] = await Promise.allSettled([
           hrmService.getTeamToday(),
-          hrmService.getAttendanceTodayStats(),
+          hrmService.getAttendanceTodayStats(statsParams),
         ])
         let recs = recRes.status === 'fulfilled' ? (recRes.value.data || []) : []
         if (statusFilter) recs = recs.filter(r => r.status === statusFilter)
@@ -537,9 +541,13 @@ function DashboardTab() {
         if (search)       params.search    = search
         if (statusFilter) params.status    = statusFilter
         if (modeFilter)   params.work_mode = modeFilter
+        const statsParams = { start_date: range.start, end_date: range.end }
+        if (search)       statsParams.search    = search
+        if (statusFilter) statsParams.status    = statusFilter
+        if (modeFilter)   statsParams.work_mode = modeFilter
         const [histRes, statsRes] = await Promise.allSettled([
           hrmService.getTeamAttendanceHistory(params),
-          hrmService.getAttendanceRangeStats({ start_date: range.start, end_date: range.end }),
+          hrmService.getAttendanceRangeStats(statsParams),
         ])
         if (histRes.status === 'fulfilled') {
           setHistRecords(histRes.value.data?.items || [])
@@ -590,6 +598,8 @@ function DashboardTab() {
     try {
       const params = { start_date: range.start, end_date: range.end }
       if (statusFilter) params.status = statusFilter
+      if (modeFilter)   params.work_mode = modeFilter
+      if (search)       params.search = search
       const r = await hrmService.exportTeamAttendanceCsv(params)
       const url = URL.createObjectURL(r.data)
       const a = document.createElement('a'); a.href = url

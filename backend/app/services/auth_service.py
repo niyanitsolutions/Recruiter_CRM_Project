@@ -1136,6 +1136,23 @@ class AuthService:
                     }
                 }
             )
+            # Owners may ALSO have a mirrored record in company_db.users (the
+            # Users list page reads last_login from there, not from
+            # master_db.tenants.owner) — keep both in sync so the Users page
+            # never shows a stale/"Never" last login for the owner. Matches
+            # the same dual-write pattern already used for active_session_token
+            # in _complete_company_login.
+            company_db = get_company_db(company_id)
+            await company_db.users.update_one(
+                {"_id": user_id},
+                {
+                    "$set": {
+                        "last_login": now,
+                        "failed_login_attempts": 0,
+                        "lockout_until": None,
+                    }
+                }
+            )
         else:
             company_db = get_company_db(company_id)
             await company_db.users.update_one(
