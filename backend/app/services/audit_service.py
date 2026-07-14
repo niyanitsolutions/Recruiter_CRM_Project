@@ -258,7 +258,26 @@ class AuditService:
                 "user_name": doc["_id"]["user_name"],
                 "action_count": doc["count"]
             })
-        
+
+        # Resolve display names from the users collection — some audit_logs
+        # entries were written without a user_name (e.g. logged via a code
+        # path that didn't have it on hand), which otherwise surfaces as a
+        # blank name on the dashboard's Top Recruiters cards. The ranking
+        # (grouping/counts above) is untouched; this only fixes what name is
+        # shown for each already-computed entry.
+        _missing_name_ids = [
+            u["user_id"] for u in top_users if not u.get("user_name") and u.get("user_id")
+        ]
+        if _missing_name_ids:
+            _name_map = {}
+            async for u in self.db.users.find(
+                {"_id": {"$in": _missing_name_ids}}, {"_id": 1, "full_name": 1}
+            ):
+                _name_map[u["_id"]] = u.get("full_name")
+            for u in top_users:
+                if not u.get("user_name"):
+                    u["user_name"] = _name_map.get(u["user_id"]) or "Unknown User"
+
         # Actions by day
         daily_pipeline = [
             {"$match": {"created_at": {"$gte": start_date}}},

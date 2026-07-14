@@ -435,6 +435,15 @@ class UserService:
             user["role_name"] = get_role_display_name(user.get("role", ""))
             user["role_type"] = _compute_role_type(user)
 
+            # Motor returns naive UTC datetimes. Without an explicit UTC marker,
+            # jsonable_encoder emits an offset-less ISO string ("...T04:52:00")
+            # which browsers parse as LOCAL time, double-shifting the display —
+            # the exact mismatch vs. /auth/login-summary (Audit Logs), which
+            # already marks its last_login values as UTC before returning them.
+            _ll = user.get("last_login")
+            if _ll is not None and _ll.tzinfo is None:
+                user["last_login"] = _ll.replace(tzinfo=timezone.utc)
+
             # Get reporting manager name
             if user.get("reporting_to"):
                 manager = await self.collection.find_one(

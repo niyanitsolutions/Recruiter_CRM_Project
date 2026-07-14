@@ -231,8 +231,43 @@ const formatTrendData = (raw) => {
     label: item.date
       ? formatDate(item.date, 'dd MMM')
       : (item.label || ''),
-    value: item.count ?? item.value ?? item.actions ?? 0,
+    // `total` = real operational activity (logins + candidates + jobs +
+    // interviews + tasks); older/generic shapes fall back for safety.
+    value:       item.total ?? item.count ?? item.value ?? item.actions ?? 0,
+    logins:      item.logins,
+    candidates:  item.candidates,
+    jobs:        item.jobs,
+    interviews:  item.interviews,
+    tasks:       item.tasks,
   }))
+}
+
+// Dedicated hover tooltip for the Platform Activity widget — same visual
+// treatment as the shared ChartTooltip, but breaks the day's total down into
+// its component metrics instead of a single generic "Actions" figure.
+const PlatformActivityTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null
+  const d = payload[0]?.payload || {}
+  const rows = [
+    ['User Logins',           d.logins],
+    ['Candidates Added',      d.candidates],
+    ['Jobs Created',          d.jobs],
+    ['Interviews Scheduled',  d.interviews],
+    ['Tasks Completed',       d.tasks],
+  ].filter(([, v]) => v !== undefined && v !== null)
+  return (
+    <div className="rounded-xl px-3 py-2 text-sm shadow-lg" style={{ background: 'var(--bg-card-alt)', border: '1px solid var(--border-strong)' }}>
+      {label && <p className="font-semibold mb-1" style={{ color: 'var(--text-heading)' }}>{label}</p>}
+      {rows.map(([name, value]) => (
+        <p key={name} style={{ color: 'var(--text-secondary)' }}>
+          {name}: <strong>{value}</strong>
+        </p>
+      ))}
+      <p style={{ color: 'var(--text-heading)' }}>
+        Total Activity: <strong>{d.value ?? 0}</strong>
+      </p>
+    </div>
+  )
 }
 
 // Validated categorical palette (node scripts/validate_palette.js from the
@@ -549,6 +584,8 @@ const AdminDashboard = () => {
     label: d.label,
     value: d.value,
     fill:  i === arr.length - 1 ? '#167CFB' : '#167CFB55',
+    logins: d.logins, candidates: d.candidates, jobs: d.jobs,
+    interviews: d.interviews, tasks: d.tasks,
   }))
 
   // ── AI insights ───────────────────────────────────────────────────────────────
@@ -1331,9 +1368,9 @@ const AdminDashboard = () => {
                         )
                       }
                     </div>
-                    <EmployeeAvatar name={r.user_name || r.name} photoUrl={meta?.avatar_url} size={32} />
+                    <EmployeeAvatar name={r.user_name || r.name || 'Unknown User'} photoUrl={meta?.avatar_url} size={32} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-heading)' }}>{r.user_name || r.name}</p>
+                      <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-heading)' }}>{r.user_name || r.name || 'Unknown User'}</p>
                       {meta?.department && <p className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{meta.department}</p>}
                       <div className="h-1 rounded-full mt-1" style={{ background: 'var(--bg-card)' }}>
                         <div className="h-1 rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: 'var(--accent)' }} />
@@ -1426,8 +1463,8 @@ const AdminDashboard = () => {
           <Card>
             <SectionHeader
               icon={BarChart2}
-              title="Activity Trend"
-              subtitle="Platform activity"
+              title="Platform Activity"
+              subtitle="Daily operational activity"
               action={
                 <div className="flex items-center gap-1 rounded-lg p-0.5" style={{ background: 'var(--bg-hover)' }}>
                   {TREND_PERIODS.map(p => (
@@ -1451,8 +1488,8 @@ const AdminDashboard = () => {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" vertical={false} />
                   <XAxis dataKey="label" tick={{ fill: 'var(--text-muted)', fontSize: 9 }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 9 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <RechartTooltip content={<ChartTooltip />} />
-                  <Bar dataKey="value" name="Actions" radius={[3, 3, 0, 0]}>
+                  <RechartTooltip content={<PlatformActivityTooltip />} />
+                  <Bar dataKey="value" name="Total Activity" radius={[3, 3, 0, 0]}>
                     {barData.map((entry, i) => (
                       <Cell key={i} fill={entry.fill} />
                     ))}
@@ -1466,9 +1503,9 @@ const AdminDashboard = () => {
               <div className="flex gap-4 mt-2 pt-2" style={{ borderTop: '1px solid var(--border-subtle)' }}>
                 <div>
                   <p className="text-sm font-bold" style={{ color: 'var(--text-heading)' }}>
-                    {(activity_stats.total_actions || 0).toLocaleString('en-IN')}
+                    {(activity_stats.total_activities ?? activity_stats.total_actions ?? 0).toLocaleString('en-IN')}
                   </p>
-                  <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Total actions (7d)</p>
+                  <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Total Activities (7d)</p>
                 </div>
               </div>
             )}

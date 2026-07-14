@@ -32,6 +32,62 @@ async def _safe_count(collection, query: dict) -> int:
         return 0
 
 
+async def _daily_counts(collection, date_field: str, start_date: datetime, extra_match: Optional[dict] = None) -> dict:
+    """Group document counts by UTC day for the given date field, since start_date.
+
+    Returns {"YYYY-MM-DD": count}. Never raises — an aggregation error (e.g.
+    missing collection) yields an empty breakdown for that metric instead of
+    failing the whole dashboard.
+    """
+    match: dict = {date_field: {"$gte": start_date}}
+    if extra_match:
+        match.update(extra_match)
+    pipeline = [
+        {"$match": match},
+        {"$group": {
+            "_id": {
+                "y": {"$year": f"${date_field}"},
+                "m": {"$month": f"${date_field}"},
+                "d": {"$dayOfMonth": f"${date_field}"},
+            },
+            "count": {"$sum": 1},
+        }},
+    ]
+    out: dict = {}
+    try:
+        async for doc in collection.aggregate(pipeline):
+            _id = doc["_id"]
+            date_str = f"{_id['y']:04d}-{_id['m']:02d}-{_id['d']:02d}"
+            out[date_str] = doc["count"]
+    except Exception:
+        pass
+    return out
+
+
+async def _get_operational_daily_breakdown(db, start_date: datetime) -> dict:
+    """Per-day counts of core operational events for the Platform Activity
+    widget: logins, candidates added, jobs created, interviews scheduled,
+    tasks completed — each drawn from that module's own existing records
+    (not audit_logs, which doesn't capture logins). Keyed by "YYYY-MM-DD".
+    """
+    logins, candidates, jobs, interviews, tasks = await asyncio.gather(
+        _daily_counts(db.login_logs, "login_time",   start_date),
+        _daily_counts(db.candidates, "created_at",   start_date, {"is_deleted": False}),
+        _daily_counts(db.jobs,       "created_at",   start_date, {"is_deleted": False}),
+        _daily_counts(db.interviews, "created_at",   start_date, {"is_deleted": False}),
+        _daily_counts(db.tasks,      "completed_at", start_date, {"status": "completed", "is_deleted": False}),
+    )
+    dates = set(logins) | set(candidates) | set(jobs) | set(interviews) | set(tasks)
+    breakdown = {}
+    for d in dates:
+        l, c, j, i, t = logins.get(d, 0), candidates.get(d, 0), jobs.get(d, 0), interviews.get(d, 0), tasks.get(d, 0)
+        breakdown[d] = {
+            "logins": l, "candidates": c, "jobs": j, "interviews": i, "tasks": t,
+            "total": l + c + j + i + t,
+        }
+    return breakdown
+
+
 @router.get("/")
 async def get_dashboard_data(
     days: Optional[int] = Query(None, ge=0, description="Filter stats to last N days; 0 or omit = all time"),
@@ -54,11 +110,19 @@ async def get_dashboard_data(
     audit_service = AuditService(db)
 
     # User stats + activity in parallel
-    user_stats, activity_stats, recent_activity = await asyncio.gather(
+    user_stats, activity_stats, recent_activity, _operational_breakdown_7d = await asyncio.gather(
         user_service.get_dashboard_stats(current_user.get("company_id")),
         audit_service.get_activity_stats(days=7),
         audit_service.get_recent_activity(limit=10),
+        _get_operational_daily_breakdown(db, datetime.now(timezone.utc) - timedelta(days=7)),
     )
+    # Real per-module activity total (logins + candidates + jobs + interviews
+    # + tasks) for the Platform Activity widget's footer — replaces the
+    # generic audit-log action count with a meaningful, existing-data total.
+    activity_stats = {
+        **activity_stats,
+        "total_activities": sum(b.get("total", 0) for b in _operational_breakdown_7d.values()),
+    }
 
     # Company-wide counts (no per-user ownership concept for these modules)
     (
@@ -199,14 +263,40 @@ async def get_activity_chart_data(
     current_user: dict = Depends(require_permissions(["dashboard:view"])),
     db = Depends(get_company_db),
 ):
-    """Get activity data for charts"""
+    """Get activity data for charts.
+
+    `daily_activity` reports real operational metrics (logins, candidates
+    added, jobs created, interviews scheduled, tasks completed) per day for
+    the Platform Activity widget, built directly from each module — not from
+    audit_logs, which never records logins and would otherwise drop days
+    that had activity but no matching audit_logs entry.
+    """
     audit_service = AuditService(db)
     stats = await audit_service.get_activity_stats(days=days)
-    
+
+    num_days = max(days, 1)
+    start_date = datetime.now(timezone.utc) - timedelta(days=num_days)
+    breakdown = await _get_operational_daily_breakdown(db, start_date)
+
+    daily_activity = []
+    for i in range(num_days):
+        day = (datetime.now(timezone.utc) - timedelta(days=num_days - 1 - i)).date()
+        date_str = day.isoformat()
+        b = breakdown.get(date_str, {})
+        daily_activity.append({
+            "date":       date_str,
+            "logins":     b.get("logins", 0),
+            "candidates": b.get("candidates", 0),
+            "jobs":       b.get("jobs", 0),
+            "interviews": b.get("interviews", 0),
+            "tasks":      b.get("tasks", 0),
+            "total":      b.get("total", 0),
+        })
+
     return {
         "success": True,
         "data": {
-            "daily_activity": stats.get("daily_activity", []),
+            "daily_activity": daily_activity,
             "actions_by_type": stats.get("actions_by_type", {}),
             "top_users": stats.get("top_users", [])
         }
