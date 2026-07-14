@@ -1874,13 +1874,29 @@ function ExceptionsTab() {
   )
 }
 
+// Convert a UTC ISO datetime string (e.g. "2026-07-14T10:00:00Z") to the
+// local wall-clock "YYYY-MM-DDTHH:mm" a <input type="datetime-local"> needs.
+// Slicing the raw UTC string instead (the previous approach) discards the
+// "Z" and re-labels the UTC time as if it were already local — every edit
+// then re-converted that mislabeled value local→UTC again, silently
+// shifting from_datetime/to_datetime by the browser's UTC offset on each
+// save (and could push to_datetime into the past, hiding the record from
+// the exceptions list). Going through a real Date round-trips correctly.
+const toLocalDatetimeInput = (iso) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function ExceptionModal({ item, employees, onClose, onSuccess }) {
   const isEdit = !!item
   const [form, setForm] = useState({
     employee_id:           item?.employee_id           ?? '',
     reason:                item?.reason                ?? '',
-    from_datetime:         item?.from_datetime         ? item.from_datetime.slice(0, 16) : '',
-    to_datetime:           item?.to_datetime           ? item.to_datetime.slice(0, 16)   : '',
+    from_datetime:         toLocalDatetimeInput(item?.from_datetime),
+    to_datetime:           toLocalDatetimeInput(item?.to_datetime),
     allow_login:           item?.allow_login           ?? true,
     bypass_geo_fence:      item?.bypass_geo_fence      ?? false,
     bypass_ip_restriction: item?.bypass_ip_restriction ?? false,

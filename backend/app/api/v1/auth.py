@@ -132,7 +132,13 @@ async def login(data: LoginRequest, request: Request):
         browser=data.browser, os_name=data.os, device_type=data.device_type,
     )
 
-    if error:
+    # A validation failure must never surface as a bare 200/null response —
+    # guard on `not result` too, not just a truthy `error` string, so a denial
+    # with an empty/falsy reason still produces a proper error response
+    # instead of a body the frontend can't parse ("unexpected response").
+    if error or not result:
+        if not error:
+            error = "Login failed. Please try again."
         if error.startswith("LOCATION_REQUIRED"):
             message = error.split("|", 1)[1] if "|" in error else "Location access is required by your organization to sign in."
             raise HTTPException(
@@ -244,7 +250,11 @@ async def login_with_tenant(data: TenantLoginRequest, request: Request):
         browser=data.browser, os_name=data.os, device_type=data.device_type,
     )
 
-    if error:
+    # See /login above — never let a falsy error + no result fall through as
+    # a bare 200/null response.
+    if error or not result:
+        if not error:
+            error = "Login failed. Please try again."
         if error.startswith("LOCATION_REQUIRED"):
             message = error.split("|", 1)[1] if "|" in error else "Location access is required by your organization to sign in."
             raise HTTPException(

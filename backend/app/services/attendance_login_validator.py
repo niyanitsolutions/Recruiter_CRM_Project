@@ -112,14 +112,26 @@ async def validate_login_access(
     today_str = date.today().isoformat()
 
     # ── 14A.1: Exception check ─────────────────────────────────────────────────
+    # Find the ACTIVE exception for this employee — matched on employee/company/
+    # time-window only (never on the allow_login flag itself, which is a value
+    # to evaluate, not a filter — a False allow_login with bypass_geo_fence=True
+    # is a legitimate, narrower exception and must still be found).
     exception = await company_db["hrm_attendance_exceptions"].find_one({
         "company_id":   company_id,
         "employee_id":  emp_id,
         "is_deleted":   False,
-        "allow_login":  True,
         "from_datetime": {"$lte": now_naive},
         "to_datetime":   {"$gte": now_naive},
     })
+
+    # "Allow Login During Window" is a blanket grant — valid for unlimited login
+    # attempts for as long as the exception window is active, independent of
+    # geo fence / IP restriction state.
+    if exception and exception.get("allow_login"):
+        await _audit(company_db, company_id, emp_id, "office",
+                     latitude, longitude, ip_address, "allowed", "exception_allow_login")
+        return True, ""
+
     bypass_geo = bool(exception and exception.get("bypass_geo_fence"))
     bypass_ip  = bool(exception and exception.get("bypass_ip_restriction"))
 
@@ -156,28 +168,40 @@ async def validate_login_access(
     if geo_enabled and not bypass_geo:
         geo_locations = settings_doc.get("geo_fence_locations") or []
 
-        if geo_locations and (latitude is None or longitude is None):
+        if not geo_locations:
+            # Geo Fence is enabled but no zones are configured — there is no
+            # location an employee could ever satisfy, so this must deny
+            # (matches the Company Settings save-time validation, which
+            # already refuses this combination going forward; this is the
+            # safety net for any pre-existing/edge-case data).
+            deny_reason = (
+                "Login denied. Geo Fence is enabled but no office locations are "
+                "configured. Please contact your administrator."
+            )
+        elif latitude is None or longitude is None:
             # Geo fence is configured and mandatory — location must be supplied,
             # not silently skipped. Frontend prompts for browser location and retries.
             deny_reason = "LOCATION_REQUIRED|Location access is required by your organization to sign in."
-        elif geo_locations and latitude is not None and longitude is not None:
+        else:
             inside_any = False
             for zone in geo_locations:
                 zone_lat = zone.get("latitude")
                 zone_lon = zone.get("longitude")
-                zone_radius = int(zone.get("radius", 500))
                 if zone_lat is None or zone_lon is None:
                     continue
+                try:
+                    zone_radius = int(zone.get("radius") or 500)
+                except (TypeError, ValueError):
+                    zone_radius = 500
                 dist = _haversine_meters(latitude, longitude, zone_lat, zone_lon)
                 if dist <= zone_radius:
                     inside_any = True
                     break
             if not inside_any:
                 deny_reason = (
-                    "You are not in the office location required by your organization. "
-                    "Please contact HR if you require remote access approval."
+                    "Login denied. You are outside the permitted Geo Fence required "
+                    "by your organization. Please contact HR if you require remote access approval."
                 )
-        # If no zones configured → geo check skipped (backward compatible)
 
     # IP restriction (only if geo did not already deny)
     if not deny_reason and ip_enabled and not bypass_ip:

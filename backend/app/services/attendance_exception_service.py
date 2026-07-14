@@ -168,11 +168,13 @@ class AttendanceExceptionService:
         elif at_time.tzinfo is not None:
             at_time = at_time.replace(tzinfo=None)
 
+        # Matched on employee/company/time-window only — allow_login is a value
+        # to evaluate once found, not a filter (a bypass_geo_fence-only
+        # exception with allow_login=False is still a valid "active" exception).
         doc = await self.col.find_one({
             "company_id": company_id,
             "employee_id": employee_id,
             "is_deleted": False,
-            "allow_login": True,
             "from_datetime": {"$lte": at_time},
             "to_datetime": {"$gte": at_time},
         })
