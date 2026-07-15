@@ -534,9 +534,20 @@ async def view_candidate_resume(
     if resume_url.startswith("http"):
         return RedirectResponse(url=resume_url, status_code=302)
 
-    # Local dev file — serve from disk
-    # resume_url looks like "/uploads/resumes/abc.pdf"
-    relative = resume_url.lstrip("/uploads/")          # "resumes/abc.pdf"
+    # Local disk file — serve from disk.
+    # _save_to_local() (app/utils/s3.py) actually stores this as
+    # "/api/v1/uploads/resumes/abc.pdf" (older records may have the plain
+    # "/uploads/resumes/abc.pdf" form). `.lstrip("/uploads/")` strips leading
+    # *characters* found in that string, not the literal prefix — "/api/v1/..."
+    # stops at "i" (not in the strip set), producing a bogus path like
+    # "i/v1/uploads/resumes/abc.pdf" that never exists on disk, so every local
+    # resume 404'd even though the file was actually there. Strip the real
+    # literal prefix instead.
+    relative = resume_url
+    for _prefix in ("/api/v1/uploads/", "/uploads/"):
+        if relative.startswith(_prefix):
+            relative = relative[len(_prefix):]
+            break
     file_path = os.path.join(settings.UPLOAD_DIR, relative)  # "uploads/resumes/abc.pdf"
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Resume file not found on server")
