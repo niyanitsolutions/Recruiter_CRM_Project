@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import {
   Mail, Lock, ArrowRight, AlertCircle, Calendar, XCircle,
   RefreshCw, CheckCircle, UserX, Building2, Monitor, Globe,
-  Clock, Shield, Smartphone, Eye, EyeOff, Rocket, Crown,
+  Clock, Shield, Smartphone, Eye, EyeOff, Rocket, Crown, User,
 } from 'lucide-react'
 import {
   login, loginWithTenant, clearError, clearTenantSelection,
@@ -22,6 +22,7 @@ import {
   getSavedPassword, setSavedPassword, removeSavedPassword,
   getRememberMe,
 } from '../../utils/token'
+import './Login.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -97,44 +98,60 @@ async function getGeolocationIfAlreadyGranted() {
   }
 }
 
+// ── Spinner ───────────────────────────────────────────────────────────────────
+function Spinner({ size = 14, inverted = false }) {
+  return (
+    <span style={{
+      width: size, height: size,
+      border: `2px solid ${inverted ? 'rgba(255,255,255,0.35)' : 'rgba(22,119,255,0.25)'}`,
+      borderTopColor: inverted ? '#fff' : '#1677FF',
+      borderRadius: '50%',
+      display: 'inline-block',
+      animation: 'hfSpin 0.7s linear infinite',
+      flexShrink: 0,
+    }} />
+  )
+}
+
 // ── Location-required retry modal ─────────────────────────────────────────────
 function LocationRequiredModal({ message, onAllow, onCancel, busy, denied }) {
   return (
     <div role="dialog" aria-modal="true" style={{
       position: 'fixed', inset: 0, zIndex: 9999,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
-      background: 'rgba(0,0,0,0.70)', backdropFilter: 'blur(8px)',
+      background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(8px)',
     }}>
       <div style={{
         width: '100%', maxWidth: '420px',
-        background: 'linear-gradient(145deg,#0f172a,#1e293b)',
+        background: '#FFFFFF',
         border: '1px solid rgba(245,158,11,0.28)',
         borderRadius: '20px', padding: '28px 24px', textAlign: 'center',
+        boxShadow: '0 24px 64px rgba(15,23,42,0.28)',
       }}>
         <div style={{
           width: 54, height: 54, borderRadius: '50%', margin: '0 auto 12px',
           background: 'rgba(245,158,11,0.11)', border: '1px solid rgba(245,158,11,0.28)',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Globe size={22} color="#f59e0b" />
+          <Globe size={22} color="#F59E0B" />
         </div>
-        <h3 style={{ color: '#f1f5f9', fontSize: '16px', fontWeight: 700, margin: 0 }}>
+        <h3 style={{ color: '#1F2937', fontSize: '16px', fontWeight: 700, margin: 0 }}>
           Location Permission Required
         </h3>
-        <p style={{ color: '#94a3b8', fontSize: '13px', marginTop: 8, lineHeight: 1.5 }}>
+        <p style={{ color: '#6B7280', fontSize: '13px', marginTop: 8, lineHeight: 1.5 }}>
           {message}
         </p>
         {denied && (
-          <p style={{ color: '#fca5a5', fontSize: '12px', marginTop: 8 }}>
+          <p style={{ color: '#EF4444', fontSize: '12px', marginTop: 8 }}>
             Location access was blocked. Enable it for this site in your browser settings, then retry.
           </p>
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
-          <ModalBtn onClick={onAllow} disabled={busy}>
-            {busy ? <><Spinner /> Requesting…</> : <><Globe size={14} /> Allow Location</>}
-          </ModalBtn>
-          <ModalBtn variant="ghost" onClick={onAllow} disabled={busy}>Retry</ModalBtn>
-          <ModalBtn variant="ghost" onClick={onCancel} disabled={busy}>Cancel</ModalBtn>
+          <button onClick={onAllow} disabled={busy} className="hf-btn-primary">
+            {busy ? <><Spinner inverted /> Requesting…</> : <><Globe size={14} /> Allow Location</>}
+          </button>
+          <button onClick={onAllow} disabled={busy} className="hf-btn-ghost" style={{ justifyContent: 'center' }}>Retry</button>
+          <button onClick={onCancel} disabled={busy} className="hf-btn-ghost" style={{ justifyContent: 'center' }}>Cancel</button>
         </div>
       </div>
     </div>
@@ -150,21 +167,6 @@ function timeSince(isoStr) {
   const h = Math.floor(m / 60)
   if (h < 24) return `${h}h ago`
   return `${Math.floor(h / 24)}d ago`
-}
-
-// ── Spinner ───────────────────────────────────────────────────────────────────
-function Spinner({ size = 14 }) {
-  return (
-    <span style={{
-      width: size, height: size,
-      border: '2px solid rgba(255,255,255,0.25)',
-      borderTopColor: '#fff',
-      borderRadius: '50%',
-      display: 'inline-block',
-      animation: 'spin 0.7s linear infinite',
-      flexShrink: 0,
-    }} />
-  )
 }
 
 // ── Small button helper (for modal) ───────────────────────────────────────────
@@ -183,16 +185,16 @@ function ModalBtn({ variant = 'primary', disabled, onClick, children, style: ext
   if (variant === 'primary') return (
     <button onClick={onClick} disabled={disabled} style={{
       ...base,
-      background: disabled ? 'rgba(99,102,241,0.45)' : 'linear-gradient(135deg,#4f46e5,#7c3aed)',
+      background: disabled ? 'rgba(22,119,255,0.45)' : 'linear-gradient(135deg,#1677FF,#0A5BFF)',
       border: 'none', color: '#fff',
-      boxShadow: disabled ? 'none' : '0 0 18px rgba(99,102,241,0.35)',
+      boxShadow: disabled ? 'none' : '0 8px 22px rgba(22,119,255,0.32)',
       opacity: disabled ? 0.75 : 1,
     }}>{children}</button>
   )
   return (
     <button onClick={onClick} disabled={disabled} style={{
       ...base, background: 'transparent',
-      border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.50)',
+      border: '1px solid #E5E7EB', color: '#6B7280',
     }}>{children}</button>
   )
 }
@@ -201,10 +203,10 @@ function ModalBtn({ variant = 'primary', disabled, onClick, children, style: ext
 function InfoRow({ icon, label, value }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-      <span style={{ color: '#64748b', marginTop: 1, flexShrink: 0 }}>{icon}</span>
+      <span style={{ color: '#9CA3AF', marginTop: 1, flexShrink: 0 }}>{icon}</span>
       <div>
-        <div style={{ color: '#64748b', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
-        <div style={{ color: '#cbd5e1', fontSize: '13px', marginTop: 1, wordBreak: 'break-all' }}>{value}</div>
+        <div style={{ color: '#9CA3AF', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
+        <div style={{ color: '#1F2937', fontSize: '13px', marginTop: 1, wordBreak: 'break-all' }}>{value}</div>
       </div>
     </div>
   )
@@ -292,21 +294,21 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
 
   const mm = String(Math.floor(countdown / 60)).padStart(2, '0')
   const ss = String(countdown % 60).padStart(2, '0')
-  const timeColor = countdown < 30 ? '#ef4444' : countdown < 60 ? '#f59e0b' : '#22c55e'
+  const timeColor = countdown < 30 ? '#EF4444' : countdown < 60 ? '#F59E0B' : '#22C55E'
 
   const overlay = {
     position: 'fixed', inset: 0, zIndex: 9999,
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
-    background: 'rgba(0,0,0,0.70)', backdropFilter: 'blur(8px)',
-    animation: 'fadeIn 0.2s ease both',
+    background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(8px)',
+    animation: 'hfFadeIn 0.2s ease both',
   }
   const card = {
     width: '100%', maxWidth: '440px',
-    background: 'linear-gradient(145deg,#0f172a,#1e293b)',
+    background: '#FFFFFF',
     border: '1px solid rgba(245,158,11,0.28)',
     borderRadius: '20px', padding: '28px 24px',
-    boxShadow: '0 0 0 1px rgba(255,255,255,0.04), 0 24px 64px rgba(0,0,0,0.65), 0 0 40px rgba(245,158,11,0.08)',
-    animation: 'cardIn2 0.28s cubic-bezier(0.16,1,0.3,1) both',
+    boxShadow: '0 24px 64px rgba(15,23,42,0.28)',
+    animation: 'hfCardIn2 0.28s cubic-bezier(0.16,1,0.3,1) both',
   }
   const iconWrap = (color) => ({
     width: 54, height: 54, borderRadius: '50%',
@@ -320,24 +322,24 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
         {/* requesting / waiting */}
         {(phase === 'requesting' || phase === 'waiting') && (
           <div style={{ textAlign: 'center' }}>
-            <div style={iconWrap('99,102,241')}>
-              {phase === 'requesting' ? <Spinner size={22} /> : <Shield size={22} color="#818cf8" />}
+            <div style={iconWrap('22,119,255')}>
+              {phase === 'requesting' ? <Spinner size={22} /> : <Shield size={22} color="#1677FF" />}
             </div>
-            <h3 style={{ color: '#f1f5f9', fontSize: '16px', fontWeight: 700, margin: 0 }}>
+            <h3 style={{ color: '#1F2937', fontSize: '16px', fontWeight: 700, margin: 0 }}>
               {phase === 'requesting' ? 'Sending Request…' : 'Waiting for Approval'}
             </h3>
             {phase === 'waiting' && (
               <>
-                <p style={{ color: '#94a3b8', fontSize: '13px', marginTop: 8, lineHeight: 1.5 }}>
+                <p style={{ color: '#6B7280', fontSize: '13px', marginTop: 8, lineHeight: 1.5 }}>
                   A notification was sent to the active device.<br />Awaiting their response.
                 </p>
                 <div style={{ marginTop: 12, fontSize: 13 }}>
-                  <span style={{ color: '#64748b' }}>Expires in </span>
+                  <span style={{ color: '#9CA3AF' }}>Expires in </span>
                   <span style={{ fontWeight: 700, color: timeColor, fontVariantNumeric: 'tabular-nums' }}>{mm}:{ss}</span>
                 </div>
                 <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', gap: 8 }}>
                   {[0, 0.3, 0.6].map((d, i) => (
-                    <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1', animation: `pulse 1.2s ease-in-out infinite ${d}s` }} />
+                    <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: '#1677FF', animation: `hfPulse 1.2s ease-in-out infinite ${d}s` }} />
                   ))}
                 </div>
                 <div style={{ marginTop: 14 }}>
@@ -351,9 +353,9 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
         {/* approved */}
         {phase === 'approved' && (
           <div style={{ textAlign: 'center' }}>
-            <div style={iconWrap('34,197,94')}><CheckCircle size={22} color="#22c55e" /></div>
-            <h3 style={{ color: '#f1f5f9', fontSize: '16px', fontWeight: 700, margin: 0 }}>Access Approved!</h3>
-            <p style={{ color: '#94a3b8', fontSize: '13px', marginTop: 8 }}>Logging you in now…</p>
+            <div style={iconWrap('34,197,94')}><CheckCircle size={22} color="#22C55E" /></div>
+            <h3 style={{ color: '#1F2937', fontSize: '16px', fontWeight: 700, margin: 0 }}>Access Approved!</h3>
+            <p style={{ color: '#6B7280', fontSize: '13px', marginTop: 8 }}>Logging you in now…</p>
             <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}><Spinner /></div>
           </div>
         )}
@@ -361,9 +363,9 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
         {/* denied */}
         {phase === 'denied' && (
           <div style={{ textAlign: 'center' }}>
-            <div style={iconWrap('239,68,68')}><XCircle size={22} color="#ef4444" /></div>
-            <h3 style={{ color: '#f1f5f9', fontSize: '16px', fontWeight: 700, margin: 0 }}>Login Request Denied</h3>
-            <p style={{ color: '#94a3b8', fontSize: '13px', marginTop: 8, lineHeight: 1.5 }}>
+            <div style={iconWrap('239,68,68')}><XCircle size={22} color="#EF4444" /></div>
+            <h3 style={{ color: '#1F2937', fontSize: '16px', fontWeight: 700, margin: 0 }}>Login Request Denied</h3>
+            <p style={{ color: '#6B7280', fontSize: '13px', marginTop: 8, lineHeight: 1.5 }}>
               The active device denied your request.<br />Contact your administrator if needed.
             </p>
             <div style={{ marginTop: 16 }}><ModalBtn variant="ghost" onClick={onClose}>Close</ModalBtn></div>
@@ -373,9 +375,9 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
         {/* expired */}
         {phase === 'expired' && (
           <div style={{ textAlign: 'center' }}>
-            <div style={iconWrap('100,116,139')}><Clock size={22} color="#64748b" /></div>
-            <h3 style={{ color: '#f1f5f9', fontSize: '16px', fontWeight: 700, margin: 0 }}>Request Timed Out</h3>
-            <p style={{ color: '#94a3b8', fontSize: '13px', marginTop: 8 }}>No response within 5 minutes.</p>
+            <div style={iconWrap('107,114,128')}><Clock size={22} color="#6B7280" /></div>
+            <h3 style={{ color: '#1F2937', fontSize: '16px', fontWeight: 700, margin: 0 }}>Request Timed Out</h3>
+            <p style={{ color: '#6B7280', fontSize: '13px', marginTop: 8 }}>No response within 5 minutes.</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
               <ModalBtn onClick={() => { setPhase('confirm'); setCountdown(300) }}>Try Again</ModalBtn>
               <ModalBtn variant="ghost" onClick={onClose}>Cancel</ModalBtn>
@@ -387,26 +389,26 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
         {phase === 'confirm' && (
           <>
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
-              <div style={iconWrap('245,158,11')}><Shield size={22} color="#f59e0b" /></div>
-              <h3 style={{ color: '#f1f5f9', fontSize: '16px', fontWeight: 700, margin: 0 }}>Active Session Detected</h3>
-              <p style={{ color: '#94a3b8', fontSize: '12.5px', marginTop: 6 }}>
+              <div style={iconWrap('245,158,11')}><Shield size={22} color="#F59E0B" /></div>
+              <h3 style={{ color: '#1F2937', fontSize: '16px', fontWeight: 700, margin: 0 }}>Active Session Detected</h3>
+              <p style={{ color: '#6B7280', fontSize: '12.5px', marginTop: 6 }}>
                 This account has an active session on another device.
               </p>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '14px 16px', marginBottom: 20 }}>
+            <div style={{ background: '#F5F9FF', border: '1px solid #D6E8FF', borderRadius: '12px', padding: '14px 16px', marginBottom: 20 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <InfoRow icon={<DeviceIcon ua={sessionInfo.device_info} />} label="Device"      value={deviceLabel} />
                 <InfoRow icon={<Globe size={14} />}                         label="IP Address"  value={ipLabel} />
                 {sinceLabel && <InfoRow icon={<Clock size={14} />}          label="Last Active" value={timeSince(sessionInfo.last_active) || sinceLabel} />}
                 {sessionInfo.ws_connected && (
                   <InfoRow
-                    icon={<span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />}
+                    icon={<span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22C55E', display: 'inline-block' }} />}
                     label="Status" value="Connected"
                   />
                 )}
               </div>
             </div>
-            <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', marginBottom: 14 }} />
+            <div style={{ height: 1, background: '#E5E7EB', marginBottom: 14 }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
               <ModalBtn onClick={handleRequestAccess}>
                 <Shield size={14} /> Request Access from Active Device
@@ -421,24 +423,16 @@ function ActiveSessionModal({ data, rememberMe, onClose, onLoginSuccess }) {
 }
 
 // ── Shared field wrapper ──────────────────────────────────────────────────────
-function GlassField({ label, htmlFor, icon, error, children }) {
+function Field({ label, htmlFor, icon, error, children }) {
   return (
-    <div>
-      <label htmlFor={htmlFor} style={{
-        display: 'block', marginBottom: 6,
-        color: 'rgba(255,255,255,0.72)', fontSize: '13px', fontWeight: '500',
-        letterSpacing: '0.01em',
-      }}>
-        {label}
-      </label>
-      <div className="glass-input-wrap">
-        <span className="glass-input-icon">
-          {icon}
-        </span>
+    <div className="hf-field">
+      <label htmlFor={htmlFor}>{label}</label>
+      <div className="hf-input-wrap">
+        <span className="hf-input-icon">{icon}</span>
         {children}
       </div>
       {error && (
-        <p style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 4, color: '#f87171', fontSize: '12px' }}>
+        <p className="hf-field-error">
           <AlertCircle size={11} /> {error}
         </p>
       )}
@@ -449,28 +443,71 @@ function GlassField({ label, htmlFor, icon, error, children }) {
 // ── Divider ───────────────────────────────────────────────────────────────────
 function Divider({ label = 'OR' }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
-      <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-      <span style={{ color: 'rgba(255,255,255,0.26)', fontSize: '11px', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>{label}</span>
-      <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+    <div className="hf-divider">
+      <div className="hf-line" />
+      <span>{label}</span>
+      <div className="hf-line" />
     </div>
   )
 }
 
 // ── Screen heading helper ─────────────────────────────────────────────────────
-function ScreenHead({ icon, iconColor, iconBg, iconBorder, title, subtitle }) {
+function ScreenHead({ icon, iconBg, iconBorder, title, subtitle }) {
   return (
-    <div style={{ textAlign: 'center', marginBottom: 22 }}>
-      <div style={{
-        width: 54, height: 54, borderRadius: '50%',
-        background: iconBg, border: `1px solid ${iconBorder}`,
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12,
-      }}>
+    <div className="hf-screen-head">
+      <div className="hf-screen-icon" style={{ background: iconBg, border: `1px solid ${iconBorder}` }}>
         {icon}
       </div>
-      <h2 style={{ color: '#f1f5f9', fontSize: '20px', fontWeight: '700', margin: '0 0 6px', letterSpacing: '-0.01em' }}>{title}</h2>
-      {subtitle && <p style={{ color: 'rgba(255,255,255,0.48)', fontSize: '13px', margin: 0, lineHeight: 1.5 }}>{subtitle}</p>}
+      <h2>{title}</h2>
+      {subtitle && <p>{subtitle}</p>}
     </div>
+  )
+}
+
+// ── Split-panel shell (background, card, left branding panel, logo) ──────────
+function LoginShell({ children }) {
+  return (
+    <div className="hf-login-page">
+      <div className="hf-login-bg" />
+      <div className="hf-login-overlay" />
+
+      <div className="hf-login-card">
+        {/* Left decorative branding panel */}
+        <div className="hf-login-left">
+          <div className="hf-dots hf-dots-tl" />
+          <div className="hf-blob hf-blob-1" />
+          <div className="hf-blob hf-blob-2" />
+          <div className="hf-badge-circle">
+            <img src="/Hire_Flow_icon-removebg.png" alt="" />
+          </div>
+          <LeftPanelText />
+          <div className="hf-accent-line" />
+          <div className="hf-dots hf-dots-bl" />
+        </div>
+
+        {/* Right form panel */}
+        <div className="hf-login-right">
+          <div className="hf-logo-wrap">
+            <img src="/Hire_Flow_Logo.png" alt="HireFlow" loading="eager" />
+          </div>
+          {children}
+        </div>
+      </div>
+
+      <p className="hf-login-footer">
+        © {new Date().getFullYear()} HireFlow · Recruit Smarter, Hire Faster
+      </p>
+    </div>
+  )
+}
+
+function LeftPanelText() {
+  const { t } = useTranslation()
+  return (
+    <>
+      <h1 className="hf-left-title">{t('login.heading')}</h1>
+      <p className="hf-left-desc">{t('login.subheading')}</p>
+    </>
   )
 }
 
@@ -630,55 +667,57 @@ const Login = () => {
   // ─────────────────────────────────────────────────────────────────────────
   if (tenantSelection) {
     return (
-      <div style={{ animation: 'slideUp 0.35s cubic-bezier(0.16,1,0.3,1) both' }}>
-        <ScreenHead
-          icon={<Building2 size={22} color="#818cf8" />}
-          iconBg="rgba(99,102,241,0.11)" iconBorder="rgba(99,102,241,0.26)"
-          title="Select Company"
-          subtitle="Your credentials match multiple companies. Choose one to continue."
-        />
+      <LoginShell>
+        <div className="hf-anim-slideup">
+          <ScreenHead
+            icon={<Building2 size={22} color="#1677FF" />}
+            iconBg="rgba(22,119,255,0.11)" iconBorder="rgba(22,119,255,0.26)"
+            title="Select Company"
+            subtitle="Your credentials match multiple companies. Choose one to continue."
+          />
 
-        {tenantSelectError && (
-          <div className="glass-alert glass-alert-red" style={{ marginBottom: 14 }}>
-            <p style={{ color: '#fca5a5', fontSize: '13px', margin: 0 }}>{tenantSelectError}</p>
+          {tenantSelectError && (
+            <div className="hf-alert hf-alert-red" style={{ marginBottom: 14 }}>
+              <p style={{ color: '#EF4444', fontSize: '13px', margin: 0 }}>{tenantSelectError}</p>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
+            {tenantSelection.tenants.map((tn) => (
+              <button
+                key={tn.company_id}
+                onClick={() => handleTenantSelect(tn.company_id)}
+                disabled={isLoading}
+                className="hf-tenant-item"
+              >
+                <div>
+                  <p style={{ color: '#1F2937', fontWeight: '600', fontSize: '14px', margin: '0 0 2px' }}>{tn.company_name}</p>
+                  <p style={{ color: '#9CA3AF', fontSize: '12px', margin: 0, textTransform: 'capitalize' }}>{tn.role}</p>
+                </div>
+                <ArrowRight size={15} style={{ color: '#9CA3AF', flexShrink: 0 }} />
+              </button>
+            ))}
           </div>
-        )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
-          {tenantSelection.tenants.map((t) => (
-            <button
-              key={t.company_id}
-              onClick={() => handleTenantSelect(t.company_id)}
-              disabled={isLoading}
-              className="tenant-item"
-            >
-              <div>
-                <p style={{ color: '#f1f5f9', fontWeight: '600', fontSize: '14px', margin: '0 0 2px' }}>{t.company_name}</p>
-                <p style={{ color: 'rgba(255,255,255,0.38)', fontSize: '12px', margin: 0, textTransform: 'capitalize' }}>{t.role}</p>
-              </div>
-              <ArrowRight size={15} style={{ color: 'rgba(255,255,255,0.30)', flexShrink: 0 }} />
+          <div style={{ textAlign: 'center' }}>
+            <button onClick={() => dispatch(clearTenantSelection())} className="hf-btn-ghost" style={{ justifyContent: 'center', width: '100%' }}>
+              ← Back to Login
             </button>
-          ))}
-        </div>
+          </div>
 
-        <div style={{ textAlign: 'center' }}>
-          <button onClick={() => dispatch(clearTenantSelection())} className="glass-btn-ghost">
-            ← Back to Login
-          </button>
+          {locationPrompt && (
+            <ModalPortal isOpen>
+              <LocationRequiredModal
+                message={locationPrompt.message}
+                busy={locationPrompt.busy}
+                denied={locationPrompt.denied}
+                onAllow={handleAllowLocation}
+                onCancel={() => setLocationPrompt(null)}
+              />
+            </ModalPortal>
+          )}
         </div>
-
-        {locationPrompt && (
-          <ModalPortal isOpen>
-            <LocationRequiredModal
-              message={locationPrompt.message}
-              busy={locationPrompt.busy}
-              denied={locationPrompt.denied}
-              onAllow={handleAllowLocation}
-              onCancel={() => setLocationPrompt(null)}
-            />
-          </ModalPortal>
-        )}
-      </div>
+      </LoginShell>
     )
   }
 
@@ -696,44 +735,46 @@ const Login = () => {
     const isAmber = isLocationIssue || isConnectionIssue
 
     return (
-      <div style={{ animation: 'slideUp 0.35s cubic-bezier(0.16,1,0.3,1) both' }}>
-        <ScreenHead
-          icon={isLocationIssue
-            ? <Globe size={22} color="#f59e0b" />
-            : isConnectionIssue
-              ? <AlertCircle size={22} color="#fbbf24" />
-              : <UserX size={22} color="#f87171" />}
-          iconBg={isAmber ? 'rgba(245,158,11,0.11)' : 'rgba(239,68,68,0.11)'}
-          iconBorder={isAmber ? 'rgba(245,158,11,0.26)' : 'rgba(239,68,68,0.26)'}
-          title={isLocationIssue ? 'Location Permission Required' : isConnectionIssue ? 'Connection Problem' : 'Login Failed'}
-          subtitle={isLocationIssue
-            ? 'This organization requires location verification before signing in.'
-            : isConnectionIssue
-              ? 'Could not reach the server. Please try again.'
-              : 'We couldn\'t find an account matching your details.'}
-        />
-        <div className={`glass-alert ${isAmber ? 'glass-alert-amber' : 'glass-alert-red'}`} style={{ marginBottom: 18 }}>
-          <p style={{ color: isAmber ? '#fcd34d' : '#fca5a5', fontWeight: '600', fontSize: '13px', margin: '0 0 5px' }}>{failMessage}</p>
-          {isLocationIssue && (
-            <p style={{ color: 'rgba(252,211,77,0.70)', fontSize: '12px', margin: 0 }}>
-              Please allow browser location access and try again.
-            </p>
-          )}
+      <LoginShell>
+        <div className="hf-anim-slideup">
+          <ScreenHead
+            icon={isLocationIssue
+              ? <Globe size={22} color="#F59E0B" />
+              : isConnectionIssue
+                ? <AlertCircle size={22} color="#F59E0B" />
+                : <UserX size={22} color="#EF4444" />}
+            iconBg={isAmber ? 'rgba(245,158,11,0.11)' : 'rgba(239,68,68,0.11)'}
+            iconBorder={isAmber ? 'rgba(245,158,11,0.26)' : 'rgba(239,68,68,0.26)'}
+            title={isLocationIssue ? 'Location Permission Required' : isConnectionIssue ? 'Connection Problem' : 'Login Failed'}
+            subtitle={isLocationIssue
+              ? 'This organization requires location verification before signing in.'
+              : isConnectionIssue
+                ? 'Could not reach the server. Please try again.'
+                : 'We couldn\'t find an account matching your details.'}
+          />
+          <div className={`hf-alert ${isAmber ? 'hf-alert-amber' : 'hf-alert-red'}`} style={{ marginBottom: 18 }}>
+            <p style={{ color: isAmber ? '#B45309' : '#B91C1C', fontWeight: '600', fontSize: '13px', margin: '0 0 5px' }}>{failMessage}</p>
+            {isLocationIssue && (
+              <p style={{ color: '#B45309', fontSize: '12px', margin: 0, opacity: 0.85 }}>
+                Please allow browser location access and try again.
+              </p>
+            )}
+            {!isLocationIssue && !isConnectionIssue && (
+              <p style={{ color: '#B91C1C', fontSize: '12px', margin: 0, opacity: 0.85 }}>
+                Double-check your email / mobile number and password, or create a new account.
+              </p>
+            )}
+          </div>
           {!isLocationIssue && !isConnectionIssue && (
-            <p style={{ color: 'rgba(252,165,165,0.70)', fontSize: '12px', margin: 0 }}>
-              Double-check your email / mobile number and password, or create a new account.
-            </p>
+            <Link to="/register" style={{ textDecoration: 'none', display: 'block' }}>
+              <button className="hf-btn-primary">Create New Account</button>
+            </Link>
           )}
+          <div style={{ textAlign: 'center', marginTop: 16 }}>
+            <button onClick={() => setLoginFailed(null)} className="hf-btn-ghost" style={{ justifyContent: 'center', width: '100%' }}>← Back to Login</button>
+          </div>
         </div>
-        {!isLocationIssue && !isConnectionIssue && (
-          <Link to="/register" style={{ textDecoration: 'none', display: 'block' }}>
-            <button className="glass-btn-primary">Create New Account</button>
-          </Link>
-        )}
-        <div style={{ textAlign: 'center', marginTop: 16 }}>
-          <button onClick={() => setLoginFailed(null)} className="glass-btn-ghost">← Back to Login</button>
-        </div>
-      </div>
+      </LoginShell>
     )
   }
 
@@ -742,42 +783,44 @@ const Login = () => {
   // ─────────────────────────────────────────────────────────────────────────
   if (emailNotVerified) {
     return (
-      <div style={{ animation: 'slideUp 0.35s cubic-bezier(0.16,1,0.3,1) both' }}>
-        <ScreenHead
-          icon={<Mail size={22} color="#fbbf24" />}
-          iconBg="rgba(245,158,11,0.11)" iconBorder="rgba(245,158,11,0.26)"
-          title="Verify Your Email"
-          subtitle="Your account is not yet verified. Check your inbox for the verification link."
-        />
-        <div className="glass-alert glass-alert-amber" style={{ marginBottom: 18 }}>
-          <p style={{ color: '#fcd34d', fontSize: '13px', margin: '0 0 4px' }}>{emailNotVerified.message}</p>
-          {emailNotVerified.email && (
-            <p style={{ color: 'rgba(252,211,77,0.70)', fontSize: '12px', margin: 0 }}>
-              Email: <strong style={{ color: '#fcd34d' }}>{emailNotVerified.email}</strong>
-            </p>
-          )}
-        </div>
-        {!resendSent ? (
-          <button
-            onClick={handleResendVerification}
-            disabled={resendLoading}
-            className="glass-btn-primary"
-            style={{ marginBottom: 10 }}
-          >
-            {resendLoading ? <><Spinner /> Sending…</> : <><RefreshCw size={15} /> Resend Verification Email</>}
-          </button>
-        ) : (
-          <div className="glass-alert glass-alert-green" style={{ marginBottom: 10, textAlign: 'center' }}>
-            <CheckCircle size={18} style={{ color: '#4ade80', display: 'block', margin: '0 auto 6px' }} />
-            <p style={{ color: '#86efac', fontSize: '13px', margin: 0 }}>
-              Verification email sent! Check your inbox.
-            </p>
+      <LoginShell>
+        <div className="hf-anim-slideup">
+          <ScreenHead
+            icon={<Mail size={22} color="#F59E0B" />}
+            iconBg="rgba(245,158,11,0.11)" iconBorder="rgba(245,158,11,0.26)"
+            title="Verify Your Email"
+            subtitle="Your account is not yet verified. Check your inbox for the verification link."
+          />
+          <div className="hf-alert hf-alert-amber" style={{ marginBottom: 18 }}>
+            <p style={{ color: '#B45309', fontSize: '13px', margin: '0 0 4px' }}>{emailNotVerified.message}</p>
+            {emailNotVerified.email && (
+              <p style={{ color: '#B45309', fontSize: '12px', margin: 0, opacity: 0.85 }}>
+                Email: <strong style={{ color: '#B45309' }}>{emailNotVerified.email}</strong>
+              </p>
+            )}
           </div>
-        )}
-        <div style={{ textAlign: 'center', marginTop: 12 }}>
-          <button onClick={() => setEmailNotVerified(null)} className="glass-btn-ghost">← Back to Login</button>
+          {!resendSent ? (
+            <button
+              onClick={handleResendVerification}
+              disabled={resendLoading}
+              className="hf-btn-primary"
+              style={{ marginBottom: 10 }}
+            >
+              {resendLoading ? <><Spinner inverted /> Sending…</> : <><RefreshCw size={15} /> Resend Verification Email</>}
+            </button>
+          ) : (
+            <div className="hf-alert hf-alert-green" style={{ marginBottom: 10, textAlign: 'center' }}>
+              <CheckCircle size={18} style={{ color: '#22C55E', display: 'block', margin: '0 auto 6px' }} />
+              <p style={{ color: '#15803D', fontSize: '13px', margin: 0 }}>
+                Verification email sent! Check your inbox.
+              </p>
+            </div>
+          )}
+          <div style={{ textAlign: 'center', marginTop: 12 }}>
+            <button onClick={() => setEmailNotVerified(null)} className="hf-btn-ghost" style={{ justifyContent: 'center', width: '100%' }}>← Back to Login</button>
+          </div>
         </div>
-      </div>
+      </LoginShell>
     )
   }
 
@@ -790,76 +833,82 @@ const Login = () => {
 
     if (isSeller) {
       return (
-        <div style={{ animation: 'slideUp 0.35s cubic-bezier(0.16,1,0.3,1) both' }}>
-          <ScreenHead
-            icon={<Calendar size={22} color="#fbbf24" />}
-            iconBg="rgba(245,158,11,0.11)" iconBorder="rgba(245,158,11,0.26)"
-            title="Subscription Expired"
-            subtitle={expiryLabel ? `Expired on ${expiryLabel}` : undefined}
-          />
-          <div className="glass-alert glass-alert-amber" style={{ marginBottom: 18 }}>
-            <p style={{ color: '#fcd34d', fontSize: '13px', margin: '0 0 6px' }}>{subscriptionExpired.message}</p>
-            <p style={{ color: 'rgba(252,211,77,0.70)', fontSize: '12px', margin: 0 }}>
-              Please contact the platform administrator to renew your seller subscription.
-            </p>
+        <LoginShell>
+          <div className="hf-anim-slideup">
+            <ScreenHead
+              icon={<Calendar size={22} color="#F59E0B" />}
+              iconBg="rgba(245,158,11,0.11)" iconBorder="rgba(245,158,11,0.26)"
+              title="Subscription Expired"
+              subtitle={expiryLabel ? `Expired on ${expiryLabel}` : undefined}
+            />
+            <div className="hf-alert hf-alert-amber" style={{ marginBottom: 18 }}>
+              <p style={{ color: '#B45309', fontSize: '13px', margin: '0 0 6px' }}>{subscriptionExpired.message}</p>
+              <p style={{ color: '#B45309', fontSize: '12px', margin: 0, opacity: 0.85 }}>
+                Please contact the platform administrator to renew your seller subscription.
+              </p>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <button onClick={() => dispatch(clearError())} className="hf-btn-ghost" style={{ justifyContent: 'center', width: '100%' }}>← Back to Login</button>
+            </div>
           </div>
-          <div style={{ textAlign: 'center' }}>
-            <button onClick={() => dispatch(clearError())} className="glass-btn-ghost">← Back to Login</button>
-          </div>
-        </div>
+        </LoginShell>
       )
     }
 
     if (subscriptionExpired.isOwner) {
       return (
-        <div style={{ animation: 'slideUp 0.35s cubic-bezier(0.16,1,0.3,1) both' }}>
-          <ScreenHead
-            icon={<Calendar size={22} color="#fbbf24" />}
-            iconBg="rgba(245,158,11,0.11)" iconBorder="rgba(245,158,11,0.26)"
-            title="Subscription Expired"
-            subtitle={expiryLabel ? `Expired on ${expiryLabel}` : undefined}
-          />
-          <div className="glass-alert glass-alert-amber" style={{ marginBottom: 18 }}>
-            <p style={{ color: '#fcd34d', fontSize: '13px', margin: 0 }}>{subscriptionExpired.message}</p>
+        <LoginShell>
+          <div className="hf-anim-slideup">
+            <ScreenHead
+              icon={<Calendar size={22} color="#F59E0B" />}
+              iconBg="rgba(245,158,11,0.11)" iconBorder="rgba(245,158,11,0.26)"
+              title="Subscription Expired"
+              subtitle={expiryLabel ? `Expired on ${expiryLabel}` : undefined}
+            />
+            <div className="hf-alert hf-alert-amber" style={{ marginBottom: 18 }}>
+              <p style={{ color: '#B45309', fontSize: '13px', margin: 0 }}>{subscriptionExpired.message}</p>
+            </div>
+            <button
+              onClick={() => navigate('/upgrade-plan', { state: subscriptionExpired })}
+              className="hf-btn-primary"
+              style={{ marginBottom: 10 }}
+            >
+              <ArrowRight size={15} /> Manage Subscription
+            </button>
+            <div style={{ textAlign: 'center' }}>
+              <button onClick={() => dispatch(clearError())} className="hf-btn-ghost" style={{ justifyContent: 'center', width: '100%' }}>← Back to Login</button>
+            </div>
           </div>
-          <button
-            onClick={() => navigate('/upgrade-plan', { state: subscriptionExpired })}
-            className="glass-btn-primary"
-            style={{ marginBottom: 10 }}
-          >
-            <ArrowRight size={15} /> Manage Subscription
-          </button>
-          <div style={{ textAlign: 'center' }}>
-            <button onClick={() => dispatch(clearError())} className="glass-btn-ghost">← Back to Login</button>
-          </div>
-        </div>
+        </LoginShell>
       )
     }
 
     return (
-      <div style={{ animation: 'slideUp 0.35s cubic-bezier(0.16,1,0.3,1) both' }}>
-        <ScreenHead
-          icon={<XCircle size={22} color="#f87171" />}
-          iconBg="rgba(239,68,68,0.11)" iconBorder="rgba(239,68,68,0.26)"
-          title="Access Unavailable"
-        />
-        <div className="glass-alert glass-alert-red" style={{ marginBottom: 18 }}>
-          <p style={{ color: '#fca5a5', fontWeight: '600', fontSize: '13px', margin: '0 0 5px' }}>
-            Your company subscription has expired.
-          </p>
-          {expiryLabel && (
-            <p style={{ color: 'rgba(252,165,165,0.65)', fontSize: '12px', margin: '0 0 4px' }}>
-              Expired on: <span style={{ color: '#fca5a5', fontWeight: '500' }}>{expiryLabel}</span>
+      <LoginShell>
+        <div className="hf-anim-slideup">
+          <ScreenHead
+            icon={<XCircle size={22} color="#EF4444" />}
+            iconBg="rgba(239,68,68,0.11)" iconBorder="rgba(239,68,68,0.26)"
+            title="Access Unavailable"
+          />
+          <div className="hf-alert hf-alert-red" style={{ marginBottom: 18 }}>
+            <p style={{ color: '#B91C1C', fontWeight: '600', fontSize: '13px', margin: '0 0 5px' }}>
+              Your company subscription has expired.
             </p>
-          )}
-          <p style={{ color: 'rgba(252,165,165,0.70)', fontSize: '12px', margin: 0 }}>
-            Please contact your company administrator to renew the subscription.
-          </p>
+            {expiryLabel && (
+              <p style={{ color: '#B91C1C', fontSize: '12px', margin: '0 0 4px', opacity: 0.8 }}>
+                Expired on: <span style={{ color: '#B91C1C', fontWeight: '500' }}>{expiryLabel}</span>
+              </p>
+            )}
+            <p style={{ color: '#B91C1C', fontSize: '12px', margin: 0, opacity: 0.85 }}>
+              Please contact your company administrator to renew the subscription.
+            </p>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <button onClick={() => dispatch(clearError())} className="hf-btn-ghost" style={{ justifyContent: 'center', width: '100%' }}>← Back to Login</button>
+          </div>
         </div>
-        <div style={{ textAlign: 'center' }}>
-          <button onClick={() => dispatch(clearError())} className="glass-btn-ghost">← Back to Login</button>
-        </div>
-      </div>
+      </LoginShell>
     )
   }
 
@@ -867,160 +916,146 @@ const Login = () => {
   // SCREEN: Main login form
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div style={{ animation: 'slideUp 0.45s cubic-bezier(0.16,1,0.3,1) both 0.08s' }}>
+    <LoginShell>
+      <div className="hf-anim-slideup" style={{ animationDelay: '0.05s' }}>
 
-      {/* Login-screen announcements (public — no auth required) */}
-      <LoginAnnouncement />
+        {/* Login-screen announcements (public — no auth required) */}
+        <LoginAnnouncement />
 
-      {/* Heading */}
-      <div style={{ textAlign: 'center', marginBottom: 26 }}>
-        <h2 style={{
-          color: '#fff',
-          fontSize: '30px',
-          fontWeight: '800',
-          letterSpacing: '-0.025em',
-          margin: '0 0 8px',
-          lineHeight: 1.1,
-        }}>
-          {t('login.heading')}
-        </h2>
-        <p style={{ color: 'rgba(255,255,255,0.52)', fontSize: '14px', margin: 0 }}>
-          {t('login.subheading')}
-        </p>
-      </div>
+        {/* Inline error from api.js interceptor */}
+        {inlineError && (
+          <div className="hf-alert hf-alert-red" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 18 }}>
+            <AlertCircle size={15} style={{ color: '#EF4444', flexShrink: 0, marginTop: 1 }} />
+            <p style={{ color: '#B91C1C', fontSize: '13px', fontWeight: '500', margin: 0 }}>{inlineError}</p>
+          </div>
+        )}
 
-      {/* Inline error from api.js interceptor */}
-      {inlineError && (
-        <div className="glass-alert glass-alert-red" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 18 }}>
-          <AlertCircle size={15} style={{ color: '#f87171', flexShrink: 0, marginTop: 1 }} />
-          <p style={{ color: '#fca5a5', fontSize: '13px', fontWeight: '500', margin: 0 }}>{inlineError}</p>
-        </div>
-      )}
-
-      {/* Form */}
-      <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-        {/* Email / Mobile */}
-        <GlassField
-          label={t('login.identifier_label')}
-          htmlFor="identifier"
-          icon={<Mail size={16} />}
-          error={errors.identifier?.message}
-        >
-          <input
-            id="identifier"
-            placeholder={t('login.identifier_placeholder')}
-            autoComplete="email"
-            className="glass-input"
-            {...register('identifier', {
-              required: 'This field is required',
-              minLength: { value: 3, message: 'Minimum 3 characters required' },
-            })}
-          />
-        </GlassField>
-
-        {/* Password */}
-        <GlassField
-          label={t('login.password_label')}
-          htmlFor="password"
-          icon={<Lock size={16} />}
-          error={errors.password?.message}
-        >
-          <input
-            id="password"
-            type={showPassword ? 'text' : 'password'}
-            placeholder={t('login.password_placeholder')}
-            autoComplete="current-password"
-            className="glass-input glass-input-pr"
-            {...register('password', { required: 'Password is required' })}
-          />
-          <button
-            type="button"
-            aria-label={showPassword ? 'Hide password' : 'Show password'}
-            onClick={() => setShowPassword(v => !v)}
-            className="glass-input-eye"
-          >
-            {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-          </button>
-        </GlassField>
-
-        {/* Remember me + forgot password */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 2 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={e => setRememberMeState(e.target.checked)}
-              style={{ width: 15, height: 15, accentColor: '#6366f1', cursor: 'pointer' }}
-            />
-            <span style={{ color: 'rgba(255,255,255,0.48)', fontSize: '13px' }}>{t('login.remember_me')}</span>
-          </label>
-          <a
-            href="/forgot-password"
-            onClick={(e) => { e.preventDefault(); navigate('/forgot-password', { state: { email: getValues('identifier') } }) }}
-            style={{ color: '#818cf8', fontSize: '13px', fontWeight: '500', textDecoration: 'none', transition: 'color 0.15s', cursor: 'pointer' }}
-            onMouseOver={e => e.target.style.color = '#a5b4fc'}
-            onMouseOut={e  => e.target.style.color = '#818cf8'}
-          >
-            {t('login.forgot_password')}
-          </a>
+        {/* Divider with profile icon */}
+        <div className="hf-profile-divider">
+          <div className="hf-line" />
+          <div className="hf-profile-circle"><User size={16} /></div>
+          <div className="hf-line" />
         </div>
 
-        {/* Sign In */}
-        <button
-          type="submit"
-          disabled={isSubmitting || isLoading}
-          className="glass-btn-primary"
-          style={{ marginTop: 6 }}
-        >
-          {(isSubmitting || isLoading)
-            ? <><Spinner /> {t('login.signing_in')}</>
-            : <>{t('login.sign_in')} <ArrowRight size={17} /></>
-          }
-        </button>
-      </form>
-
-      {/* OR divider */}
-      <Divider label="NEW TO HIREFLOW?" />
-
-      {/* Secondary CTAs */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* Secondary CTAs */}
         <Link to="/register?mode=trial" style={{ textDecoration: 'none', display: 'block' }}>
-          <button className="glass-btn-trial">
+          <button className="hf-btn-outline">
             <Rocket size={15} /> Start Free Trial
           </button>
         </Link>
         <Link to="/register?mode=subscription" style={{ textDecoration: 'none', display: 'block' }}>
-          <button className="glass-btn-sub">
-            <Crown size={15} /> Subscription / Buy Plan
+          <button className="hf-btn-outline">
+            <Crown size={15} /> Buy Subscription
           </button>
         </Link>
+
+        {/* OR divider */}
+        <Divider label="OR" />
+
+        {/* Form */}
+        <form onSubmit={handleSubmit(onSubmit)}>
+
+          {/* Email / Mobile */}
+          <Field
+            label={t('login.identifier_label')}
+            htmlFor="identifier"
+            icon={<Mail size={16} />}
+            error={errors.identifier?.message}
+          >
+            <input
+              id="identifier"
+              placeholder={t('login.identifier_placeholder')}
+              autoComplete="email"
+              className="hf-input"
+              {...register('identifier', {
+                required: 'This field is required',
+                minLength: { value: 3, message: 'Minimum 3 characters required' },
+              })}
+            />
+          </Field>
+
+          {/* Password */}
+          <Field
+            label={t('login.password_label')}
+            htmlFor="password"
+            icon={<Lock size={16} />}
+            error={errors.password?.message}
+          >
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder={t('login.password_placeholder')}
+              autoComplete="current-password"
+              className="hf-input hf-input-pr"
+              {...register('password', { required: 'Password is required' })}
+            />
+            <button
+              type="button"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              onClick={() => setShowPassword(v => !v)}
+              className="hf-input-eye"
+            >
+              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+            </button>
+          </Field>
+
+          {/* Remember me + forgot password */}
+          <div className="hf-row-between">
+            <label className="hf-remember">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={e => setRememberMeState(e.target.checked)}
+              />
+              <span>{t('login.remember_me')}</span>
+            </label>
+            <a
+              href="/forgot-password"
+              onClick={(e) => { e.preventDefault(); navigate('/forgot-password', { state: { email: getValues('identifier') } }) }}
+              className="hf-forgot-link"
+            >
+              {t('login.forgot_password')}
+            </a>
+          </div>
+
+          {/* Sign In */}
+          <button
+            type="submit"
+            disabled={isSubmitting || isLoading}
+            className="hf-btn-primary"
+          >
+            {(isSubmitting || isLoading)
+              ? <><Spinner inverted /> {t('login.signing_in')}</>
+              : <>{t('login.sign_in')} <ArrowRight size={17} /></>
+            }
+          </button>
+        </form>
+
+        {/* Multi-device conflict modal */}
+        {activeSessionData && (
+          <ModalPortal isOpen>
+            <ActiveSessionModal
+              data={activeSessionData}
+              rememberMe={rememberMe}
+              onClose={() => setActiveSessionData(null)}
+            />
+          </ModalPortal>
+        )}
+
+        {/* Location-required retry modal (only shown for tenants with geo-fence enabled) */}
+        {locationPrompt && (
+          <ModalPortal isOpen>
+            <LocationRequiredModal
+              message={locationPrompt.message}
+              busy={locationPrompt.busy}
+              denied={locationPrompt.denied}
+              onAllow={handleAllowLocation}
+              onCancel={() => setLocationPrompt(null)}
+            />
+          </ModalPortal>
+        )}
       </div>
-
-      {/* Multi-device conflict modal */}
-      {activeSessionData && (
-        <ModalPortal isOpen>
-          <ActiveSessionModal
-            data={activeSessionData}
-            rememberMe={rememberMe}
-            onClose={() => setActiveSessionData(null)}
-          />
-        </ModalPortal>
-      )}
-
-      {/* Location-required retry modal (only shown for tenants with geo-fence enabled) */}
-      {locationPrompt && (
-        <ModalPortal isOpen>
-          <LocationRequiredModal
-            message={locationPrompt.message}
-            busy={locationPrompt.busy}
-            denied={locationPrompt.denied}
-            onAllow={handleAllowLocation}
-            onCancel={() => setLocationPrompt(null)}
-          />
-        </ModalPortal>
-      )}
-    </div>
+    </LoginShell>
   )
 }
 

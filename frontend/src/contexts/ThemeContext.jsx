@@ -1,20 +1,20 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 
 const STORAGE_KEY = 'niyanHireFlowTheme'
-const DEFAULT_MODE = 'dark'
+const DEFAULT_MODE = 'light'
 
 const ThemeContext = createContext({
   themeMode: DEFAULT_MODE,
-  resolvedTheme: 'dark',
+  resolvedTheme: 'light',
   setThemeMode: () => {},
-  isDark: true,
+  isDark: false,
 })
 
 function getSystemPreference() {
   try {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   } catch {
-    return 'dark'
+    return 'light'
   }
 }
 

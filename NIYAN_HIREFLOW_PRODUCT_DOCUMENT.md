@@ -1274,7 +1274,7 @@ In a personalized 45-minute demonstration, our team will walk you through a live
 
 | Channel | Details |
 |---|---|
-| **Website** | www.niyanhireflow.com |
+| **Website** | web.hireflowcrm.com |
 | **Email** | hello@niyanhireflow.com |
 | **Phone** | +91 XXXXX XXXXX |
 | **WhatsApp** | +91 XXXXX XXXXX |

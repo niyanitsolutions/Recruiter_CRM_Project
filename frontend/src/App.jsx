@@ -1189,9 +1189,11 @@ function App() {
     <ProfileCompleteModal />
     <Suspense fallback={<RouteLoader />}>
     <Routes>
-      {/* AUTH — Login & ForgotPassword use the split-panel AuthLayout */}
+      {/* Login is standalone (full-screen, split-panel premium layout owned by Login.jsx itself) */}
+      <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+
+      {/* ForgotPassword uses the shared AuthLayout */}
       <Route element={<GuestRoute><AuthLayout /></GuestRoute>}>
-        <Route path="/login"           element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
       </Route>
 
