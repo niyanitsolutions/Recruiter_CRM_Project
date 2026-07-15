@@ -347,6 +347,7 @@ const CandidateForm = () => {
         const res = await candidateService.uploadPhoto(id, fd)
         setPhotoUrl(res.photo_url)
         toast.success('Profile photo updated')
+        publish(LIVE_TOPICS.CANDIDATES)
       } catch {
         toast.error('Failed to upload photo')
       }
@@ -367,6 +368,7 @@ const CandidateForm = () => {
     if (isEdit && id) {
       try {
         await candidateService.deletePhoto(id)
+        publish(LIVE_TOPICS.CANDIDATES)
       } catch { /* non-fatal */ }
     }
   }

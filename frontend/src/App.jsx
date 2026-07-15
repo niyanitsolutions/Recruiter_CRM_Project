@@ -1192,10 +1192,8 @@ function App() {
       {/* Login is standalone (full-screen, split-panel premium layout owned by Login.jsx itself) */}
       <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
 
-      {/* ForgotPassword uses the shared AuthLayout */}
-      <Route element={<GuestRoute><AuthLayout /></GuestRoute>}>
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-      </Route>
+      {/* ForgotPassword is standalone too — reuses the same split-panel layout/background as Login */}
+      <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
 
       {/* Register is standalone (full-screen, no split panel) */}
       <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />

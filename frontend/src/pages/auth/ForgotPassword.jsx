@@ -1,18 +1,102 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import {
-  Mail, ArrowLeft, CheckCircle, Building2, Users, ChevronRight,
+  Mail, ArrowLeft, CheckCircle, Building2, Users, ChevronRight, AlertCircle,
 } from 'lucide-react'
-import { Button, Input } from '../../components/common'
 import authService from '../../services/authService'
+import './Login.css'
 
 // Steps:
 //   "email"           → enter email
 //   "scope_selection" → multiple companies: pick "specific" or "all"
 //   "company_list"    → pick which company when scope = "specific"
 //   "submitted"       → check your inbox
+
+// ── Spinner (matches Login.jsx) ───────────────────────────────────────────────
+function Spinner({ size = 14, inverted = false }) {
+  return (
+    <span style={{
+      width: size, height: size,
+      border: `2px solid ${inverted ? 'rgba(255,255,255,0.35)' : 'rgba(22,119,255,0.25)'}`,
+      borderTopColor: inverted ? '#fff' : '#1677FF',
+      borderRadius: '50%',
+      display: 'inline-block',
+      animation: 'hfSpin 0.7s linear infinite',
+      flexShrink: 0,
+    }} />
+  )
+}
+
+// ── Shared field wrapper (matches Login.jsx) ──────────────────────────────────
+function Field({ label, htmlFor, icon, error, children }) {
+  return (
+    <div className="hf-field">
+      <label htmlFor={htmlFor}>{label}</label>
+      <div className="hf-input-wrap">
+        <span className="hf-input-icon">{icon}</span>
+        {children}
+      </div>
+      {error && (
+        <p className="hf-field-error">
+          <AlertCircle size={11} /> {error}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ── Screen heading helper (matches Login.jsx) ─────────────────────────────────
+function ScreenHead({ icon, iconBg, iconBorder, title, subtitle }) {
+  return (
+    <div className="hf-screen-head">
+      <div className="hf-screen-icon" style={{ background: iconBg, border: `1px solid ${iconBorder}` }}>
+        {icon}
+      </div>
+      <h2>{title}</h2>
+      {subtitle && <p>{subtitle}</p>}
+    </div>
+  )
+}
+
+// ── Split-panel shell — identical background/card/left-panel/logo as Login ───
+function AuthShell({ children }) {
+  return (
+    <div className="hf-login-page">
+      <div className="hf-login-bg" />
+      <div className="hf-login-overlay" />
+
+      <div className="hf-login-card">
+        {/* Left decorative branding panel */}
+        <div className="hf-login-left">
+          <div className="hf-dots hf-dots-tl" />
+          <div className="hf-blob hf-blob-1" />
+          <div className="hf-blob hf-blob-2" />
+          <div className="hf-badge-circle">
+            <img src="/Hire_Flow_icon-removebg.png" alt="" />
+          </div>
+          <h1 className="hf-left-title">Reset your password</h1>
+          <p className="hf-left-desc">We'll help you get back into your account securely.</p>
+          <div className="hf-accent-line" />
+          <div className="hf-dots hf-dots-bl" />
+        </div>
+
+        {/* Right form panel */}
+        <div className="hf-login-right">
+          <div className="hf-logo-wrap">
+            <img src="/Hire_Flow_Logo.png" alt="HireFlow" loading="eager" />
+          </div>
+          {children}
+        </div>
+      </div>
+
+      <p className="hf-login-footer">
+        © {new Date().getFullYear()} HireFlow · Recruit Smarter, Hire Faster
+      </p>
+    </div>
+  )
+}
 
 const ForgotPassword = () => {
   const location = useLocation()
@@ -85,174 +169,198 @@ const ForgotPassword = () => {
   // ── Submitted ─────────────────────────────────────────────────────────────
   if (step === 'submitted') {
     return (
-      <div className="animate-fade-in text-center">
-        <div className="w-16 h-16 bg-success-50 rounded-full flex items-center justify-center mx-auto mb-6">
-          <CheckCircle className="w-8 h-8 text-success-500" />
+      <AuthShell>
+        <div className="hf-anim-slideup">
+          <ScreenHead
+            icon={<CheckCircle size={22} color="#22C55E" />}
+            iconBg="rgba(34,197,94,0.11)" iconBorder="rgba(34,197,94,0.26)"
+            title="Check your email"
+            subtitle="We've sent password reset instructions to your email address."
+          />
+          <Link to="/login" style={{ textDecoration: 'none', display: 'block' }}>
+            <button className="hf-btn-outline">
+              <ArrowLeft size={15} /> Back to login
+            </button>
+          </Link>
         </div>
-        <h2 className="text-2xl font-bold text-surface-900 mb-2">Check your email</h2>
-        <p className="text-surface-500 mb-8">
-          We've sent password reset instructions to your email address.
-        </p>
-        <Link to="/login">
-          <Button variant="outline" leftIcon={<ArrowLeft className="w-4 h-4" />}>
-            Back to login
-          </Button>
-        </Link>
-      </div>
+      </AuthShell>
     )
   }
 
   // ── Company list (step 3) ─────────────────────────────────────────────────
   if (step === 'company_list') {
     return (
-      <div className="animate-fade-in">
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-surface-900">Select Company</h2>
-          <p className="text-surface-500 mt-2">
-            Choose the company whose password you want to reset.
-          </p>
-        </div>
+      <AuthShell>
+        <div className="hf-anim-slideup">
+          <ScreenHead
+            icon={<Building2 size={22} color="#1677FF" />}
+            iconBg="rgba(22,119,255,0.11)" iconBorder="rgba(22,119,255,0.26)"
+            title="Select Company"
+            subtitle="Choose the company whose password you want to reset."
+          />
 
-        <div className="space-y-2">
-          {companies.map((c) => (
-            <button
-              key={c.company_id}
-              onClick={() => onSelectCompany(c.company_id)}
-              disabled={isLoading}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border border-surface-200
-                         bg-white hover:bg-surface-50 hover:border-accent-400 transition-colors
-                         text-left disabled:opacity-50"
-            >
-              <div className="flex-shrink-0 w-9 h-9 rounded-full bg-accent-100 flex items-center justify-center">
-                <Building2 className="w-5 h-5 text-accent-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-surface-900 truncate">{c.company_name}</p>
-                <p className="text-xs text-surface-400 capitalize">{c.user_type}</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-surface-400 flex-shrink-0" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
+            {companies.map((c) => (
+              <button
+                key={c.company_id}
+                onClick={() => onSelectCompany(c.company_id)}
+                disabled={isLoading}
+                className="hf-tenant-item"
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <div style={{
+                    flexShrink: 0, width: 36, height: 36, borderRadius: '50%',
+                    background: 'rgba(22,119,255,0.11)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Building2 size={16} color="#1677FF" />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ color: '#1F2937', fontWeight: '600', fontSize: '14px', margin: '0 0 2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.company_name}</p>
+                    <p style={{ color: '#9CA3AF', fontSize: '12px', margin: 0, textTransform: 'capitalize' }}>{c.user_type}</p>
+                  </div>
+                </div>
+                <ChevronRight size={15} style={{ color: '#9CA3AF', flexShrink: 0 }} />
+              </button>
+            ))}
+          </div>
+
+          <div style={{ textAlign: 'center' }}>
+            <button onClick={() => setStep('scope_selection')} className="hf-btn-ghost" style={{ justifyContent: 'center', width: '100%' }}>
+              ← Back
             </button>
-          ))}
+          </div>
         </div>
-
-        <button
-          onClick={() => setStep('scope_selection')}
-          className="mt-6 inline-flex items-center gap-2 text-sm text-surface-600 hover:text-surface-900"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-      </div>
+      </AuthShell>
     )
   }
 
   // ── Scope selection (step 2) ──────────────────────────────────────────────
   if (step === 'scope_selection') {
     return (
-      <div className="animate-fade-in">
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-surface-900">Select Password Reset Scope</h2>
-          <p className="text-surface-500 mt-2 text-sm">
-            This email is associated with <strong>{companies.length} companies</strong>.
-            Choose how you want to reset your password.
-          </p>
+      <AuthShell>
+        <div className="hf-anim-slideup">
+          <ScreenHead
+            icon={<Users size={22} color="#1677FF" />}
+            iconBg="rgba(22,119,255,0.11)" iconBorder="rgba(22,119,255,0.26)"
+            title="Select Password Reset Scope"
+            subtitle={`This email is associated with ${companies.length} companies. Choose how you want to reset your password.`}
+          />
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+            <button
+              onClick={() => setStep('company_list')}
+              disabled={isLoading}
+              className="hf-tenant-item"
+              style={{ alignItems: 'flex-start', padding: '14px 16px' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, minWidth: 0 }}>
+                <div style={{
+                  flexShrink: 0, width: 36, height: 36, borderRadius: '50%',
+                  background: 'rgba(22,119,255,0.11)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', marginTop: 1,
+                }}>
+                  <Building2 size={16} color="#1677FF" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ color: '#1F2937', fontWeight: '600', fontSize: '14px', margin: '0 0 3px' }}>Reset for a specific company</p>
+                  <p style={{ color: '#9CA3AF', fontSize: '12px', margin: 0, lineHeight: 1.5 }}>
+                    Only the selected company's password will change. Others remain unchanged.
+                  </p>
+                </div>
+              </div>
+              <ChevronRight size={15} style={{ color: '#9CA3AF', flexShrink: 0, marginTop: 2 }} />
+            </button>
+
+            <button
+              onClick={onResetAll}
+              disabled={isLoading}
+              className="hf-tenant-item"
+              style={{ alignItems: 'flex-start', padding: '14px 16px' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, minWidth: 0 }}>
+                <div style={{
+                  flexShrink: 0, width: 36, height: 36, borderRadius: '50%',
+                  background: 'rgba(22,119,255,0.11)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', marginTop: 1,
+                }}>
+                  <Users size={16} color="#1677FF" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ color: '#1F2937', fontWeight: '600', fontSize: '14px', margin: '0 0 3px' }}>Reset for all companies</p>
+                  <p style={{ color: '#9CA3AF', fontSize: '12px', margin: 0, lineHeight: 1.5 }}>
+                    The same new password will apply to all {companies.length} companies.
+                  </p>
+                </div>
+              </div>
+              {isLoading
+                ? <span style={{ marginTop: 2, flexShrink: 0 }}><Spinner /></span>
+                : <ChevronRight size={15} style={{ color: '#9CA3AF', flexShrink: 0, marginTop: 2 }} />
+              }
+            </button>
+          </div>
+
+          <div style={{ textAlign: 'center' }}>
+            <button onClick={() => setStep('email')} className="hf-btn-ghost" style={{ justifyContent: 'center', width: '100%' }}>
+              ← Back
+            </button>
+          </div>
         </div>
-
-        <div className="space-y-3">
-          <button
-            onClick={() => setStep('company_list')}
-            disabled={isLoading}
-            className="w-full flex items-start gap-4 px-4 py-4 rounded-xl border border-surface-200
-                       bg-white hover:bg-surface-50 hover:border-accent-400 transition-colors
-                       text-left disabled:opacity-50"
-          >
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-accent-100 flex items-center justify-center mt-0.5">
-              <Building2 className="w-5 h-5 text-accent-600" />
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-surface-900">Reset for a specific company</p>
-              <p className="text-sm text-surface-500 mt-0.5">
-                Only the selected company's password will change. Others remain unchanged.
-              </p>
-            </div>
-            <ChevronRight className="w-5 h-5 text-surface-400 flex-shrink-0 mt-2.5" />
-          </button>
-
-          <button
-            onClick={onResetAll}
-            disabled={isLoading}
-            className="w-full flex items-start gap-4 px-4 py-4 rounded-xl border border-surface-200
-                       bg-white hover:bg-surface-50 hover:border-accent-400 transition-colors
-                       text-left disabled:opacity-50"
-          >
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center mt-0.5">
-              <Users className="w-5 h-5 text-primary-600" />
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-surface-900">Reset for all companies</p>
-              <p className="text-sm text-surface-500 mt-0.5">
-                The same new password will apply to all {companies.length} companies.
-              </p>
-            </div>
-            {isLoading
-              ? <span className="w-5 h-5 mt-2.5 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
-              : <ChevronRight className="w-5 h-5 text-surface-400 flex-shrink-0 mt-2.5" />
-            }
-          </button>
-        </div>
-
-        <button
-          onClick={() => setStep('email')}
-          className="mt-6 inline-flex items-center gap-2 text-sm text-surface-600 hover:text-surface-900"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </button>
-      </div>
+      </AuthShell>
     )
   }
 
   // ── Email form (step 1) ───────────────────────────────────────────────────
   return (
-    <div className="animate-fade-in">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-surface-900">Forgot password?</h2>
-        <p className="text-surface-500 mt-2">
-          No worries, we'll send you reset instructions.
-        </p>
-      </div>
-
-      <form onSubmit={handleSubmit(onEmailSubmit)} className="space-y-5">
-        <Input
-          label="Email Address"
-          type="email"
-          placeholder="Enter your email"
-          leftIcon={<Mail className="w-4 h-4" />}
-          error={errors.email?.message}
-          {...register('email', {
-            required: 'Email is required',
-            pattern: {
-              value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-              message: 'Invalid email address',
-            },
-          })}
+    <AuthShell>
+      <div className="hf-anim-slideup" style={{ animationDelay: '0.05s' }}>
+        <ScreenHead
+          icon={<Mail size={22} color="#1677FF" />}
+          iconBg="rgba(22,119,255,0.11)" iconBorder="rgba(22,119,255,0.26)"
+          title="Forgot password?"
+          subtitle="No worries, we'll send you reset instructions."
         />
 
-        <Button type="submit" isLoading={isLoading} className="w-full">
-          Send Reset Link
-        </Button>
-      </form>
+        <form onSubmit={handleSubmit(onEmailSubmit)}>
+          <Field
+            label="Email Address"
+            htmlFor="email"
+            icon={<Mail size={16} />}
+            error={errors.email?.message}
+          >
+            <input
+              id="email"
+              type="email"
+              placeholder="Enter your email"
+              autoComplete="email"
+              className="hf-input"
+              {...register('email', {
+                required: 'Email is required',
+                pattern: {
+                  value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                  message: 'Invalid email address',
+                },
+              })}
+            />
+          </Field>
 
-      <div className="mt-8 text-center">
-        <Link
-          to="/login"
-          className="inline-flex items-center gap-2 text-sm text-surface-600 hover:text-surface-900"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to login
-        </Link>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="hf-btn-primary"
+            style={{ marginTop: 4 }}
+          >
+            {isLoading ? <><Spinner inverted /> Sending…</> : <>Send Reset Link</>}
+          </button>
+        </form>
+
+        <div style={{ textAlign: 'center', marginTop: 20 }}>
+          <Link to="/login" className="hf-btn-ghost" style={{ justifyContent: 'center' }}>
+            <ArrowLeft size={14} /> Back to login
+          </Link>
+        </div>
       </div>
-    </div>
+    </AuthShell>
   )
 }
 
