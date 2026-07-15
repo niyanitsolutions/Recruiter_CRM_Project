@@ -15,7 +15,7 @@ router = APIRouter(prefix="/pipelines", tags=["Pipelines"])
 @router.get("/")
 async def list_pipelines(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=200),
     job_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
     db=Depends(get_company_db),
