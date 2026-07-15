@@ -23,6 +23,7 @@ import {
   getRememberMe,
 } from '../../utils/token'
 import './Login.css'
+import './Login.compact.css'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -467,7 +468,7 @@ function ScreenHead({ icon, iconBg, iconBorder, title, subtitle }) {
 // ── Split-panel shell (background, card, left branding panel, logo) ──────────
 function LoginShell({ children }) {
   return (
-    <div className="hf-login-page">
+    <div className="hf-login-page hf-login--compact">
       <div className="hf-login-bg" />
       <div className="hf-login-overlay" />
 
