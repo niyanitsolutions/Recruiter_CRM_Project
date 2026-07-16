@@ -16,12 +16,12 @@ export default function AuthHeader() {
         <div className="hf-header-buttons">
           <Link to="/register?mode=trial">
             <button className="hf-header-btn">
-              <Rocket size={14} /> Start Free Trial
+               Start Free Trial
             </button>
           </Link>
           <Link to="/register?mode=subscription">
             <button className="hf-header-btn">
-              <Crown size={14} /> Buy Subscription
+               Buy Subscription
             </button>
           </Link>
         </div>
