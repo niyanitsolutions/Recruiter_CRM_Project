@@ -5,6 +5,7 @@ import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
 import TableScroll from '../../../components/common/TableScroll'
 import SearchableSelect from '../../../components/common/SearchableSelect'
+import ActionMenu, { ActionMenuItem } from '../../../components/common/ActionMenu'
 import { getTenantTimezone } from '../../../utils/format'
 
 // Loaded once per modal-open rather than per-keystroke — Internal Hiring
@@ -21,13 +22,34 @@ const RESULT_COLORS = {
   failed:     'bg-red-100 text-red-700',
   on_hold:    'bg-yellow-100 text-yellow-700',
   no_show:    'bg-orange-100 text-orange-700',
+  cancelled:  'bg-gray-100 text-gray-500',
   rescheduled:'bg-blue-100 text-blue-700',
 }
+
+const RESULT_LABELS = {
+  pending: 'Pending', passed: 'Passed', failed: 'Failed', on_hold: 'On Hold',
+  no_show: 'Absent', cancelled: 'Cancelled', rescheduled: 'Rescheduled',
+}
+
+const RATING_FIELDS = [
+  ['technical_rating', 'Technical Rating'],
+  ['communication_rating', 'Communication Rating'],
+  ['problem_solving_rating', 'Problem Solving Rating'],
+  ['behaviour_rating', 'Behaviour / Culture Fit Rating'],
+]
 
 const emptyScheduleForm = () => ({
   candidate_id: '', mode: 'video', scheduled_at: '', duration_minutes: 60,
   location_or_link: '', send_invitation_email: true,
 })
+
+const emptyFeedbackForm = () => ({
+  interviewer_name: '', technical_rating: '', communication_rating: '',
+  problem_solving_rating: '', behaviour_rating: '', overall_rating: '',
+  overallTouched: false, feedback: '', result: 'passed', notify_candidate: true,
+})
+
+const emptyEditForm = () => ({ scheduled_at: '', duration_minutes: 60, mode: 'video', location_or_link: '' })
 
 // Groups the flat interview list into one entry per candidate — the list UI
 // shows a single row per candidate (current round + progress), with a
@@ -58,24 +80,35 @@ function overallStatus(group, totalRounds) {
   const r = group.current?.result
   if (r === 'failed') return { label: 'Rejected', color: 'bg-red-100 text-red-700' }
   if (r === 'on_hold') return { label: 'On Hold', color: 'bg-yellow-100 text-yellow-700' }
+  if (r === 'no_show') return { label: 'Absent', color: 'bg-orange-100 text-orange-700' }
+  if (r === 'cancelled') return { label: 'Cancelled', color: 'bg-gray-100 text-gray-500' }
   if (r === 'passed' && group.current.round_number >= totalRounds) return { label: 'Completed', color: 'bg-green-100 text-green-700' }
   return { label: 'In Progress', color: 'bg-blue-100 text-blue-700' }
 }
 
-function ProgressDots({ group, roundNames }) {
+// Section 8 — timeline-style progress instead of plain round names, e.g.
+// "✔ Round 1 Completed", "🟡 Round 2 Scheduled", "⚪ Round 3 Pending", with
+// the current round clearly highlighted.
+function ProgressTimeline({ group, roundNames }) {
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex flex-col gap-1">
       {roundNames.map((name, i) => {
         const roundNum = i + 1
         const iv = group.byRound[roundNum]
-        let symbol = '○', color = 'text-gray-300'
-        if (iv?.result === 'passed') { symbol = '✓'; color = 'text-green-500' }
-        else if (iv?.result === 'pending') { symbol = '🟡'; color = 'text-yellow-500' }
-        else if (iv?.result === 'on_hold') { symbol = '🟡'; color = 'text-yellow-500' }
-        else if (iv?.result === 'failed') { symbol = '✕'; color = 'text-red-500' }
+        const isCurrent = roundNum === group.current.round_number
+        let symbol = '⚪', label = 'Pending', color = 'text-gray-400'
+        if (iv?.result === 'passed')      { symbol = '✔'; label = 'Completed'; color = 'text-green-600' }
+        else if (iv?.result === 'pending')   { symbol = '🟡'; label = 'Scheduled'; color = 'text-yellow-600' }
+        else if (iv?.result === 'on_hold')   { symbol = '🟡'; label = 'On Hold'; color = 'text-yellow-600' }
+        else if (iv?.result === 'no_show')   { symbol = '🟡'; label = 'Absent'; color = 'text-orange-600' }
+        else if (iv?.result === 'failed')    { symbol = '✕'; label = 'Failed'; color = 'text-red-600' }
+        else if (iv?.result === 'cancelled') { symbol = '⚪'; label = 'Cancelled'; color = 'text-gray-400' }
         return (
-          <span key={roundNum} className={`text-xs ${color} whitespace-nowrap`} title={name}>
-            {symbol} {name}
+          <span
+            key={roundNum}
+            className={`text-xs whitespace-nowrap px-1.5 py-0.5 rounded ${color} ${isCurrent ? 'font-semibold bg-blue-50' : ''}`}
+          >
+            {symbol} Round {roundNum} {label} — {name}
           </span>
         )
       })}
@@ -93,7 +126,10 @@ export default function HRInterviews() {
   const [nextRoundInfo, setNextRoundInfo] = useState(null)
   const [nextRoundLoading, setNextRoundLoading] = useState(false)
   const [feedbackModal, setFeedbackModal] = useState(null)
-  const [fbForm, setFbForm] = useState({ result: 'passed', feedback: '', rating: '', notify_candidate: true })
+  const [fbForm, setFbForm] = useState(emptyFeedbackForm())
+  const [editModal, setEditModal] = useState(null) // { interview, action: 'edit' | 'reschedule' }
+  const [editForm, setEditForm] = useState(emptyEditForm())
+  const [passPrompt, setPassPrompt] = useState(null) // { candidateId, candidateName, nextRound }
   const [historyGroup, setHistoryGroup] = useState(null)
   const [candidateOptions, setCandidateOptions] = useState([])
 
@@ -168,38 +204,98 @@ export default function HRInterviews() {
     setSaving(false)
   }
 
+  // ── Feedback ──────────────────────────────────────────────────────────────
+
   const openFeedback = (iv) => {
     setFeedbackModal(iv)
-    setFbForm({ result: 'passed', feedback: '', rating: '', notify_candidate: true })
+    setFbForm(emptyFeedbackForm())
+  }
+
+  const handleRatingChange = (field, value) => {
+    setFbForm(f => {
+      const next = { ...f, [field]: value }
+      if (!next.overallTouched) {
+        const vals = RATING_FIELDS.map(([k]) => Number(next[k])).filter(v => !isNaN(v) && next[k] !== '')
+        next.overall_rating = vals.length ? String(Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10) : ''
+      }
+      return next
+    })
   }
 
   const handleFeedback = async (e) => {
     e.preventDefault()
+    if (!fbForm.result) { toast.error('Please select a recommendation'); return }
+    if (!fbForm.feedback.trim()) { toast.error('Feedback comments are required'); return }
+    if (!fbForm.interviewer_name.trim()) { toast.error('Please select an interviewer'); return }
+
     setSaving(true)
     try {
       const res = await hrmService.submitInterviewFeedback(feedbackModal.id, {
-        ...fbForm, rating: fbForm.rating ? Number(fbForm.rating) : undefined,
+        result: fbForm.result,
+        feedback: fbForm.feedback.trim(),
+        interviewer_name: fbForm.interviewer_name.trim(),
+        rating: fbForm.overall_rating ? Number(fbForm.overall_rating) : undefined,
+        technical_rating: fbForm.technical_rating ? Number(fbForm.technical_rating) : undefined,
+        communication_rating: fbForm.communication_rating ? Number(fbForm.communication_rating) : undefined,
+        problem_solving_rating: fbForm.problem_solving_rating ? Number(fbForm.problem_solving_rating) : undefined,
+        behaviour_rating: fbForm.behaviour_rating ? Number(fbForm.behaviour_rating) : undefined,
+        notify_candidate: fbForm.notify_candidate,
       })
       setFeedbackModal(null)
-      const { result, candidate_name, next_round } = res.data
-      if (result === 'passed' && next_round) {
-        toast.success(`${candidate_name} passed — preparing ${next_round.round_name}`)
-        await load()
-        openFormForCandidate(res.data.candidate_id, candidate_name)
-      } else if (result === 'passed') {
-        toast.success(`${candidate_name} completed the final round — moved to Offer stage`)
-        load()
+      const { result, candidate_name, candidate_id, next_round } = res.data
+      await load()
+      if (result === 'passed') {
+        setPassPrompt({ candidateId: candidate_id, candidateName: candidate_name, nextRound: next_round })
       } else if (result === 'failed') {
         toast.success(`${candidate_name} marked Rejected`)
-        load()
+      } else if (result === 'no_show') {
+        toast.success(`${candidate_name} marked Absent — you can reschedule or reject later`)
       } else {
         toast.success('Feedback saved — candidate remains On Hold')
-        load()
       }
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to submit feedback')
     }
     setSaving(false)
+  }
+
+  // ── Edit / Reschedule ────────────────────────────────────────────────────
+
+  const openEdit = (iv, action) => {
+    setEditModal({ interview: iv, action })
+    setEditForm({
+      scheduled_at: iv.scheduled_at ? iv.scheduled_at.slice(0, 16) : '',
+      duration_minutes: iv.duration_minutes,
+      mode: iv.mode,
+      location_or_link: iv.location_or_link || '',
+    })
+  }
+
+  const handleUpdateInterview = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const payload = editModal.action === 'reschedule'
+        ? { scheduled_at: editForm.scheduled_at }
+        : editForm
+      await hrmService.updateInterview(editModal.interview.id, payload)
+      toast.success(editModal.action === 'reschedule' ? 'Interview rescheduled' : 'Interview updated')
+      setEditModal(null); load()
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to update interview')
+    }
+    setSaving(false)
+  }
+
+  const handleCancelInterview = async (iv) => {
+    if (!window.confirm(`Cancel the ${iv.round_name} interview for ${iv.candidate_name}?`)) return
+    try {
+      await hrmService.cancelInterview(iv.id)
+      toast.success('Interview cancelled')
+      load()
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to cancel interview')
+    }
   }
 
   const fmtFull = (dt) => dt ? new Date(dt).toLocaleString('en-IN', { timeZone: getTenantTimezone(), day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—'
@@ -290,32 +386,127 @@ export default function HRInterviews() {
 
       {/* Feedback modal */}
       <ModalPortal isOpen={!!feedbackModal}>
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
-          <form onSubmit={handleFeedback} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
-            <h2 className="text-lg font-semibold">Submit Feedback — {feedbackModal?.round_name}</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+          <form onSubmit={handleFeedback} className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 shadow-xl max-h-[85vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold">Submit Feedback</h2>
+
+            <div className="bg-gray-50 rounded-lg p-3 text-sm border border-gray-200 grid grid-cols-2 gap-2">
+              <p><span className="text-gray-500">Candidate:</span> <span className="font-medium text-gray-900">{feedbackModal?.candidate_name}</span></p>
+              <p><span className="text-gray-500">Job:</span> <span className="font-medium text-gray-900">{feedbackModal?.job_title || '—'}</span></p>
+              <p><span className="text-gray-500">Current Round:</span> <span className="font-medium text-gray-900">Round {feedbackModal?.round_number} — {feedbackModal?.round_name}</span></p>
+              <p><span className="text-gray-500">Date & Time:</span> <span className="font-medium text-gray-900">{fmtFull(feedbackModal?.scheduled_at)}</span></p>
+            </div>
+
             <div>
-              <label className="text-sm font-medium text-gray-700">Result</label>
-              <select className="input w-full mt-1" value={fbForm.result} onChange={e => setFbForm(f => ({ ...f, result: e.target.value }))}>
-                <option value="passed">Passed</option>
-                <option value="failed">Failed</option>
+              <label className="text-sm font-medium text-gray-700">Interviewer *</label>
+              <input className="input w-full mt-1" value={fbForm.interviewer_name} onChange={e => setFbForm(f => ({ ...f, interviewer_name: e.target.value }))} required />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {RATING_FIELDS.map(([key, label]) => (
+                <div key={key}>
+                  <label className="text-sm font-medium text-gray-700">{label} (1-5)</label>
+                  <input type="number" min="1" max="5" step="0.5" className="input w-full mt-1"
+                    value={fbForm[key]} onChange={e => handleRatingChange(key, e.target.value)} />
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">Overall Rating (auto-averaged, editable)</label>
+              <input type="number" min="1" max="5" step="0.1" className="input w-full mt-1"
+                value={fbForm.overall_rating}
+                onChange={e => setFbForm(f => ({ ...f, overall_rating: e.target.value, overallTouched: true }))} />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">Feedback Comments *</label>
+              <textarea className="input w-full mt-1" rows={3} value={fbForm.feedback} onChange={e => setFbForm(f => ({ ...f, feedback: e.target.value }))} required />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">Recommendation *</label>
+              <select className="input w-full mt-1" value={fbForm.result} onChange={e => setFbForm(f => ({ ...f, result: e.target.value }))} required>
+                <option value="passed">Pass</option>
+                <option value="failed">Fail</option>
                 <option value="on_hold">On Hold</option>
+                <option value="no_show">Absent</option>
               </select>
             </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">Rating (0-5)</label>
-              <input type="number" step="0.5" min="0" max="5" className="input w-full mt-1" value={fbForm.rating} onChange={e => setFbForm(f => ({ ...f, rating: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">Remarks</label>
-              <textarea className="input w-full mt-1" rows={3} value={fbForm.feedback} onChange={e => setFbForm(f => ({ ...f, feedback: e.target.value }))} />
-            </div>
+
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" checked={fbForm.notify_candidate} onChange={e => setFbForm(f => ({ ...f, notify_candidate: e.target.checked }))} />
               Notify Candidate
             </label>
+
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setFeedbackModal(null)} className="btn-secondary">Cancel</button>
-              <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Saving…' : 'Submit'}</button>
+              <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Saving…' : 'Save Feedback'}</button>
+            </div>
+          </form>
+        </div>
+      </ModalPortal>
+
+      {/* Pass confirmation — offer to schedule next round now (section 3) */}
+      <ModalPortal isOpen={!!passPrompt}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl text-center">
+            <h2 className="text-lg font-semibold text-gray-900">Candidate passed this round.</h2>
+            {passPrompt?.nextRound ? (
+              <>
+                <p className="text-sm text-gray-500 mt-2">Would you like to schedule the next round?</p>
+                <div className="flex justify-center gap-3 mt-5">
+                  <button className="btn-secondary" onClick={() => setPassPrompt(null)}>Later</button>
+                  <button className="btn-primary" onClick={() => {
+                    const p = passPrompt; setPassPrompt(null)
+                    openFormForCandidate(p.candidateId, p.candidateName)
+                  }}>Schedule Now</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-500 mt-2">This was the final round — the candidate has moved to the Offer stage.</p>
+                <div className="flex justify-center mt-5">
+                  <button className="btn-primary" onClick={() => setPassPrompt(null)}>OK</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </ModalPortal>
+
+      {/* Edit / Reschedule modal */}
+      <ModalPortal isOpen={!!editModal}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+          <form onSubmit={handleUpdateInterview} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
+            <h2 className="text-lg font-semibold">{editModal?.action === 'reschedule' ? 'Reschedule Interview' : 'Edit Interview'}</h2>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Scheduled At *</label>
+              <input type="datetime-local" className="input w-full mt-1" value={editForm.scheduled_at} onChange={e => setEditForm(f => ({ ...f, scheduled_at: e.target.value }))} required />
+            </div>
+            {editModal?.action === 'edit' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Mode</label>
+                  <select className="input w-full mt-1" value={editForm.mode} onChange={e => setEditForm(f => ({ ...f, mode: e.target.value }))}>
+                    <option value="video">Video</option>
+                    <option value="in_person">In Person</option>
+                    <option value="phone">Phone</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Duration (min)</label>
+                  <input type="number" className="input w-full mt-1" value={editForm.duration_minutes} onChange={e => setEditForm(f => ({ ...f, duration_minutes: Number(e.target.value) }))} />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-sm font-medium text-gray-700">Meeting Link / Location</label>
+                  <input className="input w-full mt-1" value={editForm.location_or_link} onChange={e => setEditForm(f => ({ ...f, location_or_link: e.target.value }))} />
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setEditModal(null)} className="btn-secondary">Cancel</button>
+              <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Saving…' : 'Save'}</button>
             </div>
           </form>
         </div>
@@ -334,20 +525,24 @@ export default function HRInterviews() {
                 <div key={iv.id} className="border border-gray-200 rounded-lg p-3 text-sm">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-medium text-gray-900">Round {iv.round_number} — {iv.round_name}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${RESULT_COLORS[iv.result] || ''}`}>{iv.result?.replace('_', ' ')}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${RESULT_COLORS[iv.result] || ''}`}>{RESULT_LABELS[iv.result] || iv.result}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-500 text-xs">
-                    <p>Scheduled By: <span className="text-gray-700">{iv.scheduled_by_name || '—'}</span></p>
+                    <p>Interviewer: <span className="text-gray-700">{iv.interviewer_name || '—'}</span></p>
                     <p>Scheduled Time: <span className="text-gray-700">{fmtFull(iv.scheduled_at)}</span></p>
                     <p>Completed Time: <span className="text-gray-700">{fmtFull(iv.completed_at)}</span></p>
                     <p>Mail Sent: <span className="text-gray-700">{iv.invitation_email_sent ? 'Invitation' : ''}{iv.invitation_email_sent && iv.result_email_sent ? ', ' : ''}{iv.result_email_sent ? 'Result' : ''}{!iv.invitation_email_sent && !iv.result_email_sent ? 'None' : ''}</span></p>
                   </div>
-                  {(iv.feedback || iv.rating != null) && (
-                    <p className="mt-2 text-xs text-gray-600">
-                      {iv.rating != null && <span className="font-medium">Rating: {iv.rating}/5. </span>}
-                      {iv.feedback}
-                    </p>
+                  {(iv.technical_rating != null || iv.communication_rating != null || iv.problem_solving_rating != null || iv.behaviour_rating != null || iv.rating != null) && (
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-gray-500 text-xs mt-1">
+                      {iv.technical_rating != null && <p>Technical: <span className="text-gray-700">{iv.technical_rating}/5</span></p>}
+                      {iv.communication_rating != null && <p>Communication: <span className="text-gray-700">{iv.communication_rating}/5</span></p>}
+                      {iv.problem_solving_rating != null && <p>Problem Solving: <span className="text-gray-700">{iv.problem_solving_rating}/5</span></p>}
+                      {iv.behaviour_rating != null && <p>Behaviour: <span className="text-gray-700">{iv.behaviour_rating}/5</span></p>}
+                      {iv.rating != null && <p className="font-medium">Overall: <span className="text-gray-700">{iv.rating}/5</span></p>}
+                    </div>
                   )}
+                  {iv.feedback && <p className="mt-2 text-xs text-gray-600">{iv.feedback}</p>}
                 </div>
               ))}
             </div>
@@ -379,27 +574,33 @@ export default function HRInterviews() {
               const totalRounds = job?.interview_rounds?.length || g.all.length
               const status = overallStatus(g, totalRounds)
               const roundNames = roundNamesFor(g)
+              const isPending = g.current.result === 'pending'
               return (
                 <tr key={g.candidate_id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-900">{g.candidate_name}</td>
-                  <td className="px-4 py-3 text-gray-600">Round {g.current.round_number} — {g.current.round_name}</td>
-                  <td className="px-4 py-3"><ProgressDots group={g} roundNames={roundNames} /></td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 font-medium text-gray-900 align-top">{g.candidate_name}</td>
+                  <td className="px-4 py-3 text-gray-600 align-top">Round {g.current.round_number} — {g.current.round_name}</td>
+                  <td className="px-4 py-3 align-top"><ProgressTimeline group={g} roundNames={roundNames} /></td>
+                  <td className="px-4 py-3 align-top">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${status.color}`}>{status.label}</span>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      {g.current.result === 'pending' && (
-                        <button onClick={() => openFeedback(g.current)}
-                          className="px-3 py-1 bg-blue-50 text-blue-600 rounded text-xs hover:bg-blue-100">
-                          Feedback
-                        </button>
+                  <td className="px-4 py-3 align-top">
+                    <ActionMenu>
+                      {(close) => (
+                        <>
+                          <ActionMenuItem label="View History" icon={History} onClick={() => { setHistoryGroup(g); close() }} />
+                          {isPending && (
+                            <>
+                              <ActionMenuItem divider />
+                              <ActionMenuItem label="Submit Feedback" onClick={() => { openFeedback(g.current); close() }} />
+                              <ActionMenuItem label="Edit Interview" onClick={() => { openEdit(g.current, 'edit'); close() }} />
+                              <ActionMenuItem label="Reschedule Interview" onClick={() => { openEdit(g.current, 'reschedule'); close() }} />
+                              <ActionMenuItem divider />
+                              <ActionMenuItem label="Cancel Interview" danger onClick={() => { handleCancelInterview(g.current); close() }} />
+                            </>
+                          )}
+                        </>
                       )}
-                      <button onClick={() => setHistoryGroup(g)} title="View History"
-                        className="p-1.5 hover:bg-gray-100 rounded text-gray-500">
-                        <History className="w-4 h-4" />
-                      </button>
-                    </div>
+                    </ActionMenu>
                   </td>
                 </tr>
               )

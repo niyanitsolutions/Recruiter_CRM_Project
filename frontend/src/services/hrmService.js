@@ -95,6 +95,8 @@ const getNextRound = (candidateId) => api.get(`${BASE}/hiring/candidates/${candi
 const createInterview = (data) => api.post(`${BASE}/hiring/interviews`, data)
 const listInterviews = (params) => api.get(`${BASE}/hiring/interviews`, { params })
 const submitInterviewFeedback = (id, data) => api.post(`${BASE}/hiring/interviews/${id}/feedback`, data)
+const updateInterview = (id, data) => api.put(`${BASE}/hiring/interviews/${id}`, data)
+const cancelInterview = (id) => api.post(`${BASE}/hiring/interviews/${id}/cancel`)
 
 // ── Hiring — Offers ──────────────────────────────────────────────────────────
 const createOffer = (data) => api.post(`${BASE}/hiring/offers`, data)
@@ -289,7 +291,7 @@ const hrmService = {
   markAnnouncementRead, getAnnouncementReadStats,
   createJob, listJobs, getJob, updateJob, deleteJob,
   createHiringCandidate, listHiringCandidates, getHiringCandidate, updateHiringCandidate,
-  getNextRound, createInterview, listInterviews, submitInterviewFeedback,
+  getNextRound, createInterview, listInterviews, submitInterviewFeedback, updateInterview, cancelInterview,
   createOffer, listOffers, getOffer, respondOffer, generateOfferLetter,
   createOnboarding, listOnboardings, getOnboarding, updateOnboarding, completeOnboarding,
   getJobPublicLink, sendApplicationInvitation, listInvitations,

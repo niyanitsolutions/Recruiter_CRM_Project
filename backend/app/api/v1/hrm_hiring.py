@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions, require_any_permission
 from app.models.company.hrm_job import HRMJobCreate, HRMJobUpdate
 from app.models.company.hrm_candidate import HRMCandidateCreate, HRMCandidateUpdate
-from app.models.company.hrm_interview import HRMInterviewCreate, HRMInterviewFeedback
+from app.models.company.hrm_interview import HRMInterviewCreate, HRMInterviewFeedback, HRMInterviewUpdate
 from app.models.company.hrm_offer import HRMOfferCreate, HRMOfferRespond
 from app.models.company.hrm_onboarding import HRMOnboardingCreate, HRMOnboardingUpdate
 from app.models.company.hrm_candidate_invitation import HRMCandidateInvitationCreate
@@ -306,6 +306,35 @@ async def submit_feedback(
                         company_name=cu.get("company_name", ""),
                         company_id=cu.get("company_id", ""),
                     )
+    return result
+
+
+@router.put("/interviews/{interview_id}")
+async def update_interview(
+    interview_id: str,
+    data: HRMInterviewUpdate,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
+):
+    """Edit Interview / Reschedule Interview — same endpoint, the frontend
+    just shows a different subset of fields for each action."""
+    result = await HRMHiringService(db).update_interview(interview_id, cu["company_id"], data.model_dump(exclude_none=True))
+    if not result:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    return result
+
+
+@router.post("/interviews/{interview_id}/cancel")
+async def cancel_interview(
+    interview_id: str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
+):
+    result = await HRMHiringService(db).cancel_interview(interview_id, cu["company_id"])
+    if not result:
+        raise HTTPException(status_code=404, detail="Interview not found")
     return result
 
 

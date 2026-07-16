@@ -98,7 +98,6 @@ function OverviewTab({ onSwitchTab }) {
           { tab: 'jobs',            icon: Briefcase,    label: 'Manage Jobs' },
           { tab: 'candidates',      icon: Users,        label: 'Manage Applicants' },
           { tab: 'interviews',      icon: Calendar,     label: 'Manage Interviews' },
-          { tab: 'offers',          icon: FileText,     label: 'Manage Offers' },
           { tab: 'onboarding',      icon: UserCheck,    label: 'Manage Onboarding' },
         ].map(item => (
           <button

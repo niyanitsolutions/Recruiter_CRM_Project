@@ -456,15 +456,40 @@ class HRMHiringService:
         return {"items": items, "total": total, "page": page, "page_size": page_size}
 
     async def submit_feedback(self, interview_id: str, company_id: str, data: dict) -> Optional[dict]:
+        from fastapi import HTTPException
         now = datetime.now(timezone.utc)
         interview = await self.interviews.find_one({"_id": interview_id, "company_id": company_id})
         if not interview:
             return None
+        if interview.get("result") != "pending":
+            raise HTTPException(
+                status_code=400,
+                detail="Feedback has already been submitted for this interview — history cannot be overwritten.",
+            )
+
+        # Validation (section 12): recommendation is already required by the
+        # pydantic schema (HRMInterviewFeedback.result has no default); guard
+        # comments + interviewer here too.
+        if not (data.get("feedback") or "").strip():
+            raise HTTPException(status_code=422, detail="Feedback comments are required.")
+        if not (data.get("interviewer_name") or "").strip():
+            raise HTTPException(status_code=422, detail="Please select an interviewer.")
 
         notify_candidate = data.get("notify_candidate", True)
         result = data.get("result")
 
         upd = {k: v for k, v in data.items() if k != "notify_candidate"}
+        # Overall Rating: use what was sent, or fall back to the average of
+        # the 4 sub-ratings if the caller omitted it (defense in depth — the
+        # frontend already computes/allows editing this before submit).
+        if upd.get("rating") is None:
+            sub_ratings = [
+                upd.get(k) for k in
+                ("technical_rating", "communication_rating", "problem_solving_rating", "behaviour_rating")
+                if upd.get(k) is not None
+            ]
+            if sub_ratings:
+                upd["rating"] = round(sum(sub_ratings) / len(sub_ratings), 1)
         upd["completed_at"] = now
         upd["updated_at"] = now
         upd["result_email_sent"] = bool(notify_candidate)
@@ -488,6 +513,44 @@ class HRMHiringService:
         if result_doc is not None:
             result_doc["next_round"] = next_round_info
         return result_doc
+
+    async def update_interview(self, interview_id: str, company_id: str, data: dict) -> Optional[dict]:
+        """Edit / Reschedule Interview — only while feedback hasn't been given
+        yet. Candidate/round/job are fixed once scheduled; only the logistics
+        (when/how) can change."""
+        from fastapi import HTTPException
+        interview = await self.interviews.find_one({"_id": interview_id, "company_id": company_id})
+        if not interview:
+            return None
+        if interview.get("result") != "pending":
+            raise HTTPException(
+                status_code=400,
+                detail="Only a pending interview can be edited or rescheduled.",
+            )
+        upd = {k: v for k, v in data.items() if v is not None}
+        upd["updated_at"] = datetime.now(timezone.utc)
+        await self.interviews.update_one({"_id": interview_id, "company_id": company_id}, {"$set": upd})
+        doc = await self.interviews.find_one({"_id": interview_id, "company_id": company_id})
+        return self._ser(doc) if doc else None
+
+    async def cancel_interview(self, interview_id: str, company_id: str) -> Optional[dict]:
+        """Cancel Interview — marks it cancelled without deleting the record
+        (section 7/10: never delete history). Does not touch candidate stage;
+        HR can schedule a fresh interview for the same round afterward since
+        a cancelled round was never counted as passed."""
+        from fastapi import HTTPException
+        interview = await self.interviews.find_one({"_id": interview_id, "company_id": company_id})
+        if not interview:
+            return None
+        if interview.get("result") != "pending":
+            raise HTTPException(status_code=400, detail="Only a pending interview can be cancelled.")
+        now = datetime.now(timezone.utc)
+        await self.interviews.update_one(
+            {"_id": interview_id, "company_id": company_id},
+            {"$set": {"result": "cancelled", "completed_at": now, "updated_at": now}},
+        )
+        doc = await self.interviews.find_one({"_id": interview_id, "company_id": company_id})
+        return self._ser(doc) if doc else None
 
     # ── OFFERS ────────────────────────────────────────────────────────────────
 

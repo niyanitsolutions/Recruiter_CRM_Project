@@ -17,9 +17,13 @@ class InterviewResult(str, Enum):
     PASSED = "passed"
     FAILED = "failed"
     ON_HOLD = "on_hold"
-    # Kept for backward compatibility with existing records — no longer
-    # offered as a choice in the feedback UI (Passed / Failed / On Hold only).
+    # "Absent" in the feedback UI — candidate didn't show up. Distinct from
+    # Failed: does not reject the candidate, HR can reschedule or reject later.
     NO_SHOW = "no_show"
+    # Interview was scheduled but HR cancelled it before it happened (Cancel
+    # Interview action) — does not count as a completed round either way.
+    CANCELLED = "cancelled"
+    # Kept for backward compatibility with existing records.
     RESCHEDULED = "rescheduled"
 
 
@@ -44,7 +48,12 @@ class HRMInterviewModel(BaseModel):
 
     result: InterviewResult = InterviewResult.PENDING
     feedback: Optional[str] = None
-    rating: Optional[float] = None   # 0-5
+    interviewer_name: Optional[str] = None
+    rating: Optional[float] = None   # 0-5 — "Overall Rating" (auto-averaged from the 4 below, HR-editable)
+    technical_rating: Optional[float] = None
+    communication_rating: Optional[float] = None
+    problem_solving_rating: Optional[float] = None
+    behaviour_rating: Optional[float] = None
     strengths: Optional[str] = None
     weaknesses: Optional[str] = None
     recommended_for_next: Optional[bool] = None
@@ -84,8 +93,22 @@ class HRMInterviewCreate(BaseModel):
 class HRMInterviewFeedback(BaseModel):
     result: InterviewResult
     feedback: Optional[str] = None
-    rating: Optional[float] = None
+    interviewer_name: Optional[str] = None
+    rating: Optional[float] = None   # Overall — auto-computed client-side if omitted, but accepted as sent
+    technical_rating: Optional[float] = None
+    communication_rating: Optional[float] = None
+    problem_solving_rating: Optional[float] = None
+    behaviour_rating: Optional[float] = None
     strengths: Optional[str] = None
     weaknesses: Optional[str] = None
     recommended_for_next: Optional[bool] = None
     notify_candidate: bool = True
+
+
+class HRMInterviewUpdate(BaseModel):
+    """Edit / Reschedule Interview — only allowed while result is still
+    'pending' (see hrm_hiring_service.update_interview)."""
+    scheduled_at: Optional[datetime] = None
+    duration_minutes: Optional[int] = None
+    mode: Optional[InterviewMode] = None
+    location_or_link: Optional[str] = None
