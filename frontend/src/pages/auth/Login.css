@@ -41,7 +41,7 @@
   align-items: center;
 }
 .hf-auth-header-logo img {
-  width: 160px;
+  width: 215px;
   height: auto;
   object-fit: contain;
   display: block;
@@ -97,15 +97,14 @@
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  filter: blur(2px) brightness(1.02);
-  transform: scale(1.02);
+  filter: brightness(1.02);
 }
 
 .hf-login-overlay {
   position: fixed;
   inset: 0;
   z-index: 1;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* ── Card ─────────────────────────────────────────────────────────────── */
@@ -533,7 +532,7 @@
 /* Tablet — header stays horizontal, just tighter and wrap-safe */
 @media (max-width: 900px) {
   .hf-auth-header { gap: 14px; }
-  .hf-auth-header-logo img { width: 140px; }
+  .hf-auth-header-logo img { width: 190px; }
   .hf-header-buttons { flex-wrap: wrap; justify-content: flex-end; }
 }
 
@@ -556,5 +555,5 @@
 
 @media (max-width: 400px) {
   .hf-login-right { padding: 28px 18px; }
-  .hf-auth-header-logo img { width: 120px; }
+  .hf-auth-header-logo img { width: 160px; }
 }

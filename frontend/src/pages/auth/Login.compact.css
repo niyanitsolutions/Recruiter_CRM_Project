@@ -7,11 +7,6 @@
    untouched — the size overrides below only apply above 780px.
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* Background blur — slightly reduced, applies at all sizes (not a layout change) */
-.hf-login--compact .hf-login-bg {
-  filter: blur(1.5px) brightness(1.02);
-}
-
 @media (min-width: 781px) {
   .hf-login--compact .hf-login-card {
     max-width: 820px;
