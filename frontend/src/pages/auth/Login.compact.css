@@ -42,12 +42,9 @@
     margin-top: 17px;
   }
 
-  /* Right form panel — spacing scaled, logo size untouched */
+  /* Right form panel — spacing scaled */
   .hf-login--compact .hf-login-right {
     padding: 38px 42px;
-  }
-  .hf-login--compact .hf-logo-wrap {
-    margin-bottom: 16px;
   }
   .hf-login--compact .hf-profile-divider {
     margin: 5px 0 17px;

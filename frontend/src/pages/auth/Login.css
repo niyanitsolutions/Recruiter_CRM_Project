@@ -8,12 +8,86 @@
   position: relative;
   min-height: 100vh;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   padding: 32px 16px;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   overflow-x: hidden;
 }
+
+/* Centers the card in the space below the header */
+.hf-login-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+/* ── Header (shared by Login + Forgot Password) ──────────────────────── */
+
+.hf-auth-header {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 4px 4px 24px;
+}
+
+.hf-auth-header-logo {
+  display: flex;
+  align-items: center;
+}
+.hf-auth-header-logo img {
+  width: 160px;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.hf-auth-header-cta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hf-auth-header-text {
+  color: rgba(31, 41, 55, 0.72);
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.hf-header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hf-header-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border: 1.5px solid #1677FF;
+  border-radius: 11px;
+  background: #FFFFFF;
+  color: #1677FF;
+  font-weight: 600;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.18s, transform 0.18s, box-shadow 0.18s;
+}
+.hf-header-btn:hover {
+  background: #F5F9FF;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(22, 119, 255, 0.16);
+}
+.hf-header-btn:active { transform: translateY(0); }
 
 .hf-login-bg {
   position: fixed;
@@ -163,17 +237,6 @@
   flex-direction: column;
   justify-content: center;
   min-width: 0;
-}
-
-.hf-logo-wrap {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 18px;
-}
-.hf-logo-wrap img {
-  width: 180px;
-  height: auto;
-  object-fit: contain;
 }
 
 .hf-profile-divider {
@@ -467,14 +530,31 @@
 
 /* ── Responsive ───────────────────────────────────────────────────────── */
 
+/* Tablet — header stays horizontal, just tighter and wrap-safe */
+@media (max-width: 900px) {
+  .hf-auth-header { gap: 14px; }
+  .hf-auth-header-logo img { width: 140px; }
+  .hf-header-buttons { flex-wrap: wrap; justify-content: flex-end; }
+}
+
 @media (max-width: 780px) {
   .hf-login-card { max-width: 460px; }
   .hf-login-left { display: none; }
   .hf-login-right { padding: 36px 28px; }
-  .hf-logo-wrap img { width: 160px; }
+
+  /* Mobile — header stacks: logo first, CTA section below */
+  .hf-auth-header {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 12px;
+    padding: 4px 4px 20px;
+  }
+  .hf-auth-header-cta { flex-direction: column; gap: 10px; }
+  .hf-header-buttons { justify-content: center; }
 }
 
 @media (max-width: 400px) {
   .hf-login-right { padding: 28px 18px; }
-  .hf-logo-wrap img { width: 140px; }
+  .hf-auth-header-logo img { width: 120px; }
 }

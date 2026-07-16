@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import authService from '../../services/authService'
 import './Login.css'
+import AuthHeader from './AuthHeader'
 
 // Steps:
 //   "email"           → enter email
@@ -67,27 +68,28 @@ function AuthShell({ children }) {
       <div className="hf-login-bg" />
       <div className="hf-login-overlay" />
 
-      <div className="hf-login-card">
-        {/* Left decorative branding panel */}
-        <div className="hf-login-left">
-          <div className="hf-dots hf-dots-tl" />
-          <div className="hf-blob hf-blob-1" />
-          <div className="hf-blob hf-blob-2" />
-          <div className="hf-badge-circle">
-            <img src="/Hire_Flow_icon-removebg.png" alt="" />
-          </div>
-          <h1 className="hf-left-title">Reset your password</h1>
-          <p className="hf-left-desc">We'll help you get back into your account securely.</p>
-          <div className="hf-accent-line" />
-          <div className="hf-dots hf-dots-bl" />
-        </div>
+      <AuthHeader />
 
-        {/* Right form panel */}
-        <div className="hf-login-right">
-          <div className="hf-logo-wrap">
-            <img src="/Hire_Flow_Logo.png" alt="HireFlow" loading="eager" />
+      <div className="hf-login-main">
+        <div className="hf-login-card">
+          {/* Left decorative branding panel */}
+          <div className="hf-login-left">
+            <div className="hf-dots hf-dots-tl" />
+            <div className="hf-blob hf-blob-1" />
+            <div className="hf-blob hf-blob-2" />
+            <div className="hf-badge-circle">
+              <img src="/Hire_Flow_icon-removebg.png" alt="" />
+            </div>
+            <h1 className="hf-left-title">Reset your password</h1>
+            <p className="hf-left-desc">We'll help you get back into your account securely.</p>
+            <div className="hf-accent-line" />
+            <div className="hf-dots hf-dots-bl" />
           </div>
-          {children}
+
+          {/* Right form panel */}
+          <div className="hf-login-right">
+            {children}
+          </div>
         </div>
       </div>
 

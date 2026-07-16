@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import {
   Mail, Lock, ArrowRight, AlertCircle, Calendar, XCircle,
   RefreshCw, CheckCircle, UserX, Building2, Monitor, Globe,
-  Clock, Shield, Smartphone, Eye, EyeOff, Rocket, Crown, User,
+  Clock, Shield, Smartphone, Eye, EyeOff, User,
 } from 'lucide-react'
 import {
   login, loginWithTenant, clearError, clearTenantSelection,
@@ -24,6 +24,7 @@ import {
 } from '../../utils/token'
 import './Login.css'
 import './Login.compact.css'
+import AuthHeader from './AuthHeader'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -441,17 +442,6 @@ function Field({ label, htmlFor, icon, error, children }) {
   )
 }
 
-// ── Divider ───────────────────────────────────────────────────────────────────
-function Divider({ label = 'OR' }) {
-  return (
-    <div className="hf-divider">
-      <div className="hf-line" />
-      <span>{label}</span>
-      <div className="hf-line" />
-    </div>
-  )
-}
-
 // ── Screen heading helper ─────────────────────────────────────────────────────
 function ScreenHead({ icon, iconBg, iconBorder, title, subtitle }) {
   return (
@@ -472,26 +462,27 @@ function LoginShell({ children }) {
       <div className="hf-login-bg" />
       <div className="hf-login-overlay" />
 
-      <div className="hf-login-card">
-        {/* Left decorative branding panel */}
-        <div className="hf-login-left">
-          <div className="hf-dots hf-dots-tl" />
-          <div className="hf-blob hf-blob-1" />
-          <div className="hf-blob hf-blob-2" />
-          <div className="hf-badge-circle">
-            <img src="/Hire_Flow_icon-removebg.png" alt="" />
-          </div>
-          <LeftPanelText />
-          <div className="hf-accent-line" />
-          <div className="hf-dots hf-dots-bl" />
-        </div>
+      <AuthHeader />
 
-        {/* Right form panel */}
-        <div className="hf-login-right">
-          <div className="hf-logo-wrap">
-            <img src="/Hire_Flow_Logo.png" alt="HireFlow" loading="eager" />
+      <div className="hf-login-main">
+        <div className="hf-login-card">
+          {/* Left decorative branding panel */}
+          <div className="hf-login-left">
+            <div className="hf-dots hf-dots-tl" />
+            <div className="hf-blob hf-blob-1" />
+            <div className="hf-blob hf-blob-2" />
+            <div className="hf-badge-circle">
+              <img src="/Hire_Flow_icon-removebg.png" alt="" />
+            </div>
+            <LeftPanelText />
+            <div className="hf-accent-line" />
+            <div className="hf-dots hf-dots-bl" />
           </div>
-          {children}
+
+          {/* Right form panel */}
+          <div className="hf-login-right">
+            {children}
+          </div>
         </div>
       </div>
 
@@ -937,21 +928,6 @@ const Login = () => {
           <div className="hf-profile-circle"><User size={16} /></div>
           <div className="hf-line" />
         </div>
-
-        {/* Secondary CTAs */}
-        <Link to="/register?mode=trial" style={{ textDecoration: 'none', display: 'block' }}>
-          <button className="hf-btn-outline">
-            <Rocket size={15} /> Start Free Trial
-          </button>
-        </Link>
-        <Link to="/register?mode=subscription" style={{ textDecoration: 'none', display: 'block' }}>
-          <button className="hf-btn-outline">
-            <Crown size={15} /> Buy Subscription
-          </button>
-        </Link>
-
-        {/* OR divider */}
-        <Divider label="OR" />
 
         {/* Form */}
         <form onSubmit={handleSubmit(onSubmit)}>
