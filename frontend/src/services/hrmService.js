@@ -91,6 +91,7 @@ const getHiringCandidate = (id) => api.get(`${BASE}/hiring/candidates/${id}`)
 const updateHiringCandidate = (id, data) => api.put(`${BASE}/hiring/candidates/${id}`, data)
 
 // ── Hiring — Interviews ────────────────────────────────────────────────────
+const getNextRound = (candidateId) => api.get(`${BASE}/hiring/candidates/${candidateId}/next-round`)
 const createInterview = (data) => api.post(`${BASE}/hiring/interviews`, data)
 const listInterviews = (params) => api.get(`${BASE}/hiring/interviews`, { params })
 const submitInterviewFeedback = (id, data) => api.post(`${BASE}/hiring/interviews/${id}/feedback`, data)
@@ -100,6 +101,7 @@ const createOffer = (data) => api.post(`${BASE}/hiring/offers`, data)
 const listOffers = (params) => api.get(`${BASE}/hiring/offers`, { params })
 const getOffer = (id) => api.get(`${BASE}/hiring/offers/${id}`)
 const respondOffer = (id, data) => api.post(`${BASE}/hiring/offers/${id}/respond`, data)
+const generateOfferLetter = (id, data) => api.post(`${BASE}/hiring/offers/${id}/generate-letter`, data)
 
 // ── Hiring — Onboarding ────────────────────────────────────────────────────
 const createOnboarding = (data) => api.post(`${BASE}/hiring/onboarding`, data)
@@ -287,8 +289,8 @@ const hrmService = {
   markAnnouncementRead, getAnnouncementReadStats,
   createJob, listJobs, getJob, updateJob, deleteJob,
   createHiringCandidate, listHiringCandidates, getHiringCandidate, updateHiringCandidate,
-  createInterview, listInterviews, submitInterviewFeedback,
-  createOffer, listOffers, getOffer, respondOffer,
+  getNextRound, createInterview, listInterviews, submitInterviewFeedback,
+  createOffer, listOffers, getOffer, respondOffer, generateOfferLetter,
   createOnboarding, listOnboardings, getOnboarding, updateOnboarding, completeOnboarding,
   getJobPublicLink, sendApplicationInvitation, listInvitations,
   uploadDocument, multiUploadDocuments, getDocuments, getMyDocuments, getAllDocuments,

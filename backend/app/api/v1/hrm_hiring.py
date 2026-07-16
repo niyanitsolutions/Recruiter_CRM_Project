@@ -208,14 +208,49 @@ async def update_candidate(
 
 # ── INTERVIEWS ────────────────────────────────────────────────────────────────
 
+@router.get("/candidates/{cand_id}/next-round")
+async def get_next_round(
+    cand_id: str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_permissions(["hrm:hiring:view"])),
+):
+    """Read-only preview for the Schedule Interview screen's auto-populated
+    Current Round / Next Round / Stage fields — HR never picks these manually."""
+    return await HRMHiringService(db).get_next_round(cand_id, cu["company_id"])
+
+
 @router.post("/interviews", status_code=201)
 async def create_interview(
     data: HRMInterviewCreate,
+    background_tasks: BackgroundTasks,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
-    return await HRMHiringService(db).create_interview(cu["company_id"], data.model_dump(exclude_none=True), cu["id"])
+    result = await HRMHiringService(db).create_interview(
+        cu["company_id"], data.model_dump(exclude_none=True), cu["id"], cu.get("full_name", "HR Team")
+    )
+    if data.send_invitation_email:
+        from app.core.config import settings as _settings
+        if _settings.EMAIL_ENABLED:
+            candidate = await HRMHiringService(db).get_candidate(data.candidate_id, cu["company_id"])
+            if candidate and candidate.get("email"):
+                from app.services.email_service import send_hrm_interview_invitation_email
+                background_tasks.add_task(
+                    send_hrm_interview_invitation_email,
+                    to_email=candidate["email"],
+                    candidate_name=result.get("candidate_name", ""),
+                    job_title=result.get("job_title") or "",
+                    round_name=result.get("round_name", ""),
+                    scheduled_at=result.get("scheduled_at"),
+                    duration_minutes=result.get("duration_minutes", 60),
+                    mode=result.get("mode", ""),
+                    location_or_link=result.get("location_or_link"),
+                    company_name=cu.get("company_name", ""),
+                    company_id=cu.get("company_id", ""),
+                )
+    return result
 
 
 @router.get("/interviews")
@@ -234,13 +269,43 @@ async def list_interviews(
 async def submit_feedback(
     interview_id: str,
     data: HRMInterviewFeedback,
+    background_tasks: BackgroundTasks,
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
 ):
-    result = await HRMHiringService(db).submit_feedback(interview_id, cu["company_id"], data.model_dump(exclude_none=True))
+    svc = HRMHiringService(db)
+    result = await svc.submit_feedback(interview_id, cu["company_id"], data.model_dump(exclude_none=True))
     if not result:
         raise HTTPException(status_code=404, detail="Interview not found")
+
+    if data.notify_candidate and data.result in ("passed", "failed"):
+        from app.core.config import settings as _settings
+        if _settings.EMAIL_ENABLED:
+            candidate = await svc.get_candidate(result["candidate_id"], cu["company_id"])
+            if candidate and candidate.get("email"):
+                if data.result == "passed":
+                    from app.services.email_service import send_hrm_interview_passed_email
+                    background_tasks.add_task(
+                        send_hrm_interview_passed_email,
+                        to_email=candidate["email"],
+                        candidate_name=result.get("candidate_name", ""),
+                        job_title=result.get("job_title") or "",
+                        round_name=result.get("round_name", ""),
+                        has_next_round=bool(result.get("next_round")),
+                        company_name=cu.get("company_name", ""),
+                        company_id=cu.get("company_id", ""),
+                    )
+                else:
+                    from app.services.email_service import send_hrm_interview_rejected_email
+                    background_tasks.add_task(
+                        send_hrm_interview_rejected_email,
+                        to_email=candidate["email"],
+                        candidate_name=result.get("candidate_name", ""),
+                        job_title=result.get("job_title") or "",
+                        company_name=cu.get("company_name", ""),
+                        company_id=cu.get("company_id", ""),
+                    )
     return result
 
 
@@ -294,6 +359,28 @@ async def respond_offer(
     if not result:
         raise HTTPException(status_code=404, detail="Offer not found")
     return result
+
+
+class GenerateOfferLetterRequest(BaseModel):
+    template_id: str
+    field_values: Optional[dict] = None
+
+
+@router.post("/offers/{offer_id}/generate-letter")
+async def generate_offer_letter(
+    offer_id: str,
+    body: GenerateOfferLetterRequest,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
+):
+    """Generates the offer letter via Document Center's own existing template
+    engine (called as a library function — Document Center itself is
+    untouched) and attaches the resulting PDF to this offer."""
+    return await HRMHiringService(db).generate_offer_letter_via_doc_center(
+        offer_id, cu["company_id"], body.template_id, cu["id"], cu.get("full_name", "HR Team"),
+        extra_field_values=body.field_values,
+    )
 
 
 # ── ONBOARDING ────────────────────────────────────────────────────────────────

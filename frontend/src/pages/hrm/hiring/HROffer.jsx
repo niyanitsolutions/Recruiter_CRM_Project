@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { Plus, FileText, CheckCircle, XCircle } from 'lucide-react'
+import { Plus, FileText, CheckCircle, XCircle, FileSignature } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
+import documentCenterService from '../../../services/documentCenterService'
 import ModalPortal from '../../../components/common/ModalPortal'
 import TableScroll from '../../../components/common/TableScroll'
 import SearchableSelect from '../../../components/common/SearchableSelect'
@@ -31,6 +32,14 @@ export default function HROffer() {
   const [saving, setSaving]   = useState(false)
   const [form, setForm] = useState({ candidate_id: '', offered_designation: '', offered_ctc: '', joining_date: '' })
   const [candidateOptions, setCandidateOptions] = useState([])
+
+  // Generate Offer Letter modal (reuses Document Center's own existing
+  // template engine as a client — no changes to Document Center itself)
+  const [letterOffer, setLetterOffer] = useState(null)
+  const [customTemplates, setCustomTemplates] = useState([])
+  const [prebuiltTemplates, setPrebuiltTemplates] = useState([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [generating, setGenerating] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -69,15 +78,68 @@ export default function HROffer() {
     setSaving(false)
   }
 
-  const handleRespond = async (id, action) => {
+  const handleRespond = async (o, action) => {
     try {
-      await hrmService.respondOffer(id, { action })
-      toast.success(action === 'accept' ? 'Offer accepted' : 'Offer rejected')
+      await hrmService.respondOffer(o.id, { action })
+      if (action === 'accept') {
+        toast.success('Offer accepted')
+        // Section 10: ask before moving to onboarding — never auto-switch
+        // status without HR confirming.
+        if (window.confirm(`Move ${o.candidate_name} to onboarding now?`)) {
+          try {
+            await hrmService.createOnboarding({
+              candidate_id: o.candidate_id,
+              offer_id: o.id,
+              designation: o.offered_designation,
+              department_name: o.department_name,
+              joining_date: o.joining_date,
+            })
+            toast.success('Onboarding started')
+          } catch (err) {
+            toast.error(err?.response?.data?.detail || 'Failed to start onboarding — you can start it manually from the Onboarding tab')
+          }
+        }
+      } else {
+        toast.success('Offer rejected')
+      }
     } catch (err) {
       // Backend enforces: only draft/sent offers can be responded to
       toast.error(err?.response?.data?.detail || 'Failed to update offer')
     }
     load()
+  }
+
+  const openGenerateLetter = async (offer) => {
+    setLetterOffer(offer)
+    setSelectedTemplateId('')
+    try {
+      const [tRes, lRes] = await Promise.all([
+        documentCenterService.listTemplates(),
+        documentCenterService.getLibrary(),
+      ])
+      setCustomTemplates(tRes.data?.data?.templates || [])
+      setPrebuiltTemplates(lRes.data?.data || [])
+    } catch {
+      toast.error('Failed to load Document Center templates')
+    }
+  }
+
+  const handleGenerateLetter = async () => {
+    if (!selectedTemplateId) {
+      toast.error('Please select a template')
+      return
+    }
+    setGenerating(true)
+    try {
+      const res = await hrmService.generateOfferLetter(letterOffer.id, { template_id: selectedTemplateId })
+      toast.success('Offer letter generated and saved to Document Center')
+      setLetterOffer(null)
+      load()
+      if (res.data?.pdf_url) window.open(res.data.pdf_url, '_blank')
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to generate offer letter')
+    }
+    setGenerating(false)
   }
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString('en-IN') : '—'
@@ -139,6 +201,60 @@ export default function HROffer() {
         </div>
       </ModalPortal>
 
+      {/* Generate Offer Letter — Document Center templates, reused as-is */}
+      <ModalPortal isOpen={!!letterOffer}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg space-y-4 shadow-xl max-h-[85vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold">Generate Offer Letter — {letterOffer?.candidate_name}</h2>
+            <div className="bg-gray-50 rounded-lg p-3 text-sm border border-gray-200 space-y-1">
+              <p><span className="text-gray-500">Designation:</span> <span className="font-medium text-gray-900">{letterOffer?.offered_designation || '—'}</span></p>
+              <p><span className="text-gray-500">CTC:</span> <span className="font-medium text-gray-900">{fmtCtc(letterOffer?.offered_ctc)}</span></p>
+              <p><span className="text-gray-500">Joining Date:</span> <span className="font-medium text-gray-900">{fmt(letterOffer?.joining_date)}</span></p>
+              <p className="text-xs text-gray-400 mt-1">These fields auto-fill the selected template's merge fields.</p>
+            </div>
+
+            {customTemplates.length > 0 && (
+              <div>
+                <label className="text-sm font-medium text-gray-700">Custom Templates</label>
+                <div className="space-y-1 mt-1">
+                  {customTemplates.map(t => (
+                    <label key={t.id || t._id} className="flex items-center gap-2 text-sm p-2 rounded border border-gray-200 cursor-pointer hover:bg-gray-50">
+                      <input type="radio" name="template" checked={selectedTemplateId === (t.id || t._id)} onChange={() => setSelectedTemplateId(t.id || t._id)} />
+                      {t.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {prebuiltTemplates.length > 0 && (
+              <div>
+                <label className="text-sm font-medium text-gray-700">Prebuilt Templates</label>
+                <div className="grid grid-cols-2 gap-1 mt-1">
+                  {prebuiltTemplates.map(t => (
+                    <label key={t.key} className="flex items-center gap-2 text-sm p-2 rounded border border-gray-200 cursor-pointer hover:bg-gray-50">
+                      <input type="radio" name="template" checked={selectedTemplateId === t.key} onChange={() => setSelectedTemplateId(t.key)} />
+                      {t.name || t.label || t.key}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {customTemplates.length === 0 && prebuiltTemplates.length === 0 && (
+              <p className="text-sm text-gray-400">Loading templates from Document Center…</p>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setLetterOffer(null)} className="btn-secondary">Cancel</button>
+              <button type="button" disabled={generating} onClick={handleGenerateLetter} className="btn-primary">
+                {generating ? 'Generating…' : 'Generate PDF'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </ModalPortal>
+
       <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
         <TableScroll>
         <table className="w-full text-sm">
@@ -166,14 +282,18 @@ export default function HROffer() {
                 <td className="px-4 py-3 text-gray-600">{fmt(o.joining_date)}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[o.status] || ''}`}>{o.status}</span>
+                  {o.pdf_url && <a href={o.pdf_url} target="_blank" rel="noreferrer" className="block text-xs text-blue-500 hover:underline mt-1">View letter</a>}
                 </td>
                 <td className="px-4 py-3">
-                  {(o.status === 'draft' || o.status === 'sent') && (
-                    <div className="flex gap-2">
-                      <button onClick={() => handleRespond(o.id, 'accept')} className="p-1.5 hover:bg-green-50 rounded text-green-600" title="Accept"><CheckCircle className="w-4 h-4" /></button>
-                      <button onClick={() => handleRespond(o.id, 'reject')} className="p-1.5 hover:bg-red-50 rounded text-red-500" title="Reject"><XCircle className="w-4 h-4" /></button>
-                    </div>
-                  )}
+                  <div className="flex gap-2">
+                    <button onClick={() => openGenerateLetter(o)} className="p-1.5 hover:bg-indigo-50 rounded text-indigo-500" title="Generate Offer Letter"><FileSignature className="w-4 h-4" /></button>
+                    {(o.status === 'draft' || o.status === 'sent') && (
+                      <>
+                        <button onClick={() => handleRespond(o, 'accept')} className="p-1.5 hover:bg-green-50 rounded text-green-600" title="Accept"><CheckCircle className="w-4 h-4" /></button>
+                        <button onClick={() => handleRespond(o, 'reject')} className="p-1.5 hover:bg-red-50 rounded text-red-500" title="Reject"><XCircle className="w-4 h-4" /></button>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

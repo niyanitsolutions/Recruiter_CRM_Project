@@ -308,7 +308,15 @@ class HRMHiringService:
         upd = {k: v for k, v in data.items() if v is not None}
         upd["updated_at"] = now
         if "current_stage" in upd:
-            new_stage = str(upd["current_stage"])
+            # str(HiringStage.X) prints "HiringStage.X", not the enum's string
+            # value ("x") — every internal caller (create_interview,
+            # create_offer, respond_offer, complete_onboarding) passes the raw
+            # enum member here, so this always failed validation and raised
+            # BEFORE the actual $set below ever ran: the interview/offer would
+            # already be persisted, but the candidate's current_stage silently
+            # never advanced. Use .value directly for enum members.
+            raw_stage = upd["current_stage"]
+            new_stage = raw_stage.value if isinstance(raw_stage, HiringStage) else str(raw_stage)
             valid_stages = {s.value for s in HiringStage}
             if new_stage not in valid_stages:
                 raise HTTPException(status_code=400, detail=f"Invalid hiring stage '{new_stage}'")
@@ -329,16 +337,106 @@ class HRMHiringService:
 
     # ── INTERVIEWS ────────────────────────────────────────────────────────────
 
-    async def create_interview(self, company_id: str, data: dict, created_by: str) -> dict:
+    async def _get_job_rounds(self, job_id: Optional[str], company_id: str) -> list:
+        """The job's configured interview workflow, or [] if the job has none
+        configured / no job_id — legacy behavior: unlimited, generically-named
+        rounds, matching the pre-automation manual round-name entry."""
+        if not job_id:
+            return []
+        job = await self.jobs.find_one({"_id": job_id, "company_id": company_id}, {"interview_rounds": 1})
+        return (job or {}).get("interview_rounds") or []
+
+    async def _compute_next_round(
+        self, candidate_id: str, job_id: Optional[str], company_id: str, *, for_scheduling: bool
+    ) -> Optional[dict]:
+        """Auto-determines the next interview round for a candidate — HR never
+        picks a round number/name manually (section 2/4).
+
+        for_scheduling=True (about to create an interview): raises if the
+        candidate has a pending (feedback not yet given) interview, or if the
+        job has no further configured rounds left.
+        for_scheduling=False (checking after a Passed result): returns None
+        instead of raising when there are no further configured rounds —
+        the caller treats that as "final round reached".
+        """
+        from fastapi import HTTPException
+        existing = await self.interviews.find(
+            {"candidate_id": candidate_id, "company_id": company_id}
+        ).to_list(length=None)
+
+        if for_scheduling and any(iv.get("result") == "pending" for iv in existing):
+            raise HTTPException(
+                status_code=409,
+                detail="This candidate already has a pending interview awaiting feedback.",
+            )
+
+        passed_count = sum(1 for iv in existing if iv.get("result") == "passed")
+        next_round_number = passed_count + 1
+
+        rounds = await self._get_job_rounds(job_id, company_id)
+        if rounds:
+            rounds_sorted = sorted(rounds, key=lambda r: r["round_number"])
+            match = next((r for r in rounds_sorted if r["round_number"] == next_round_number), None)
+            if not match:
+                if for_scheduling:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="No further interview rounds are configured for this job.",
+                    )
+                return None
+            return {
+                "round_number": next_round_number,
+                "round_name": match["round_name"],
+                "is_final": next_round_number >= rounds_sorted[-1]["round_number"],
+            }
+        return {"round_number": next_round_number, "round_name": f"Round {next_round_number}", "is_final": False}
+
+    async def get_next_round(self, candidate_id: str, company_id: str) -> dict:
+        """Read-only preview for the Schedule Interview screen's auto-populated
+        Current/Next Round + Stage fields (section 4)."""
+        from fastapi import HTTPException
+        cand = await self.candidates.find_one({"_id": candidate_id, "company_id": company_id, "is_deleted": False})
+        if not cand:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        next_round = await self._compute_next_round(candidate_id, cand.get("job_id"), company_id, for_scheduling=True)
+        return {
+            "candidate_id": candidate_id,
+            "current_stage": cand.get("current_stage"),
+            **next_round,
+        }
+
+    async def create_interview(self, company_id: str, data: dict, created_by: str, created_by_name: str = "") -> dict:
+        from fastapi import HTTPException
         now = datetime.now(timezone.utc)
         cand = await self.candidates.find_one({"_id": data["candidate_id"], "company_id": company_id})
+        if not cand:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        if cand.get("current_stage") == HiringStage.REJECTED.value:
+            raise HTTPException(status_code=400, detail="Cannot schedule an interview for a rejected candidate.")
+
+        job_id = data.get("job_id") or cand.get("job_id")
+        round_info = await self._compute_next_round(data["candidate_id"], job_id, company_id, for_scheduling=True)
+        send_invite = data.get("send_invitation_email", True)
+
         doc = {
             "_id": str(ObjectId()),
             "company_id": company_id,
-            "candidate_name": cand.get("full_name", "") if cand else "",
-            **data,
+            "candidate_id": data["candidate_id"],
+            "candidate_name": cand.get("full_name", ""),
+            "job_id": job_id,
+            "job_title": cand.get("job_title"),
+            "round_number": round_info["round_number"],
+            "round_name": round_info["round_name"],
+            "mode": data.get("mode", "video"),
+            "scheduled_at": data["scheduled_at"],
+            "duration_minutes": data.get("duration_minutes", 60),
+            "location_or_link": data.get("location_or_link"),
             "interviewers": data.get("interviewers") or [],
             "result": "pending",
+            "invitation_email_sent": bool(send_invite),
+            "result_email_sent": False,
+            "scheduled_by": created_by,
+            "scheduled_by_name": created_by_name,
             "created_by": created_by,
             "created_at": now,
             "updated_at": now,
@@ -358,12 +456,118 @@ class HRMHiringService:
         return {"items": items, "total": total, "page": page, "page_size": page_size}
 
     async def submit_feedback(self, interview_id: str, company_id: str, data: dict) -> Optional[dict]:
-        upd = {**data, "updated_at": datetime.now(timezone.utc)}
+        now = datetime.now(timezone.utc)
+        interview = await self.interviews.find_one({"_id": interview_id, "company_id": company_id})
+        if not interview:
+            return None
+
+        notify_candidate = data.get("notify_candidate", True)
+        result = data.get("result")
+
+        upd = {k: v for k, v in data.items() if k != "notify_candidate"}
+        upd["completed_at"] = now
+        upd["updated_at"] = now
+        upd["result_email_sent"] = bool(notify_candidate)
         await self.interviews.update_one({"_id": interview_id, "company_id": company_id}, {"$set": upd})
+
+        next_round_info = None
+        if result == "passed":
+            next_round_info = await self._compute_next_round(
+                interview["candidate_id"], interview.get("job_id"), company_id, for_scheduling=False
+            )
+            if not next_round_info:
+                # Final configured round passed — move to Offer, never straight
+                # to onboarding (onboarding still requires an accepted offer).
+                await self.update_candidate(interview["candidate_id"], company_id, {"current_stage": HiringStage.OFFER})
+        elif result == "failed":
+            await self.update_candidate(interview["candidate_id"], company_id, {"current_stage": HiringStage.REJECTED})
+        # on_hold (or any other result): no stage change — candidate stays "interview"
+
         doc = await self.interviews.find_one({"_id": interview_id, "company_id": company_id})
-        return self._ser(doc) if doc else None
+        result_doc = self._ser(doc) if doc else None
+        if result_doc is not None:
+            result_doc["next_round"] = next_round_info
+        return result_doc
 
     # ── OFFERS ────────────────────────────────────────────────────────────────
+
+    async def generate_offer_letter_via_doc_center(
+        self, offer_id: str, company_id: str, template_id: str, user_id: str, user_name: str,
+        extra_field_values: Optional[dict] = None,
+    ) -> dict:
+        """Generates the offer letter PDF by calling Document Center's own,
+        already-existing generate_document as a library function — this makes
+        zero changes to Document Center's own files/routes/models. The
+        generated doc still shows up in Document Center's own Generated list
+        (with employee_id=None); we additionally store its doc_id/pdf_url on
+        this hrm_offers record so Internal Hiring can show/attach it too."""
+        from fastapi import HTTPException
+        from app.models.company.document_center import DocGenerateRequest
+        from app.services.document_center_service import document_center_service, TEMPLATE_LIBRARY
+
+        offer = await self.offers.find_one({"_id": offer_id, "company_id": company_id})
+        if not offer:
+            raise HTTPException(status_code=404, detail="Offer not found")
+
+        # template_id may be a prebuilt library key (e.g. "offer_letter") rather
+        # than a real saved doc_templates _id — those only exist as static
+        # definitions until materialized. Reuse a previously-materialized copy
+        # if one exists; otherwise create it once. Avoids spamming Document
+        # Center's own template list with a fresh duplicate on every generation.
+        lib_meta = next((t for t in TEMPLATE_LIBRARY if t["key"] == template_id), None)
+        if lib_meta:
+            existing_tmpl = await self.db.doc_templates.find_one({
+                "name": lib_meta["name"], "is_deleted": False, "tags": lib_meta["category"],
+            })
+            if existing_tmpl:
+                template_id = existing_tmpl["_id"]
+            else:
+                ok, msg, created = await document_center_service.create_from_library(
+                    self.db, template_id, user_id, user_name,
+                )
+                if not ok:
+                    raise HTTPException(status_code=400, detail=msg)
+                template_id = created["_id"]
+
+        job = None
+        if offer.get("job_id"):
+            job = await self.jobs.find_one({"_id": offer["job_id"], "company_id": company_id})
+
+        # Same field names Document Center's own _fetch_employee_fields uses,
+        # so any existing template (built for employees) resolves correctly.
+        field_values = {
+            "employee_name": offer.get("candidate_name", "") or "",
+            "employee_email": offer.get("candidate_email", "") or "",
+            "designation": offer.get("offered_designation", "") or "",
+            "department": offer.get("department_name", "") or "",
+            "salary": str(offer.get("offered_ctc", "") or ""),
+            "joining_date": str(offer.get("joining_date", "") or ""),
+            "manager_name": (job or {}).get("hiring_manager_name", "") or "",
+        }
+        if extra_field_values:
+            field_values.update(extra_field_values)
+
+        req = DocGenerateRequest(
+            template_id=template_id,
+            document_name=f"Offer Letter - {offer.get('candidate_name', '')}",
+            employee_id=None,
+            field_values=field_values,
+            generate_pdf=True,
+            generate_docx=False,
+        )
+        ok, msg, gen_doc = await document_center_service.generate_document(self.db, req, user_id, user_name)
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
+
+        await self.offers.update_one(
+            {"_id": offer_id, "company_id": company_id},
+            {"$set": {
+                "generated_doc_id": gen_doc["_id"],
+                "pdf_url": gen_doc.get("pdf_url"),
+                "updated_at": datetime.now(timezone.utc),
+            }},
+        )
+        return await self.get_offer(offer_id, company_id)
 
     async def create_offer(self, company_id: str, data: dict, created_by: str) -> dict:
         now = datetime.now(timezone.utc)

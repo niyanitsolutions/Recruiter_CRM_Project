@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Briefcase, Users, Calendar, UserCheck, FileText, LayoutTemplate, XCircle } from 'lucide-react'
+import { Briefcase, Users, Calendar, UserCheck, FileText, XCircle } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import { getTenantTimezone } from '../../../utils/format'
 import HRJobs from './HRJobs'
@@ -7,7 +7,6 @@ import HRCandidates from './HRCandidates'
 import HRInterviews from './HRInterviews'
 import HROffer from './HROffer'
 import HROnboarding from './HROnboarding'
-import OfferTemplates from '../OfferTemplates'
 
 // "Applicants" matches the Internal Hiring terminology used across this
 // module — the underlying component/collection (HRCandidates / hrm_candidates)
@@ -100,7 +99,6 @@ function OverviewTab({ onSwitchTab }) {
           { tab: 'candidates',      icon: Users,        label: 'Manage Applicants' },
           { tab: 'interviews',      icon: Calendar,     label: 'Manage Interviews' },
           { tab: 'offers',          icon: FileText,     label: 'Manage Offers' },
-          { tab: 'offer_templates', icon: LayoutTemplate, label: 'Offer Templates' },
           { tab: 'onboarding',      icon: UserCheck,    label: 'Manage Onboarding' },
         ].map(item => (
           <button
@@ -153,17 +151,16 @@ export default function HiringDashboard() {
         </div>
       </div>
 
-      {/* Tab content — "offers"/"offer_templates" are reachable via the
-          Overview stat cards and quick actions, not persistent top tabs, so
-          the nav bar stays exactly Overview/Jobs/Applicants/Interviews/Onboarding */}
+      {/* Tab content — "offers" is reachable via the Overview stat cards and
+          quick actions, not a persistent top tab, so the nav bar stays
+          exactly Overview/Jobs/Applicants/Interviews/Onboarding */}
       <div className="flex-1 overflow-auto">
-        {activeTab === 'overview'        && <OverviewTab onSwitchTab={setActiveTab} />}
-        {activeTab === 'jobs'            && <HRJobs />}
-        {activeTab === 'candidates'      && <HRCandidates />}
-        {activeTab === 'interviews'      && <HRInterviews />}
-        {activeTab === 'offers'          && <HROffer />}
-        {activeTab === 'offer_templates' && <OfferTemplates />}
-        {activeTab === 'onboarding'      && <HROnboarding />}
+        {activeTab === 'overview'   && <OverviewTab onSwitchTab={setActiveTab} />}
+        {activeTab === 'jobs'       && <HRJobs />}
+        {activeTab === 'candidates' && <HRCandidates />}
+        {activeTab === 'interviews' && <HRInterviews />}
+        {activeTab === 'offers'     && <HROffer />}
+        {activeTab === 'onboarding' && <HROnboarding />}
       </div>
     </div>
   )

@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
-import { Plus, Briefcase, Edit2, Trash2, Send, Link2 } from 'lucide-react'
+import { Plus, Briefcase, Edit2, Trash2, Send, Link2, X, ArrowUp, ArrowDown } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
+
+const emptyForm = () => ({
+  job_title: '', department_name: '', num_positions: 1, job_description: '',
+  location: '', is_remote: false, interview_rounds: [],
+})
 
 const STATUS_COLORS = {
   open:      'bg-green-100 text-green-700',
@@ -20,7 +25,7 @@ export default function HRJobs() {
   const [showForm, setShowForm] = useState(false)
   const [editJob, setEditJob]   = useState(null)
   const [saving, setSaving]     = useState(false)
-  const [form, setForm] = useState({ job_title: '', department_name: '', num_positions: 1, job_description: '', location: '', is_remote: false })
+  const [form, setForm] = useState(emptyForm())
   const [inviteJob, setInviteJob] = useState(null)
   const [inviteForm, setInviteForm] = useState({ candidate_name: '', email: '', message: '' })
   const [inviteSaving, setInviteSaving] = useState(false)
@@ -40,16 +45,54 @@ export default function HRJobs() {
 
   const open = (j = null) => {
     setEditJob(j)
-    setForm(j ? { job_title: j.job_title, department_name: j.department_name || '', num_positions: j.num_positions, job_description: j.job_description || '', location: j.location || '', is_remote: j.is_remote } : { job_title: '', department_name: '', num_positions: 1, job_description: '', location: '', is_remote: false })
+    setForm(j ? {
+      job_title: j.job_title, department_name: j.department_name || '', num_positions: j.num_positions,
+      job_description: j.job_description || '', location: j.location || '', is_remote: j.is_remote,
+      interview_rounds: [...(j.interview_rounds || [])].sort((a, b) => a.round_number - b.round_number),
+    } : emptyForm())
     setShowForm(true)
+  }
+
+  // Interview Rounds editor — keeps round_number sequential (1..N) on every
+  // add/remove/reorder so the backend's automatic round-progression always
+  // has a clean, contiguous sequence to walk through (section 3).
+  const reindexRounds = (rounds) => rounds.map((r, i) => ({ ...r, round_number: i + 1 }))
+
+  const addRound = () => {
+    setForm(f => ({
+      ...f,
+      interview_rounds: reindexRounds([...f.interview_rounds, { round_number: 0, round_name: '' }]),
+    }))
+  }
+  const removeRound = (idx) => {
+    setForm(f => ({ ...f, interview_rounds: reindexRounds(f.interview_rounds.filter((_, i) => i !== idx)) }))
+  }
+  const renameRound = (idx, name) => {
+    setForm(f => ({
+      ...f,
+      interview_rounds: f.interview_rounds.map((r, i) => i === idx ? { ...r, round_name: name } : r),
+    }))
+  }
+  const moveRound = (idx, dir) => {
+    setForm(f => {
+      const next = [...f.interview_rounds]
+      const target = idx + dir
+      if (target < 0 || target >= next.length) return f
+      ;[next[idx], next[target]] = [next[target], next[idx]]
+      return { ...f, interview_rounds: reindexRounds(next) }
+    })
   }
 
   const handleSave = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
-      if (editJob) await hrmService.updateJob(editJob.id, form)
-      else await hrmService.createJob(form)
+      const payload = {
+        ...form,
+        interview_rounds: form.interview_rounds.filter(r => r.round_name.trim()),
+      }
+      if (editJob) await hrmService.updateJob(editJob.id, payload)
+      else await hrmService.createJob(payload)
       setShowForm(false); load()
     } catch {}
     setSaving(false)
@@ -150,6 +193,37 @@ export default function HRJobs() {
               <div className="col-span-2">
                 <label className="text-sm font-medium text-gray-700">Description</label>
                 <textarea className="input w-full mt-1" rows={3} value={form.job_description} onChange={e => setForm(f => ({ ...f, job_description: e.target.value }))} />
+              </div>
+              <div className="col-span-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700">Interview Rounds</label>
+                  <button type="button" onClick={addRound} className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                    <Plus className="w-3.5 h-3.5" /> Add Round
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Candidates applying to this job automatically progress through these rounds in order — HR never picks a round manually.
+                </p>
+                {form.interview_rounds.length === 0 ? (
+                  <p className="text-xs text-gray-400 mt-2">No rounds configured — scheduling will use generic "Round 1", "Round 2"… naming.</p>
+                ) : (
+                  <div className="space-y-2 mt-2">
+                    {form.interview_rounds.map((r, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 w-14 flex-shrink-0">Round {r.round_number}</span>
+                        <input
+                          className="input flex-1"
+                          placeholder="e.g. Technical Interview"
+                          value={r.round_name}
+                          onChange={e => renameRound(idx, e.target.value)}
+                        />
+                        <button type="button" onClick={() => moveRound(idx, -1)} disabled={idx === 0} className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
+                        <button type="button" onClick={() => moveRound(idx, 1)} disabled={idx === form.interview_rounds.length - 1} className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
+                        <button type="button" onClick={() => removeRound(idx)} className="p-1 text-red-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex justify-end gap-3">

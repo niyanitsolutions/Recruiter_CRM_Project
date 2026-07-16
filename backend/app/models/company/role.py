@@ -170,9 +170,6 @@ class Permission(str, Enum):
     # Hiring Pipeline
     HRM_HIRING_VIEW          = "hrm:hiring:view"
     HRM_HIRING_MANAGE        = "hrm:hiring:manage"
-    # Offer Templates
-    HRM_OFFER_TEMPLATES_VIEW   = "hrm:offer_templates:view"
-    HRM_OFFER_TEMPLATES_MANAGE = "hrm:offer_templates:manage"
     # Documents
     HRM_DOCUMENTS_MANAGE     = "hrm:documents:manage"
     # Assets
@@ -235,8 +232,6 @@ _HRM_FULL = [
     Permission.HRM_ANNOUNCEMENTS_MANAGE,
     Permission.HRM_HIRING_VIEW,
     Permission.HRM_HIRING_MANAGE,
-    Permission.HRM_OFFER_TEMPLATES_VIEW,
-    Permission.HRM_OFFER_TEMPLATES_MANAGE,
     Permission.HRM_DOCUMENTS_MANAGE,
     Permission.HRM_ASSETS_VIEW,
     Permission.HRM_ASSETS_MANAGE,

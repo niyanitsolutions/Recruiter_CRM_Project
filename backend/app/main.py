@@ -86,7 +86,7 @@ from app.api.v1 import export
 from app.api.v1 import (
     hrm_employees, hrm_attendance, hrm_leaves, hrm_payroll,
     hrm_performance, hrm_announcements, hrm_dashboard, hrm_hiring,
-    hrm_offer_templates, hrm_documents, hrm_sync,
+    hrm_documents, hrm_sync,
     hrm_assets, hrm_exit,
     hrm_holidays, hrm_leave_policies, hrm_shifts,
     hrm_doc_upload_tokens,
@@ -466,7 +466,6 @@ app.include_router(hrm_performance.router, prefix=API_V1_PREFIX, tags=["HRM - Pe
 app.include_router(hrm_announcements.router,   prefix=API_V1_PREFIX, tags=["HRM - Announcements"])
 app.include_router(hrm_hiring.router,           prefix=API_V1_PREFIX, tags=["HRM - Hiring"])
 app.include_router(hrm_hiring.public_router,    prefix=API_V1_PREFIX, tags=["HRM - Hiring (Public)"])
-app.include_router(hrm_offer_templates.router,  prefix=API_V1_PREFIX, tags=["HRM - Offer Templates"])
 app.include_router(hrm_documents.router,        prefix=API_V1_PREFIX, tags=["HRM - Documents"])
 app.include_router(hrm_sync.router,             prefix=API_V1_PREFIX, tags=["HRM - Sync"])
 app.include_router(hrm_assets.router,           prefix=API_V1_PREFIX, tags=["HRM - Assets"])

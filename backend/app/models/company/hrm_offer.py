@@ -38,7 +38,9 @@ class HRMOfferModel(BaseModel):
     accepted_at: Optional[datetime] = None
     rejected_at: Optional[datetime] = None
 
-    # PDF
+    # Offer letter generated via Document Center (see hrm_hiring_service.py
+    # generate_offer_letter_via_doc_center) — set once HR generates it.
+    generated_doc_id: Optional[str] = None
     pdf_url: Optional[str] = None
 
     notes: Optional[str] = None

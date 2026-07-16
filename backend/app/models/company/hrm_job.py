@@ -13,6 +13,12 @@ class HRMJobStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class InterviewRound(BaseModel):
+    """One configured round in a job's interview workflow, in sequence order."""
+    round_number: int
+    round_name: str
+
+
 class HRMJobModel(BaseModel):
     """Internal job opening for HRM hiring — company_db.hrm_jobs"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), alias="_id")
@@ -37,6 +43,12 @@ class HRMJobModel(BaseModel):
     is_remote: bool = False
 
     target_date: Optional[str] = None   # ISO date string
+
+    # Ordered interview workflow for this job — drives automatic round
+    # progression in hrm_hiring_service.py (create_interview/submit_feedback).
+    # Empty for jobs created before this existed; those fall back to a single
+    # generic round so scheduling never breaks for pre-existing jobs.
+    interview_rounds: List[InterviewRound] = Field(default_factory=list)
 
     # Public apply link — lazily generated on first request (get-or-create),
     # None for jobs that never had a link requested. See hrm_hiring_service.py
@@ -67,6 +79,7 @@ class HRMJobCreate(BaseModel):
     location: Optional[str] = None
     is_remote: bool = False
     target_date: Optional[str] = None
+    interview_rounds: Optional[List[InterviewRound]] = None
 
 
 class HRMJobUpdate(BaseModel):
@@ -80,3 +93,4 @@ class HRMJobUpdate(BaseModel):
     salary_min: Optional[float] = None
     salary_max: Optional[float] = None
     target_date: Optional[str] = None
+    interview_rounds: Optional[List[InterviewRound]] = None

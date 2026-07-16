@@ -439,7 +439,6 @@ ROLE_PERMISSIONS = {
         "hrm:performance:self", "hrm:performance:team", "hrm:performance:manage",
         "hrm:announcements:view", "hrm:announcements:manage",
         "hrm:hiring:view", "hrm:hiring:manage",
-        "hrm:offer_templates:view", "hrm:offer_templates:manage",
         "hrm:documents:manage",
         "hrm:assets:view", "hrm:assets:manage",
         "hrm:exit:view", "hrm:exit:manage",

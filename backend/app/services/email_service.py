@@ -1038,6 +1038,100 @@ async def send_hrm_hiring_invitation_email(
     )
 
 
+async def send_hrm_interview_invitation_email(
+    to_email: str,
+    candidate_name: str,
+    job_title: str,
+    round_name: str,
+    scheduled_at,
+    duration_minutes: int,
+    mode: str,
+    location_or_link: str = None,
+    company_name: str = "",
+    company_id: str = "",
+) -> bool:
+    """Notify a candidate that an internal-hiring interview round was scheduled."""
+    when = scheduled_at.strftime("%B %d, %Y at %I:%M %p") if hasattr(scheduled_at, "strftime") else str(scheduled_at)
+    link_row = (
+        f'<p style="color:#374151;font-size:14px"><strong>Meeting Link:</strong> '
+        f'<a href="{location_or_link}" style="color:#4F46E5">{location_or_link}</a></p>'
+        if location_or_link else ""
+    )
+    subject = f"Interview Scheduled — {round_name} for {job_title}"
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Interview Scheduled</h2>
+      <p>Hi {candidate_name},</p>
+      <p>Your <strong>{round_name}</strong> interview for the <strong>{job_title}</strong> position
+         at <strong>{company_name}</strong> has been scheduled.</p>
+      <div style="background:#F9FAFB;border-radius:8px;padding:16px;margin:20px 0">
+        <p style="margin:0 0 6px;font-size:14px"><strong>Date/Time:</strong> {when}</p>
+        <p style="margin:0 0 6px;font-size:14px"><strong>Duration:</strong> {duration_minutes} minutes</p>
+        <p style="margin:0;font-size:14px"><strong>Mode:</strong> {mode}</p>
+      </div>
+      {link_row}
+      <p style="color:#6B7280;font-size:13px">Please be available at the scheduled time. Good luck!</p>""")
+    text = (
+        f"Interview Scheduled — {round_name} for {job_title}\n\n"
+        f"Date/Time: {when}\nDuration: {duration_minutes} minutes\nMode: {mode}\n"
+        + (f"Meeting Link: {location_or_link}\n" if location_or_link else "")
+    )
+    return await send_email(
+        to_email, subject, html, text, "hrm_interview_invitation", company_id=company_id
+    )
+
+
+async def send_hrm_interview_passed_email(
+    to_email: str,
+    candidate_name: str,
+    job_title: str,
+    round_name: str,
+    has_next_round: bool,
+    company_name: str = "",
+    company_id: str = "",
+) -> bool:
+    """Congratulate a candidate on passing an internal-hiring interview round."""
+    subject = f"Great news — you passed {round_name}!"
+    next_line = (
+        "We'll be in touch shortly to schedule your next round."
+        if has_next_round else
+        "Our team will follow up soon with the next steps regarding your offer."
+    )
+    html = _wrap(f"""
+      <h2 style="color:#22C55E;margin-top:0">Congratulations, {candidate_name}!</h2>
+      <p>You've successfully passed the <strong>{round_name}</strong> round for the
+         <strong>{job_title}</strong> position at <strong>{company_name}</strong>.</p>
+      <p>{next_line}</p>""")
+    text = f"Congratulations! You passed {round_name} for {job_title} at {company_name}.\n\n{next_line}"
+    return await send_email(
+        to_email, subject, html, text, "hrm_interview_passed", company_id=company_id
+    )
+
+
+async def send_hrm_interview_rejected_email(
+    to_email: str,
+    candidate_name: str,
+    job_title: str,
+    company_name: str = "",
+    company_id: str = "",
+) -> bool:
+    """Inform a candidate they were not selected to continue for an internal role."""
+    subject = f"Update on your application — {job_title}"
+    html = _wrap(f"""
+      <h2 style="color:#374151;margin-top:0">Application Update</h2>
+      <p>Hi {candidate_name},</p>
+      <p>Thank you for taking the time to interview for the <strong>{job_title}</strong> position
+         at <strong>{company_name}</strong>. After careful consideration, we've decided to move
+         forward with other candidates at this time.</p>
+      <p>We appreciate your interest and wish you the best in your career search.</p>""")
+    text = (
+        f"Hi {candidate_name}, thank you for interviewing for {job_title} at {company_name}. "
+        "We've decided to move forward with other candidates at this time."
+    )
+    return await send_email(
+        to_email, subject, html, text, "hrm_interview_rejected", company_id=company_id
+    )
+
+
 async def send_employee_onboarding_link_email(
     to_email: str,
     form_url: str,
