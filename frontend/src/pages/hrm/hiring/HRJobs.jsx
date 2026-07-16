@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Briefcase, Edit2, Trash2 } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { Plus, Briefcase, Edit2, Trash2, Send, Link2 } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
 
@@ -20,6 +21,10 @@ export default function HRJobs() {
   const [editJob, setEditJob]   = useState(null)
   const [saving, setSaving]     = useState(false)
   const [form, setForm] = useState({ job_title: '', department_name: '', num_positions: 1, job_description: '', location: '', is_remote: false })
+  const [inviteJob, setInviteJob] = useState(null)
+  const [inviteForm, setInviteForm] = useState({ candidate_name: '', email: '', message: '' })
+  const [inviteSaving, setInviteSaving] = useState(false)
+  const [copyingLinkId, setCopyingLinkId] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -53,6 +58,47 @@ export default function HRJobs() {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this job?')) return
     await hrmService.deleteJob(id); load()
+  }
+
+  const openInvite = (job) => {
+    setInviteJob(job)
+    setInviteForm({ candidate_name: '', email: '', message: '' })
+  }
+
+  const handleSendInvitation = async (e) => {
+    e.preventDefault()
+    if (!inviteForm.candidate_name.trim() || !inviteForm.email.trim()) {
+      toast.error('Candidate name and email are required')
+      return
+    }
+    setInviteSaving(true)
+    try {
+      await hrmService.sendApplicationInvitation({
+        job_id: inviteJob.id,
+        candidate_name: inviteForm.candidate_name.trim(),
+        email: inviteForm.email.trim(),
+        message: inviteForm.message.trim() || undefined,
+        frontend_base_url: window.location.origin,
+      })
+      toast.success('Invitation Sent')
+      setInviteJob(null)
+    } catch (err) {
+      // Backend enforces: job must be open, no duplicate active invitation
+      toast.error(err?.response?.data?.detail || 'Failed to send invitation')
+    }
+    setInviteSaving(false)
+  }
+
+  const handleCopyLink = async (job) => {
+    setCopyingLinkId(job.id)
+    try {
+      const res = await hrmService.getJobPublicLink(job.id, window.location.origin)
+      await navigator.clipboard.writeText(res.data.apply_url)
+      toast.success('Public application link copied to clipboard')
+    } catch {
+      toast.error('Failed to generate public link')
+    }
+    setCopyingLinkId(null)
   }
 
   return (
@@ -114,6 +160,34 @@ export default function HRJobs() {
         </div>
       </ModalPortal>
 
+      <ModalPortal isOpen={!!inviteJob}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+          <form onSubmit={handleSendInvitation} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
+            <h2 className="text-lg font-semibold">Send Application Link</h2>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Job</label>
+              <input className="input w-full mt-1 bg-gray-50" value={inviteJob?.job_title || ''} disabled />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Candidate Name *</label>
+              <input className="input w-full mt-1" value={inviteForm.candidate_name} onChange={e => setInviteForm(f => ({ ...f, candidate_name: e.target.value }))} required />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Email *</label>
+              <input type="email" className="input w-full mt-1" value={inviteForm.email} onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))} required />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Optional Message</label>
+              <textarea className="input w-full mt-1" rows={3} value={inviteForm.message} onChange={e => setInviteForm(f => ({ ...f, message: e.target.value }))} />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setInviteJob(null)} className="btn-secondary">Cancel</button>
+              <button type="submit" disabled={inviteSaving} className="btn-primary">{inviteSaving ? 'Sending…' : 'Send'}</button>
+            </div>
+          </form>
+        </div>
+      </ModalPortal>
+
       <div className="space-y-3">
         {loading ? (
           [...Array(3)].map((_, i) => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)
@@ -133,6 +207,8 @@ export default function HRJobs() {
               <p className="text-sm text-gray-500">{j.department_name || 'No department'} · {j.num_positions} position{j.num_positions !== 1 ? 's' : ''}{j.location ? ` · ${j.location}` : ''}</p>
             </div>
             <div className="flex gap-2">
+              <button onClick={() => openInvite(j)} className="p-1.5 hover:bg-blue-50 rounded text-blue-500" title="Send Application Link"><Send className="w-4 h-4" /></button>
+              <button onClick={() => handleCopyLink(j)} disabled={copyingLinkId === j.id} className="p-1.5 hover:bg-indigo-50 rounded text-indigo-500 disabled:opacity-50" title="Copy Public Link"><Link2 className="w-4 h-4" /></button>
               <button onClick={() => open(j)} className="p-1.5 hover:bg-yellow-50 rounded text-yellow-500"><Edit2 className="w-4 h-4" /></button>
               <button onClick={() => handleDelete(j.id)} className="p-1.5 hover:bg-red-50 rounded text-red-500"><Trash2 className="w-4 h-4" /></button>
             </div>

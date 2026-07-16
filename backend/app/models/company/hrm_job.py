@@ -38,6 +38,11 @@ class HRMJobModel(BaseModel):
 
     target_date: Optional[str] = None   # ISO date string
 
+    # Public apply link — lazily generated on first request (get-or-create),
+    # None for jobs that never had a link requested. See hrm_hiring_service.py
+    # get_or_create_job_public_slug().
+    public_slug: Optional[str] = None
+
     created_by: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

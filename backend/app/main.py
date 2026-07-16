@@ -465,6 +465,7 @@ app.include_router(hrm_payroll.router, prefix=API_V1_PREFIX, tags=["HRM - Payrol
 app.include_router(hrm_performance.router, prefix=API_V1_PREFIX, tags=["HRM - Performance"])
 app.include_router(hrm_announcements.router,   prefix=API_V1_PREFIX, tags=["HRM - Announcements"])
 app.include_router(hrm_hiring.router,           prefix=API_V1_PREFIX, tags=["HRM - Hiring"])
+app.include_router(hrm_hiring.public_router,    prefix=API_V1_PREFIX, tags=["HRM - Hiring (Public)"])
 app.include_router(hrm_offer_templates.router,  prefix=API_V1_PREFIX, tags=["HRM - Offer Templates"])
 app.include_router(hrm_documents.router,        prefix=API_V1_PREFIX, tags=["HRM - Documents"])
 app.include_router(hrm_sync.router,             prefix=API_V1_PREFIX, tags=["HRM - Sync"])

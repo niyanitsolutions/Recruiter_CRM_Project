@@ -95,12 +95,24 @@ const createInterview = (data) => api.post(`${BASE}/hiring/interviews`, data)
 const listInterviews = (params) => api.get(`${BASE}/hiring/interviews`, { params })
 const submitInterviewFeedback = (id, data) => api.post(`${BASE}/hiring/interviews/${id}/feedback`, data)
 
+// ── Hiring — Offers ──────────────────────────────────────────────────────────
+const createOffer = (data) => api.post(`${BASE}/hiring/offers`, data)
+const listOffers = (params) => api.get(`${BASE}/hiring/offers`, { params })
+const getOffer = (id) => api.get(`${BASE}/hiring/offers/${id}`)
+const respondOffer = (id, data) => api.post(`${BASE}/hiring/offers/${id}/respond`, data)
+
 // ── Hiring — Onboarding ────────────────────────────────────────────────────
 const createOnboarding = (data) => api.post(`${BASE}/hiring/onboarding`, data)
 const listOnboardings = (params) => api.get(`${BASE}/hiring/onboarding`, { params })
 const getOnboarding = (id) => api.get(`${BASE}/hiring/onboarding/${id}`)
 const updateOnboarding = (id, data) => api.put(`${BASE}/hiring/onboarding/${id}`, data)
 const completeOnboarding = (id) => api.post(`${BASE}/hiring/onboarding/${id}/complete`)
+
+// ── Hiring — Public Apply Link & Invitations ────────────────────────────────
+const getJobPublicLink = (jobId, frontendBaseUrl) =>
+  api.post(`${BASE}/hiring/jobs/${jobId}/public-link`, { frontend_base_url: frontendBaseUrl })
+const sendApplicationInvitation = (data) => api.post(`${BASE}/hiring/invitations`, data)
+const listInvitations = (params) => api.get(`${BASE}/hiring/invitations`, { params })
 
 // ── Documents ──────────────────────────────────────────────────────────────
 const uploadDocument = (employeeId, formData) =>
@@ -276,7 +288,9 @@ const hrmService = {
   createJob, listJobs, getJob, updateJob, deleteJob,
   createHiringCandidate, listHiringCandidates, getHiringCandidate, updateHiringCandidate,
   createInterview, listInterviews, submitInterviewFeedback,
+  createOffer, listOffers, getOffer, respondOffer,
   createOnboarding, listOnboardings, getOnboarding, updateOnboarding, completeOnboarding,
+  getJobPublicLink, sendApplicationInvitation, listInvitations,
   uploadDocument, multiUploadDocuments, getDocuments, getMyDocuments, getAllDocuments,
   getEmployeeDocumentCounts, deleteDocument, updateDocumentMeta, updateDocumentStatus, getDocumentServeUrl,
   getAnnouncements,

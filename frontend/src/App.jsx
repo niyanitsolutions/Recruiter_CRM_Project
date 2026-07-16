@@ -98,6 +98,7 @@ const CandidateForm         = lazy(() => import('./pages/recruitment').then(m =>
 const CandidateDetails      = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidateDetails })))
 const CandidatePublicForm   = lazy(() => import('./pages/recruitment').then(m => ({ default: m.CandidatePublicForm })))
 const PublicApplyForm       = lazy(() => import('./pages/recruitment').then(m => ({ default: m.PublicApplyForm })))
+const InternalApplyForm     = lazy(() => import('./pages/hrm/hiring/InternalApplyForm'))
 const EmployeeOnboardForm   = lazy(() => import('./pages/hrm/EmployeeOnboardForm'))
 const Jobs                  = lazy(() => import('./pages/recruitment').then(m => ({ default: m.Jobs })))
 const JobForm               = lazy(() => import('./pages/recruitment').then(m => ({ default: m.JobForm })))
@@ -1211,6 +1212,10 @@ function App() {
 
       {/* Candidate self-registration via form link — public, no auth */}
       <Route path="/apply/:token" element={<CandidatePublicForm />} />
+
+      {/* Internal Hiring — public per-job apply link, creates an Internal
+          Hiring applicant only (hrm_candidates), never a Recruitment candidate */}
+      <Route path="/internal/jobs/:slug/apply" element={<InternalApplyForm />} />
 
       {/* Employee self-onboarding form — public, no auth */}
       <Route path="/employee-onboard/:token" element={<EmployeeOnboardForm />} />

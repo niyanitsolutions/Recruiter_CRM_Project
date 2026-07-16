@@ -1,15 +1,21 @@
 import React, { useState, useEffect } from 'react'
-import { Briefcase, Users, Calendar, UserCheck, FileText, LayoutTemplate } from 'lucide-react'
+import { Briefcase, Users, Calendar, UserCheck, FileText, LayoutTemplate, XCircle } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
+import { getTenantTimezone } from '../../../utils/format'
 import HRJobs from './HRJobs'
 import HRCandidates from './HRCandidates'
 import HRInterviews from './HRInterviews'
+import HROffer from './HROffer'
 import HROnboarding from './HROnboarding'
+import OfferTemplates from '../OfferTemplates'
 
+// "Applicants" matches the Internal Hiring terminology used across this
+// module — the underlying component/collection (HRCandidates / hrm_candidates)
+// is unchanged, only the visible label.
 const TABS = [
   { key: 'overview',   label: 'Overview' },
   { key: 'jobs',       label: 'Jobs' },
-  { key: 'candidates', label: 'Candidates' },
+  { key: 'candidates', label: 'Applicants' },
   { key: 'interviews', label: 'Interviews' },
   { key: 'onboarding', label: 'Onboarding' },
 ]
@@ -21,59 +27,69 @@ const STEP_COLORS = {
   yellow: 'bg-yellow-50 text-yellow-600 border-yellow-200',
   green:  'bg-green-50 text-green-600 border-green-200',
   orange: 'bg-orange-50 text-orange-600 border-orange-200',
+  red:    'bg-red-50 text-red-600 border-red-200',
 }
 
 function OverviewTab({ onSwitchTab }) {
-  const [counts, setCounts] = useState({ jobs: 0, candidates: 0, interviews: 0, onboarding: 0 })
+  const [counts, setCounts] = useState({
+    jobs: 0, applications: 0, interviewsToday: 0, offers: 0, joined: 0, rejected: 0,
+  })
 
   useEffect(() => {
+    const tz = getTenantTimezone()
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: tz }) // YYYY-MM-DD
+
     Promise.all([
       hrmService.listJobs({ page: 1, page_size: 1, status: 'open' }),
       hrmService.listHiringCandidates({ page: 1, page_size: 1 }),
-      hrmService.listInterviews({ page: 1, page_size: 1 }),
-      hrmService.listOnboardings({ page: 1, page_size: 1 }),
-    ]).then(([j, c, i, ob]) => {
+      hrmService.listInterviews({ page: 1, page_size: 200 }),
+      hrmService.listOffers({ page: 1, page_size: 1 }),
+      hrmService.listHiringCandidates({ page: 1, page_size: 1, stage: 'hired' }),
+      hrmService.listHiringCandidates({ page: 1, page_size: 1, stage: 'rejected' }),
+    ]).then(([j, c, iv, of, hired, rejected]) => {
+      const interviewsToday = (iv.data.items || []).filter(item => {
+        if (!item.scheduled_at) return false
+        return new Date(item.scheduled_at).toLocaleDateString('en-CA', { timeZone: tz }) === todayStr
+      }).length
       setCounts({
-        jobs:        j.data.total  || 0,
-        candidates:  c.data.total  || 0,
-        interviews:  i.data.total  || 0,
-        onboarding:  ob.data.total || 0,
+        jobs:            j.data.total  || 0,
+        applications:    c.data.total  || 0,
+        interviewsToday,
+        offers:          of.data.total || 0,
+        joined:          hired.data.total || 0,
+        rejected:        rejected.data.total || 0,
       })
     }).catch(() => {})
   }, [])
 
-  const steps = [
-    { label: 'Open Jobs',  count: counts.jobs,        icon: Briefcase,  tab: 'jobs',       color: 'blue' },
-    { label: 'Candidates', count: counts.candidates,  icon: Users,      tab: 'candidates', color: 'indigo' },
-    { label: 'Interviews', count: counts.interviews,  icon: Calendar,   tab: 'interviews', color: 'purple' },
-    { label: 'Onboarding', count: counts.onboarding,  icon: UserCheck,  tab: 'onboarding', color: 'green' },
+  const cards = [
+    { label: 'Open Jobs',        count: counts.jobs,            icon: Briefcase, tab: 'jobs',       color: 'blue' },
+    { label: 'Applications',     count: counts.applications,    icon: Users,     tab: 'candidates', color: 'indigo' },
+    { label: 'Interviews Today', count: counts.interviewsToday, icon: Calendar,  tab: 'interviews', color: 'purple' },
+    { label: 'Offers',           count: counts.offers,          icon: FileText,  tab: 'offers',      color: 'yellow' },
+    { label: 'Joined',           count: counts.joined,          icon: UserCheck, tab: 'onboarding',  color: 'green' },
+    { label: 'Rejected',         count: counts.rejected,        icon: XCircle,   tab: 'candidates',  color: 'red' },
   ]
 
   return (
     <div className="p-6 space-y-6">
       <div>
-        <p className="text-sm text-gray-500">Full cycle recruitment management — click a stage to manage it</p>
+        <p className="text-sm text-gray-500">Full cycle internal hiring management — click a card to manage it</p>
       </div>
 
-      {/* Pipeline funnel cards */}
-      <div className="flex items-stretch gap-2 overflow-x-auto pb-2">
-        {steps.map((step, i) => (
-          <React.Fragment key={step.label}>
-            <button
-              onClick={() => onSwitchTab(step.tab)}
-              className={`flex-1 min-w-36 rounded-xl border p-5 hover:shadow-md transition-shadow text-left ${STEP_COLORS[step.color]}`}
-              style={{ background: 'transparent' }}
-            >
-              <step.icon className="w-6 h-6 mb-3" />
-              <p className="text-3xl font-bold text-gray-900">{step.count}</p>
-              <p className="text-sm font-medium mt-1">{step.label}</p>
-            </button>
-            {i < steps.length - 1 && (
-              <div className="flex items-center text-gray-300 flex-shrink-0">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </div>
-            )}
-          </React.Fragment>
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {cards.map(card => (
+          <button
+            key={card.label}
+            onClick={() => onSwitchTab(card.tab)}
+            className={`rounded-xl border p-5 hover:shadow-md transition-shadow text-left ${STEP_COLORS[card.color]}`}
+            style={{ background: 'transparent' }}
+          >
+            <card.icon className="w-6 h-6 mb-3" />
+            <p className="text-3xl font-bold text-gray-900">{card.count}</p>
+            <p className="text-sm font-medium mt-1">{card.label}</p>
+          </button>
         ))}
       </div>
 
@@ -81,7 +97,7 @@ function OverviewTab({ onSwitchTab }) {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {[
           { tab: 'jobs',            icon: Briefcase,    label: 'Manage Jobs' },
-          { tab: 'candidates',      icon: Users,        label: 'Manage Candidates' },
+          { tab: 'candidates',      icon: Users,        label: 'Manage Applicants' },
           { tab: 'interviews',      icon: Calendar,     label: 'Manage Interviews' },
           { tab: 'offers',          icon: FileText,     label: 'Manage Offers' },
           { tab: 'offer_templates', icon: LayoutTemplate, label: 'Offer Templates' },
@@ -137,13 +153,17 @@ export default function HiringDashboard() {
         </div>
       </div>
 
-      {/* Tab content */}
+      {/* Tab content — "offers"/"offer_templates" are reachable via the
+          Overview stat cards and quick actions, not persistent top tabs, so
+          the nav bar stays exactly Overview/Jobs/Applicants/Interviews/Onboarding */}
       <div className="flex-1 overflow-auto">
-        {activeTab === 'overview'   && <OverviewTab onSwitchTab={setActiveTab} />}
-        {activeTab === 'jobs'       && <HRJobs />}
-        {activeTab === 'candidates' && <HRCandidates />}
-        {activeTab === 'interviews' && <HRInterviews />}
-        {activeTab === 'onboarding' && <HROnboarding />}
+        {activeTab === 'overview'        && <OverviewTab onSwitchTab={setActiveTab} />}
+        {activeTab === 'jobs'            && <HRJobs />}
+        {activeTab === 'candidates'      && <HRCandidates />}
+        {activeTab === 'interviews'      && <HRInterviews />}
+        {activeTab === 'offers'          && <HROffer />}
+        {activeTab === 'offer_templates' && <OfferTemplates />}
+        {activeTab === 'onboarding'      && <HROnboarding />}
       </div>
     </div>
   )

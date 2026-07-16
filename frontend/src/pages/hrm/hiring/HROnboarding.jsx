@@ -3,6 +3,13 @@ import toast from 'react-hot-toast'
 import { Plus, UserCheck, CheckCircle } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
+import SearchableSelect from '../../../components/common/SearchableSelect'
+
+const candidateToOption = (c) => ({
+  value: c.id,
+  label: `${c.full_name} — ${c.email}`,
+  searchText: `${c.full_name} ${c.email}`,
+})
 
 const STATUS_COLORS = {
   initiated:          'bg-gray-100 text-gray-600',
@@ -22,6 +29,9 @@ export default function HROnboarding() {
   const [saving, setSaving]   = useState(false)
   const [completing, setCompleting] = useState(null)
   const [form, setForm] = useState({ candidate_id: '', designation: '', department_name: '', joining_date: '' })
+  const [candidateOptions, setCandidateOptions] = useState([])
+  const [candidatesById, setCandidatesById] = useState({})
+  const [jobsById, setJobsById] = useState({})
 
   const load = async () => {
     setLoading(true)
@@ -35,8 +45,42 @@ export default function HROnboarding() {
 
   useEffect(() => { load() }, [page, status])
 
+  const openForm = async () => {
+    setForm({ candidate_id: '', designation: '', department_name: '', joining_date: '' })
+    setShowForm(true)
+    try {
+      const [candRes, jobsRes] = await Promise.all([
+        hrmService.listHiringCandidates({ page: 1, page_size: 200 }),
+        hrmService.listJobs({ page: 1, page_size: 200 }),
+      ])
+      const cands = candRes.data.items || []
+      setCandidateOptions(cands.map(candidateToOption))
+      setCandidatesById(Object.fromEntries(cands.map(c => [c.id, c])))
+      setJobsById(Object.fromEntries((jobsRes.data.items || []).map(j => [j.id, j])))
+    } catch {}
+  }
+
+  // Auto-fill designation/department from the selected candidate so HR
+  // doesn't have to retype what's already on file (section 3).
+  const handleSelectCandidate = (candidateId) => {
+    const cand = candidatesById[candidateId]
+    const job = cand?.job_id ? jobsById[cand.job_id] : null
+    setForm(f => ({
+      ...f,
+      candidate_id: candidateId,
+      designation: cand?.current_designation || f.designation,
+      department_name: job?.department_name || f.department_name,
+    }))
+  }
+
+  const selectedCandidate = candidatesById[form.candidate_id]
+
   const handleCreate = async (e) => {
     e.preventDefault()
+    if (!form.candidate_id) {
+      toast.error('Please select a candidate')
+      return
+    }
     setSaving(true)
     try {
       await hrmService.createOnboarding(form)
@@ -71,7 +115,7 @@ export default function HROnboarding() {
           <h1 className="text-2xl font-bold text-gray-900">Onboarding</h1>
           <p className="text-sm text-gray-500">{total} records</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 text-sm">
+        <button onClick={openForm} className="btn-primary flex items-center gap-2 text-sm">
           <Plus className="w-4 h-4" /> Start Onboarding
         </button>
       </div>
@@ -90,9 +134,23 @@ export default function HROnboarding() {
           <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
             <h2 className="text-lg font-semibold">Start Onboarding</h2>
             <div>
-              <label className="text-sm font-medium text-gray-700">Candidate ID *</label>
-              <input className="input w-full mt-1" value={form.candidate_id} onChange={e => setForm(f => ({ ...f, candidate_id: e.target.value }))} required />
+              <label className="text-sm font-medium text-gray-700">Candidate *</label>
+              <SearchableSelect
+                value={form.candidate_id}
+                onChange={handleSelectCandidate}
+                options={candidateOptions}
+                placeholder="Search candidate by name or email…"
+                minChars={1}
+                className="mt-1"
+              />
             </div>
+            {selectedCandidate && (
+              <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-1 border border-gray-200">
+                <p><span className="text-gray-500">Name:</span> <span className="font-medium text-gray-900">{selectedCandidate.full_name}</span></p>
+                <p><span className="text-gray-500">Email:</span> <span className="font-medium text-gray-900">{selectedCandidate.email}</span></p>
+                <p><span className="text-gray-500">Job Applied:</span> <span className="font-medium text-gray-900">{selectedCandidate.job_title || '—'}</span></p>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-700">Designation</label>

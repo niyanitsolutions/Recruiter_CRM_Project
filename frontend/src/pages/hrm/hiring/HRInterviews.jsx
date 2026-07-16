@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from 'react'
+import toast from 'react-hot-toast'
 import { Plus, Calendar, CheckCircle, XCircle } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
 import TableScroll from '../../../components/common/TableScroll'
+import SearchableSelect from '../../../components/common/SearchableSelect'
 import { getTenantTimezone } from '../../../utils/format'
+
+// Loaded once per modal-open rather than per-keystroke — Internal Hiring
+// candidate volumes are small, so a single fetch is enough for the search box.
+const candidateToOption = (c) => ({
+  value: c.id,
+  label: `${c.full_name} — ${c.email}`,
+  searchText: `${c.full_name} ${c.email}`,
+})
 
 const RESULT_COLORS = {
   pending:    'bg-gray-100 text-gray-600',
@@ -23,6 +33,7 @@ export default function HRInterviews() {
   const [form, setForm] = useState({ candidate_id: '', round_name: 'Round 1', mode: 'video', scheduled_at: '', duration_minutes: 60 })
   const [feedbackModal, setFeedbackModal] = useState(null)
   const [fbForm, setFbForm] = useState({ result: 'pending', feedback: '', rating: '', recommended_for_next: null })
+  const [candidateOptions, setCandidateOptions] = useState([])
 
   const load = async () => {
     setLoading(true)
@@ -36,10 +47,28 @@ export default function HRInterviews() {
 
   useEffect(() => { load() }, [page])
 
+  const openForm = async () => {
+    setShowForm(true)
+    try {
+      const res = await hrmService.listHiringCandidates({ page: 1, page_size: 200 })
+      setCandidateOptions((res.data.items || []).map(candidateToOption))
+    } catch {}
+  }
+
   const handleCreate = async (e) => {
     e.preventDefault()
+    if (!form.candidate_id) {
+      toast.error('Please select a candidate')
+      return
+    }
     setSaving(true)
-    try { await hrmService.createInterview(form); setShowForm(false); load() } catch {}
+    try {
+      await hrmService.createInterview(form)
+      toast.success('Interview scheduled')
+      setShowForm(false); load()
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to schedule interview')
+    }
     setSaving(false)
   }
 
@@ -62,7 +91,7 @@ export default function HRInterviews() {
           <h1 className="text-2xl font-bold text-gray-900">Interviews</h1>
           <p className="text-sm text-gray-500">{total} scheduled</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 text-sm">
+        <button onClick={openForm} className="btn-primary flex items-center gap-2 text-sm">
           <Plus className="w-4 h-4" /> Schedule Interview
         </button>
       </div>
@@ -72,8 +101,15 @@ export default function HRInterviews() {
           <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
             <h2 className="text-lg font-semibold">Schedule Interview</h2>
             <div>
-              <label className="text-sm font-medium text-gray-700">Candidate ID *</label>
-              <input className="input w-full mt-1" value={form.candidate_id} onChange={e => setForm(f => ({ ...f, candidate_id: e.target.value }))} required />
+              <label className="text-sm font-medium text-gray-700">Candidate *</label>
+              <SearchableSelect
+                value={form.candidate_id}
+                onChange={(v) => setForm(f => ({ ...f, candidate_id: v }))}
+                options={candidateOptions}
+                placeholder="Search candidate by name or email…"
+                minChars={1}
+                className="mt-1"
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>

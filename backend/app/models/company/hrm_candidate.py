@@ -24,6 +24,7 @@ class HRMCandidateSource(str, Enum):
     LINKEDIN = "linkedin"
     CAMPUS = "campus"
     AGENCY = "agency"
+    PUBLIC_LINK = "public_link"   # Self-applied via the job's public apply form
     OTHER = "other"
 
 

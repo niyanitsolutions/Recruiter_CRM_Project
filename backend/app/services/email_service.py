@@ -997,6 +997,47 @@ async def send_candidate_form_link_email(
     )
 
 
+async def send_hrm_hiring_invitation_email(
+    to_email: str,
+    form_url: str,
+    candidate_name: str,
+    job_title: str,
+    sent_by_name: str,
+    company_name: str,
+    message: str = None,
+    company_id: str = "",
+) -> bool:
+    """Invite a named person to apply for an internal job opening (HRM Internal Hiring)."""
+    subject = f"You're invited to apply — {job_title} at {company_name}"
+    optional_message = f'<p style="color:#374151;font-size:14px">"{message}"</p>' if message else ""
+    html = _wrap(f"""
+      <h2 style="color:#4F46E5;margin-top:0">Application Invitation</h2>
+      <p>Hi {candidate_name},</p>
+      <p><strong>{sent_by_name}</strong> from <strong>{company_name}</strong> has invited you to apply
+         for the <strong>{job_title}</strong> position.</p>
+      {optional_message}
+      <p>Click the button below to complete your application:</p>
+      <div style="text-align:center;margin:32px 0">
+        <a href="{form_url}"
+           style="background:#4F46E5;color:#fff;padding:14px 28px;border-radius:8px;
+                  text-decoration:none;font-weight:700;display:inline-block;font-size:14px">
+          Apply Now
+        </a>
+      </div>
+      <p style="color:#6B7280;font-size:13px">
+        Or copy this link:<br>
+        <a href="{form_url}" style="color:#4F46E5;word-break:break-all">{form_url}</a>
+      </p>""")
+    text = (
+        f"Application Invitation — {job_title} at {company_name}\n\n"
+        f"Hi {candidate_name}, {sent_by_name} has invited you to apply.\n\n"
+        f"Apply here: {form_url}"
+    )
+    return await send_email(
+        to_email, subject, html, text, "hrm_hiring_invitation", company_id=company_id
+    )
+
+
 async def send_employee_onboarding_link_email(
     to_email: str,
     form_url: str,

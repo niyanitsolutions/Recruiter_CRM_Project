@@ -4,6 +4,13 @@ import { Plus, FileText, CheckCircle, XCircle } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
 import TableScroll from '../../../components/common/TableScroll'
+import SearchableSelect from '../../../components/common/SearchableSelect'
+
+const candidateToOption = (c) => ({
+  value: c.id,
+  label: `${c.full_name} — ${c.email}`,
+  searchText: `${c.full_name} ${c.email}`,
+})
 
 const STATUS_COLORS = {
   draft:    'bg-gray-100 text-gray-600',
@@ -23,6 +30,7 @@ export default function HROffer() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving]   = useState(false)
   const [form, setForm] = useState({ candidate_id: '', offered_designation: '', offered_ctc: '', joining_date: '' })
+  const [candidateOptions, setCandidateOptions] = useState([])
 
   const load = async () => {
     setLoading(true)
@@ -36,8 +44,20 @@ export default function HROffer() {
 
   useEffect(() => { load() }, [page, status])
 
+  const openForm = async () => {
+    setShowForm(true)
+    try {
+      const res = await hrmService.listHiringCandidates({ page: 1, page_size: 200 })
+      setCandidateOptions((res.data.items || []).map(candidateToOption))
+    } catch {}
+  }
+
   const handleCreate = async (e) => {
     e.preventDefault()
+    if (!form.candidate_id) {
+      toast.error('Please select a candidate')
+      return
+    }
     setSaving(true)
     try {
       await hrmService.createOffer({ ...form, offered_ctc: Number(form.offered_ctc) })
@@ -70,7 +90,7 @@ export default function HROffer() {
           <h1 className="text-2xl font-bold text-gray-900">Offer Letters</h1>
           <p className="text-sm text-gray-500">{total} total</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 text-sm">
+        <button onClick={openForm} className="btn-primary flex items-center gap-2 text-sm">
           <Plus className="w-4 h-4" /> Create Offer
         </button>
       </div>
@@ -89,8 +109,15 @@ export default function HROffer() {
           <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
             <h2 className="text-lg font-semibold">Create Offer Letter</h2>
             <div>
-              <label className="text-sm font-medium text-gray-700">Candidate ID *</label>
-              <input className="input w-full mt-1" value={form.candidate_id} onChange={e => setForm(f => ({ ...f, candidate_id: e.target.value }))} required />
+              <label className="text-sm font-medium text-gray-700">Candidate *</label>
+              <SearchableSelect
+                value={form.candidate_id}
+                onChange={(v) => setForm(f => ({ ...f, candidate_id: v }))}
+                options={candidateOptions}
+                placeholder="Search candidate by name or email…"
+                minChars={1}
+                className="mt-1"
+              />
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700">Offered Designation</label>
