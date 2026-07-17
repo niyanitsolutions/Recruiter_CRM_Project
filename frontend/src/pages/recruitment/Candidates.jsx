@@ -28,6 +28,17 @@ import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 // data that never change during a session, so fetching them once is enough.
 const _dropdownCache = { statuses: null, sources: null, noticePeriods: null }
 
+// Short-TTL list cache — makes navigating back to Candidates instant instead of
+// flashing a skeleton and refetching. Keyed by company + the exact query params
+// (page, filters, tab) so a cached view is only reused for an identical query.
+// Mirrors the TTL cache already used on the admin dashboard. The 5s live-polling
+// refresh keeps entries warm while the page is open; entries older than the TTL
+// fall through to a normal (spinner) fetch. Deletes explicitly clear it so a
+// removed candidate can never be served from cache.
+const _listCache = {}          // cacheKey → { data, total, totalPages, ts }
+const LIST_CACHE_TTL = 30_000  // 30s
+const _clearListCache = () => { for (const k in _listCache) delete _listCache[k] }
+
 const AVATAR_GRADIENTS = [
   'var(--stat-purple)',
   'var(--stat-blue)',
@@ -46,6 +57,7 @@ const Candidates = () => {
   const navigate = useNavigate()
   const { has } = usePermissions()
   const userType = useSelector(selectUserType)
+  const companyId = useSelector((s) => s.auth.user?.companyId)
   const [candidates, setCandidates] = useState([])
   const [activeTab, setActiveTab] = useState('all')
   const [viewMode, setViewMode] = useState('table')
@@ -163,23 +175,42 @@ const Candidates = () => {
   }, [])
 
   const loadCandidates = useCallback(async (overrideFilters, silent = false) => {
+    const activeFilters = overrideFilters ?? filters
+    const params = {
+      page: pagination.page,
+      page_size: 20,
+      ...Object.fromEntries(Object.entries(activeFilters).filter(([_, v]) => v))
+    }
+    if (activeTab === 'active') params.status = 'active'
+    if (activeTab === 'blacklisted') params.status = 'blacklisted'
+
+    // Cache key is company + the exact params, so a cached view is reused only
+    // for an identical query.
+    const cacheKey = `${companyId || ''}|${JSON.stringify(params)}`
+
+    // Fast path: a fresh cached result renders instantly with no spinner and no
+    // network call. Only for visible (non-silent) loads — silent polling always
+    // fetches to keep the cache warm.
+    if (!silent) {
+      const c = _listCache[cacheKey]
+      if (c && (Date.now() - c.ts) < LIST_CACHE_TTL) {
+        setCandidates(c.data)
+        setPagination(prev => ({ ...prev, total: c.total, totalPages: c.totalPages }))
+        setSelectedIds(new Set())
+        setLoading(false)
+        return
+      }
+    }
+
     try {
       if (!silent) setLoading(true)
-      const activeFilters = overrideFilters ?? filters
-      const params = {
-        page: pagination.page,
-        page_size: 20,
-        ...Object.fromEntries(Object.entries(activeFilters).filter(([_, v]) => v))
-      }
-      if (activeTab === 'active') params.status = 'active'
-      if (activeTab === 'blacklisted') params.status = 'blacklisted'
       const response = await candidateService.getCandidates(params)
-      setCandidates(response.data || [])
-      setPagination(prev => ({
-        ...prev,
-        total: response.pagination?.total || 0,
-        totalPages: response.pagination?.total_pages || 0
-      }))
+      const data       = response.data || []
+      const total      = response.pagination?.total || 0
+      const totalPages = response.pagination?.total_pages || 0
+      _listCache[cacheKey] = { data, total, totalPages, ts: Date.now() }
+      setCandidates(data)
+      setPagination(prev => ({ ...prev, total, totalPages }))
       // Clear selection when the page changes so stale IDs don't linger
       if (!silent) setSelectedIds(new Set())
     } catch (error) {
@@ -187,7 +218,7 @@ const Candidates = () => {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [filters, pagination.page, activeTab])
+  }, [filters, pagination.page, activeTab, companyId])
 
   // Live background refresh (Task 8) — silent, no visible reload.
   // Also refreshes immediately (not after up to 5s) on a 'candidates' event
@@ -236,6 +267,7 @@ const Candidates = () => {
       await candidateService.deleteCandidate(candidateId)
       toast.success('Candidate deleted successfully')
       setSelectedIds(prev => { const n = new Set(prev); n.delete(candidateId); return n })
+      _clearListCache()   // a deleted candidate must never be served from cache
       loadCandidates()
       publish(LIVE_TOPICS.CANDIDATES); publish(LIVE_TOPICS.DASHBOARD)
     } catch (error) {
@@ -282,6 +314,7 @@ const Candidates = () => {
       }
       setSelectedIds(new Set())
       setBulkDeleteConfirm(false)
+      _clearListCache()
       loadCandidates()
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Bulk delete failed')
@@ -313,6 +346,7 @@ const Candidates = () => {
     try {
       await candidateService.updateStatus(candidate.id, newValue)
       toast.success(`Status updated to ${newValue === 'active' ? 'Active' : 'Blacklisted'}`)
+      _clearListCache()
       loadCandidates()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to update status')
@@ -335,6 +369,7 @@ const Candidates = () => {
         setEligibleJobs(prev =>
           prev.map(j => j.job_id === jobId ? { ...j, already_applied: true } : j)
         )
+        _clearListCache()
         loadCandidates()
       }
     } catch (err) {

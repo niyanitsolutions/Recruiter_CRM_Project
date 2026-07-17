@@ -912,7 +912,10 @@ class DocumentCenterService:
                     key, docx_bytes,
                     content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 )
-        except Exception:
+        except Exception as _store_err:
+            # A failure here means the generated document was NOT persisted —
+            # log it loudly instead of silently continuing with null URLs.
+            logger.error("Document persistence failed (doc not stored): %s", _store_err, exc_info=True)
             doc_id = str(uuid.uuid4())
 
         # Fetch employee info
@@ -1113,8 +1116,9 @@ class DocumentCenterService:
             from app.utils.s3 import upload_bytes
             s3_key = f"doc-center/imports/{uuid.uuid4()}/{filename}"
             await upload_bytes(s3_key, file_bytes, content_type=f"application/{file_type}")
-        except Exception:
-            pass
+        except Exception as _imp_store_err:
+            logger.warning("Imported-template raw file not stored: %s", _imp_store_err)
+            s3_key = None
 
         content = TemplateContent(body_html=body_html)
         tmpl = DocTemplate(

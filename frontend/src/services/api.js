@@ -59,11 +59,48 @@ const _emitExpiredAndLogout = (reason, message) => {
   }, 8000)
 }
 
+// ── Transient-failure retry (idempotent GETs only) ────────────────────────────
+// A single dropped packet or a momentary 429/502/503/504 (nginx rate-limit or a
+// backend restart) previously surfaced straight to the user as a failed page.
+// GETs are idempotent, so retry them up to MAX_RETRIES times with a short
+// backoff, honoring Retry-After when the server provides one.
+// Deliberately NOT retried: mutations (POST/PUT/DELETE — no idempotency keys),
+// 401s (handled by the token-refresh flow below), and client timeouts
+// (ECONNABORTED — retrying piles more load onto an already-slow endpoint).
+const MAX_RETRIES = 2
+const RETRY_STATUS = new Set([429, 502, 503, 504])
+
+const _isRetryableGet = (error) => {
+  const cfg = error.config
+  if (!cfg || (cfg.method || '').toLowerCase() !== 'get') return false
+  if ((cfg._retryCount || 0) >= MAX_RETRIES) return false
+  if (!error.response) {
+    return error.code !== 'ECONNABORTED'   // network error yes, timeout no
+  }
+  return RETRY_STATUS.has(error.response.status)
+}
+
+const _retryDelayMs = (error, attempt) => {
+  const retryAfter = parseInt(error.response?.headers?.['retry-after'], 10)
+  if (!Number.isNaN(retryAfter) && retryAfter > 0) {
+    return Math.min(retryAfter * 1000, 5000)   // honor server hint, cap at 5s
+  }
+  return attempt === 1 ? 500 : 1500
+}
+
 // ── Response interceptor ──────────────────────────────────────────────────────
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
+
+    // ── Transient errors on idempotent GETs — retry with backoff ─────────────
+    if (_isRetryableGet(error)) {
+      originalRequest._retryCount = (originalRequest._retryCount || 0) + 1
+      const delay = _retryDelayMs(error, originalRequest._retryCount)
+      await new Promise((r) => setTimeout(r, delay))
+      return api(originalRequest)
+    }
 
     // ── 401: Session terminated by another device ─────────────────────────────
     if (error.response?.status === 401) {
@@ -130,15 +167,26 @@ api.interceptors.response.use(
         _processQueue(refreshError, null)
         _isRefreshing = false
 
+        const refreshStatus = refreshError.response?.status
         const errDetail = refreshError.response?.data?.detail || ''
-        if (errDetail.startsWith('SUBSCRIPTION_EXPIRED:')) {
+
+        if (typeof errDetail === 'string' && errDetail.startsWith('SUBSCRIPTION_EXPIRED:')) {
           removeToken()
           removeUser()
           localStorage.removeItem('refresh_token')
           sessionStorage.setItem('login_error', errDetail.replace('SUBSCRIPTION_EXPIRED:', ''))
           _emitExpiredAndLogout('token', 'Your session has expired. Please login again.')
-        } else {
+        } else if (refreshStatus === 401 || refreshStatus === 403) {
+          // The refresh token itself was rejected — the session is truly over.
           _emitExpiredAndLogout('token', 'Your session has expired. Please login again.')
+        } else {
+          // Transient failure (network blip, 429 rate limit, 5xx during a
+          // deploy): do NOT wipe the session. The failed requests surface
+          // their errors normally, and the next 401 triggers a fresh refresh
+          // attempt — which succeeds once the blip passes. Previously this
+          // branch force-logged users out on any hiccup.
+          console.warn('[API] Token refresh failed transiently (status:',
+            refreshStatus ?? 'network', ') — keeping session for retry.')
         }
         return Promise.reject(refreshError)
       }

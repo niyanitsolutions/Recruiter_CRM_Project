@@ -4,6 +4,8 @@
  */
 import api from './api';
 
+const LONG_OP_TIMEOUT = 120_000 // matches nginx proxy_read_timeout for reports/imports/exports
+
 const importExportService = {
   // ============== Import Templates ==============
   getImportTemplates: async (entityType = null) => {
@@ -32,7 +34,8 @@ const importExportService = {
     
     const response = await api.post('/data/import/validate', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      params: { entity_type: entityType }
+      params: { entity_type: entityType },
+      timeout: LONG_OP_TIMEOUT
     });
     return response.data;
   },
@@ -43,7 +46,8 @@ const importExportService = {
     formData.append('data', JSON.stringify(data));
     
     const response = await api.post('/data/import/start', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: LONG_OP_TIMEOUT
     });
     return response.data;
   },
@@ -60,7 +64,7 @@ const importExportService = {
 
   // ============== Export Operations ==============
   createExport: async (data) => {
-    const response = await api.post('/data/export', data);
+    const response = await api.post('/data/export', data, { timeout: LONG_OP_TIMEOUT });
     return response.data;
   },
 
@@ -75,7 +79,7 @@ const importExportService = {
   },
 
   downloadExport: async (exportId) => {
-    const response = await api.get(`/data/export/jobs/${exportId}/download`);
+    const response = await api.get(`/data/export/jobs/${exportId}/download`, { timeout: LONG_OP_TIMEOUT });
     return response.data;
   },
 
@@ -83,7 +87,8 @@ const importExportService = {
   exportCandidates: async (params = {}) => {
     const response = await api.get('/data/export/candidates', {
       params,
-      responseType: 'blob'
+      responseType: 'blob',
+      timeout: LONG_OP_TIMEOUT
     });
     return response;
   },

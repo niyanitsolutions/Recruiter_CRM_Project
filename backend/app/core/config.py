@@ -85,6 +85,17 @@ class Settings(BaseSettings):
     # Anthropic / Claude API
     ANTHROPIC_API_KEY: str = ""
 
+    # Error tracking — Sentry (optional). Leave blank to disable entirely.
+    # When set (and sentry-sdk is installed), unhandled exceptions and 5xx
+    # responses are reported with request context.
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.0   # perf tracing off by default
+    ENVIRONMENT: str = "development"          # tagged on Sentry events
+
+    # Slow-request logging threshold (seconds). Requests slower than this are
+    # logged at WARNING with method/path/duration/request-id.
+    SLOW_REQUEST_SECONDS: float = 2.0
+
     # Seller default commission margin percentage
     DEFAULT_SELLER_MARGIN: float = 20.0
 
@@ -105,8 +116,13 @@ class Settings(BaseSettings):
 
 def _validate_production_secrets(s: Settings) -> None:
     """
-    Raise an error at startup if critical secrets are still at their
-    insecure default values while DEBUG is False (i.e. in production).
+    Validate critical secrets at startup when DEBUG is False (production).
+
+    JWT is a hard failure (the app cannot be safely run with a default signing
+    key). FERNET / default super-admin password are surfaced as prominent
+    WARNINGS rather than hard failures, so an existing deployment that has not
+    configured integrations is not knocked offline by a restart — while the
+    operational risk is still made loud and greppable in the logs.
     """
     if s.DEBUG:
         return  # Skip validation in development
@@ -125,6 +141,28 @@ def _validate_production_secrets(s: Settings) -> None:
     if len(s.JWT_SECRET_KEY) < 32:
         raise RuntimeError(
             "FATAL: JWT_SECRET_KEY must be at least 32 characters in production."
+        )
+
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
+    # FERNET_SECRET_KEY protects tenant integration secrets (SMTP/OAuth/API
+    # tokens) at rest. Without it, integration_service falls back to Base64,
+    # which is reversible by anyone with DB access — i.e. effectively plaintext.
+    if not s.FERNET_SECRET_KEY:
+        _log.warning(
+            "SECURITY: FERNET_SECRET_KEY is not set in production. Tenant "
+            "integration secrets (SMTP/OAuth/API tokens) will be stored with a "
+            "reversible Base64 fallback, not encrypted. Generate one: "
+            "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+        )
+
+    # Default super-admin bootstrap password (main.py seeds it on first boot).
+    if os.getenv("DEFAULT_SUPERADMIN_PASSWORD", "") in {"", "SuperAdmin@123"}:
+        _log.warning(
+            "SECURITY: DEFAULT_SUPERADMIN_PASSWORD is unset or using the known "
+            "default 'SuperAdmin@123'. If the super admin is seeded on first "
+            "boot it will be guessable — set a strong value in .env."
         )
 
 

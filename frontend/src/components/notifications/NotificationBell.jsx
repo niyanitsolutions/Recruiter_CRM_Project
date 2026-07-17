@@ -82,7 +82,12 @@ const formatRelative = (iso) => {
   return `${Math.floor(h / 24)}d ago`
 }
 
-const POLL_INTERVAL = 5_000 // 5 seconds (Task 8 — live background refresh)
+// Background poll cadence for the unread badge. Immediate updates still happen
+// out-of-band: the live-update bus subscription below nudges refreshCount() the
+// moment a local mutation fires. 5s polling was the single largest source of
+// background API traffic (12 req/min per open tab, ~37 idle tabs saturated the
+// per-IP nginx budget on their own).
+const POLL_INTERVAL = 30_000 // 30 seconds
 
 const NotificationBell = () => {
   const navigate   = useNavigate()

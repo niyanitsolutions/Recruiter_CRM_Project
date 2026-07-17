@@ -90,14 +90,32 @@ async def get_current_user(
     # When another device force-logs in, _revoke_sessions() sets is_active=False for
     # all prior sessions, so this check will fail for the displaced device on its
     # very next API call — regardless of how much time remains on the JWT.
+    #
+    # A short-TTL Redis cache fronts the MongoDB lookup so this hot path doesn't
+    # cost an Atlas round trip on every request. Revocation stays immediate:
+    # every revocation code path writes a "revoked" marker to the cache
+    # (see mark_sessions_revoked in app.core.redis), so a displaced device is
+    # still rejected on its next call, not after the cache TTL.
     jti = payload.get("jti")
     if jti:
         try:
-            master_db = _db_get_master_db()
-            session_doc = await master_db.sessions.find_one(
-                {"_id": jti}, {"is_active": 1}
+            from app.core.redis import (
+                get_cached_session_state, cache_session_active, mark_sessions_revoked,
             )
-            if not session_doc or not session_doc.get("is_active"):
+            session_active = await get_cached_session_state(jti)
+            if session_active is None:
+                # Cache miss (or Redis unavailable) — authoritative MongoDB check
+                master_db = _db_get_master_db()
+                session_doc = await master_db.sessions.find_one(
+                    {"_id": jti}, {"is_active": 1}
+                )
+                session_active = bool(session_doc and session_doc.get("is_active"))
+                if session_active:
+                    await cache_session_active(jti)
+                else:
+                    # jtis are never reused — safe to remember the revoked verdict
+                    await mark_sessions_revoked([jti])
+            if not session_active:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail={

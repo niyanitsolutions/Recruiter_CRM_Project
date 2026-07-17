@@ -65,6 +65,10 @@ python-dateutil==2.8.2
 # Logging
 loguru==0.7.2
 
+# Error tracking — optional at runtime: only initialized when SENTRY_DSN is set
+# (see app/main.py). Includes FastAPI/Starlette integration.
+sentry-sdk[fastapi]>=2.8,<3
+
 # Testing
 pytest==7.4.4
 pytest-asyncio==0.23.3

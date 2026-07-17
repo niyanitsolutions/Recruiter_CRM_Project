@@ -43,14 +43,51 @@ echo "[$(date)] Backup created: $BACKUP_DIR/$BACKUP_FILE ($BACKUP_SIZE)"
 # ─── Upload to S3 (optional) ───────────────────────────────────────────────────
 
 if [ -n "$S3_BUCKET" ]; then
-    echo "[$(date)] Uploading to S3: s3://$S3_BUCKET/backups/$BACKUP_FILE"
+    echo "[$(date)] Uploading DB backup to S3: s3://$S3_BUCKET/backups/$BACKUP_FILE"
     aws s3 cp "$BACKUP_DIR/$BACKUP_FILE" "s3://$S3_BUCKET/backups/$BACKUP_FILE"
     echo "[$(date)] Upload complete"
+fi
+
+# ─── Uploaded-files Backup ─────────────────────────────────────────────────────
+# The MongoDB dump above does NOT contain uploaded files (resumes, candidate
+# photos, company logos, generated HR documents). Those live on the Docker
+# volume `uploads_data`, mounted into the backend container at /app/uploads.
+# A disk/instance loss without this step permanently destroys every tenant file.
+#
+# UPLOADS_PATH resolution order:
+#   1. $UPLOADS_PATH if set explicitly
+#   2. the Docker named volume mountpoint (docker volume inspect)
+#   3. a conventional host path fallback
+UPLOADS_FILE="crm_uploads_${TIMESTAMP}.tar.gz"
+
+if [ -z "$UPLOADS_PATH" ]; then
+    if command -v docker >/dev/null 2>&1; then
+        UPLOADS_PATH=$(docker volume inspect uploads_data \
+            --format '{{ .Mountpoint }}' 2>/dev/null || true)
+    fi
+fi
+if [ -z "$UPLOADS_PATH" ] && [ -d /var/lib/docker/volumes/uploads_data/_data ]; then
+    UPLOADS_PATH=/var/lib/docker/volumes/uploads_data/_data
+fi
+
+if [ -n "$UPLOADS_PATH" ] && [ -d "$UPLOADS_PATH" ]; then
+    echo "[$(date)] Archiving uploaded files from: $UPLOADS_PATH"
+    tar -czf "$BACKUP_DIR/$UPLOADS_FILE" -C "$UPLOADS_PATH" . 2>/dev/null || \
+        echo "[$(date)] WARNING: uploads archive failed (permissions? run as root/sudo)"
+    UPLOADS_SIZE=$(du -sh "$BACKUP_DIR/$UPLOADS_FILE" 2>/dev/null | cut -f1)
+    echo "[$(date)] Uploads archived: $BACKUP_DIR/$UPLOADS_FILE ($UPLOADS_SIZE)"
+    if [ -n "$S3_BUCKET" ] && [ -f "$BACKUP_DIR/$UPLOADS_FILE" ]; then
+        echo "[$(date)] Uploading files backup to S3: s3://$S3_BUCKET/backups/$UPLOADS_FILE"
+        aws s3 cp "$BACKUP_DIR/$UPLOADS_FILE" "s3://$S3_BUCKET/backups/$UPLOADS_FILE"
+    fi
+else
+    echo "[$(date)] WARNING: uploads path not found — set UPLOADS_PATH to back up files. DB-only backup produced."
 fi
 
 # ─── Clean up old backups (keep last 7 days) ───────────────────────────────────
 
 echo "[$(date)] Cleaning backups older than 7 days..."
-find "$BACKUP_DIR" -name "crm_backup_*.gz" -mtime +7 -delete
+find "$BACKUP_DIR" -name "crm_backup_*.gz"   -mtime +7 -delete
+find "$BACKUP_DIR" -name "crm_uploads_*.tar.gz" -mtime +7 -delete
 
-echo "[$(date)] Backup complete: $BACKUP_FILE"
+echo "[$(date)] Backup complete: DB=$BACKUP_FILE  FILES=${UPLOADS_FILE:-<skipped>}"

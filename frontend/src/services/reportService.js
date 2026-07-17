@@ -4,6 +4,8 @@
  */
 import api from './api';
 
+const LONG_OP_TIMEOUT = 120_000 // matches nginx proxy_read_timeout for reports/imports/exports
+
 const reportService = {
   // ============== Report Types ==============
   getReportTypes: async (category = null) => {
@@ -19,19 +21,20 @@ const reportService = {
 
   // ============== Report Generation ==============
   generateReport: async (data) => {
-    const response = await api.post('/reports/generate', data);
+    const response = await api.post('/reports/generate', data, { timeout: LONG_OP_TIMEOUT });
     return response.data;
   },
 
   generateReportByType: async (reportType, filters = {}) => {
-    const response = await api.post(`/reports/generate/${reportType}`, null, { params: filters });
+    const response = await api.post(`/reports/generate/${reportType}`, null, { params: filters, timeout: LONG_OP_TIMEOUT });
     return response.data;
   },
 
   // ============== Report Export ==============
   exportReport: async (data) => {
     const response = await api.post('/reports/export', data, {
-      responseType: 'blob'
+      responseType: 'blob',
+      timeout: LONG_OP_TIMEOUT
     });
     return response;
   },
@@ -74,7 +77,7 @@ const reportService = {
   },
 
   runSavedReport: async (reportId) => {
-    const response = await api.post(`/reports/saved/${reportId}/run`);
+    const response = await api.post(`/reports/saved/${reportId}/run`, null, { timeout: LONG_OP_TIMEOUT });
     return response.data;
   },
 

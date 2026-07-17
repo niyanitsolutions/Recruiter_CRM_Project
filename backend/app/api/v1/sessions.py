@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSo
 from pydantic import BaseModel
 
 from app.core.database import get_master_db, get_company_db
+from app.core.redis import mark_sessions_revoked
 from app.core.ws_manager import ws_manager
 from app.core.security import verify_access_token
 from app.middleware.auth import get_current_user, AuthContext
@@ -121,6 +122,7 @@ async def revoke_session(session_id: str, auth: AuthContext = Depends(get_curren
             "revoked_at":     now,
         }}
     )
+    await mark_sessions_revoked([session_id])
 
     if session_id != auth.jti:
         await ws_manager.send_to_user(auth.user_id, {
@@ -143,6 +145,10 @@ async def revoke_all_sessions(auth: AuthContext = Depends(get_current_user)):
     master_db = get_master_db()
     now       = datetime.now(timezone.utc)
 
+    _target_ids = await master_db.sessions.find(
+        {"user_id": auth.user_id, "is_active": True, "_id": {"$ne": auth.jti}},
+        {"_id": 1},
+    ).to_list(200)
     result = await master_db.sessions.update_many(
         {
             "user_id":   auth.user_id,
@@ -156,6 +162,7 @@ async def revoke_all_sessions(auth: AuthContext = Depends(get_current_user)):
             "revoked_at":     now,
         }}
     )
+    await mark_sessions_revoked([d["_id"] for d in _target_ids])
 
     await ws_manager.send_to_user(auth.user_id, {
         "type":    "all_sessions_revoked",
@@ -375,6 +382,7 @@ async def approve_request(body: ApproveBody, auth: AuthContext = Depends(get_cur
             "ended_at":       now,
         }}
     )
+    await mark_sessions_revoked([auth.jti])
 
     # ── Step 2: Clear active_session_token on the user document ───────────────
     # Belt-and-suspenders: even if Device B polls just after step 1, the login

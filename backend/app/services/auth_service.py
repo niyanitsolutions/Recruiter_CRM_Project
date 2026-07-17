@@ -612,6 +612,8 @@ class AuthService:
                                 "ended_at":       _now,
                             }}
                         )
+                        from app.core.redis import mark_sessions_revoked as _msr
+                        await _msr([_active_jti])
             # active_session_token is stale or no session doc found — proceed
 
         # ── Subscription expiry ───────────────────────────────────────────────
@@ -1194,6 +1196,10 @@ class AuthService:
             "is_active": True,
             "session_status": "active",
         })
+        # Prime the per-request session cache so the first API calls after
+        # login skip the MongoDB round trip (best-effort, never raises).
+        from app.core.redis import cache_session_active
+        await cache_session_active(session_id)
         return session_id
 
     @staticmethod
@@ -1237,10 +1243,19 @@ class AuthService:
     async def _revoke_sessions(user_id: str) -> None:
         """Mark all active sessions for user_id as inactive and clear the active-session slot."""
         master_db = get_master_db()
+        # Collect the jtis being revoked BEFORE the update so the per-request
+        # session cache can be invalidated — keeps force-logout immediate for
+        # the displaced device even with the Redis fast path in front of Mongo.
+        _revoked_ids = await master_db.sessions.find(
+            {"user_id": user_id, "is_active": True}, {"_id": 1}
+        ).to_list(200)
         await master_db.sessions.update_many(
             {"user_id": user_id, "is_active": True},
             {"$set": {"is_active": False}},
         )
+        if _revoked_ids:
+            from app.core.redis import mark_sessions_revoked
+            await mark_sessions_revoked([d["_id"] for d in _revoked_ids])
         # Clear the per-user active-session slot so force-login / logout
         # allows a fresh login from any device.
         await master_db.user_active_sessions.delete_one({"_id": user_id})
@@ -1286,6 +1301,8 @@ class AuthService:
                 {"_id": session_id, "user_id": user_id},
                 {"$set": {"is_active": False}},
             )
+            from app.core.redis import mark_sessions_revoked
+            await mark_sessions_revoked([session_id])
         else:
             await AuthService._revoke_sessions(user_id)
 

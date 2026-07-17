@@ -251,23 +251,27 @@ async def lifespan(app: FastAPI):
             print(f" System roles synced for {len(_role_cids)} tenant DB(s)")
     except Exception as _role_err:
         logger.warning("Role sync startup step skipped: %s", _role_err)
-    # Start subscription reminder background task (runs every 24 hours)
-    reminder_task = asyncio.create_task(reminder_background_loop())
-    print(" Subscription reminder scheduler started")
-    cleanup_task = asyncio.create_task(session_cleanup_loop())
-    print(" Session cleanup scheduler started")
-    auto_checkout_task = asyncio.create_task(hrm_auto_checkout_loop())
-    print(" HRM midnight auto punch-out scheduler started")
-    tenant_cleanup_task = asyncio.create_task(tenant_cleanup_loop())
-    print(" Tenant deletion cleanup scheduler started (runs daily at 2 AM UTC)")
+    # Background schedulers — run in exactly ONE worker via Redis leader
+    # election (see app/core/scheduler_lock.py). With multiple uvicorn workers,
+    # starting these directly in every lifespan duplicated reminder emails and
+    # cleanup sweeps. The one-shot recovery sweep rides the same election so a
+    # large tenant count never delays app readiness and never runs twice.
     from app.services.subscription_queue_service import subscription_queue_loop
-    subscription_queue_task = asyncio.create_task(subscription_queue_loop())
-    print(" Subscription queue activation scheduler started (hourly)")
-    # Layer-2 recovery: close any attendance records left open from a previous
-    # day because the server was down/restarting over its last shift-end window.
-    # Fire-and-forget so a large tenant count doesn't delay app readiness.
-    asyncio.create_task(run_startup_recovery())
-    print(" HRM auto punch-out recovery sweep started")
+    from app.core.scheduler_lock import SchedulerLeader
+    _scheduler_leader = SchedulerLeader(
+        loops=[
+            ("subscription_reminder", reminder_background_loop),
+            ("session_cleanup",       session_cleanup_loop),
+            ("hrm_auto_checkout",     hrm_auto_checkout_loop),
+            ("tenant_cleanup",        tenant_cleanup_loop),
+            ("subscription_queue",    subscription_queue_loop),
+        ],
+        one_shots=[
+            ("hrm_startup_recovery",  run_startup_recovery),
+        ],
+    )
+    scheduler_manager_task = asyncio.create_task(_scheduler_leader.run())
+    print(" Scheduler leader election started (5 loops + recovery sweep, single-worker)")
 
     # Ensure sessions TTL index exists (idempotent)
     try:
@@ -289,16 +293,33 @@ async def lifespan(app: FastAPI):
         logger.warning("Master index init skipped: %s", _midx_err)
 
     yield
-    # Shutdown
-    subscription_queue_task.cancel()
-    tenant_cleanup_task.cancel()
-    auto_checkout_task.cancel()
-    cleanup_task.cancel()
-    reminder_task.cancel()
+    # Shutdown — cancelling the manager stops all scheduler tasks it owns and
+    # releases the leader lock so a surviving worker can take over immediately.
+    scheduler_manager_task.cancel()
+    try:
+        await scheduler_manager_task
+    except (asyncio.CancelledError, Exception):
+        pass
     await close_redis()
     await close_mongo_connection()
     print(" Shutting down Niyan HireFlow API Server...")
 
+
+# ── Error tracking (optional) ─────────────────────────────────────────────────
+# Initialized BEFORE the app is created so the SDK's ASGI integration wraps
+# everything. Entirely env-gated: no SENTRY_DSN (or sdk not installed) → no-op.
+if settings.SENTRY_DSN:
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=settings.SENTRY_DSN,
+            environment=settings.ENVIRONMENT,
+            traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+            send_default_pii=False,   # never ship user PII in events
+        )
+        logger.info("Sentry error tracking enabled (env=%s)", settings.ENVIRONMENT)
+    except Exception as _sentry_err:  # ImportError or bad DSN — never block startup
+        logger.warning("Sentry init skipped: %s", _sentry_err)
 
 app = FastAPI(
     title="Niyan HireFlow",
@@ -362,6 +383,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         content={"success": False, "detail": msg, "message": msg},
     )
 
+
+# Request IDs + slow-request / 5xx logging (see app/middleware/observability.py)
+from app.middleware.observability import ObservabilityMiddleware
+app.add_middleware(ObservabilityMiddleware)
 
 # GZip — compress any response ≥ 512 B; most list/dashboard JSON payloads
 # are 2–20 kB and compress 60–80%, which matters on slow mobile connections.
@@ -553,9 +578,12 @@ async def readiness():
         all_ok = False
 
     # Redis (optional — gracefully degraded if not configured)
+    # NOTE: get_redis() is synchronous — the previous `await get_redis()`
+    # raised TypeError on every probe, so this check always reported
+    # "degraded" even when Redis was healthy.
     try:
         from app.core.redis import get_redis
-        redis = await get_redis()
+        redis = get_redis()
         if redis:
             await redis.ping()
             checks["redis"] = "ok"
@@ -564,6 +592,40 @@ async def readiness():
     except Exception as _redis_exc:
         checks["redis"] = f"degraded: {_redis_exc}"
         # Redis is non-critical — don't fail readiness
+
+    # Scheduler health (informational — never fails readiness). The elected
+    # leader publishes this snapshot every renewal tick (see scheduler_lock);
+    # "missing" for longer than ~2.5 ticks means no leader is alive.
+    try:
+        from app.core.redis import get_redis as _gr
+        _r = _gr()
+        if _r:
+            _sched_raw = await _r.get("scheduler:health")
+            if _sched_raw:
+                import json as _json
+                checks["schedulers"] = _json.loads(_sched_raw)
+            else:
+                checks["schedulers"] = "no_leader_heartbeat"
+        else:
+            checks["schedulers"] = "unknown (redis not configured)"
+    except Exception as _sched_exc:
+        checks["schedulers"] = f"unknown: {_sched_exc}"
+
+    # Uploads disk space (informational — a full disk breaks every upload and
+    # nginx cache write long before anything else complains).
+    try:
+        import shutil as _shutil
+        _du = _shutil.disk_usage(settings.UPLOAD_DIR)
+        _free_pct = round(_du.free / _du.total * 100, 1)
+        checks["uploads_disk"] = {
+            "free_gb": round(_du.free / (1024 ** 3), 2),
+            "free_percent": _free_pct,
+        }
+        if _free_pct < 10:
+            checks["uploads_disk"]["warning"] = "less than 10% disk free"
+            logger.warning("Uploads disk low: %.1f%% free", _free_pct)
+    except Exception as _disk_exc:
+        checks["uploads_disk"] = f"unknown: {_disk_exc}"
 
     if not all_ok:
         return JSONResponse(

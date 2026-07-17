@@ -145,6 +145,66 @@ async def is_token_blacklisted(jti: str) -> bool:
         return False
 
 
+# ─── Per-request session-state cache ──────────────────────────────────────────
+# get_current_user() validates the JWT's jti against master_db.sessions on every
+# API request. These helpers cache that lookup so steady-state traffic doesn't
+# pay a MongoDB round trip per call. Semantics are preserved exactly:
+#   - active sessions are cached for a short TTL only (ACTIVE_TTL)
+#   - every explicit revocation path (logout, force-login, revoke endpoints)
+#     writes a "revoked" marker immediately, so force-logout still takes effect
+#     on the displaced device's very next API call — no stale-active window.
+# A session id (jti) is never reused after revocation (new logins mint a new
+# uuid4 jti), so a cached "revoked" marker can never mask a legitimate session.
+
+SESSION_STATE_PREFIX = "sessactive:"
+SESSION_STATE_ACTIVE_TTL = 30       # seconds an "active" verdict may be reused
+SESSION_STATE_REVOKED_TTL = 3600    # revoked markers only exist to short-circuit
+
+
+async def get_cached_session_state(jti: str) -> Optional[bool]:
+    """Return True (active) / False (revoked) from cache, or None on miss/unavailable."""
+    client = get_redis()
+    if not client:
+        return None
+    try:
+        val = await client.get(f"{SESSION_STATE_PREFIX}{jti}")
+        if val == "1":
+            return True
+        if val == "0":
+            return False
+        return None
+    except Exception as e:
+        logger.warning(f"Redis get_cached_session_state failed: {e}")
+        return None
+
+
+async def cache_session_active(jti: str) -> None:
+    """Mark a session as verified-active for a short TTL."""
+    client = get_redis()
+    if not client:
+        return
+    try:
+        await client.setex(f"{SESSION_STATE_PREFIX}{jti}", SESSION_STATE_ACTIVE_TTL, "1")
+    except Exception as e:
+        logger.warning(f"Redis cache_session_active failed: {e}")
+
+
+async def mark_sessions_revoked(jtis: list) -> None:
+    """Overwrite cache entries for revoked session ids so the displaced device
+    is rejected immediately (not after the active-TTL lapses)."""
+    client = get_redis()
+    if not client or not jtis:
+        return
+    try:
+        pipe = client.pipeline()
+        for jti in jtis:
+            if jti:
+                pipe.setex(f"{SESSION_STATE_PREFIX}{jti}", SESSION_STATE_REVOKED_TTL, "0")
+        await pipe.execute()
+    except Exception as e:
+        logger.warning(f"Redis mark_sessions_revoked failed: {e}")
+
+
 # ─── Permission & Tenant Caching ───────────────────────────────────────────────
 
 async def cache_permissions(user_id: str, permissions: list, ttl_seconds: int = 300) -> bool:

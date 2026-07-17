@@ -318,12 +318,27 @@ export const initAuth = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     const storedRefresh = getRefreshToken()
     if (!storedRefresh) return rejectWithValue('no session')
+
+    const attemptRefresh = () => axios.post(
+      `${_API_BASE}/auth/refresh`,
+      { refresh_token: storedRefresh },
+      { headers: { 'Content-Type': 'application/json' } }
+    )
+
     try {
-      const response = await axios.post(
-        `${_API_BASE}/auth/refresh`,
-        { refresh_token: storedRefresh },
-        { headers: { 'Content-Type': 'application/json' } }
-      )
+      let response
+      try {
+        response = await attemptRefresh()
+      } catch (firstErr) {
+        // Only a 401/403 means the refresh token is truly invalid. Anything
+        // else (network blip, 429 rate limit, 5xx mid-deploy) is transient —
+        // retry once after a short delay instead of immediately wiping the
+        // stored session and bouncing the user to the login page.
+        const st = firstErr.response?.status
+        if (st === 401 || st === 403) throw firstErr
+        await new Promise((r) => setTimeout(r, 2000))
+        response = await attemptRefresh()
+      }
       const { access_token, refresh_token } = response.data
       // Decode user info from the new JWT — avoids a second network call
       const payload = parseToken(access_token)

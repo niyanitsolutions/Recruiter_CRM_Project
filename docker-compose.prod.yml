@@ -52,7 +52,10 @@ services:
     container_name: hireflow_backend
     restart: always
     ports:
-      - "8000:8000"
+      # Loopback-only: reachable by the host's nginx reverse proxy, never
+      # directly from the internet. Required for uvicorn --proxy-headers to be
+      # safe (a directly-reachable port would let clients spoof X-Forwarded-For).
+      - "127.0.0.1:8000:8000"
     env_file:
       - /home/ubuntu/crm-backend/.env
     environment:

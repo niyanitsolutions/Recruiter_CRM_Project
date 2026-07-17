@@ -8,6 +8,7 @@ from typing import Optional
 from bson import ObjectId
 import base64
 import json
+import logging
 import os
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -89,11 +90,26 @@ INTEGRATION_DEFINITIONS = [
 ]
 
 
+_warned_base64_fallback = False
+
+
 def _simple_encrypt(value: str) -> str:
-    """Encrypt with Fernet if key is configured, otherwise fall back to Base64."""
+    """Encrypt with Fernet if key is configured, otherwise fall back to Base64.
+
+    Behavior is unchanged (fallback preserved so existing records stay
+    readable); the first fallback now logs a loud warning so an unset
+    FERNET_SECRET_KEY in production is visible rather than silent.
+    """
     fernet = _get_fernet()
     if fernet:
         return fernet.encrypt(value.encode()).decode()
+    global _warned_base64_fallback
+    if not _warned_base64_fallback:
+        _warned_base64_fallback = True
+        logging.getLogger(__name__).warning(
+            "SECURITY: storing an integration secret with reversible Base64 "
+            "encoding because FERNET_SECRET_KEY is not configured."
+        )
     return base64.b64encode(value.encode()).decode()
 
 
