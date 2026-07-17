@@ -373,7 +373,15 @@ class HRMHiringService:
         passed_count = sum(1 for iv in existing if iv.get("result") == "passed")
         next_round_number = passed_count + 1
 
-        rounds = await self._get_job_rounds(job_id, company_id)
+        # Round definitions, in priority order:
+        #   1. the candidate's own interview_pipeline (recruiter-defined at the
+        #      first schedule), then
+        #   2. the job's configured interview_rounds, then
+        #   3. generic unlimited "Round N" (legacy behavior).
+        cand_doc = await self.candidates.find_one(
+            {"_id": candidate_id, "company_id": company_id}, {"interview_pipeline": 1}
+        )
+        rounds = (cand_doc or {}).get("interview_pipeline") or await self._get_job_rounds(job_id, company_id)
         if rounds:
             rounds_sorted = sorted(rounds, key=lambda r: r["round_number"])
             match = next((r for r in rounds_sorted if r["round_number"] == next_round_number), None)
@@ -413,6 +421,22 @@ class HRMHiringService:
             raise HTTPException(status_code=404, detail="Candidate not found")
         if cand.get("current_stage") == HiringStage.REJECTED.value:
             raise HTTPException(status_code=400, detail="Cannot schedule an interview for a rejected candidate.")
+
+        # First schedule: persist the recruiter-defined round pipeline on the
+        # candidate. Ignored on later schedules (the pipeline is fixed once set),
+        # so it can never create duplicate rounds or change an in-flight pipeline.
+        pipeline = data.get("interview_rounds")
+        if pipeline and not cand.get("interview_pipeline"):
+            _clean_pipeline = [
+                {"round_number": int(r.get("round_number", i + 1)),
+                 "round_name": (r.get("round_name") or f"Round {i + 1}").strip()}
+                for i, r in enumerate(pipeline)
+            ]
+            await self.candidates.update_one(
+                {"_id": data["candidate_id"], "company_id": company_id},
+                {"$set": {"interview_pipeline": _clean_pipeline}},
+            )
+            cand["interview_pipeline"] = _clean_pipeline
 
         job_id = data.get("job_id") or cand.get("job_id")
         round_info = await self._compute_next_round(data["candidate_id"], job_id, company_id, for_scheduling=True)

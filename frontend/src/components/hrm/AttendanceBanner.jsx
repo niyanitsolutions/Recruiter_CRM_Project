@@ -22,6 +22,7 @@
  *   - A context-aware status message is shown in the banner instead.
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Clock, Coffee, LogOut, Loader2, AlertCircle, Calendar, Sun, Umbrella } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -31,8 +32,11 @@ import { getTenantTimezone } from '../../utils/format'
 import PunchInModal from './PunchInModal'
 import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
-const DISMISS_KEY = 'attendance_modal_dismissed'
-const todayStr = () => new Date().toISOString().slice(0, 10)
+// The punch-in popup's visibility is derived from today's attendance record
+// (backend truth: record.check_in), never from a persisted "dismissed" flag.
+// Dismissing (X / Remind Me Later) only hides it for the current view — it
+// reappears on refresh / navigation / re-login while the user has not yet
+// punched in, and it NEVER reappears once punched in.
 
 // HH:MM:SS — used for live work/break timers
 function formatHMS(totalSeconds) {
@@ -68,6 +72,7 @@ function leaveTypeLabel(lt) {
 
 export default function AttendanceBanner() {
   const user = useSelector(selectUser)
+  const location = useLocation()
 
   const [record,        setRecord]        = useState(null)
   const [recordLoaded,  setRecordLoaded]  = useState(false)
@@ -75,6 +80,13 @@ export default function AttendanceBanner() {
   const [resolvedEmpId, setResolvedEmpId] = useState(null)
   const [showModal,     setShowModal]     = useState(false)
   const [loading,       setLoading]       = useState(false)
+  // Transient (in-memory) — hides the popup for the current view only. Reset on
+  // navigation so the reminder reappears until the user actually punches in.
+  const [dismissed,     setDismissed]     = useState(false)
+  // True when the last /me/today load failed — we then can't confirm punch-in
+  // status, so we must NOT nag with the popup (prevents the false popup on a
+  // network blip / reconnect after the user already punched in).
+  const [loadErrored,   setLoadErrored]   = useState(false)
 
   // Today's context — determines whether to show punch-in modal
   const [isHoliday,   setIsHoliday]   = useState(false)
@@ -95,6 +107,7 @@ export default function AttendanceBanner() {
     if (!user || isPartner) return
     try {
       const res  = await hrmService.getMyTodayAttendance()
+      setLoadErrored(false)
       const data = res.data
 
       if (!data || typeof data !== 'object') {
@@ -123,6 +136,7 @@ export default function AttendanceBanner() {
       const hasRecord = !!(data.check_in || (data.id && data.id !== data.employee_id))
       setRecord(hasRecord ? data : null)
     } catch {
+      setLoadErrored(true)
       // API error — fall back to JWT employee ID so banner stays visible
       const fallback = user?.hrmEmployeeId || null
       setResolvedEmpId(prev => prev || fallback || '__PENDING__')
@@ -188,15 +202,26 @@ export default function AttendanceBanner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onBreak, lastBreak?.start])
 
-  // ── Auto-show punch-in modal once per day ───────────────────────────────────
-  // Do NOT show the modal if: on holiday, weekend, approved leave, or already punched in.
+  // ── Auto-show punch-in modal — driven purely by today's attendance record ───
+  // Show ONLY when we can positively confirm the user has NOT punched in today.
+  // Never show if: still loading, no real employee profile, the load errored
+  // (status unknown), already punched in (record.check_in), a non-working day
+  // (holiday/weekend/approved leave), or the popup was dismissed in this view.
   useEffect(() => {
-    if (!recordLoaded || !resolvedEmpId) return
-    if (record !== null) return                          // already punched in
-    if (isHoliday || isWeekend || leaveInfo) return     // no punch needed today
-    if (localStorage.getItem(DISMISS_KEY) === todayStr()) return
+    if (!recordLoaded || !resolvedEmpId || resolvedEmpId === '__PENDING__') return
+    if (loadErrored) return                              // status unknown — don't nag
+    if (record?.check_in) return                         // punched in today (backend truth)
+    if (isHoliday || isWeekend || leaveInfo) return      // no punch needed today
+    if (dismissed) return                                // transiently dismissed this view
     setShowModal(true)
-  }, [recordLoaded, resolvedEmpId, record, isHoliday, isWeekend, leaveInfo])
+  }, [recordLoaded, resolvedEmpId, record, isHoliday, isWeekend, leaveInfo, loadErrored, dismissed])
+
+  // Reset the transient dismiss when the route changes, so the reminder popup
+  // reappears on navigation while the user has still not punched in (spec:
+  // Refresh / Navigate / Re-login all bring it back until Punch In succeeds).
+  useEffect(() => {
+    setDismissed(false)
+  }, [location.pathname])
 
   // ── Auto punch-out at midnight (client-side safety net) ─────────────────────
   useEffect(() => {
@@ -216,8 +241,11 @@ export default function AttendanceBanner() {
     return () => clearTimeout(id)
   }, [record?.check_in, record?.check_out, loadRecord])
 
+  // X or "Remind Me Later" — hide for THIS view only (no persistence). The
+  // small attendance status widget stays visible; the popup returns on the
+  // next navigation/refresh/re-login until the user actually punches in.
   const handleDismiss = () => {
-    localStorage.setItem(DISMISS_KEY, todayStr())
+    setDismissed(true)
     setShowModal(false)
   }
 
@@ -229,7 +257,7 @@ export default function AttendanceBanner() {
   //      committed before the response arrives, but a secondary used for reads may not
   //      have caught up yet.  1.5 s covers all observed replication windows in production.
   const handlePunchedIn = useCallback((checkInData) => {
-    localStorage.removeItem(DISMISS_KEY)
+    setDismissed(false)
     if (checkInData && checkInData.check_in) {
       // Immediate optimistic update — timer and dashboard update at once
       setRecord(checkInData)
@@ -311,7 +339,7 @@ export default function AttendanceBanner() {
     <>
       <PunchInModal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={handleDismiss}
         onDismiss={handleDismiss}
         onPunchedIn={handlePunchedIn}
       />

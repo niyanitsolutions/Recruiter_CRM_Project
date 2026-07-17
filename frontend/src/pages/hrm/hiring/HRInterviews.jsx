@@ -41,13 +41,20 @@ const RATING_FIELDS = [
 const emptyScheduleForm = () => ({
   candidate_id: '', mode: 'video', scheduled_at: '', duration_minutes: 60,
   location_or_link: '', send_invitation_email: true,
+  // Round pipeline — only used/sent when scheduling the FIRST round of a
+  // candidate (num_rounds = how many rounds, round_names = their names).
+  num_rounds: 1, round_names: [''],
 })
 
 const emptyFeedbackForm = () => ({
   interviewer_name: '', technical_rating: '', communication_rating: '',
   problem_solving_rating: '', behaviour_rating: '', overall_rating: '',
   overallTouched: false, feedback: '', result: 'passed', notify_candidate: true,
+  rejection_reason: '',
 })
+
+// Structured reasons offered when a candidate is failed/rejected (section: Fail flow).
+const REJECTION_REASONS = ['Communication', 'Technical', 'Salary', 'Experience', 'Culture Fit', 'Other']
 
 const emptyEditForm = () => ({ scheduled_at: '', duration_minutes: 60, mode: 'video', location_or_link: '' })
 
@@ -132,16 +139,26 @@ export default function HRInterviews() {
   const [passPrompt, setPassPrompt] = useState(null) // { candidateId, candidateName, nextRound }
   const [historyGroup, setHistoryGroup] = useState(null)
   const [candidateOptions, setCandidateOptions] = useState([])
+  // candidate_id → their interview_pipeline ([{round_number, round_name}]) so
+  // the progress timeline can show the full recruiter-defined pipeline (not just
+  // the rounds scheduled so far).
+  const [pipelineByCandidate, setPipelineByCandidate] = useState({})
 
   const load = async () => {
     setLoading(true)
     try {
-      const [ivRes, jobsRes] = await Promise.all([
+      const [ivRes, jobsRes, candRes] = await Promise.all([
         hrmService.listInterviews({ page: 1, page_size: 200 }),
         hrmService.listJobs({ page: 1, page_size: 200 }),
+        hrmService.listHiringCandidates({ page: 1, page_size: 200 }),
       ])
       setInterviews(ivRes.data.items || [])
       setJobsById(Object.fromEntries((jobsRes.data.items || []).map(j => [j.id, j])))
+      setPipelineByCandidate(Object.fromEntries(
+        (candRes.data.items || [])
+          .filter(c => Array.isArray(c.interview_pipeline) && c.interview_pipeline.length)
+          .map(c => [c.id, c.interview_pipeline])
+      ))
     } catch {}
     setLoading(false)
   }
@@ -187,21 +204,51 @@ export default function HRInterviews() {
     loadNextRound(candidateId)
   }
 
+  // The pipeline (rounds + names) is only defined/sent when scheduling the very
+  // first round for a candidate. After that the pipeline is fixed server-side.
+  const isFirstRound = nextRoundInfo?.round_number === 1 && !pipelineByCandidate[form.candidate_id]
+
   const handleCreate = async (e) => {
     e.preventDefault()
     if (!form.candidate_id) {
       toast.error('Please select a candidate')
       return
     }
+    const payload = {
+      candidate_id: form.candidate_id,
+      mode: form.mode,
+      scheduled_at: form.scheduled_at,
+      duration_minutes: form.duration_minutes,
+      location_or_link: form.location_or_link,
+      send_invitation_email: form.send_invitation_email,
+    }
+    if (isFirstRound) {
+      const names = form.round_names.slice(0, form.num_rounds).map(n => (n || '').trim())
+      if (names.some(n => !n)) {
+        toast.error('Please name every interview round')
+        return
+      }
+      payload.interview_rounds = names.map((round_name, i) => ({ round_number: i + 1, round_name }))
+    }
     setSaving(true)
     try {
-      await hrmService.createInterview(form)
+      await hrmService.createInterview(payload)
       toast.success('Interview scheduled')
       setShowForm(false); load()
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to schedule interview')
     }
     setSaving(false)
+  }
+
+  // Keep round_names array length in sync with the selected number of rounds.
+  const setNumRounds = (n) => {
+    setForm(f => {
+      const names = [...f.round_names]
+      names.length = n
+      for (let i = 0; i < n; i++) if (names[i] == null) names[i] = ''
+      return { ...f, num_rounds: n, round_names: names }
+    })
   }
 
   // ── Feedback ──────────────────────────────────────────────────────────────
@@ -227,6 +274,7 @@ export default function HRInterviews() {
     if (!fbForm.result) { toast.error('Please select a recommendation'); return }
     if (!fbForm.feedback.trim()) { toast.error('Feedback comments are required'); return }
     if (!fbForm.interviewer_name.trim()) { toast.error('Please select an interviewer'); return }
+    if (fbForm.result === 'failed' && !fbForm.rejection_reason) { toast.error('Please select a rejection reason'); return }
 
     setSaving(true)
     try {
@@ -234,6 +282,7 @@ export default function HRInterviews() {
         result: fbForm.result,
         feedback: fbForm.feedback.trim(),
         interviewer_name: fbForm.interviewer_name.trim(),
+        rejection_reason: fbForm.result === 'failed' ? fbForm.rejection_reason : undefined,
         rating: fbForm.overall_rating ? Number(fbForm.overall_rating) : undefined,
         technical_rating: fbForm.technical_rating ? Number(fbForm.technical_rating) : undefined,
         communication_rating: fbForm.communication_rating ? Number(fbForm.communication_rating) : undefined,
@@ -301,6 +350,12 @@ export default function HRInterviews() {
   const fmtFull = (dt) => dt ? new Date(dt).toLocaleString('en-IN', { timeZone: getTenantTimezone(), day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—'
 
   const roundNamesFor = (group) => {
+    // Priority: candidate's recruiter-defined pipeline → job's configured
+    // rounds → the names of the rounds actually scheduled so far (legacy).
+    const pipeline = pipelineByCandidate[group.candidate_id]
+    if (pipeline?.length) {
+      return [...pipeline].sort((a, b) => a.round_number - b.round_number).map(r => r.round_name)
+    }
     const job = jobsById[group.job_id]
     if (job?.interview_rounds?.length) {
       return [...job.interview_rounds].sort((a, b) => a.round_number - b.round_number).map(r => r.round_name)
@@ -350,6 +405,41 @@ export default function HRInterviews() {
                 )}
               </div>
             )}
+
+            {/* Interview Rounds pipeline — defined once, when scheduling round 1 */}
+            {form.candidate_id && isFirstRound && (
+              <div className="border border-gray-200 rounded-lg p-3 space-y-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Interview Rounds *</label>
+                  <select
+                    className="input w-full mt-1"
+                    value={form.num_rounds}
+                    onChange={e => setNumRounds(Number(e.target.value))}
+                  >
+                    {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">Name each round — these become the candidate's interview pipeline.</p>
+                </div>
+                {form.round_names.slice(0, form.num_rounds).map((name, i) => (
+                  <div key={i}>
+                    <label className="text-sm font-medium text-gray-700">Round {i + 1} Name *</label>
+                    <input
+                      className="input w-full mt-1"
+                      value={name}
+                      onChange={e => setForm(f => {
+                        const names = [...f.round_names]; names[i] = e.target.value
+                        return { ...f, round_names: names }
+                      })}
+                      placeholder={['Technical Screening', 'Technical Interview', 'HR Discussion'][i] || `Round ${i + 1}`}
+                      required
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-700">Mode</label>
@@ -425,14 +515,26 @@ export default function HRInterviews() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700">Recommendation *</label>
+              <label className="text-sm font-medium text-gray-700">Decision *</label>
               <select className="input w-full mt-1" value={fbForm.result} onChange={e => setFbForm(f => ({ ...f, result: e.target.value }))} required>
                 <option value="passed">Pass</option>
-                <option value="failed">Fail</option>
+                <option value="failed">Fail / Reject</option>
                 <option value="on_hold">On Hold</option>
                 <option value="no_show">Absent</option>
               </select>
             </div>
+
+            {/* Rejection reason — required on Fail/Reject (section: Fail flow) */}
+            {fbForm.result === 'failed' && (
+              <div>
+                <label className="text-sm font-medium text-gray-700">Reason *</label>
+                <select className="input w-full mt-1" value={fbForm.rejection_reason}
+                  onChange={e => setFbForm(f => ({ ...f, rejection_reason: e.target.value }))} required>
+                  <option value="">Select a reason…</option>
+                  {REJECTION_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+            )}
 
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" checked={fbForm.notify_candidate} onChange={e => setFbForm(f => ({ ...f, notify_candidate: e.target.checked }))} />
@@ -465,9 +567,19 @@ export default function HRInterviews() {
               </>
             ) : (
               <>
-                <p className="text-sm text-gray-500 mt-2">This was the final round — the candidate has moved to the Offer stage.</p>
-                <div className="flex justify-center mt-5">
-                  <button className="btn-primary" onClick={() => setPassPrompt(null)}>OK</button>
+                <p className="text-sm text-gray-500 mt-2">This was the final round. <span className="font-medium text-gray-700">Candidate Selected?</span></p>
+                <div className="flex justify-center gap-3 mt-5">
+                  <button className="btn-secondary" onClick={async () => {
+                    const p = passPrompt; setPassPrompt(null)
+                    try {
+                      await hrmService.updateHiringCandidate(p.candidateId, { current_stage: 'rejected' })
+                      toast.success(`${p.candidateName} marked Rejected`)
+                      load()
+                    } catch (err) {
+                      toast.error(err?.response?.data?.detail || 'Failed to update candidate')
+                    }
+                  }}>No</button>
+                  <button className="btn-primary" onClick={() => { setPassPrompt(null); toast.success('Candidate selected — moved to Offer stage') }}>Yes — Move to Offer</button>
                 </div>
               </>
             )}
@@ -531,6 +643,7 @@ export default function HRInterviews() {
                     <p>Interviewer: <span className="text-gray-700">{iv.interviewer_name || '—'}</span></p>
                     <p>Scheduled Time: <span className="text-gray-700">{fmtFull(iv.scheduled_at)}</span></p>
                     <p>Completed Time: <span className="text-gray-700">{fmtFull(iv.completed_at)}</span></p>
+                    {iv.rejection_reason && <p>Reject Reason: <span className="text-gray-700">{iv.rejection_reason}</span></p>}
                     <p>Mail Sent: <span className="text-gray-700">{iv.invitation_email_sent ? 'Invitation' : ''}{iv.invitation_email_sent && iv.result_email_sent ? ', ' : ''}{iv.result_email_sent ? 'Result' : ''}{!iv.invitation_email_sent && !iv.result_email_sent ? 'None' : ''}</span></p>
                   </div>
                   {(iv.technical_rating != null || iv.communication_rating != null || iv.problem_solving_rating != null || iv.behaviour_rating != null || iv.rating != null) && (

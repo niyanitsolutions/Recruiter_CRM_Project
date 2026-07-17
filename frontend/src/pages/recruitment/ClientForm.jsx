@@ -17,9 +17,16 @@ const ClientForm = () => {
   const [statuses, setStatuses] = useState([])
   const [types, setTypes] = useState([])
 
+  // Company email is OPTIONAL: no error when empty, but if a value is entered
+  // it must be a valid email format. (Backend already stores email as optional.)
+  const optionalEmail = (value) => {
+    if (!value || !value.trim()) return null
+    return validators.email()(value)
+  }
+
   const { errors, touched, touch, validate: fValidate, reset: resetValidation } = useFormValidation({
     name:  validators.required('Client name'),
-    email: validators.compose(validators.email()),
+    email: optionalEmail,
     phone: validators.compose(validators.mobile()),
   })
 
@@ -284,11 +291,41 @@ const ClientForm = () => {
           </div>
         </div>
 
-        {/* Contact Information */}
+        {/* Contact Details (merged: company contact info + contact persons) */}
         <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
-          <h2 className="text-lg font-semibold text-surface-900 mb-4">Contact Information</h2>
-          
+          <h2 className="text-lg font-semibold text-surface-900 mb-4">Contact Details</h2>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">
+                Company Phone
+              </label>
+              <input
+                type="tel"
+                name="phone"
+                value={formData.phone}
+                onChange={handleChange}
+                onBlur={() => touch('phone', formData.phone, formData)}
+                className={`input w-full ${errors.phone && touched.phone ? 'border-red-400' : ''}`}
+              />
+              {errors.phone && touched.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-surface-700 mb-1">
+                Company Email <span className="text-surface-400 font-normal">(Optional)</span>
+              </label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                onBlur={() => touch('email', formData.email, formData)}
+                className={`input w-full ${errors.email && touched.email ? 'border-red-400' : ''}`}
+              />
+              {errors.email && touched.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+            </div>
+
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-surface-700 mb-1">
                 Address
@@ -354,41 +391,10 @@ const ClientForm = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Email
-              </label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                onBlur={() => touch('email', formData.email, formData)}
-                className={`input w-full ${errors.email && touched.email ? 'border-red-400' : ''}`}
-              />
-              {errors.email && touched.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">
-                Phone
-              </label>
-              <input
-                type="tel"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                onBlur={() => touch('phone', formData.phone, formData)}
-                className={`input w-full ${errors.phone && touched.phone ? 'border-red-400' : ''}`}
-              />
-              {errors.phone && touched.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
-            </div>
           </div>
-        </div>
 
-        {/* Contact Persons */}
-        <div className="bg-white rounded-xl shadow-sm border border-surface-200 p-6">
-          <div className="flex items-center justify-between mb-4">
+          {/* ── Contact Persons (same card) ─────────────────────────────── */}
+          <div className="mt-6 pt-6 border-t border-surface-200 flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-surface-900">Contact Persons</h2>
             <button
               type="button"
@@ -396,7 +402,7 @@ const ClientForm = () => {
               className="btn-secondary text-sm flex items-center gap-1"
             >
               <Plus className="w-4 h-4" />
-              Add Contact
+              Add Another Contact
             </button>
           </div>
           
@@ -441,7 +447,7 @@ const ClientForm = () => {
                     />
                     <input
                       type="email"
-                      placeholder="Email"
+                      placeholder="Email (Optional)"
                       value={contact.email}
                       onChange={(e) => handleContactChange(index, 'email', e.target.value)}
                       className="input"

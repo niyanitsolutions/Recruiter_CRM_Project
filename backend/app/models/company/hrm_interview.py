@@ -59,6 +59,11 @@ class HRMInterviewModel(BaseModel):
     recommended_for_next: Optional[bool] = None
     completed_at: Optional[datetime] = None
 
+    # Structured rejection reason captured on a Fail/Reject decision (optional;
+    # e.g. "Technical", "Communication", "Culture Fit"). Kept alongside the free
+    # -text feedback so History and reporting can group rejections by reason.
+    rejection_reason: Optional[str] = None
+
     # Audit trail (section 13) — who scheduled it and whether each email
     # actually fired, for the candidate's History timeline.
     scheduled_by: Optional[str] = None
@@ -77,11 +82,17 @@ class HRMInterviewCreate(BaseModel):
     candidate_id: str
     job_id: Optional[str] = None
     # round_number/round_name are no longer HR-entered — the service computes
-    # them from the job's configured interview_rounds + the candidate's
-    # existing interview history. Kept here (optional, ignored by the service)
-    # only so any older caller sending them doesn't get a validation error.
+    # them from the candidate's interview_pipeline (defined below on the first
+    # schedule) → the job's configured interview_rounds → generic "Round N".
+    # Kept here (optional, ignored by the service) only so any older caller
+    # sending them doesn't get a validation error.
     round_number: Optional[int] = None
     round_name: Optional[str] = None
+    # Recruiter-defined round pipeline, sent ONLY when scheduling the first
+    # interview for a candidate. The service stores it on the candidate and
+    # ignores it on subsequent schedules (the pipeline is fixed once set).
+    # Shape: [{"round_number": 1, "round_name": "Technical Screening"}, ...]
+    interview_rounds: Optional[List[dict]] = None
     mode: InterviewMode = InterviewMode.VIDEO
     scheduled_at: datetime
     duration_minutes: int = 60
@@ -94,6 +105,8 @@ class HRMInterviewFeedback(BaseModel):
     result: InterviewResult
     feedback: Optional[str] = None
     interviewer_name: Optional[str] = None
+    # Required by the UI when result == FAILED; free-form/categorical string.
+    rejection_reason: Optional[str] = None
     rating: Optional[float] = None   # Overall — auto-computed client-side if omitted, but accepted as sent
     technical_rating: Optional[float] = None
     communication_rating: Optional[float] = None

@@ -50,6 +50,13 @@ class HRMCandidateModel(BaseModel):
     current_stage: HiringStage = HiringStage.APPLIED
     stage_history: List[dict] = Field(default_factory=list)
 
+    # Per-candidate interview pipeline (round names) defined by the recruiter at
+    # the time the FIRST interview is scheduled. Optional — when absent the
+    # workflow falls back to the job's configured interview_rounds, then to
+    # generic "Round N" names (fully backward compatible with existing records).
+    # Shape: [{"round_number": 1, "round_name": "Technical Screening"}, ...]
+    interview_pipeline: Optional[List[dict]] = None
+
     current_salary: Optional[float] = None
     expected_salary: Optional[float] = None
     notice_period_days: Optional[int] = None
