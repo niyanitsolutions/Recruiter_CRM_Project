@@ -23,7 +23,11 @@ import { useNavigate } from 'react-router-dom'
 import { logout, logoutUser, selectIsAuthenticated } from '../store/authSlice'
 
 // ── Threshold ─────────────────────────────────────────────────────────────────
-const EXPIRE_MS = 5 * 60 * 1000   // 5 min of no activity
+// Inactivity window: the session expires after this long with no REAL user
+// interaction (see ACTIVITY_EVENTS below). Background traffic — notification
+// polling, WebSocket heartbeat, token refresh, dashboard polling — never
+// touches this timer, so "activity" always means a real person.
+const EXPIRE_MS = 10 * 60 * 1000   // 10 min of no activity
 
 // ── localStorage / BroadcastChannel keys ──────────────────────────────────────
 const ACTIVITY_KEY = 'last_activity'

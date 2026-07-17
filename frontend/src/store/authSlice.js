@@ -27,9 +27,11 @@ function _extractServerErrorMessage(error, fallback) {
 
 // ── Inactivity timeout ────────────────────────────────────────────────────────
 // If the user has been idle for longer than this, clear the session on startup
-// so they are forced to log in again.  The useAutoLogout hook enforces the same
-// limit in real-time; this is the safety net for "closed last night, back today".
-const INACTIVITY_LIMIT_MS = 30 * 60 * 1000 // 30 minutes
+// (fresh page load / reopened tab) so they are forced to log in again. Kept in
+// lock-step with EXPIRE_MS in useAutoLogout (which enforces the same window in
+// real-time on the open tab) so the inactivity limit is a consistent 10 minutes
+// whether the tab stayed open or was reloaded.
+const INACTIVITY_LIMIT_MS = 10 * 60 * 1000 // 10 minutes
 
 // ── Build a normalised user object from a JWT payload ─────────────────────────
 // The JWT contains all the fields we need; this avoids an extra /me API call.

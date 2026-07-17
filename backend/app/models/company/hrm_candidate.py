@@ -50,6 +50,7 @@ class HRMCandidateModel(BaseModel):
     current_stage: HiringStage = HiringStage.APPLIED
     stage_history: List[dict] = Field(default_factory=list)
 
+    current_salary: Optional[float] = None
     expected_salary: Optional[float] = None
     notice_period_days: Optional[int] = None
     location: Optional[str] = None
@@ -77,6 +78,7 @@ class HRMCandidateCreate(BaseModel):
     source: HRMCandidateSource = HRMCandidateSource.DIRECT
     referral_by: Optional[str] = None
     resume_url: Optional[str] = None
+    current_salary: Optional[float] = None
     expected_salary: Optional[float] = None
     notice_period_days: Optional[int] = None
     location: Optional[str] = None
@@ -84,9 +86,25 @@ class HRMCandidateCreate(BaseModel):
 
 
 class HRMCandidateUpdate(BaseModel):
-    current_stage: Optional[HiringStage] = None
+    """Applicant edit (section 1). Every field is optional so HR can PATCH any
+    subset; the service $sets only the fields actually sent (exclude_none). This
+    only mutates the candidate document — interview rows, applications, stage
+    history and audit logs reference the candidate by id and are never touched,
+    so editing profile details can't break interview history."""
+    # Profile fields HR can correct
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    current_company: Optional[str] = None
     current_designation: Optional[str] = None
-    expected_salary: Optional[float] = None
-    notes: Optional[str] = None
-    resume_url: Optional[str] = None
+    total_experience_years: Optional[float] = None
     skills: Optional[List[str]] = None
+    resume_url: Optional[str] = None
+    current_salary: Optional[float] = None
+    expected_salary: Optional[float] = None
+    notice_period_days: Optional[int] = None
+    location: Optional[str] = None
+    notes: Optional[str] = None          # "Remarks" in the UI
+    # Stage is still updatable (used by Reject / Withdraw actions and the
+    # workflow); the service validates and records stage_history for it.
+    current_stage: Optional[HiringStage] = None
