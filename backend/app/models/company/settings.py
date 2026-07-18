@@ -291,6 +291,15 @@ class NotificationPreferences(BaseModel):
 
 # ============== Company Settings ==============
 
+class EmploymentDefaults(BaseModel):
+    """Company-wide default probation & notice periods for NEW employees.
+    Disabled by default so existing tenants are unaffected until HR opts in."""
+    probation_enabled: bool = False
+    probation_days: int = 90
+    notice_enabled: bool = False
+    notice_days: int = 30
+
+
 class CompanySettings(BaseModel):
     """Company-wide settings"""
     id: Optional[str] = Field(None, alias="_id")
@@ -317,6 +326,9 @@ class CompanySettings(BaseModel):
     default_currency: str = Field(default="INR")
     default_notice_period: str = Field(default="30_days")
     auto_assign_candidates: bool = Field(default=False)
+
+    # ===== HR Employment Defaults (Probation & Notice) =====
+    employment_defaults: EmploymentDefaults = Field(default_factory=EmploymentDefaults)
 
     # ===== Partner Settings =====
     default_partner_commission: float = Field(default=8.33)
@@ -404,6 +416,9 @@ class CompanySettingsUpdate(BaseModel):
     default_currency: Optional[str] = None
     default_notice_period: Optional[str] = None
     auto_assign_candidates: Optional[bool] = None
+
+    # HR Employment Defaults (Probation & Notice)
+    employment_defaults: Optional[EmploymentDefaults] = None
     default_partner_commission: Optional[float] = None
     partner_commission_gst_percentage: Optional[float] = None
     partner_commission_tds_percentage: Optional[float] = None

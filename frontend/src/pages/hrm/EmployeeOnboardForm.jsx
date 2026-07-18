@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import {
   CheckCircle, XCircle, Loader2, Plus, Trash2,
   Upload, User, Phone, CreditCard, GraduationCap, FileText,
-  AlertTriangle,
+  AlertTriangle, Briefcase, Building2, Lock,
 } from 'lucide-react'
 import api from '../../services/api'
 
@@ -133,6 +133,10 @@ export default function EmployeeOnboardForm() {
 
   // Qualifications (array)
   const [qualifications, setQualifications] = useState([EMPTY_QUAL()])
+  // Emergency contacts (Part 4 — multiple). First contact is required.
+  const [emergencyContacts, setEmergencyContacts] = useState([{ name: '', relationship: '', phone: '' }])
+  // Employment info (Part 2 — HR-controlled, shown read-only if already assigned).
+  const [employmentInfo, setEmploymentInfo] = useState(null)
 
   // Main form
   const [form, setForm] = useState({
@@ -142,19 +146,33 @@ export default function EmployeeOnboardForm() {
     date_of_birth:     '',
     gender:            '',
     blood_group:       '',
-    current_address:   '',
+    current_address:   '',      // composed string (kept for backward compat)
     permanent_address: '',
+    // Split current address (Part 1) — these drive address_info + current_address
+    addr_street:       '',
+    addr_city:         '',
+    addr_state:        '',
+    addr_zip:          '',
+    addr_country:      'India',
     pan_number:        '',
     aadhaar_number:    '',
-    // Emergency contact
-    ec_name:           '',
-    ec_relationship:   '',
-    ec_mobile:         '',
     // Bank details
     bank_name:             '',
     account_holder_name:   '',
     account_number:        '',
     ifsc_code:             '',
+    pf_number:             '',
+    uan_number:            '',
+    no_pf_uan:             false,
+    // Background verification (previous employment) — all optional
+    bgv_previous_company:     '',
+    bgv_previous_designation: '',
+    bgv_manager_name:         '',
+    bgv_manager_email:        '',
+    bgv_manager_phone:        '',
+    bgv_employment_from:      '',
+    bgv_employment_to:        '',
+    bgv_reason:               '',
   })
 
   // ── Validate token on mount ────────────────────────────────────────────────
@@ -179,21 +197,48 @@ export default function EmployeeOnboardForm() {
             blood_group:       p.blood_group || f.blood_group,
             current_address:   p.current_address || f.current_address,
             permanent_address: p.permanent_address || f.permanent_address,
+            addr_street:       p.address_info?.street   || f.addr_street,
+            addr_city:         p.address_info?.city     || f.addr_city,
+            addr_state:        p.address_info?.state    || f.addr_state,
+            addr_zip:          p.address_info?.zip_code || f.addr_zip,
+            addr_country:      p.address_info?.country  || f.addr_country,
             pan_number:        p.pan_number || f.pan_number,
             aadhaar_number:    p.aadhaar_number || f.aadhaar_number,
-            ec_name:           p.emergency_contact?.name || f.ec_name,
-            ec_relationship:   p.emergency_contact?.relationship || f.ec_relationship,
-            ec_mobile:         p.emergency_contact?.phone || f.ec_mobile,
+            pf_number:         p.pf_number || f.pf_number,
+            uan_number:        p.uan_number || f.uan_number,
             bank_name:             p.bank_details?.bank_name || f.bank_name,
             account_holder_name:  p.bank_details?.account_holder_name || f.account_holder_name,
             account_number:        p.bank_details?.account_number || f.account_number,
             ifsc_code:             p.bank_details?.ifsc_code || f.ifsc_code,
+            bgv_previous_company:     p.background_verification?.previous_company || f.bgv_previous_company,
+            bgv_previous_designation: p.background_verification?.previous_designation || f.bgv_previous_designation,
+            bgv_manager_name:         p.background_verification?.manager_name || f.bgv_manager_name,
+            bgv_manager_email:        p.background_verification?.manager_email || f.bgv_manager_email,
+            bgv_manager_phone:        p.background_verification?.manager_phone || f.bgv_manager_phone,
+            bgv_employment_from:      p.background_verification?.employment_from || f.bgv_employment_from,
+            bgv_employment_to:        p.background_verification?.employment_to || f.bgv_employment_to,
+            bgv_reason:               p.background_verification?.reason_for_leaving || f.bgv_reason,
           }))
           if (Array.isArray(p.qualifications) && p.qualifications.length > 0) {
             setQualifications(p.qualifications.map(q => ({
               degree: q.title || '', institution: q.institution || '',
               year: q.year || '', grade: q.grade || '',
             })))
+          }
+          // Emergency contacts — prefer the multi-contact array, fall back to
+          // the legacy single contact.
+          const ecList = (Array.isArray(p.emergency_contacts) && p.emergency_contacts.length > 0)
+            ? p.emergency_contacts
+            : (p.emergency_contact ? [p.emergency_contact] : [])
+          if (ecList.length > 0) {
+            setEmergencyContacts(ecList.map(c => ({
+              name: c.name || '', relationship: c.relationship || '', phone: c.phone || '',
+            })))
+          }
+          // Employment info — display read-only only when HR has actually assigned it.
+          const emp = p.employment
+          if (emp && (emp.department_name || emp.designation_name || emp.date_of_joining || emp.work_location)) {
+            setEmploymentInfo(emp)
           }
         }
         setPageStatus('valid')
@@ -213,16 +258,30 @@ export default function EmployeeOnboardForm() {
   const handleChange = e => {
     const { name, value } = e.target
     set(name, value)
-    // Keep permanent address in sync while the same-address checkbox is ticked
-    if (name === 'current_address' && sameAddress) {
-      setForm(f => ({ ...f, current_address: value, permanent_address: value }))
-    }
+  }
+
+  // Compose the split address fields into a single readable line (kept in
+  // current_address for backward compatibility with older records/consumers).
+  const composeAddr = (f) =>
+    [f.addr_street, f.addr_city, f.addr_state, f.addr_zip, f.addr_country]
+      .map(x => (x || '').trim()).filter(Boolean).join(', ')
+
+  // Update one split-address part, recompute current_address, and keep the
+  // permanent address in sync while "same as current" is ticked.
+  const setAddrPart = (field, value) => {
+    setForm(f => {
+      const next = { ...f, [field]: value }
+      next.current_address = composeAddr(next)
+      if (sameAddress) next.permanent_address = next.current_address
+      return next
+    })
+    if (fieldErrors[field]) setFieldErrors(prev => ({ ...prev, [field]: '' }))
   }
 
   const handleSameAddress = e => {
     const checked = e.target.checked
     setSameAddress(checked)
-    if (checked) set('permanent_address', form.current_address)
+    if (checked) setForm(f => ({ ...f, permanent_address: composeAddr(f) }))
   }
 
   // Photo
@@ -279,6 +338,18 @@ export default function EmployeeOnboardForm() {
     setQualifications(prev => prev.filter((_, idx) => idx !== i))
   }
 
+  // Emergency contacts (Part 4)
+  const updateEC = (i, field, value) => {
+    setEmergencyContacts(prev => prev.map((c, idx) => idx === i ? { ...c, [field]: value } : c))
+    const ekey = `ec_${field}_${i}`
+    if (fieldErrors[ekey]) setFieldErrors(prev => ({ ...prev, [ekey]: '' }))
+  }
+  const addEC    = () => setEmergencyContacts(prev => [...prev, { name: '', relationship: '', phone: '' }])
+  const removeEC = i => {
+    if (emergencyContacts.length === 1) return
+    setEmergencyContacts(prev => prev.filter((_, idx) => idx !== i))
+  }
+
   // ── Validation ─────────────────────────────────────────────────────────────
   const validate = () => {
     const errs    = {}
@@ -312,28 +383,56 @@ export default function EmployeeOnboardForm() {
       errs.gender = 'Required'
       messages.push('Please select your gender.')
     }
-    if (!form.current_address.trim()) {
-      errs.current_address = 'Required'
-      messages.push('Please enter your current address.')
+    // Current address (split, Part 1) — street/city/state/PIN required; PIN 6 digits.
+    if (!form.addr_street.trim()) errs.addr_street = 'Required'
+    if (!form.addr_city.trim())   errs.addr_city   = 'Required'
+    if (!form.addr_state.trim())  errs.addr_state  = 'Required'
+    if (!form.addr_zip.trim())    errs.addr_zip    = 'Required'
+    if (!form.addr_street.trim() || !form.addr_city.trim() || !form.addr_state.trim() || !form.addr_zip.trim()) {
+      messages.push('Please complete your current address (street, city, state, PIN).')
+    } else if (!/^\d{6}$/.test(form.addr_zip.trim())) {
+      errs.addr_zip = 'PIN must be 6 digits'
+      messages.push('PIN / ZIP code must be 6 digits.')
+    }
+    // PAN — validate format only when provided (same style as HR forms)
+    if (form.pan_number.trim() && !/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(form.pan_number.trim())) {
+      errs.pan_number = 'Invalid PAN'
+      messages.push('Please enter a valid PAN (e.g. ABCDE1234F).')
+    }
+    // Aadhaar — 12 digits when provided
+    if (form.aadhaar_number.trim() && form.aadhaar_number.replace(/\D/g, '').length !== 12) {
+      errs.aadhaar_number = 'Aadhaar must be 12 digits'
+      messages.push('Aadhaar number must be 12 digits.')
+    }
+    // Background-verification manager email — validate format when provided
+    if (form.bgv_manager_email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.bgv_manager_email.trim())) {
+      errs.bgv_manager_email = 'Invalid email format'
+      messages.push('Please enter a valid manager email.')
     }
 
-    // Emergency contact — all 3 fields mandatory
-    if (!form.ec_name.trim()) {
-      errs.ec_name = 'Required'
-      messages.push('Please enter your emergency contact name.')
-    }
-    if (!form.ec_relationship) {
-      errs.ec_relationship = 'Required'
-      messages.push('Please select your relationship with the emergency contact.')
-    }
-    const ecMobileCleaned = form.ec_mobile.replace(/\D/g, '')
-    if (!form.ec_mobile.trim()) {
-      errs.ec_mobile = 'Required'
-      messages.push('Please enter your emergency contact mobile number.')
-    } else if (ecMobileCleaned === mobileCleaned && mobileCleaned.length > 0) {
-      errs.ec_mobile = 'Must be different from your mobile'
-      messages.push('Emergency Contact Number must be different from Employee Mobile Number.')
-    }
+    // Emergency contacts (Part 4) — the FIRST contact is mandatory (all 3
+    // fields); any additional contacts are validated only if partially filled.
+    emergencyContacts.forEach((c, i) => {
+      const isFirst = i === 0
+      const anyFilled = c.name.trim() || c.relationship || c.phone.trim()
+      if (!isFirst && !anyFilled) return   // skip empty extra rows
+      if (!c.name.trim()) {
+        errs[`ec_name_${i}`] = 'Required'
+        if (isFirst) messages.push('Please enter your emergency contact name.')
+      }
+      if (!c.relationship) {
+        errs[`ec_relationship_${i}`] = 'Required'
+        if (isFirst) messages.push('Please select your relationship with the emergency contact.')
+      }
+      const phoneClean = c.phone.replace(/\D/g, '')
+      if (!c.phone.trim()) {
+        errs[`ec_phone_${i}`] = 'Required'
+        if (isFirst) messages.push('Please enter your emergency contact mobile number.')
+      } else if (isFirst && phoneClean === mobileCleaned && mobileCleaned.length > 0) {
+        errs[`ec_phone_${i}`] = 'Must be different from your mobile'
+        messages.push('Emergency Contact Number must be different from Employee Mobile Number.')
+      }
+    })
 
     // Mandatory documents
     if (!docFiles.aadhaar) {
@@ -391,20 +490,50 @@ export default function EmployeeOnboardForm() {
         date_of_birth:     form.date_of_birth || null,
         gender:            form.gender || null,
         blood_group:       form.blood_group || null,
-        current_address:   form.current_address.trim() || null,
+        current_address:   (composeAddr(form) || form.current_address.trim()) || null,
         permanent_address: form.permanent_address.trim() || null,
+        address_info: (form.addr_street.trim() || form.addr_city.trim() || form.addr_state.trim() || form.addr_zip.trim()) ? {
+          street:   form.addr_street.trim() || null,
+          city:     form.addr_city.trim() || null,
+          state:    form.addr_state.trim() || null,
+          zip_code: form.addr_zip.trim() || null,
+          country:  form.addr_country.trim() || 'India',
+        } : null,
         pan_number:        form.pan_number.trim().toUpperCase() || null,
         aadhaar_number:    form.aadhaar_number.trim() || null,
-        emergency_contact: {
-          name:         form.ec_name.trim(),
-          relationship: form.ec_relationship.trim(),
-          phone:        form.ec_mobile.trim(),
-        },
+        emergency_contacts: emergencyContacts
+          .filter(c => c.name.trim() && c.phone.trim())
+          .map(c => ({
+            name:         c.name.trim(),
+            relationship: (c.relationship || '').trim(),
+            phone:        c.phone.trim(),
+          })),
+        // Legacy single-contact field kept for backward compatibility.
+        emergency_contact: emergencyContacts[0] ? {
+          name:         emergencyContacts[0].name.trim(),
+          relationship: (emergencyContacts[0].relationship || '').trim(),
+          phone:        emergencyContacts[0].phone.trim(),
+        } : null,
         bank_details: (form.bank_name.trim() || form.account_number.trim()) ? {
           bank_name:           form.bank_name.trim(),
           account_holder_name: form.account_holder_name.trim(),
           account_number:      form.account_number.trim(),
           ifsc_code:           form.ifsc_code.trim().toUpperCase(),
+        } : null,
+        pf_number:  form.no_pf_uan ? null : (form.pf_number.trim() || null),
+        uan_number: form.no_pf_uan ? null : (form.uan_number.trim() || null),
+        background_verification: (
+          form.bgv_previous_company.trim() || form.bgv_previous_designation.trim() ||
+          form.bgv_manager_name.trim() || form.bgv_reason.trim()
+        ) ? {
+          previous_company:     form.bgv_previous_company.trim() || null,
+          previous_designation: form.bgv_previous_designation.trim() || null,
+          manager_name:         form.bgv_manager_name.trim() || null,
+          manager_email:        form.bgv_manager_email.trim() || null,
+          manager_phone:        form.bgv_manager_phone.trim() || null,
+          employment_from:      form.bgv_employment_from || null,
+          employment_to:        form.bgv_employment_to || null,
+          reason_for_leaving:   form.bgv_reason.trim() || null,
         } : null,
         qualifications: qualifications
           .filter(q => q.degree.trim())
@@ -641,18 +770,35 @@ export default function EmployeeOnboardForm() {
                 </select>
               </div>
 
-              {/* Current Address */}
+              {/* Current Address (split) */}
               <div className="sm:col-span-2">
-                <label className={lbl}>
-                  Current Address <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  name="current_address" value={form.current_address} onChange={handleChange}
-                  rows={2}
-                  className={inpErr('current_address')}
-                  placeholder="House / Street / City / State / PIN"
-                />
-                {fieldErrors.current_address && <p className={err}>{fieldErrors.current_address}</p>}
+                <label className={lbl}>Street <span className="text-red-500">*</span></label>
+                <input value={form.addr_street} onChange={e => setAddrPart('addr_street', e.target.value)}
+                  className={inpErr('addr_street')} placeholder="House no. / Street / Area" />
+                {fieldErrors.addr_street && <p className={err}>{fieldErrors.addr_street}</p>}
+              </div>
+              <div>
+                <label className={lbl}>City <span className="text-red-500">*</span></label>
+                <input value={form.addr_city} onChange={e => setAddrPart('addr_city', e.target.value)}
+                  className={inpErr('addr_city')} placeholder="e.g. Bengaluru" />
+                {fieldErrors.addr_city && <p className={err}>{fieldErrors.addr_city}</p>}
+              </div>
+              <div>
+                <label className={lbl}>State <span className="text-red-500">*</span></label>
+                <input value={form.addr_state} onChange={e => setAddrPart('addr_state', e.target.value)}
+                  className={inpErr('addr_state')} placeholder="e.g. Karnataka" />
+                {fieldErrors.addr_state && <p className={err}>{fieldErrors.addr_state}</p>}
+              </div>
+              <div>
+                <label className={lbl}>ZIP / PIN <span className="text-red-500">*</span></label>
+                <input value={form.addr_zip} onChange={e => setAddrPart('addr_zip', e.target.value)}
+                  className={inpErr('addr_zip')} placeholder="6-digit PIN" inputMode="numeric" maxLength={6} />
+                {fieldErrors.addr_zip && <p className={err}>{fieldErrors.addr_zip}</p>}
+              </div>
+              <div>
+                <label className={lbl}>Country</label>
+                <input value={form.addr_country} onChange={e => setAddrPart('addr_country', e.target.value)}
+                  className={inp} placeholder="Country" />
               </div>
 
               {/* Same-address checkbox */}
@@ -689,42 +835,98 @@ export default function EmployeeOnboardForm() {
             </div>
           </div>
 
-          {/* ── Section 3: Emergency Contact ─────────────────────────── */}
+          {/* ── Employment Information (Part 2 — HR-controlled, read-only) ── */}
+          {employmentInfo && (
+            <div className={card}>
+              <h2 className={sec}>
+                <Building2 className="w-5 h-5 text-indigo-500" /> Employment Information
+                <span className="ml-2 inline-flex items-center gap-1 text-xs font-normal text-gray-400">
+                  <Lock className="w-3 h-3" /> Set by HR
+                </span>
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[
+                  ['Department',      employmentInfo.department_name],
+                  ['Designation',     employmentInfo.designation_name],
+                  ['Employment Type', (employmentInfo.employment_type || '').replace(/_/g, ' ')],
+                  ['Date of Joining', employmentInfo.date_of_joining ? String(employmentInfo.date_of_joining).slice(0, 10) : ''],
+                  ['Work Location',   employmentInfo.work_location],
+                  ['Shift',           (employmentInfo.shift_start_time && employmentInfo.shift_end_time)
+                                        ? `${employmentInfo.shift_start_time} – ${employmentInfo.shift_end_time}` : ''],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <label className={lbl}>{label}</label>
+                    <input
+                      value={value || '—'} readOnly disabled
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-100 text-gray-500 cursor-not-allowed capitalize"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-3">Salary and salary structure are managed by HR and are not shown here.</p>
+            </div>
+          )}
+
+          {/* ── Section 3: Emergency Contacts ────────────────────────── */}
           <div className={card}>
-            <h2 className={sec}><Phone className="w-5 h-5 text-indigo-500" /> Emergency Contact</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={lbl}>Contact Name <span className="text-red-500">*</span></label>
-                <input
-                  name="ec_name" value={form.ec_name} onChange={handleChange}
-                  className={inpErr('ec_name')} placeholder="e.g. Rahul Sharma"
-                />
-                {fieldErrors.ec_name && <p className={err}>{fieldErrors.ec_name}</p>}
-              </div>
-              <div>
-                <label className={lbl}>Relationship <span className="text-red-500">*</span></label>
-                <select
-                  name="ec_relationship" value={form.ec_relationship} onChange={handleChange}
-                  className={inpErr('ec_relationship')}
-                >
-                  <option value="">Select</option>
-                  <option value="Spouse">Spouse</option>
-                  <option value="Parent">Parent</option>
-                  <option value="Sibling">Sibling</option>
-                  <option value="Child">Child</option>
-                  <option value="Friend">Friend</option>
-                  <option value="Other">Other</option>
-                </select>
-                {fieldErrors.ec_relationship && <p className={err}>{fieldErrors.ec_relationship}</p>}
-              </div>
-              <div>
-                <label className={lbl}>Mobile Number <span className="text-red-500">*</span></label>
-                <input
-                  type="tel" name="ec_mobile" value={form.ec_mobile} onChange={handleChange}
-                  className={inpErr('ec_mobile')} placeholder="9988776655"
-                />
-                {fieldErrors.ec_mobile && <p className={err}>{fieldErrors.ec_mobile}</p>}
-              </div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className={sec.replace(' mb-4', '')}>
+                <Phone className="w-5 h-5 text-indigo-500" /> Emergency Contacts
+              </h2>
+              <button
+                type="button" onClick={addEC}
+                className="flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                <Plus className="w-4 h-4" /> Add
+              </button>
+            </div>
+            <div className="space-y-4">
+              {emergencyContacts.map((c, i) => (
+                <div key={i} className="border border-gray-200 rounded-lg p-4 relative">
+                  {emergencyContacts.length > 1 && (
+                    <button
+                      type="button" onClick={() => removeEC(i)}
+                      className="absolute top-3 right-3 text-red-400 hover:text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={lbl}>Contact Name {i === 0 && <span className="text-red-500">*</span>}</label>
+                      <input
+                        value={c.name} onChange={e => updateEC(i, 'name', e.target.value)}
+                        className={inpErr(`ec_name_${i}`)} placeholder="e.g. Rahul Sharma"
+                      />
+                      {fieldErrors[`ec_name_${i}`] && <p className={err}>{fieldErrors[`ec_name_${i}`]}</p>}
+                    </div>
+                    <div>
+                      <label className={lbl}>Relationship {i === 0 && <span className="text-red-500">*</span>}</label>
+                      <select
+                        value={c.relationship} onChange={e => updateEC(i, 'relationship', e.target.value)}
+                        className={inpErr(`ec_relationship_${i}`)}
+                      >
+                        <option value="">Select</option>
+                        <option value="Spouse">Spouse</option>
+                        <option value="Parent">Parent</option>
+                        <option value="Sibling">Sibling</option>
+                        <option value="Child">Child</option>
+                        <option value="Friend">Friend</option>
+                        <option value="Other">Other</option>
+                      </select>
+                      {fieldErrors[`ec_relationship_${i}`] && <p className={err}>{fieldErrors[`ec_relationship_${i}`]}</p>}
+                    </div>
+                    <div>
+                      <label className={lbl}>Mobile Number {i === 0 && <span className="text-red-500">*</span>}</label>
+                      <input
+                        type="tel" value={c.phone} onChange={e => updateEC(i, 'phone', e.target.value)}
+                        className={inpErr(`ec_phone_${i}`)} placeholder="9988776655"
+                      />
+                      {fieldErrors[`ec_phone_${i}`] && <p className={err}>{fieldErrors[`ec_phone_${i}`]}</p>}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -760,6 +962,83 @@ export default function EmployeeOnboardForm() {
                   className={inp} placeholder="e.g. SBIN0001234"
                   style={{ textTransform: 'uppercase' }}
                 />
+              </div>
+              <div>
+                <label className={lbl}>PF Number</label>
+                <input
+                  name="pf_number" value={form.pf_number} onChange={handleChange}
+                  className={inp} placeholder="Provident Fund number"
+                  disabled={form.no_pf_uan}
+                />
+              </div>
+              <div>
+                <label className={lbl}>UAN Number</label>
+                <input
+                  name="uan_number" value={form.uan_number} onChange={handleChange}
+                  className={inp} placeholder="Universal Account Number"
+                  disabled={form.no_pf_uan}
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 mt-4 text-sm text-gray-600 cursor-pointer">
+              <input
+                type="checkbox" checked={form.no_pf_uan}
+                onChange={e => setForm(f => ({
+                  ...f,
+                  no_pf_uan: e.target.checked,
+                  pf_number:  e.target.checked ? '' : f.pf_number,
+                  uan_number: e.target.checked ? '' : f.uan_number,
+                }))}
+              />
+              I don't have PF / UAN
+            </label>
+          </div>
+
+          {/* ── Section: Background Verification (previous employment) ─── */}
+          <div className={card}>
+            <h2 className={sec}><Briefcase className="w-5 h-5 text-indigo-500" /> Background Verification</h2>
+            <p className="text-xs text-gray-400 mb-4">Previous employment details (optional).</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={lbl}>Previous Company</label>
+                <input name="bgv_previous_company" value={form.bgv_previous_company} onChange={handleChange}
+                  className={inp} placeholder="e.g. Acme Corp" />
+              </div>
+              <div>
+                <label className={lbl}>Previous Designation</label>
+                <input name="bgv_previous_designation" value={form.bgv_previous_designation} onChange={handleChange}
+                  className={inp} placeholder="e.g. Software Engineer" />
+              </div>
+              <div>
+                <label className={lbl}>Reporting Manager</label>
+                <input name="bgv_manager_name" value={form.bgv_manager_name} onChange={handleChange}
+                  className={inp} placeholder="Manager name" />
+              </div>
+              <div>
+                <label className={lbl}>Manager Email</label>
+                <input type="email" name="bgv_manager_email" value={form.bgv_manager_email} onChange={handleChange}
+                  className={inp} placeholder="manager@company.com" />
+              </div>
+              <div>
+                <label className={lbl}>Manager Phone</label>
+                <input name="bgv_manager_phone" value={form.bgv_manager_phone} onChange={handleChange}
+                  className={inp} placeholder="Contact number" />
+              </div>
+              <div className="hidden sm:block" />
+              <div>
+                <label className={lbl}>Employment From</label>
+                <input type="month" name="bgv_employment_from" value={form.bgv_employment_from} onChange={handleChange}
+                  className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Employment To</label>
+                <input type="month" name="bgv_employment_to" value={form.bgv_employment_to} onChange={handleChange}
+                  className={inp} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={lbl}>Reason for Leaving</label>
+                <textarea name="bgv_reason" value={form.bgv_reason} onChange={handleChange}
+                  className={inp} rows={2} placeholder="Optional" />
               </div>
             </div>
           </div>

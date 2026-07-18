@@ -10,6 +10,7 @@ class HolidayType(str, Enum):
     NATIONAL = "national"
     FESTIVAL = "festival"
     COMPANY = "company"
+    REGIONAL = "regional"
     OPTIONAL = "optional"
 
 

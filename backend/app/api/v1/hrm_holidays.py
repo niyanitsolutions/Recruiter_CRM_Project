@@ -141,19 +141,20 @@ async def check_holiday(
 async def import_holidays(
     request: Request,
     file: UploadFile = File(...),
+    year: Optional[int] = Query(None, description="Target year for year-less dates (e.g. '26-Jan')"),
     cu: dict = Depends(require_hrm_module),
     db=Depends(get_company_db),
     _p=_MANAGE,
 ):
-    if not file.filename.endswith(".csv"):
-        raise HTTPException(status_code=422, detail="Only CSV files are supported")
+    fn = (file.filename or "").lower()
+    if not fn.endswith((".csv", ".xlsx", ".xls", ".txt")):
+        raise HTTPException(
+            status_code=422,
+            detail="Only CSV or Excel files are supported (.csv, .xlsx, .xls)",
+        )
     content_bytes = await file.read()
-    try:
-        csv_text = content_bytes.decode("utf-8-sig")  # handle BOM
-    except UnicodeDecodeError:
-        csv_text = content_bytes.decode("latin-1")
-    result = await HolidayService(db).import_from_csv(
-        csv_text, cu["company_id"], cu["id"], _ip(request)
+    result = await HolidayService(db).import_from_file(
+        content_bytes, file.filename, cu["company_id"], cu["id"], year, _ip(request)
     )
     return result
 

@@ -1,11 +1,107 @@
 """HRM — Holiday Service"""
 import csv
 import io
-from datetime import datetime, date, timezone
+import re
+import logging
+from datetime import datetime, date, timezone, timedelta
 from typing import Optional, List
 from bson import ObjectId
 
 from app.models.company.hrm_holiday import HolidayType
+
+logger = logging.getLogger(__name__)
+
+# ── Import parsing helpers ─────────────────────────────────────────────────────
+# Canonical field ← accepted header aliases. Headers are compared after
+# normalization: lowercased, trimmed, and runs of spaces/underscores collapsed
+# to a single space — so "Holiday Name", "holiday name", "HOLIDAY NAME" and
+# "Holiday_Name" all match. Unmapped columns are ignored.
+_HEADER_ALIASES = {
+    "name":         {"name", "holiday name", "holiday", "title", "holiday title"},
+    "date":         {"date", "holiday date", "day", "on"},
+    "holiday_type": {"type", "holiday type", "category", "holiday category"},
+    "description":  {"description", "desc", "notes", "note", "remark", "remarks", "details"},
+    "is_paid":      {"is paid", "paid", "paid holiday", "paid leave"},
+    "is_recurring": {"is recurring", "recurring", "recurring every year",
+                     "recurring every", "repeat", "yearly", "annual"},
+}
+_ALIAS_TO_FIELD = {alias: field for field, aliases in _HEADER_ALIASES.items() for alias in aliases}
+
+# Date formats that carry a year vs. year-less (day+month only → resolved to the
+# import's target year). Day-first (Indian) ordering is preferred over month-first.
+_DATE_FORMATS_WITH_YEAR = [
+    "%Y-%m-%d", "%Y/%m/%d",
+    "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y",
+    "%d-%b-%Y", "%d %b %Y", "%d-%B-%Y", "%d %B %Y",
+    "%b %d %Y", "%B %d %Y", "%b %d, %Y", "%B %d, %Y",
+    "%m/%d/%Y", "%m-%d-%Y",
+]
+_DATE_FORMATS_NO_YEAR = [
+    "%d-%b", "%d %b", "%d-%B", "%d %B", "%d/%b", "%b-%d", "%b %d",
+    "%d-%m", "%d/%m",
+]
+
+
+def _norm_header(h) -> str:
+    return re.sub(r"[\s_]+", " ", str(h if h is not None else "").strip().lower())
+
+
+def _parse_bool(val, default: bool) -> bool:
+    """Yes/No, True/False, 1/0, Y/N (any case). Blank → default."""
+    if val is None:
+        return default
+    if isinstance(val, bool):
+        return val
+    s = str(val).strip().lower()
+    if not s:
+        return default
+    if s in ("1", "true", "yes", "y", "t", "paid", "recurring"):
+        return True
+    if s in ("0", "false", "no", "n", "f", "unpaid", "none"):
+        return False
+    return default
+
+
+def _parse_holiday_type(val) -> HolidayType:
+    """"National Holiday" → national, etc. Trims the redundant ' Holiday'
+    suffix and lowercases. Unknown/blank → NATIONAL (never skips a row)."""
+    s = re.sub(r"\s+", " ", str(val if val is not None else "").strip().lower())
+    if s.endswith(" holiday"):
+        s = s[: -len(" holiday")].strip()
+    try:
+        return HolidayType(s)
+    except ValueError:
+        return HolidayType.NATIONAL
+
+
+def _parse_date(val, default_year: int) -> str:
+    """Normalize to YYYY-MM-DD. Accepts native datetime/date cells (Excel),
+    Excel serial numbers, and a wide range of string formats — with or without
+    a year (a year-less date resolves to default_year)."""
+    if val is None or (isinstance(val, str) and not val.strip()):
+        raise ValueError("empty date")
+    if isinstance(val, datetime):
+        return val.strftime("%Y-%m-%d")
+    if isinstance(val, date):
+        return val.strftime("%Y-%m-%d")
+    # Excel serial date (1900 date system; day 0 == 1899-12-30). Guard against bool.
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        try:
+            return (datetime(1899, 12, 30) + timedelta(days=int(val))).strftime("%Y-%m-%d")
+        except (ValueError, OverflowError):
+            raise ValueError(f"invalid serial date '{val}'")
+    s = str(val).strip()
+    for fmt in _DATE_FORMATS_WITH_YEAR:
+        try:
+            return datetime.strptime(s, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    for fmt in _DATE_FORMATS_NO_YEAR:
+        try:
+            return datetime.strptime(s, fmt).replace(year=default_year).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    raise ValueError(f"invalid date '{s}'")
 
 
 class HolidayService:
@@ -185,41 +281,164 @@ class HolidayService:
 
     # ── Import / Export ───────────────────────────────────────────────────────
 
+    # ── Row extraction per file type ──────────────────────────────────────────
+
+    @staticmethod
+    def _rows_from_csv(text: str) -> List[dict]:
+        reader = csv.DictReader(io.StringIO(text.strip()))
+        return [dict(raw) for raw in reader]
+
+    @staticmethod
+    def _rows_from_xlsx(content: bytes) -> List[dict]:
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        try:
+            ws = wb.active
+            headers, rows = None, []
+            for r in ws.iter_rows(values_only=True):
+                if r is None or all(c is None for c in r):
+                    continue
+                if headers is None:
+                    headers = [str(c) if c is not None else "" for c in r]
+                    continue
+                rows.append({headers[i]: (r[i] if i < len(r) else None) for i in range(len(headers))})
+            return rows
+        finally:
+            wb.close()
+
+    @staticmethod
+    def _rows_from_xls(content: bytes) -> List[dict]:
+        import xlrd
+        book = xlrd.open_workbook(file_contents=content)
+        sheet = book.sheet_by_index(0)
+        if sheet.nrows == 0:
+            return []
+        headers = [str(sheet.cell_value(0, c)) for c in range(sheet.ncols)]
+        rows = []
+        for r in range(1, sheet.nrows):
+            row = {}
+            for c in range(sheet.ncols):
+                cell = sheet.cell(r, c)
+                val = cell.value
+                if cell.ctype == xlrd.XL_CELL_DATE:
+                    val = xlrd.xldate_as_datetime(val, book.datemode)
+                row[headers[c]] = val
+            rows.append(row)
+        return rows
+
+    def _map_row(self, raw: dict) -> dict:
+        """Map arbitrary source headers to canonical fields via _ALIAS_TO_FIELD."""
+        mapped: dict = {}
+        for k, v in raw.items():
+            field = _ALIAS_TO_FIELD.get(_norm_header(k))
+            if field and (field not in mapped or mapped[field] in (None, "")):
+                mapped[field] = v
+        return mapped
+
+    # ── Public import entry points ────────────────────────────────────────────
+
+    async def import_from_file(self, content: bytes, filename: str, company_id: str,
+                               created_by: str, year: Optional[int] = None,
+                               ip: Optional[str] = None) -> dict:
+        """Import holidays from a CSV, XLSX or XLS file (auto-detected by extension)."""
+        fn = (filename or "").lower()
+        if fn.endswith(".xlsx"):
+            raw_rows = self._rows_from_xlsx(content)
+        elif fn.endswith(".xls"):
+            raw_rows = self._rows_from_xls(content)
+        else:  # .csv / .txt / unknown → treat as CSV text
+            try:
+                text = content.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                text = content.decode("latin-1")
+            raw_rows = self._rows_from_csv(text)
+        return await self._import_rows(raw_rows, company_id, created_by, year, ip)
+
     async def import_from_csv(self, csv_content: str, company_id: str,
-                               created_by: str, ip: Optional[str] = None) -> dict:
+                              created_by: str, ip: Optional[str] = None) -> dict:
+        """Backward-compatible CSV entry point (older callers / tests)."""
+        return await self._import_rows(self._rows_from_csv(csv_content), company_id, created_by, None, ip)
+
+    async def _import_rows(self, raw_rows: List[dict], company_id: str, created_by: str,
+                           year: Optional[int], ip: Optional[str]) -> dict:
+        """Validate + normalize rows and batch-insert the valid, non-duplicate
+        ones. Returns detailed per-row results.
+
+        Uniqueness rule (unchanged from create()): one holiday per date per
+        company — a normalized date already carries the year, so this is the
+        same-tenant-same-year rule. Existing dates are pre-loaded once so a
+        1000-row import issues a single read + a single insert_many, not N of each.
         """
-        Parse CSV with columns: name, date (YYYY-MM-DD), type, description, is_paid, is_recurring
-        Returns {"created": N, "skipped": N, "errors": [...]}
-        """
-        reader = csv.DictReader(io.StringIO(csv_content.strip()))
+        default_year = year or datetime.now().year
+
+        existing_dates = set()
+        async for d in self.col.find({"company_id": company_id, "is_deleted": False}, {"date": 1}):
+            if d.get("date"):
+                existing_dates.add(d["date"])
+
         created = skipped = 0
         errors: List[str] = []
-        for i, row in enumerate(reader, start=2):
+        docs: List[dict] = []
+        seen_in_batch = set()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        for i, raw in enumerate(raw_rows, start=2):   # row 1 = header
+            mapped = self._map_row(raw)
+            name = str(mapped.get("name") or "").strip()
+            date_raw = mapped.get("date")
+
+            if not name:
+                errors.append(f"Row {i}: Missing Holiday Name"); skipped += 1
+                logger.info("Holiday import skip (row %d): missing name", i); continue
+            if date_raw is None or (isinstance(date_raw, str) and not date_raw.strip()):
+                errors.append(f"Row {i}: Missing Date"); skipped += 1
+                logger.info("Holiday import skip (row %d): missing date", i); continue
             try:
-                name = (row.get("name") or "").strip()
-                dt = (row.get("date") or "").strip()
-                if not name or not dt:
-                    errors.append(f"Row {i}: name and date are required")
-                    skipped += 1
-                    continue
-                # Validate date format
-                datetime.strptime(dt, "%Y-%m-%d")
-                holiday_type_raw = (row.get("type") or "national").strip().lower()
-                try:
-                    h_type = HolidayType(holiday_type_raw)
-                except ValueError:
-                    h_type = HolidayType.COMPANY
-                await self.create({
-                    "name": name, "date": dt, "holiday_type": h_type,
-                    "description": (row.get("description") or "").strip() or None,
-                    "is_paid": str(row.get("is_paid", "true")).lower() in ("1", "true", "yes"),
-                    "is_recurring": str(row.get("is_recurring", "false")).lower() in ("1", "true", "yes"),
-                }, company_id, created_by, ip)
-                created += 1
-            except ValueError as e:
-                errors.append(f"Row {i}: {e}")
+                iso_date = _parse_date(date_raw, default_year)
+            except ValueError:
+                errors.append(f"Row {i}: Invalid date ({str(date_raw).strip()})"); skipped += 1
+                logger.info("Holiday import skip (row %d): invalid date %r", i, date_raw); continue
+
+            if iso_date in existing_dates or iso_date in seen_in_batch:
+                errors.append(f"Row {i}: Duplicate holiday — one already exists on {iso_date}")
                 skipped += 1
-        return {"created": created, "skipped": skipped, "errors": errors}
+                logger.info("Holiday import skip (row %d): duplicate on %s", i, iso_date); continue
+
+            seen_in_batch.add(iso_date)
+            desc = mapped.get("description")
+            docs.append({
+                "_id": str(ObjectId()),
+                "company_id": company_id,
+                "name": name,
+                "date": iso_date,
+                "holiday_type": _parse_holiday_type(mapped.get("holiday_type")).value,
+                "description": (str(desc).strip() or None) if desc not in (None, "") else None,
+                "is_paid": _parse_bool(mapped.get("is_paid"), True),
+                "is_recurring": _parse_bool(mapped.get("is_recurring"), False),
+                "applicable_departments": [],
+                "applicable_locations": [],
+                "is_active": True,
+                "created_by": created_by,
+                "updated_by": None,
+                "created_at": now,
+                "updated_at": now,
+                "is_deleted": False,
+            })
+            created += 1
+
+        if docs:
+            await self.col.insert_many(docs)          # batch insert (supports 1000+ rows)
+            await self._audit("holiday_imported", "bulk", created_by, company_id,
+                              {"created": created, "skipped": skipped}, ip)
+
+        return {
+            "created": created,
+            "skipped": skipped,
+            "created_count": created,
+            "skipped_count": skipped,
+            "total": len(raw_rows),
+            "errors": errors,
+        }
 
     def export_to_csv(self, holidays: List[dict]) -> str:
         """Convert list of holiday dicts to CSV string."""

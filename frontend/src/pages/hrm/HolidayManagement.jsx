@@ -192,16 +192,29 @@ export default function HolidayManagement() {
     const formData = new FormData()
     formData.append('file', file)
     try {
-      const res = await hrmService.importHolidaysCsv(formData)
+      // Pass the selected year so year-less dates (e.g. "26-Jan") resolve correctly.
+      const res = await hrmService.importHolidaysCsv(formData, year)
       const d = res.data
-      toast.success(`Imported: ${d.created} created, ${d.skipped} skipped`)
+      const created = d.created ?? d.created_count ?? 0
+      const skipped = d.skipped ?? d.skipped_count ?? 0
+      if (created > 0) {
+        toast.success(`Imported ${created} holiday${created !== 1 ? 's' : ''}${skipped ? `, ${skipped} skipped` : ''}`)
+      } else {
+        toast(`No new holidays imported${skipped ? ` — ${skipped} row(s) skipped` : ''}`, { icon: 'ℹ️' })
+      }
       if (d.errors?.length) {
-        console.warn('Import errors:', d.errors)
-        toast.error(`${d.errors.length} row(s) had errors — check console`)
+        console.warn('Holiday import — skipped rows:', d.errors)
+        const preview = d.errors.slice(0, 3).join('\n')
+        toast.error(
+          `${d.errors.length} row(s) skipped:\n${preview}${d.errors.length > 3 ? '\n…see console for the rest' : ''}`,
+          { duration: 6000 },
+        )
       }
       load()
       publish(LIVE_TOPICS.CALENDAR)
-    } catch { toast.error('Import failed') }
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Import failed')
+    }
     e.target.value = ''
   }
 
@@ -244,7 +257,7 @@ export default function HolidayManagement() {
               <button onClick={() => fileRef.current?.click()}
                       className="btn-secondary flex items-center gap-1.5 text-sm">
                 <Upload className="w-4 h-4" /> Import
-                <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+                <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleImport} />
               </button>
               <button onClick={() => setModal('create')} className="btn-primary flex items-center gap-1.5 text-sm">
                 <Plus className="w-4 h-4" /> Add Holiday

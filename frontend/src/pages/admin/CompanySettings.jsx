@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import {
-  Building2, User, CreditCard, Shield, Globe,
+  Building2, User, CreditCard, Shield, Globe, Briefcase,
   Save, Loader2, Plus, Trash2, MapPin, AlertCircle, RefreshCw,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -105,6 +105,7 @@ const TABS = [
   { id: 'contact',       label: 'Admin Contact',   icon: User },
   { id: 'subscription',  label: 'Subscription',    icon: CreditCard },
   { id: 'security',      label: 'Security',        icon: Shield },
+  { id: 'hr',            label: 'HR Settings',     icon: Briefcase },
   { id: 'localization',  label: 'Localization',    icon: Globe },
 ]
 
@@ -210,6 +211,9 @@ const CompanySettings = () => {
   const localizationFromStore = useSelector(selectLocalization)
 
   const [activeTab, setActiveTab] = useState('profile')
+  const [empDefaults, setEmpDefaults] = useState({
+    probation_enabled: false, probation_days: 90, notice_enabled: false, notice_days: 30,
+  })
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
@@ -260,6 +264,14 @@ const CompanySettings = () => {
         ip_restriction_enabled: !!d.attendance_ip_restriction_enabled,
         approved_ips:           d.approved_office_ips || [],
       })
+      if (d.employment_defaults) {
+        setEmpDefaults({
+          probation_enabled: !!d.employment_defaults.probation_enabled,
+          probation_days:    d.employment_defaults.probation_days ?? 90,
+          notice_enabled:    !!d.employment_defaults.notice_enabled,
+          notice_days:       d.employment_defaults.notice_days ?? 30,
+        })
+      }
       // Load localization from the unified tenant-settings endpoint. This is
       // the single source of truth for timezone — the Profile tab's Time
       // Zone selector is mirrored from it below so the two tabs never show
@@ -358,6 +370,25 @@ const CompanySettings = () => {
       toast.success('Security settings saved')
     } catch (e) {
       toast.error(getErrorMessage(e, 'Geo Fence settings could not be saved. Please verify the entered values.'))
+    } finally { setSaving(false) }
+  }
+
+  const saveEmploymentDefaults = async () => {
+    if (Number(empDefaults.probation_days) <= 0) { toast.error('Probation days must be greater than 0.'); return }
+    if (Number(empDefaults.notice_days) < 0)     { toast.error('Notice days cannot be negative.'); return }
+    try {
+      setSaving(true)
+      const payload = {
+        probation_enabled: !!empDefaults.probation_enabled,
+        probation_days:    Number(empDefaults.probation_days) || 90,
+        notice_enabled:    !!empDefaults.notice_enabled,
+        notice_days:       Number(empDefaults.notice_days) || 0,
+      }
+      await api.put('/company-settings/employment-defaults', payload)
+      setEmpDefaults(payload)
+      toast.success('Employment defaults saved')
+    } catch (e) {
+      toast.error(getErrorMessage(e, 'Employment defaults could not be saved.'))
     } finally { setSaving(false) }
   }
 
@@ -940,6 +971,63 @@ const CompanySettings = () => {
 
 
       {/* ── 5. LOCALIZATION ───────────────────────────────────────────────── */}
+      {activeTab === 'hr' && (
+        <SectionCard title="Employment Defaults" icon={Briefcase}>
+          <div className="space-y-6">
+            <p className="text-sm text-surface-500">
+              Default probation &amp; notice periods applied to newly created employees.
+              Existing employees are unaffected until HR edits them.
+            </p>
+
+            {/* Probation */}
+            <div className="border border-surface-200 rounded-lg p-4">
+              <label className="flex items-center gap-2 text-sm font-medium text-surface-700">
+                <input type="checkbox" checked={empDefaults.probation_enabled}
+                  onChange={e => setEmpDefaults(d => ({ ...d, probation_enabled: e.target.checked }))} />
+                Enable Default Probation Period
+              </label>
+              {empDefaults.probation_enabled && (
+                <div className="mt-3 max-w-xs">
+                  <Field label="Duration (Days)">
+                    <input type="number" min="1"
+                      className="w-full px-3 py-2 border border-surface-300 rounded-lg"
+                      value={empDefaults.probation_days}
+                      onChange={e => setEmpDefaults(d => ({ ...d, probation_days: e.target.value }))} />
+                  </Field>
+                </div>
+              )}
+            </div>
+
+            {/* Notice */}
+            <div className="border border-surface-200 rounded-lg p-4">
+              <label className="flex items-center gap-2 text-sm font-medium text-surface-700">
+                <input type="checkbox" checked={empDefaults.notice_enabled}
+                  onChange={e => setEmpDefaults(d => ({ ...d, notice_enabled: e.target.checked }))} />
+                Enable Default Notice Period
+              </label>
+              {empDefaults.notice_enabled && (
+                <div className="mt-3 max-w-xs">
+                  <Field label="Duration (Days)">
+                    <input type="number" min="0"
+                      className="w-full px-3 py-2 border border-surface-300 rounded-lg"
+                      value={empDefaults.notice_days}
+                      onChange={e => setEmpDefaults(d => ({ ...d, notice_days: e.target.value }))} />
+                  </Field>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end">
+              <button onClick={saveEmploymentDefaults} disabled={saving}
+                className="btn-primary flex items-center gap-2">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save
+              </button>
+            </div>
+          </div>
+        </SectionCard>
+      )}
+
       {activeTab === 'localization' && (
         <SectionCard title="Localization Settings" icon={Globe}>
           <div className="space-y-6">

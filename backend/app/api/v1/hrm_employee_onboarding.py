@@ -351,12 +351,26 @@ async def validate_employee_onboarding_token(token: str):
         "blood_group": emp.get("blood_group"),
         "pan_number": emp.get("pan_number"),
         "aadhaar_number": emp.get("aadhaar_number"),
+        "pf_number": emp.get("pf_number"),
+        "uan_number": emp.get("uan_number"),
         "current_address": emp.get("address"),
         "permanent_address": emp.get("permanent_address"),
         "address_info": emp.get("address_info"),
         "emergency_contact": (emp.get("emergency_contacts") or [None])[0],
+        "emergency_contacts": emp.get("emergency_contacts") or [],
         "bank_details": emp.get("bank_details"),
+        "background_verification": emp.get("background_verification"),
         "qualifications": emp.get("qualifications"),
+        # Employment info is HR-controlled (read-only on the onboarding form).
+        "employment": {
+            "department_name":   emp.get("department_name"),
+            "designation_name":  emp.get("designation_name"),
+            "employment_type":   emp.get("employment_type"),
+            "date_of_joining":   emp.get("date_of_joining"),
+            "work_location":     emp.get("work_location"),
+            "shift_start_time":  emp.get("shift_start_time"),
+            "shift_end_time":    emp.get("shift_end_time"),
+        },
     }
     return {
         "success": True,
@@ -383,15 +397,25 @@ async def submit_employee_onboarding(token: str, data: dict):
     now = datetime.now(timezone.utc)
     existing_employee_id = token_doc.get("employee_id")
 
-    # Emergency contact
-    ec = data.get("emergency_contact") or {}
+    # Emergency contacts — accept the multi-contact array (new) and fall back to
+    # the legacy single emergency_contact object (backward compatible).
     emergency_contacts = []
-    if ec.get("name") and ec.get("phone"):
-        emergency_contacts = [{
-            "name": ec.get("name", ""),
-            "relationship": ec.get("relationship", ""),
-            "phone": ec.get("phone", ""),
-        }]
+    for c in (data.get("emergency_contacts") or []):
+        if c and c.get("name") and c.get("phone"):
+            emergency_contacts.append({
+                "name": c.get("name", ""),
+                "relationship": c.get("relationship", ""),
+                "phone": c.get("phone", ""),
+                "email": c.get("email") or None,
+            })
+    if not emergency_contacts:
+        ec = data.get("emergency_contact") or {}
+        if ec.get("name") and ec.get("phone"):
+            emergency_contacts = [{
+                "name": ec.get("name", ""),
+                "relationship": ec.get("relationship", ""),
+                "phone": ec.get("phone", ""),
+            }]
 
     # Bank details
     bank = data.get("bank_details") or {}
@@ -401,6 +425,25 @@ async def submit_employee_onboarding(token: str, data: dict):
         "ifsc_code": bank.get("ifsc_code") or "",
         "account_holder_name": bank.get("account_holder_name") or "",
     } if any(v for v in bank.values() if v) else None
+
+    # PF / UAN — top-level employee fields (not part of the bank_details schema).
+    # The "I don't have PF/UAN" checkbox simply leaves these blank on the client.
+    pf_number = (str(data.get("pf_number") or "")).strip() or None
+    uan_number = (str(data.get("uan_number") or "")).strip() or None
+
+    # Background verification — previous-employment details (optional). Reuses
+    # the Employee model's new background_verification object (no new table).
+    bgv = data.get("background_verification") or {}
+    background_verification = {
+        "previous_company":     bgv.get("previous_company") or None,
+        "previous_designation": bgv.get("previous_designation") or None,
+        "manager_name":         bgv.get("manager_name") or None,
+        "manager_email":        bgv.get("manager_email") or None,
+        "manager_phone":        bgv.get("manager_phone") or None,
+        "employment_from":      bgv.get("employment_from") or None,
+        "employment_to":        bgv.get("employment_to") or None,
+        "reason_for_leaving":   bgv.get("reason_for_leaving") or None,
+    } if any(v for v in bgv.values() if v) else None
 
     # Address
     addr = data.get("address_info") or {}
@@ -447,7 +490,10 @@ async def submit_employee_onboarding(token: str, data: dict):
             "emergency_contacts": emergency_contacts or existing_emp.get("emergency_contacts") or [],
             "pan_number": data.get("pan_number") or existing_emp.get("pan_number"),
             "aadhaar_number": data.get("aadhaar_number") or existing_emp.get("aadhaar_number"),
+            "pf_number": pf_number or existing_emp.get("pf_number"),
+            "uan_number": uan_number or existing_emp.get("uan_number"),
             "bank_details": bank_details or existing_emp.get("bank_details"),
+            "background_verification": background_verification or existing_emp.get("background_verification"),
             "qualifications": qualifications or existing_emp.get("qualifications") or [],
             "updated_at": now,
         }
@@ -487,6 +533,8 @@ async def submit_employee_onboarding(token: str, data: dict):
         "photo_url": None,
         "pan_number": data.get("pan_number") or None,
         "aadhaar_number": data.get("aadhaar_number") or None,
+        "pf_number": pf_number,
+        "uan_number": uan_number,
         # Employment info — HR completes these after review
         "department_id": None,
         "department_name": None,
@@ -509,6 +557,7 @@ async def submit_employee_onboarding(token: str, data: dict):
         "qualifications": qualifications,
         "documents": [],
         "background_check": None,
+        "background_verification": background_verification,
         "crm_user_id": None,
         "hrm_onboarding_id": None,
         "source": "onboarding_form",

@@ -203,6 +203,12 @@ async def create_user(
     """Create a new user (enforces seat-limit before creation)"""
     user_service = UserService(db)
 
+    # Reports To is mandatory for regular internal users. Owner accounts are
+    # provisioned via registration (not this endpoint) and external partners
+    # have no reporting line, so both are naturally exempt here.
+    if (user_data.user_type or "internal") != "partner" and not (user_data.reporting_to or "").strip():
+        raise HTTPException(status_code=422, detail="Reports To (reporting manager) is required.")
+
     success, message, user = await user_service.create_user(
         user_data=user_data,
         created_by_id=current_user["id"],
@@ -474,7 +480,15 @@ async def update_user(
 ):
     """Update a user (Admin operation)"""
     user_service = UserService(db)
-    
+
+    # Reports To may not be cleared for a regular internal user. Only enforced
+    # when the field is explicitly sent empty (partial updates that omit it are
+    # untouched, preserving backward compatibility); Owner and partner exempt.
+    if update_data.reporting_to is not None and not update_data.reporting_to.strip():
+        _target = await db["users"].find_one({"_id": user_id}, {"is_owner": 1, "user_type": 1})
+        if _target and not _target.get("is_owner") and (_target.get("user_type") or "internal") != "partner":
+            raise HTTPException(status_code=422, detail="Reports To (reporting manager) is required.")
+
     success, message, user = await user_service.update_user(
         user_id=user_id,
         update_data=update_data,

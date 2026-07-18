@@ -18,7 +18,9 @@ import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_STYLE = {
+  probation:          { bg: 'var(--bg-info)',     color: 'var(--text-info)',     label: 'Probation' },
   active:             { bg: 'var(--bg-success)',  color: 'var(--text-success)',  label: 'Active' },
+  notice_period:      { bg: 'var(--bg-warning)',  color: 'var(--text-warning)',  label: 'Notice Period' },
   inactive:           { bg: 'var(--bg-card-alt)', color: 'var(--text-muted)',   label: 'Inactive' },
   terminated:         { bg: 'var(--bg-danger)',   color: 'var(--text-danger)',   label: 'Terminated' },
   on_leave:           { bg: 'var(--bg-warning)', color: 'var(--text-warning)',  label: 'On Leave' },

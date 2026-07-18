@@ -17,6 +17,7 @@ from app.models.company.settings import (
     GeoFenceLocation,
     UserGeoFenceConfig,
     NotificationPreferences,
+    EmploymentDefaults,
 )
 
 router = APIRouter(prefix="/company-settings", tags=["Company Settings"])
@@ -236,6 +237,25 @@ async def update_notifications(
     update = CompanySettingsUpdate(notification_preferences=data.notification_preferences)
     updated = await SettingsService.update_company_settings(db, update, current_user["id"])
     return {"success": True, "message": "Notification preferences updated", "data": _settings_to_dict(updated)}
+
+
+# ── HR Employment Defaults (Probation & Notice) ───────────────────────────────
+
+@router.put("/employment-defaults")
+async def update_employment_defaults(
+    data: EmploymentDefaults,
+    current_user: dict = Depends(require_permissions(["crm_settings:edit"])),
+    db=Depends(get_company_db),
+):
+    """Set the company-wide default probation & notice periods applied to NEW
+    employees (section 1). Existing employees are unaffected until HR edits them."""
+    if data.probation_days <= 0:
+        raise HTTPException(status_code=422, detail="Probation days must be greater than 0.")
+    if data.notice_days < 0:
+        raise HTTPException(status_code=422, detail="Notice days cannot be negative.")
+    update = CompanySettingsUpdate(employment_defaults=data)
+    updated = await SettingsService.update_company_settings(db, update, current_user["id"])
+    return {"success": True, "message": "Employment defaults updated", "data": _settings_to_dict(updated)}
 
 
 # ── SMTP Configuration ────────────────────────────────────────────────────────

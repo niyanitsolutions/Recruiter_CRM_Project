@@ -523,6 +523,12 @@ const [errors,       setErrors]       = useState({})
         newErrors.permissions = 'Please select a Department to assign permissions.'
       }
     }
+    // Reports To is mandatory for regular internal users. System-level accounts
+    // (Owner — detected via the existing permDept === 'owner' check) and external
+    // partners (who have no reporting line / no field shown) are exempt.
+    if (!isPartner && permDept !== 'owner' && !formData.reporting_to) {
+      newErrors.reporting_to = 'Reports To is required'
+    }
     setErrors(newErrors)
     if (Object.keys(newErrors).length > 0) {
       // Scroll to the first error field
@@ -1062,14 +1068,17 @@ const [errors,       setErrors]       = useState({})
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-surface-700 mb-1">Reports To</label>
+              <label className="block text-sm font-medium text-surface-700 mb-1">
+                Reports To {!isPartner && permDept !== 'owner' && <span className="text-red-500">*</span>}
+              </label>
               <select name="reporting_to" value={formData.reporting_to} onChange={handleChange}
-                className="w-full px-3 py-2 border border-surface-300 rounded-lg">
+                className={`w-full px-3 py-2 border rounded-lg ${errors.reporting_to ? 'border-red-400' : 'border-surface-300'}`}>
                 <option value="">Select</option>
                 {users.filter(u => u.id !== id).map(u => (
                   <option key={u.id} value={u.id}>{u.full_name}</option>
                 ))}
               </select>
+              {errors.reporting_to && <p className="text-red-500 text-xs mt-1">{errors.reporting_to}</p>}
             </div>
 
             <div>

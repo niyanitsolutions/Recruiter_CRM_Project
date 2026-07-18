@@ -93,10 +93,22 @@ class LeaveService:
             "is_deleted": False,
         })
 
+    @staticmethod
+    def _fmt_date_long(iso) -> Optional[str]:
+        """ISO date → '31 Mar 2026' for user-facing messages."""
+        if not iso:
+            return None
+        try:
+            d = iso if isinstance(iso, date) else date.fromisoformat(str(iso)[:10])
+            return d.strftime("%d %b %Y")
+        except (ValueError, TypeError):
+            return None
+
     async def _validate_policy(
         self, leave_type: str, days: float, company_id: str,
         gender: Optional[str] = None, department: Optional[str] = None,
         on_probation: bool = False, on_notice: bool = False,
+        probation_end: Optional[str] = None,
     ) -> None:
         policy = await self._get_policy(leave_type, company_id)
         if not policy:
@@ -108,11 +120,19 @@ class LeaveService:
         if gender and policy.get("gender_restriction") and policy["gender_restriction"] != gender:
             raise ValueError(f"'{policy['name']}' is restricted to {policy['gender_restriction']} employees")
 
+        # Probation restriction (section 7) — only blocks when the leave's policy
+        # has "Restrict During Probation" enabled AND the employee is still in
+        # probation. Includes the probation end date in the message when known.
         if on_probation and policy.get("probation_restriction"):
-            raise ValueError(f"'{policy['name']}' cannot be taken during probation period")
+            _end = self._fmt_date_long(probation_end)
+            msg = "You cannot apply this leave while you are in your probation period."
+            if _end:
+                msg += f" Probation ends {_end}."
+            raise ValueError(msg)
 
+        # Notice-period restriction (section 7).
         if on_notice and policy.get("notice_period_restriction"):
-            raise ValueError(f"'{policy['name']}' cannot be taken during notice period")
+            raise ValueError("Leave applications are not allowed during the notice period.")
 
         min_days = float(policy.get("min_days", 0.5))
         if days < min_days:
@@ -297,8 +317,20 @@ class LeaveService:
         if days <= 0:
             raise ValueError("No working days in selected date range (all days are weekends or holidays)")
 
+        # Probation / notice status for policy restrictions (section 7)
+        from app.services.employment_policy import is_on_probation, is_on_notice
+        emp_doc = await self.db["hrm_employees"].find_one(
+            {"_id": employee_id, "company_id": company_id},
+            {"employment_status": 1, "probation_end_date": 1},
+        ) or {}
+        _prob_end = emp_doc.get("probation_end_date")
+
         # Policy validation
-        await self._validate_policy(leave_type, days, company_id, gender=gender, department=department)
+        await self._validate_policy(
+            leave_type, days, company_id, gender=gender, department=department,
+            on_probation=is_on_probation(emp_doc), on_notice=is_on_notice(emp_doc),
+            probation_end=_prob_end,
+        )
 
         # Balance check
         await self._check_balance(employee_id, company_id, leave_type, days)

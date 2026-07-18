@@ -225,7 +225,10 @@ const deleteHoliday = (id) => api.delete(`${BASE}/holidays/${id}`)
 const checkHoliday = (dt, dept) => api.get(`${BASE}/holidays/check/${dt}`, { params: { department: dept } })
 const exportHolidaysCsv = (year) => api.get(`${BASE}/holidays/export/csv`, { params: { year }, responseType: 'blob' })
 const copyHolidaysToNextYear = () => api.post(`${BASE}/holidays/copy-next-year`)
-const importHolidaysCsv = (formData) => api.post(`${BASE}/holidays/import`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+const importHolidaysCsv = (formData, year) => api.post(`${BASE}/holidays/import`, formData, {
+  params: year ? { year } : {},
+  headers: { 'Content-Type': 'multipart/form-data' },
+})
 
 // ── Company Calendar ─────────────────────────────────────────────────────────
 const getCalendarEvents = (from, to) => api.get(`${BASE}/calendar/events`, { params: { from, to } })

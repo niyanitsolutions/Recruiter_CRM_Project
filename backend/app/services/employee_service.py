@@ -164,6 +164,19 @@ class EmployeeService:
             doc["emergency_contacts"] = [ec.model_dump() for ec in data.emergency_contacts]
         if data.qualifications:
             doc["qualifications"] = [q.model_dump() for q in data.qualifications]
+        # ── Employment policy (Probation & Notice) ────────────────────────────
+        # Resolve the effective probation days (company default or custom),
+        # compute the probation end date, and set the initial status
+        # (probation vs active). Additive + backward compatible: the new fields
+        # default to use-company-default, so callers that don't send them are
+        # simply governed by the company setting.
+        from app.services.employment_policy import get_employment_defaults, compute_probation_on_save
+        _emp_defaults = await get_employment_defaults(self.db)
+        _pdays, _pend, _status = compute_probation_on_save(doc, _emp_defaults)
+        if not doc.get("probation_use_company_default", True):
+            doc["probation_days"] = _pdays
+        doc["probation_end_date"] = _pend
+        doc["employment_status"] = _status
         # Convert datetime.date → datetime.datetime before insert.
         # PyMongo's BSON encoder cannot handle bare date objects (e.g. date_of_birth,
         # date_of_joining). This must run after all model_dump() calls above.
@@ -363,6 +376,22 @@ class EmployeeService:
             if field in update_data and hasattr(update_data[field], "model_dump"):
                 update_data[field] = update_data[field].model_dump()
         update_data["updated_at"] = datetime.now(timezone.utc)
+        # ── Employment policy recompute (section 9/10) ────────────────────────
+        # Only when HR actually edits a probation-affecting field — never a
+        # silent overwrite of untouched existing records. Status is recomputed
+        # unless HR is explicitly changing employment_status in the same edit.
+        _prob_keys = {"date_of_joining", "probation_use_company_default", "probation_days"}
+        if _prob_keys & set(update_data.keys()):
+            from app.services.employment_policy import get_employment_defaults, compute_probation_on_save
+            _existing = await self.col.find_one({"_id": employee_id, "company_id": company_id}) or {}
+            _merged = {**_existing, **update_data}
+            _defaults = await get_employment_defaults(self.db)
+            _pdays, _pend, _status = compute_probation_on_save(_merged, _defaults)
+            if not _merged.get("probation_use_company_default", True):
+                update_data["probation_days"] = _pdays
+            update_data["probation_end_date"] = _pend
+            if "employment_status" not in update_data:
+                update_data["employment_status"] = _status
         # Same date-serialization fix as in create() — covers date_of_joining,
         # date_of_leaving, and DisciplinaryRecord.date in EmployeeUpdate payloads.
         update_data = _dates_to_datetime(update_data)

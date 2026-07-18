@@ -4,6 +4,7 @@ import os
 from typing import Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from pydantic import BaseModel
 
 from app.core.dependencies import get_company_db, require_hrm_module, require_permissions, require_any_permission
 from app.models.company.employee import EmployeeCreate, EmployeeUpdate
@@ -76,6 +77,66 @@ async def update_employee(
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
     return emp
+
+
+# ── Notice Period workflow (section 11) ───────────────────────────────────────
+
+class InitiateNoticeRequest(BaseModel):
+    resignation_date: str                     # ISO date the employee resigned
+    notice_days: Optional[int] = None         # optional override; else resolved
+
+
+@router.post("/{employee_id}/initiate-notice")
+async def initiate_notice(
+    employee_id: str,
+    body: InitiateNoticeRequest,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_any_permission([["hrm:employees:manage"], ["hrm:employees:edit"]])),
+):
+    """HR initiates resignation: stores resignation date, notice days and the
+    computed last working day, and moves the employee to Notice Period status
+    (section 11). Additive endpoint — the existing lifecycle is unchanged."""
+    from datetime import date as _date, timedelta as _td
+    from app.services.employment_policy import get_employment_defaults, resolve_notice_days
+
+    emp = await db["hrm_employees"].find_one(
+        {"_id": employee_id, "company_id": cu["company_id"], "is_deleted": False}
+    )
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    try:
+        resignation = _date.fromisoformat(str(body.resignation_date)[:10])
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="Invalid resignation date.")
+
+    if body.notice_days is not None:
+        if body.notice_days < 0:
+            raise HTTPException(status_code=422, detail="Notice days cannot be negative.")
+        notice_days = int(body.notice_days)
+    else:
+        notice_days = resolve_notice_days(emp, await get_employment_defaults(db))
+
+    last_working_day = resignation + _td(days=notice_days)
+    now = datetime.now(timezone.utc)
+    await db["hrm_employees"].update_one(
+        {"_id": employee_id, "company_id": cu["company_id"]},
+        {"$set": {
+            "employment_status": "notice_period",
+            "resignation_date": datetime(resignation.year, resignation.month, resignation.day, tzinfo=timezone.utc),
+            "notice_days": notice_days,
+            "last_working_day": datetime(last_working_day.year, last_working_day.month, last_working_day.day, tzinfo=timezone.utc),
+            "updated_at": now,
+        }},
+    )
+    return {
+        "success": True,
+        "employment_status": "notice_period",
+        "resignation_date": resignation.isoformat(),
+        "notice_days": notice_days,
+        "last_working_day": last_working_day.isoformat(),
+    }
 
 
 @router.post("/{employee_id}/photo")

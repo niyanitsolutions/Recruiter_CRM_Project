@@ -179,12 +179,12 @@ function PolicyForm({ initial, onSave, onCancel, saving }) {
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={form.probation_restriction}
                      onChange={() => toggle('probation_restriction')} className="w-4 h-4 accent-blue-500" />
-              <span style={{ color: 'var(--text-body)' }}>Not During Probation</span>
+              <span style={{ color: 'var(--text-body)' }}>Restrict During Probation</span>
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={form.notice_period_restriction}
                      onChange={() => toggle('notice_period_restriction')} className="w-4 h-4 accent-blue-500" />
-              <span style={{ color: 'var(--text-body)' }}>Not During Notice Period</span>
+              <span style={{ color: 'var(--text-body)' }}>Restrict During Notice Period</span>
             </label>
           </div>
         </div>

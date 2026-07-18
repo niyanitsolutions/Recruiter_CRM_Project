@@ -15,7 +15,9 @@ class EmploymentType(str, Enum):
 
 
 class EmploymentStatus(str, Enum):
+    PROBATION = "probation"
     ACTIVE = "active"
+    NOTICE_PERIOD = "notice_period"
     INACTIVE = "inactive"
     ON_LEAVE = "on_leave"
     TERMINATED = "terminated"
@@ -76,6 +78,21 @@ class BackgroundCheck(BaseModel):
     checked_by: Optional[str] = None
     checked_on: Optional[date] = None
     notes: Optional[str] = None
+
+
+class BackgroundVerification(BaseModel):
+    """Previous-employment details captured during self-onboarding. Distinct
+    from BackgroundCheck (which tracks HR's verification status); this holds the
+    employee-supplied prior-employment record. All optional — older employee
+    records simply carry null."""
+    previous_company: Optional[str] = None
+    previous_designation: Optional[str] = None
+    manager_name: Optional[str] = None
+    manager_email: Optional[str] = None
+    manager_phone: Optional[str] = None
+    employment_from: Optional[str] = None      # YYYY-MM or YYYY-MM-DD
+    employment_to: Optional[str] = None
+    reason_for_leaving: Optional[str] = None
 
 
 class BankDetails(BaseModel):
@@ -199,6 +216,15 @@ class EmployeeModel(BaseModel):
     employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
     date_of_joining: Optional[date] = None
     date_of_leaving: Optional[date] = None
+    # ── Employment Policy (Probation & Notice) — additive, backward compatible.
+    # Older records simply carry the defaults (use_company_default=True, nulls). ──
+    probation_use_company_default: bool = True
+    probation_days: Optional[int] = None          # custom override when not using default
+    probation_end_date: Optional[date] = None     # computed = joining + effective probation days
+    notice_use_company_default: bool = True
+    notice_days: Optional[int] = None             # custom override when not using default
+    resignation_date: Optional[date] = None       # set when HR initiates notice
+    last_working_day: Optional[date] = None        # resignation_date + notice_days
     work_location: Optional[str] = None
     shift_start_time: str = "09:00"   # HH:MM
     shift_end_time: str = "18:00"
@@ -221,7 +247,8 @@ class EmployeeModel(BaseModel):
     qualifications: List[Qualification] = Field(default_factory=list)
 
     # Background Verification
-    background_check: Optional[BackgroundCheck] = None
+    background_check: Optional[BackgroundCheck] = None          # HR verify status
+    background_verification: Optional[BackgroundVerification] = None  # prior-employment details
 
     # Documents
     documents: List[EmployeeDocument] = Field(default_factory=list)
@@ -282,6 +309,10 @@ class EmployeeCreate(BaseModel):
     reporting_manager_id: Optional[str] = None
     employment_type: EmploymentType = EmploymentType.FULL_TIME
     date_of_joining: Optional[date] = None
+    probation_use_company_default: bool = True
+    probation_days: Optional[int] = None
+    notice_use_company_default: bool = True
+    notice_days: Optional[int] = None
     work_location: Optional[str] = None
     shift_start_time: str = "09:00"
     shift_end_time: str = "18:00"
@@ -297,6 +328,7 @@ class EmployeeCreate(BaseModel):
     work_description: Optional[str] = None
     qualifications: Optional[List[Qualification]] = None
     background_check: Optional[BackgroundCheck] = None
+    background_verification: Optional[BackgroundVerification] = None
     account_info: Optional[AccountInfoCreate] = None
 
 
@@ -318,6 +350,10 @@ class EmployeeUpdate(BaseModel):
     employment_status: Optional[EmploymentStatus] = None
     date_of_joining: Optional[date] = None
     date_of_leaving: Optional[date] = None
+    probation_use_company_default: Optional[bool] = None
+    probation_days: Optional[int] = None
+    notice_use_company_default: Optional[bool] = None
+    notice_days: Optional[int] = None
     work_location: Optional[str] = None
     shift_start_time: Optional[str] = None
     shift_end_time: Optional[str] = None
@@ -335,3 +371,4 @@ class EmployeeUpdate(BaseModel):
     disciplinary_records: Optional[List[DisciplinaryRecord]] = None
     qualifications: Optional[List[Qualification]] = None
     background_check: Optional[BackgroundCheck] = None
+    background_verification: Optional[BackgroundVerification] = None

@@ -9,6 +9,7 @@ import {
   Camera,
 } from 'lucide-react'
 import hrmService from '../../services/hrmService'
+import api from '../../services/api'
 import userService from '../../services/userService'
 import departmentService from '../../services/departmentService'
 import designationService from '../../services/designationService'
@@ -237,6 +238,9 @@ const EMPTY_EMP = {
   designation_name:'', department_name:'',
   reporting_manager_id:'', employment_type:'full_time',
   date_of_joining:'', work_location:'',
+  // Employment Policy (Probation & Notice) — default to company defaults.
+  probation_use_company_default: true, probation_days: '',
+  notice_use_company_default: true, notice_days: '',
   shift_start_time:'09:00', shift_end_time:'18:00', work_description:'',
   ctc:'', basic:'', hra:'', special_allowance:'',
   bank_name:'', account_number:'', ifsc_code:'', account_holder_name:'',
@@ -646,6 +650,19 @@ export default function EmployeeForm() {
   const [saving, setSaving]         = useState(false)
   const [errorModal, setErrorModal] = useState(null)   // { title, lines, variant }
   const [sectionErrors, setSectionErrors] = useState({})
+  // Company-wide probation/notice defaults (for the "Use Company Default" hint).
+  const [companyEmpDefaults, setCompanyEmpDefaults] = useState(
+    { probation_enabled: false, probation_days: 90, notice_enabled: false, notice_days: 30 })
+  useEffect(() => {
+    let alive = true
+    api.get('/company-settings/')
+      .then(res => {
+        const ed = res.data?.data?.employment_defaults
+        if (alive && ed) setCompanyEmpDefaults(ed)
+      })
+      .catch(() => {})   // non-fatal — falls back to the sensible defaults above
+    return () => { alive = false }
+  }, [])
 
   // ── Photo upload state ────────────────────────────────────────────
   const [photoUrl,       setPhotoUrl]       = useState(null)     // current photo (edit: from server; create: from crop)
@@ -777,6 +794,10 @@ export default function EmployeeForm() {
         reporting_manager_id: e.reporting_manager_id || '',
         employment_type:  e.employment_type   || 'full_time',
         date_of_joining:  e.date_of_joining   || '',
+        probation_use_company_default: e.probation_use_company_default !== false,
+        probation_days:   e.probation_days != null ? String(e.probation_days) : '',
+        notice_use_company_default: e.notice_use_company_default !== false,
+        notice_days:      e.notice_days != null ? String(e.notice_days) : '',
         work_location:    e.work_location     || '',
         shift_start_time: e.shift_start_time  || '09:00',
         shift_end_time:   e.shift_end_time    || '18:00',
@@ -1089,6 +1110,12 @@ export default function EmployeeForm() {
       reporting_manager_id: form.reporting_manager_id || undefined,
       employment_type:     form.employment_type,
       date_of_joining:     form.date_of_joining  || undefined,
+      probation_use_company_default: form.probation_use_company_default,
+      probation_days: form.probation_use_company_default ? undefined
+                        : (form.probation_days ? Number(form.probation_days) : undefined),
+      notice_use_company_default: form.notice_use_company_default,
+      notice_days: form.notice_use_company_default ? undefined
+                        : (form.notice_days !== '' ? Number(form.notice_days) : undefined),
       work_location:       form.work_location    || undefined,
       shift_start_time:    form.shift_start_time,
       shift_end_time:      form.shift_end_time,
@@ -1920,6 +1947,49 @@ export default function EmployeeForm() {
               </Field>
             </div>
           </div>
+
+          {/* ── Employment Policy (Probation & Notice) ─────────────────── */}
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="border border-gray-200 rounded-lg p-3">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 flex-wrap">
+                <input type="checkbox" checked={form.probation_use_company_default}
+                  onChange={e => set('probation_use_company_default', e.target.checked)} />
+                Use Company Default Probation
+                <span className="text-xs text-gray-400">
+                  {companyEmpDefaults.probation_enabled ? `(Default ${companyEmpDefaults.probation_days} Days)` : '(no company default set)'}
+                </span>
+              </label>
+              {!form.probation_use_company_default && (
+                <div className="mt-2">
+                  <Field label="Custom Probation Duration (Days)"
+                    error={form.probation_days !== '' && Number(form.probation_days) <= 0 ? 'Must be greater than 0' : ''}>
+                    <input type="number" min="1" className={inp} value={form.probation_days}
+                      onChange={e => set('probation_days', e.target.value)} placeholder="e.g. 180" />
+                  </Field>
+                </div>
+              )}
+            </div>
+            <div className="border border-gray-200 rounded-lg p-3">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 flex-wrap">
+                <input type="checkbox" checked={form.notice_use_company_default}
+                  onChange={e => set('notice_use_company_default', e.target.checked)} />
+                Use Company Default Notice Period
+                <span className="text-xs text-gray-400">
+                  {companyEmpDefaults.notice_enabled ? `(Default ${companyEmpDefaults.notice_days} Days)` : '(no company default set)'}
+                </span>
+              </label>
+              {!form.notice_use_company_default && (
+                <div className="mt-2">
+                  <Field label="Custom Notice Duration (Days)"
+                    error={form.notice_days !== '' && Number(form.notice_days) < 0 ? 'Cannot be negative' : ''}>
+                    <input type="number" min="0" className={inp} value={form.notice_days}
+                      onChange={e => set('notice_days', e.target.value)} placeholder="e.g. 60" />
+                  </Field>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="mt-4">
             <Field label="Role Description / Notes">
               <textarea rows={3} className={inp + " resize-none"} value={form.work_description}

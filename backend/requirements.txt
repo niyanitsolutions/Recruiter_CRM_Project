@@ -49,6 +49,8 @@ reportlab==4.1.0
 
 # Excel / Spreadsheet
 openpyxl==3.1.2
+# xlrd reads legacy .xls files (xlrd 2.x supports .xls only; .xlsx uses openpyxl)
+xlrd==2.0.1
 
 # Resume Parsing (text extraction)
 pypdf==4.2.0
