@@ -12,6 +12,7 @@ const createEmployee = (data) => api.post(`${BASE}/employees`, data)
 const getEmployee = (id) => api.get(`${BASE}/employees/${id}`)
 const updateEmployee = (id, data) => api.put(`${BASE}/employees/${id}`, data)
 const deleteEmployee = (id) => api.delete(`${BASE}/employees/${id}`)
+const approveEmployee = (id) => api.post(`${BASE}/employees/${id}/approve`)
 
 // ── Attendance ─────────────────────────────────────────────────────────────
 // History & export — date strings must be YYYY-MM-DD
@@ -232,6 +233,10 @@ const importHolidaysCsv = (formData, year) => api.post(`${BASE}/holidays/import`
 
 // ── Company Calendar ─────────────────────────────────────────────────────────
 const getCalendarEvents = (from, to) => api.get(`${BASE}/calendar/events`, { params: { from, to } })
+const listCompanyEvents = () => api.get(`${BASE}/calendar/company-events`)
+const createCompanyEvent = (data) => api.post(`${BASE}/calendar/company-events`, data)
+const updateCompanyEvent = (id, data) => api.put(`${BASE}/calendar/company-events/${id}`, data)
+const deleteCompanyEvent = (id) => api.delete(`${BASE}/calendar/company-events/${id}`)
 
 // ── Leave Policies ─────────────────────────────────────────────────────────
 const listLeavePolicies = (params) => api.get(`${BASE}/leave-policies`, { params })
@@ -279,7 +284,7 @@ const getAnnouncements = listAnnouncements
 
 const hrmService = {
   getDashboardStats, getAttendanceTrend,
-  listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee, uploadEmployeePhoto, deleteEmployeePhoto,
+  listEmployees, createEmployee, getEmployee, updateEmployee, deleteEmployee, approveEmployee, uploadEmployeePhoto, deleteEmployeePhoto,
   getTeamAttendanceHistory, getMyAttendanceHistory, getAttendanceRangeStats, exportTeamAttendanceCsv, exportMyAttendanceCsv,
   checkIn, checkOut, startBreak, endBreak, getMyTodayAttendance, getTodayAttendance, getMonthlyAttendance, getTeamToday, manualAttendance, recoverAttendance,
   getAttendanceTodayStats, getAttendanceSettings, updateAttendanceSettings,
@@ -313,6 +318,7 @@ const hrmService = {
   listHolidays, createHoliday, updateHoliday, deleteHoliday,
   checkHoliday, exportHolidaysCsv, copyHolidaysToNextYear, importHolidaysCsv,
   getCalendarEvents,
+  listCompanyEvents, createCompanyEvent, updateCompanyEvent, deleteCompanyEvent,
   listLeavePolicies, createLeavePolicy, getLeavePolicy, updateLeavePolicy, deleteLeavePolicy, seedDefaultLeavePolicies,
   listShifts, createShift, updateShift, deleteShift, seedDefaultShifts, assignShift,
   createShiftAssignment, listShiftAssignments, listMyShiftAssignments,

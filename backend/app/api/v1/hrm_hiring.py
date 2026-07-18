@@ -250,7 +250,41 @@ async def create_interview(
                     company_name=cu.get("company_name", ""),
                     company_id=cu.get("company_id", ""),
                 )
+            # Notify each assigned interviewer who has an email on file.
+            _mail_interviewers(background_tasks, result, cu)
     return result
+
+
+def _mail_interviewers(background_tasks: BackgroundTasks, result: dict, cu: dict) -> None:
+    """Fire an 'Interview Assignment' email to each interviewer with an email."""
+    from datetime import datetime
+    from app.services.email_service import send_interviewer_assigned_email
+    sched = result.get("scheduled_at")
+    date_str, time_str = "", ""
+    try:
+        dt = sched if isinstance(sched, datetime) else datetime.fromisoformat(str(sched).replace("Z", "+00:00"))
+        date_str = dt.strftime("%d %b %Y")
+        time_str = dt.strftime("%I:%M %p")
+    except Exception:
+        date_str = str(sched or "")
+    for iv in (result.get("interviewers") or []):
+        email = (iv.get("email") or "").strip()
+        if not email:
+            continue
+        background_tasks.add_task(
+            send_interviewer_assigned_email,
+            to_email=email,
+            interviewer_name=iv.get("name", "") or "Interviewer",
+            candidate_name=result.get("candidate_name", ""),
+            job_title=result.get("job_title") or "",
+            company_name=cu.get("company_name", ""),
+            interview_date=date_str,
+            interview_time=time_str,
+            interview_mode=result.get("mode", ""),
+            venue_or_link=result.get("location_or_link") or "",
+            duration_minutes=result.get("duration_minutes", 60),
+            company_id=cu.get("company_id", ""),
+        )
 
 
 @router.get("/interviews")

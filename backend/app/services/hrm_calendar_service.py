@@ -46,7 +46,18 @@ class HrmCalendarService:
         events.extend(await self._leave_events(company_id, date_from, date_to, cu, self_employee_id))
         events.extend(await self._wfh_events(company_id, date_from, date_to, cu, self_employee_id))
         events.extend(await self._shift_change_events(company_id, date_from, date_to, cu, self_employee_id))
+        events.extend(await self._company_event_events(company_id, date_from, date_to, cu, self_employee_id))
         return events
+
+    # ── Company events — visibility-scoped (see CompanyEventService) ─────────
+
+    async def _company_event_events(
+        self, company_id: str, date_from: date, date_to: date, cu: dict, self_employee_id: Optional[str],
+    ) -> list:
+        from app.services.hrm_calendar_event_service import CompanyEventService
+        return await CompanyEventService(self.db).visible_events(
+            company_id, date_from.isoformat(), date_to.isoformat(), cu, self_employee_id,
+        )
 
     # ── Holidays — visible to everyone, no filtering ────────────────────────
 

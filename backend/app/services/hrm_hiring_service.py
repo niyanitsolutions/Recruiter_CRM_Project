@@ -422,23 +422,30 @@ class HRMHiringService:
         if cand.get("current_stage") == HiringStage.REJECTED.value:
             raise HTTPException(status_code=400, detail="Cannot schedule an interview for a rejected candidate.")
 
-        # First schedule: persist the recruiter-defined round pipeline on the
-        # candidate. Ignored on later schedules (the pipeline is fixed once set),
-        # so it can never create duplicate rounds or change an in-flight pipeline.
-        pipeline = data.get("interview_rounds")
-        if pipeline and not cand.get("interview_pipeline"):
-            _clean_pipeline = [
-                {"round_number": int(r.get("round_number", i + 1)),
-                 "round_name": (r.get("round_name") or f"Round {i + 1}").strip()}
-                for i, r in enumerate(pipeline)
-            ]
-            await self.candidates.update_one(
-                {"_id": data["candidate_id"], "company_id": company_id},
-                {"$set": {"interview_pipeline": _clean_pipeline}},
-            )
-            cand["interview_pipeline"] = _clean_pipeline
-
         job_id = data.get("job_id") or cand.get("job_id")
+
+        # Job-first: on the FIRST schedule, snapshot the JOB's configured
+        # interview rounds onto the candidate. This locks the round sequence for
+        # this candidate (later edits to the job's rounds don't disrupt an
+        # in-flight pipeline) and makes the job the single source of truth for
+        # rounds — HR no longer types round names per candidate. Falls back to
+        # any explicitly provided rounds only for legacy callers or jobs that
+        # have no rounds configured; if neither exists, _compute_next_round uses
+        # generic "Round N" names as before. Ignored once a pipeline exists.
+        if not cand.get("interview_pipeline"):
+            seed = await self._get_job_rounds(job_id, company_id) or data.get("interview_rounds")
+            if seed:
+                _clean_pipeline = [
+                    {"round_number": int(r.get("round_number", i + 1)),
+                     "round_name": (r.get("round_name") or f"Round {i + 1}").strip()}
+                    for i, r in enumerate(seed)
+                ]
+                await self.candidates.update_one(
+                    {"_id": data["candidate_id"], "company_id": company_id},
+                    {"$set": {"interview_pipeline": _clean_pipeline}},
+                )
+                cand["interview_pipeline"] = _clean_pipeline
+
         round_info = await self._compute_next_round(data["candidate_id"], job_id, company_id, for_scheduling=True)
         send_invite = data.get("send_invitation_email", True)
 
@@ -467,6 +474,33 @@ class HRMHiringService:
         }
         await self.interviews.insert_one(doc)
         await self.update_candidate(data["candidate_id"], company_id, {"current_stage": HiringStage.INTERVIEW})
+
+        # Notify assigned interviewers (in-app). Interviewers are Active
+        # Employees; resolve each to their linked CRM user before notifying.
+        # Best-effort — a notification failure must never block scheduling.
+        try:
+            interviewer_ids = [iv.get("id") for iv in (doc["interviewers"] or []) if iv.get("id")]
+            if interviewer_ids:
+                user_ids = []
+                async for emp in self.db["hrm_employees"].find(
+                    {"_id": {"$in": interviewer_ids}, "company_id": company_id},
+                    {"crm_user_id": 1},
+                ):
+                    if emp.get("crm_user_id"):
+                        user_ids.append(emp["crm_user_id"])
+                if user_ids:
+                    from app.services.notification_service import NotificationService
+                    await NotificationService(self.db).notify_interview_assigned(
+                        company_id=company_id,
+                        user_ids=user_ids,
+                        candidate_name=doc["candidate_name"],
+                        round_name=doc["round_name"],
+                        scheduled_at=doc["scheduled_at"],
+                        job_title=doc.get("job_title") or "",
+                    )
+        except Exception:
+            pass
+
         return self._ser(doc)
 
     async def list_interviews(self, company_id: str, candidate_id: Optional[str], page: int, page_size: int) -> dict:

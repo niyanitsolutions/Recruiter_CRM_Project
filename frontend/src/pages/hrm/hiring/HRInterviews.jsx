@@ -39,12 +39,23 @@ const RATING_FIELDS = [
 ]
 
 const emptyScheduleForm = () => ({
-  candidate_id: '', mode: 'video', scheduled_at: '', duration_minutes: 60,
-  location_or_link: '', send_invitation_email: true,
-  // Round pipeline — only used/sent when scheduling the FIRST round of a
-  // candidate (num_rounds = how many rounds, round_names = their names).
-  num_rounds: 1, round_names: [''],
+  // Job-first flow: HR picks the Job → the candidate list is filtered to that
+  // job → rounds come from the job's configured interview_rounds (HR no longer
+  // types round names). interviewers = [{id, name, email}] chosen from Active
+  // Employees; the round is auto-determined server-side.
+  job_id: '', candidate_id: '', mode: 'video', scheduled_at: '', duration_minutes: 60,
+  location_or_link: '', send_invitation_email: true, interviewers: [],
 })
+
+// Mode → the label + placeholder for the single location/link field.
+const MODE_FIELD = {
+  video:     { label: 'Meeting Link',  placeholder: 'https://meet.google.com/…' },
+  in_person: { label: 'Location / Venue', placeholder: 'e.g. HQ, 4th Floor, Room 2' },
+  phone:     { label: 'Phone Number',  placeholder: 'e.g. +91 98765 43210' },
+}
+
+// Employment statuses that count as "active" staff eligible to interview.
+const ACTIVE_EMP_STATUSES = new Set(['active', 'probation', 'notice_period', 'on_leave'])
 
 const emptyFeedbackForm = () => ({
   interviewer_name: '', technical_rating: '', communication_rating: '',
@@ -139,9 +150,13 @@ export default function HRInterviews() {
   const [passPrompt, setPassPrompt] = useState(null) // { candidateId, candidateName, nextRound }
   const [historyGroup, setHistoryGroup] = useState(null)
   const [candidateOptions, setCandidateOptions] = useState([])
+  const [candLoading, setCandLoading] = useState(false)
+  // Job-first flow support: the list of open jobs for the Job picker and the
+  // list of Active Employees for the interviewer picker (loaded on modal open).
+  const [jobOptions, setJobOptions] = useState([])
+  const [activeEmployees, setActiveEmployees] = useState([])
   // candidate_id → their interview_pipeline ([{round_number, round_name}]) so
-  // the progress timeline can show the full recruiter-defined pipeline (not just
-  // the rounds scheduled so far).
+  // the progress timeline can show the full pipeline (snapshotted from the job).
   const [pipelineByCandidate, setPipelineByCandidate] = useState({})
 
   const load = async () => {
@@ -167,23 +182,67 @@ export default function HRInterviews() {
 
   const groups = useMemo(() => groupByCandidate(interviews), [interviews])
 
-  const openForm = async () => {
-    setForm(emptyScheduleForm())
-    setNextRoundInfo(null)
-    setShowForm(true)
+  // Load the pickers a schedule modal needs: open jobs + active employees.
+  const loadFormRefData = async () => {
     try {
-      const res = await hrmService.listHiringCandidates({ page: 1, page_size: 200 })
-      setCandidateOptions((res.data.items || []).map(candidateToOption))
+      const [jobsRes, empRes] = await Promise.all([
+        hrmService.listJobs({ page: 1, page_size: 200 }),
+        hrmService.listEmployees({ page: 1, page_size: 500 }),
+      ])
+      setJobOptions((jobsRes.data.items || [])
+        .filter(j => j.status === 'open')
+        .map(j => ({ value: j.id, label: j.job_title, job: j })))
+      setActiveEmployees((empRes.data.items || [])
+        .filter(e => ACTIVE_EMP_STATUSES.has(e.employment_status))
+        .map(e => ({ id: e.id, name: e.full_name, email: e.email || '' })))
     } catch {}
   }
 
-  const openFormForCandidate = (candidateId, candidateName, email) => {
-    setForm({ ...emptyScheduleForm(), candidate_id: candidateId })
-    setCandidateOptions(prev => prev.some(o => o.value === candidateId)
-      ? prev
-      : [...prev, { value: candidateId, label: `${candidateName} — ${email || ''}`, searchText: `${candidateName} ${email || ''}` }])
+  const openForm = async () => {
+    setForm(emptyScheduleForm())
+    setNextRoundInfo(null)
+    setCandidateOptions([])
     setShowForm(true)
+    loadFormRefData()
+  }
+
+  const openFormForCandidate = async (candidateId, candidateName, email) => {
+    setNextRoundInfo(null)
+    setShowForm(true)
+    await loadFormRefData()
+    // Derive the candidate's job so the job-first form is pre-filled correctly.
+    let jobId = ''
+    try {
+      const res = await hrmService.getHiringCandidate(candidateId)
+      jobId = res.data?.job_id || ''
+    } catch {}
+    setForm({ ...emptyScheduleForm(), job_id: jobId, candidate_id: candidateId })
+    if (jobId) await loadCandidatesForJob(jobId, candidateId, candidateName, email)
+    else setCandidateOptions([{ value: candidateId, label: `${candidateName} — ${email || ''}`, searchText: `${candidateName} ${email || ''}` }])
     loadNextRound(candidateId)
+  }
+
+  const loadCandidatesForJob = async (jobId, keepId, keepName, keepEmail) => {
+    setCandLoading(true)
+    try {
+      const res = await hrmService.listHiringCandidates({ page: 1, page_size: 200, job_id: jobId })
+      let opts = (res.data.items || []).map(candidateToOption)
+      // Ensure a pre-selected candidate (from the "schedule next round" flow)
+      // stays selectable even if the filter would exclude them.
+      if (keepId && !opts.some(o => o.value === keepId)) {
+        opts = [...opts, { value: keepId, label: `${keepName} — ${keepEmail || ''}`, searchText: `${keepName} ${keepEmail || ''}` }]
+      }
+      setCandidateOptions(opts)
+    } catch {}
+    setCandLoading(false)
+  }
+
+  const handleSelectJob = (jobId) => {
+    // New job → reset candidate + round; reload the candidate list for the job.
+    setForm(f => ({ ...f, job_id: jobId, candidate_id: '' }))
+    setNextRoundInfo(null)
+    setCandidateOptions([])
+    if (jobId) loadCandidatesForJob(jobId)
   }
 
   const loadNextRound = async (candidateId) => {
@@ -204,31 +263,30 @@ export default function HRInterviews() {
     loadNextRound(candidateId)
   }
 
-  // The pipeline (rounds + names) is only defined/sent when scheduling the very
-  // first round for a candidate. After that the pipeline is fixed server-side.
-  const isFirstRound = nextRoundInfo?.round_number === 1 && !pipelineByCandidate[form.candidate_id]
+  const toggleInterviewer = (emp) => {
+    setForm(f => {
+      const has = f.interviewers.some(i => i.id === emp.id)
+      return { ...f, interviewers: has ? f.interviewers.filter(i => i.id !== emp.id) : [...f.interviewers, emp] }
+    })
+  }
+
+  const selectedJob = useMemo(() => jobOptions.find(j => j.value === form.job_id)?.job, [jobOptions, form.job_id])
+  const jobRounds = selectedJob?.interview_rounds || []
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    if (!form.candidate_id) {
-      toast.error('Please select a candidate')
-      return
-    }
+    if (!form.job_id) { toast.error('Please select a job'); return }
+    if (!form.candidate_id) { toast.error('Please select a candidate'); return }
+    if (!form.scheduled_at) { toast.error('Please pick a date & time'); return }
     const payload = {
       candidate_id: form.candidate_id,
+      job_id: form.job_id,
       mode: form.mode,
       scheduled_at: form.scheduled_at,
       duration_minutes: form.duration_minutes,
       location_or_link: form.location_or_link,
       send_invitation_email: form.send_invitation_email,
-    }
-    if (isFirstRound) {
-      const names = form.round_names.slice(0, form.num_rounds).map(n => (n || '').trim())
-      if (names.some(n => !n)) {
-        toast.error('Please name every interview round')
-        return
-      }
-      payload.interview_rounds = names.map((round_name, i) => ({ round_number: i + 1, round_name }))
+      interviewers: form.interviewers.map(i => ({ id: i.id, name: i.name, email: i.email })),
     }
     setSaving(true)
     try {
@@ -239,16 +297,6 @@ export default function HRInterviews() {
       toast.error(err?.response?.data?.detail || 'Failed to schedule interview')
     }
     setSaving(false)
-  }
-
-  // Keep round_names array length in sync with the selected number of rounds.
-  const setNumRounds = (n) => {
-    setForm(f => {
-      const names = [...f.round_names]
-      names.length = n
-      for (let i = 0; i < n; i++) if (names[i] == null) names[i] = ''
-      return { ...f, num_rounds: n, round_names: names }
-    })
   }
 
   // ── Feedback ──────────────────────────────────────────────────────────────
@@ -375,22 +423,44 @@ export default function HRInterviews() {
         </button>
       </div>
 
-      {/* Schedule modal */}
+      {/* Schedule modal — job-first flow */}
       <ModalPortal isOpen={showForm}>
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
-          <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+          <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold">Schedule Interview</h2>
+
+            {/* 1 — Job */}
             <div>
-              <label className="text-sm font-medium text-gray-700">Candidate *</label>
+              <label className="text-sm font-medium text-gray-700">Job *</label>
               <SearchableSelect
-                value={form.candidate_id}
-                onChange={handleSelectCandidate}
-                options={candidateOptions}
-                placeholder="Search candidate by name or email…"
-                minChars={1}
+                value={form.job_id}
+                onChange={handleSelectJob}
+                options={jobOptions}
+                placeholder="Select an open job…"
+                minChars={0}
                 className="mt-1"
               />
             </div>
+
+            {/* 2 — Candidate (filtered by job) */}
+            {form.job_id && (
+              <div>
+                <label className="text-sm font-medium text-gray-700">Candidate *</label>
+                <SearchableSelect
+                  value={form.candidate_id}
+                  onChange={handleSelectCandidate}
+                  options={candidateOptions}
+                  placeholder={candLoading ? 'Loading candidates…' : 'Search candidate by name or email…'}
+                  minChars={0}
+                  className="mt-1"
+                />
+                {!candLoading && candidateOptions.length === 0 && (
+                  <p className="text-xs text-gray-400 mt-1">No candidates in this job's pipeline yet.</p>
+                )}
+              </div>
+            )}
+
+            {/* 3 — Auto round + stage (from the job's configured rounds) */}
             {form.candidate_id && (
               <div className="bg-gray-50 rounded-lg p-3 text-sm border border-gray-200">
                 {nextRoundLoading ? (
@@ -399,6 +469,11 @@ export default function HRInterviews() {
                   <>
                     <p><span className="text-gray-500">Round:</span> <span className="font-medium text-gray-900">Round {nextRoundInfo.round_number} — {nextRoundInfo.round_name}</span></p>
                     <p className="mt-1"><span className="text-gray-500">Current Stage:</span> <span className="font-medium text-gray-900 capitalize">{nextRoundInfo.current_stage}</span></p>
+                    {jobRounds.length > 0 && (
+                      <p className="mt-1 text-xs text-gray-400">
+                        Rounds from job: {[...jobRounds].sort((a, b) => a.round_number - b.round_number).map(r => r.round_name).join(' → ')}
+                      </p>
+                    )}
                   </>
                 ) : (
                   <span className="text-gray-400">Select a candidate to see their round</span>
@@ -406,40 +481,38 @@ export default function HRInterviews() {
               </div>
             )}
 
-            {/* Interview Rounds pipeline — defined once, when scheduling round 1 */}
-            {form.candidate_id && isFirstRound && (
-              <div className="border border-gray-200 rounded-lg p-3 space-y-3">
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Interview Rounds *</label>
-                  <select
-                    className="input w-full mt-1"
-                    value={form.num_rounds}
-                    onChange={e => setNumRounds(Number(e.target.value))}
-                  >
-                    {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
-                      <option key={n} value={n}>{n}</option>
+            {/* 4 — Interviewers (Active Employees) */}
+            {form.candidate_id && (
+              <div>
+                <label className="text-sm font-medium text-gray-700">Interviewers</label>
+                {form.interviewers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    {form.interviewers.map(iv => (
+                      <span key={iv.id} className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs rounded-full px-2 py-0.5">
+                        {iv.name}
+                        <button type="button" onClick={() => toggleInterviewer(iv)} className="hover:text-indigo-900"><X className="w-3 h-3" /></button>
+                      </span>
                     ))}
-                  </select>
-                  <p className="text-xs text-gray-400 mt-1">Name each round — these become the candidate's interview pipeline.</p>
-                </div>
-                {form.round_names.slice(0, form.num_rounds).map((name, i) => (
-                  <div key={i}>
-                    <label className="text-sm font-medium text-gray-700">Round {i + 1} Name *</label>
-                    <input
-                      className="input w-full mt-1"
-                      value={name}
-                      onChange={e => setForm(f => {
-                        const names = [...f.round_names]; names[i] = e.target.value
-                        return { ...f, round_names: names }
-                      })}
-                      placeholder={['Technical Screening', 'Technical Interview', 'HR Discussion'][i] || `Round ${i + 1}`}
-                      required
-                    />
                   </div>
-                ))}
+                )}
+                <div className="mt-1.5 border border-gray-200 rounded-lg max-h-36 overflow-y-auto">
+                  {activeEmployees.length === 0 ? (
+                    <p className="text-xs text-gray-400 px-3 py-2">No active employees found.</p>
+                  ) : activeEmployees.map(emp => {
+                    const checked = form.interviewers.some(i => i.id === emp.id)
+                    return (
+                      <label key={emp.id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+                        <input type="checkbox" checked={checked} onChange={() => toggleInterviewer(emp)} />
+                        <span className="flex-1 truncate">{emp.name}</span>
+                        {!emp.email && <span className="text-[10px] text-gray-400">no email</span>}
+                      </label>
+                    )
+                  })}
+                </div>
               </div>
             )}
 
+            {/* 5 — Mode + type-conditional field + timing */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-700">Mode</label>
@@ -458,10 +531,25 @@ export default function HRInterviews() {
                 <input type="datetime-local" className="input w-full mt-1" value={form.scheduled_at} onChange={e => setForm(f => ({ ...f, scheduled_at: e.target.value }))} required />
               </div>
               <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-700">Meeting Link / Location</label>
-                <input className="input w-full mt-1" value={form.location_or_link} onChange={e => setForm(f => ({ ...f, location_or_link: e.target.value }))} />
+                <label className="text-sm font-medium text-gray-700">{(MODE_FIELD[form.mode] || MODE_FIELD.video).label}</label>
+                <input className="input w-full mt-1" value={form.location_or_link}
+                  onChange={e => setForm(f => ({ ...f, location_or_link: e.target.value }))}
+                  placeholder={(MODE_FIELD[form.mode] || MODE_FIELD.video).placeholder} />
               </div>
             </div>
+
+            {/* 6 — Summary */}
+            {form.candidate_id && nextRoundInfo && (
+              <div className="rounded-lg p-3 text-xs border border-indigo-100 bg-indigo-50/50 space-y-1">
+                <p className="font-semibold text-indigo-800 mb-1">Summary</p>
+                <p><span className="text-gray-500">Job:</span> {selectedJob?.job_title || '—'}</p>
+                <p><span className="text-gray-500">Round:</span> Round {nextRoundInfo.round_number} — {nextRoundInfo.round_name}</p>
+                <p><span className="text-gray-500">Mode:</span> <span className="capitalize">{form.mode.replace('_', ' ')}</span></p>
+                <p><span className="text-gray-500">When:</span> {form.scheduled_at ? new Date(form.scheduled_at).toLocaleString('en-IN', { timeZone: getTenantTimezone(), day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'} ({form.duration_minutes} min)</p>
+                <p><span className="text-gray-500">Interviewers:</span> {form.interviewers.length ? form.interviewers.map(i => i.name).join(', ') : 'None'}</p>
+              </div>
+            )}
+
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" checked={form.send_invitation_email} onChange={e => setForm(f => ({ ...f, send_invitation_email: e.target.checked }))} />
               Send Interview Invitation Email

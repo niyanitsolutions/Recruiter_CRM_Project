@@ -12,6 +12,8 @@ import { startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns'
 import { selectUser } from '../../store/authSlice'
 import { usePermissions } from '../../hooks/usePermissions'
 import hrmService from '../../services/hrmService'
+import departmentService from '../../services/departmentService'
+import designationService from '../../services/designationService'
 import { getTenantTimezone, formatTimeOnly, formatDateTime } from '../../utils/format'
 import { useLivePolling } from '../../hooks/useLivePolling'
 import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
@@ -1018,6 +1020,253 @@ function DashboardTab() {
 }
 
 
+// ── Company Event dialog (create / edit) ─────────────────────────────────────
+
+const EVENT_COLORS = ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6']
+
+// Non-HR managers may only target themselves or their direct reports.
+const VISIBILITY_OPTIONS_ALL = [
+  { value: 'everyone',              label: 'Everyone' },
+  { value: 'selected_departments', label: 'Selected Departments' },
+  { value: 'selected_designations',label: 'Selected Designations' },
+  { value: 'selected_employees',   label: 'Selected Employees' },
+  { value: 'only_me',              label: 'Only Me' },
+]
+const VISIBILITY_OPTIONS_MANAGER = [
+  { value: 'selected_employees', label: 'Selected Employees (my team)' },
+  { value: 'only_me',            label: 'Only Me' },
+]
+
+const EMPTY_EVENT = {
+  event_name: '', description: '', start_date: '', end_date: '', all_day: true,
+  start_time: '', end_time: '', location: '', meeting_link: '', color: '#6366f1',
+  repeat: 'none', visibility: 'everyone', visible_employee_ids: [],
+  visible_department_ids: [], visible_designation_ids: [],
+}
+
+function CompanyEventDialog({ open, onClose, onSaved, canManageAll, editing, employees, departments, designations }) {
+  const [form, setForm] = useState(EMPTY_EVENT)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    if (editing) {
+      setForm({ ...EMPTY_EVENT, ...editing,
+        visible_employee_ids: editing.visible_employee_ids || [],
+        visible_department_ids: editing.visible_department_ids || [],
+        visible_designation_ids: editing.visible_designation_ids || [] })
+    } else {
+      setForm({ ...EMPTY_EVENT, visibility: canManageAll ? 'everyone' : 'selected_employees' })
+    }
+  }, [open, editing, canManageAll])
+
+  if (!open) return null
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const visOptions = canManageAll ? VISIBILITY_OPTIONS_ALL : VISIBILITY_OPTIONS_MANAGER
+
+  const toggleId = (key, id) => setForm(f => {
+    const cur = f[key] || []
+    return { ...f, [key]: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id] }
+  })
+
+  const submit = async () => {
+    if (!form.event_name.trim()) { toast.error('Event name is required'); return }
+    if (!form.start_date || !form.end_date) { toast.error('Start and end dates are required'); return }
+    if (form.end_date < form.start_date) { toast.error('End date cannot be before start date'); return }
+    if (form.visibility === 'selected_employees' && form.visible_employee_ids.length === 0) {
+      toast.error('Select at least one employee'); return }
+    if (form.visibility === 'selected_departments' && form.visible_department_ids.length === 0) {
+      toast.error('Select at least one department'); return }
+    if (form.visibility === 'selected_designations' && form.visible_designation_ids.length === 0) {
+      toast.error('Select at least one designation'); return }
+
+    const payload = {
+      event_name: form.event_name.trim(),
+      description: form.description || null,
+      start_date: form.start_date,
+      end_date: form.end_date,
+      all_day: form.all_day,
+      start_time: form.all_day ? null : (form.start_time || null),
+      end_time: form.all_day ? null : (form.end_time || null),
+      location: form.location || null,
+      meeting_link: form.meeting_link || null,
+      color: form.color,
+      repeat: form.repeat,
+      visibility: form.visibility,
+      visible_employee_ids: form.visibility === 'selected_employees' ? form.visible_employee_ids : [],
+      visible_department_ids: form.visibility === 'selected_departments' ? form.visible_department_ids : [],
+      visible_designation_ids: form.visibility === 'selected_designations' ? form.visible_designation_ids : [],
+    }
+    setSaving(true)
+    try {
+      if (editing) await hrmService.updateCompanyEvent(editing.id, payload)
+      else await hrmService.createCompanyEvent(payload)
+      toast.success(editing ? 'Event updated' : 'Event created')
+      onSaved()
+      onClose()
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to save event')
+    }
+    setSaving(false)
+  }
+
+  const inputCls = 'w-full rounded-lg px-3 py-2 text-sm'
+  const inputStyle = { background: 'var(--bg-hover)', color: 'var(--text-heading)', border: '1px solid var(--border)' }
+  const labelCls = 'block text-xs font-semibold mb-1'
+  const labelStyle = { color: 'var(--text-secondary)' }
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-2xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto"
+        style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold" style={{ color: 'var(--text-heading)' }}>
+            {editing ? 'Edit Event' : 'New Company Event'}
+          </h3>
+          <button onClick={onClose} className="p-1 rounded-lg" style={{ color: 'var(--text-muted)' }} aria-label="Close">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className={labelCls} style={labelStyle}>Event Name <span className="text-red-500">*</span></label>
+            <input className={inputCls} style={inputStyle} value={form.event_name}
+              onChange={e => set('event_name', e.target.value)} placeholder="e.g. Town Hall Meeting" />
+          </div>
+          <div>
+            <label className={labelCls} style={labelStyle}>Description</label>
+            <textarea rows={2} className={inputCls} style={inputStyle} value={form.description}
+              onChange={e => set('description', e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls} style={labelStyle}>Start Date <span className="text-red-500">*</span></label>
+              <input type="date" className={inputCls} style={inputStyle} value={form.start_date}
+                onChange={e => set('start_date', e.target.value)} />
+            </div>
+            <div>
+              <label className={labelCls} style={labelStyle}>End Date <span className="text-red-500">*</span></label>
+              <input type="date" className={inputCls} style={inputStyle} value={form.end_date}
+                min={form.start_date || undefined} onChange={e => set('end_date', e.target.value)} />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+            <input type="checkbox" checked={form.all_day} onChange={e => set('all_day', e.target.checked)} />
+            All-day event
+          </label>
+          {!form.all_day && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls} style={labelStyle}>Start Time</label>
+                <input type="time" className={inputCls} style={inputStyle} value={form.start_time || ''}
+                  onChange={e => set('start_time', e.target.value)} />
+              </div>
+              <div>
+                <label className={labelCls} style={labelStyle}>End Time</label>
+                <input type="time" className={inputCls} style={inputStyle} value={form.end_time || ''}
+                  onChange={e => set('end_time', e.target.value)} />
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls} style={labelStyle}>Location</label>
+              <input className={inputCls} style={inputStyle} value={form.location}
+                onChange={e => set('location', e.target.value)} placeholder="Optional" />
+            </div>
+            <div>
+              <label className={labelCls} style={labelStyle}>Meeting Link</label>
+              <input className={inputCls} style={inputStyle} value={form.meeting_link}
+                onChange={e => set('meeting_link', e.target.value)} placeholder="https://…" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls} style={labelStyle}>Repeat</label>
+              <select className={inputCls} style={inputStyle} value={form.repeat}
+                onChange={e => set('repeat', e.target.value)}>
+                {['none', 'daily', 'weekly', 'monthly', 'yearly'].map(r =>
+                  <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls} style={labelStyle}>Color</label>
+              <div className="flex flex-wrap gap-1.5 pt-1.5">
+                {EVENT_COLORS.map(c => (
+                  <button key={c} type="button" onClick={() => set('color', c)}
+                    className="w-6 h-6 rounded-full transition-transform"
+                    style={{ background: c, transform: form.color === c ? 'scale(1.2)' : 'scale(1)',
+                      border: form.color === c ? '2px solid var(--text-heading)' : '2px solid transparent' }} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className={labelCls} style={labelStyle}>Visibility <span className="text-red-500">*</span></label>
+            <select className={inputCls} style={inputStyle} value={form.visibility}
+              onChange={e => set('visibility', e.target.value)}>
+              {visOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+
+          {form.visibility === 'selected_employees' && (
+            <MultiSelectBox label="Employees" items={employees.map(e => ({ id: e.id, name: `${e.full_name}${e.employee_code ? ` (${e.employee_code})` : ''}` }))}
+              selected={form.visible_employee_ids} onToggle={id => toggleId('visible_employee_ids', id)} />
+          )}
+          {form.visibility === 'selected_departments' && (
+            <MultiSelectBox label="Departments" items={departments.map(d => ({ id: d.id, name: d.name }))}
+              selected={form.visible_department_ids} onToggle={id => toggleId('visible_department_ids', id)} />
+          )}
+          {form.visibility === 'selected_designations' && (
+            <MultiSelectBox label="Designations" items={designations.map(d => ({ id: d.id, name: d.name }))}
+              selected={form.visible_designation_ids} onToggle={id => toggleId('visible_designation_ids', id)} />
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 mt-5">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-semibold"
+            style={{ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}>
+            Cancel
+          </button>
+          <button onClick={submit} disabled={saving}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-2 disabled:opacity-60"
+            style={{ background: 'var(--accent)' }}>
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {editing ? 'Save Changes' : 'Create Event'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MultiSelectBox({ label, items, selected, onToggle }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>
+        {label} <span style={{ color: 'var(--text-muted)' }}>({selected.length} selected)</span>
+      </label>
+      <div className="rounded-lg max-h-40 overflow-y-auto p-1"
+        style={{ background: 'var(--bg-hover)', border: '1px solid var(--border)' }}>
+        {items.length === 0 ? (
+          <p className="text-xs px-2 py-1.5" style={{ color: 'var(--text-muted)' }}>None available.</p>
+        ) : items.map(it => (
+          <label key={it.id} className="flex items-center gap-2 px-2 py-1.5 text-sm rounded cursor-pointer"
+            style={{ color: 'var(--text-secondary)' }}>
+            <input type="checkbox" checked={selected.includes(it.id)} onChange={() => onToggle(it.id)} />
+            {it.name}
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Calendar Tab ───────────────────────────────────────────────────────────────
 
 function CalendarTab() {
@@ -1025,6 +1274,14 @@ function CalendarTab() {
   const [view, setView] = useState('month')
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
+  const [canCreate, setCanCreate] = useState(false)
+  const [canManageAll, setCanManageAll] = useState(false)
+  const [manageable, setManageable] = useState([])
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editing, setEditing] = useState(null)
+  const [employees, setEmployees] = useState([])
+  const [departments, setDepartments] = useState([])
+  const [designations, setDesignations] = useState([])
 
   const range = useMemo(() => {
     const start = startOfWeek(startOfMonth(month), { weekStartsOn: 1 })
@@ -1041,11 +1298,62 @@ function CalendarTab() {
     if (!silent) setLoading(false)
   }, [range.from, range.to])
 
+  const loadManageable = useCallback(async () => {
+    try {
+      const res = await hrmService.listCompanyEvents()
+      setManageable(res.data?.data || [])
+      setCanCreate(!!res.data?.can_create)
+      setCanManageAll(!!res.data?.can_manage_all)
+    } catch { /* non-blocking */ }
+  }, [])
+
   useEffect(() => { load() }, [load])
+  useEffect(() => { loadManageable() }, [loadManageable])
   useLivePolling(() => load(true), 20000, true, [LIVE_TOPICS.CALENDAR])
 
+  // Lazy-load selector data the first time the dialog opens.
+  const openDialog = async (ev = null) => {
+    if (employees.length === 0 && departments.length === 0) {
+      const [er, dr, gr] = await Promise.all([
+        hrmService.listEmployees({ page_size: 500 }).catch(() => ({ data: { items: [] } })),
+        departmentService.getDepartments().catch(() => ({ data: [] })),
+        designationService.getDesignations().catch(() => ({ data: [] })),
+      ])
+      setEmployees(er.data?.items || [])
+      setDepartments(dr.data || [])
+      setDesignations(gr.data || [])
+    }
+    setEditing(ev)
+    setDialogOpen(true)
+  }
+
+  const handleDelete = async (ev) => {
+    if (!window.confirm(`Delete event "${ev.event_name}"?`)) return
+    try {
+      await hrmService.deleteCompanyEvent(ev.id)
+      toast.success('Event deleted')
+      loadManageable()
+      load(true)
+      publish(LIVE_TOPICS.CALENDAR)
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to delete event')
+    }
+  }
+
+  const onSaved = () => { loadManageable(); load(true); publish(LIVE_TOPICS.CALENDAR) }
+
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto space-y-4">
+      {canCreate && (
+        <div className="flex justify-end">
+          <button onClick={() => openDialog(null)}
+            className="px-3.5 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-1.5"
+            style={{ background: 'var(--accent)' }}>
+            <Plus className="w-4 h-4" /> Add Event
+          </button>
+        </div>
+      )}
+
       <CompanyCalendar
         events={events}
         loading={loading}
@@ -1053,6 +1361,46 @@ function CalendarTab() {
         onMonthChange={setMonth}
         view={view}
         onViewChange={setView}
+      />
+
+      {canCreate && manageable.length > 0 && (
+        <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+          <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-heading)' }}>
+            {canManageAll ? 'All Company Events' : 'My Events'}
+          </h3>
+          <div className="space-y-1.5">
+            {manageable.map(ev => (
+              <div key={ev.id} className="flex items-center gap-3 px-3 py-2 rounded-lg"
+                style={{ background: 'var(--bg-hover)' }}>
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: ev.color || '#6366f1' }} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate" style={{ color: 'var(--text-heading)' }}>{ev.event_name}</p>
+                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    {ev.start_date}{ev.end_date && ev.end_date !== ev.start_date ? ` → ${ev.end_date}` : ''}
+                    {' · '}{(ev.visibility || '').replace(/_/g, ' ')}
+                  </p>
+                </div>
+                <button onClick={() => openDialog(ev)} className="p-1.5 rounded-lg" style={{ color: 'var(--text-muted)' }} aria-label="Edit">
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => handleDelete(ev)} className="p-1.5 rounded-lg" style={{ color: 'var(--danger, #ef4444)' }} aria-label="Delete">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <CompanyEventDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        onSaved={onSaved}
+        canManageAll={canManageAll}
+        editing={editing}
+        employees={employees}
+        departments={departments}
+        designations={designations}
       />
     </div>
   )

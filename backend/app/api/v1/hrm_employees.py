@@ -79,6 +79,39 @@ async def update_employee(
     return emp
 
 
+# ── HR approval (Employee status automation) ──────────────────────────────────
+
+@router.post("/{employee_id}/approve")
+async def approve_employee(
+    employee_id: str,
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_any_permission([["hrm:employees:manage"], ["hrm:employees:edit"]])),
+):
+    """HR approves an onboarding-pipeline employee, moving them into the active
+    workforce — Probation or Active per the employment policy. The derived
+    workflow status advances automatically; this is the one explicit HR step."""
+    from app.services.employment_policy import get_employment_defaults, compute_probation_on_save
+    emp = await db["hrm_employees"].find_one(
+        {"_id": employee_id, "company_id": cu["company_id"], "is_deleted": False}
+    )
+    if not emp:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    defaults = await get_employment_defaults(db)
+    # Override the pipeline status so the policy computes a fresh Probation/Active.
+    _pdays, _pend, status = compute_probation_on_save({**emp, "employment_status": "active"}, defaults)
+    now = datetime.now(timezone.utc)
+    set_fields = {"employment_status": status, "updated_at": now}
+    if _pend is not None:
+        set_fields["probation_end_date"] = datetime(_pend.year, _pend.month, _pend.day, tzinfo=timezone.utc)
+    await db["hrm_employees"].update_one(
+        {"_id": employee_id, "company_id": cu["company_id"]},
+        {"$set": set_fields},
+    )
+    return {"success": True, "employment_status": status}
+
+
 # ── Notice Period workflow (section 11) ───────────────────────────────────────
 
 class InitiateNoticeRequest(BaseModel):

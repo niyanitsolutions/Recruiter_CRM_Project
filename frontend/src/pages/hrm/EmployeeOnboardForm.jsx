@@ -434,6 +434,28 @@ export default function EmployeeOnboardForm() {
       }
     })
 
+    // Bank details — now mandatory (Part 1). PF/UAN required unless the
+    // "I don't have PF/UAN" checkbox is ticked.
+    if (!form.account_holder_name.trim()) { errs.account_holder_name = 'Required'; messages.push('Please enter the account holder name.') }
+    if (!form.bank_name.trim())           { errs.bank_name = 'Required';           messages.push('Please enter your bank name.') }
+    if (!form.account_number.trim())      { errs.account_number = 'Required';      messages.push('Please enter your account number.') }
+    if (!form.ifsc_code.trim()) {
+      errs.ifsc_code = 'Required'; messages.push('Please enter your IFSC code.')
+    } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/i.test(form.ifsc_code.trim())) {
+      errs.ifsc_code = 'Invalid IFSC'; messages.push('Please enter a valid IFSC code (e.g. SBIN0001234).')
+    }
+    if (!form.no_pf_uan) {
+      if (!form.pf_number.trim())  { errs.pf_number = 'Required';  messages.push('Please enter your PF number (or tick "I don\'t have PF/UAN").') }
+      if (!form.uan_number.trim()) { errs.uan_number = 'Required'; messages.push('Please enter your UAN number (or tick "I don\'t have PF/UAN").') }
+    }
+
+    // Qualifications — at least one complete entry required (Part 1).
+    const validQuals = qualifications.filter(q => q.degree && q.degree.trim())
+    if (validQuals.length === 0) {
+      errs.qualifications = 'Required'
+      messages.push('Please add at least one qualification.')
+    }
+
     // Mandatory documents
     if (!docFiles.aadhaar) {
       errs.doc_aadhaar = 'Required'
@@ -935,28 +957,28 @@ export default function EmployeeOnboardForm() {
             <h2 className={sec}><CreditCard className="w-5 h-5 text-indigo-500" /> Bank Details</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={lbl}>Account Holder Name</label>
+                <label className={lbl}>Account Holder Name <span className="text-red-500">*</span></label>
                 <input
                   name="account_holder_name" value={form.account_holder_name} onChange={handleChange}
                   className={inp} placeholder="As on bank account"
                 />
               </div>
               <div>
-                <label className={lbl}>Bank Name</label>
+                <label className={lbl}>Bank Name <span className="text-red-500">*</span></label>
                 <input
                   name="bank_name" value={form.bank_name} onChange={handleChange}
                   className={inp} placeholder="e.g. State Bank of India"
                 />
               </div>
               <div>
-                <label className={lbl}>Account Number</label>
+                <label className={lbl}>Account Number <span className="text-red-500">*</span></label>
                 <input
                   name="account_number" value={form.account_number} onChange={handleChange}
                   className={inp} placeholder="e.g. 1234567890"
                 />
               </div>
               <div>
-                <label className={lbl}>IFSC Code</label>
+                <label className={lbl}>IFSC Code <span className="text-red-500">*</span></label>
                 <input
                   name="ifsc_code" value={form.ifsc_code} onChange={handleChange}
                   className={inp} placeholder="e.g. SBIN0001234"
@@ -964,7 +986,7 @@ export default function EmployeeOnboardForm() {
                 />
               </div>
               <div>
-                <label className={lbl}>PF Number</label>
+                <label className={lbl}>PF Number {!form.no_pf_uan && <span className="text-red-500">*</span>}</label>
                 <input
                   name="pf_number" value={form.pf_number} onChange={handleChange}
                   className={inp} placeholder="Provident Fund number"
@@ -972,7 +994,7 @@ export default function EmployeeOnboardForm() {
                 />
               </div>
               <div>
-                <label className={lbl}>UAN Number</label>
+                <label className={lbl}>UAN Number {!form.no_pf_uan && <span className="text-red-500">*</span>}</label>
                 <input
                   name="uan_number" value={form.uan_number} onChange={handleChange}
                   className={inp} placeholder="Universal Account Number"
@@ -1047,7 +1069,7 @@ export default function EmployeeOnboardForm() {
           <div className={card}>
             <div className="flex items-center justify-between mb-4">
               <h2 className={sec.replace(' mb-4', '')}>
-                <GraduationCap className="w-5 h-5 text-indigo-500" /> Qualifications
+                <GraduationCap className="w-5 h-5 text-indigo-500" /> Qualifications <span className="text-red-500">*</span>
               </h2>
               <button
                 type="button" onClick={addQual}

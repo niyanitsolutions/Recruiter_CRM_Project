@@ -19,6 +19,13 @@ const TYPE_STYLE = {
   leave:         { color: '#8b5cf6', label: 'Leave' },
   wfh:           { color: '#10b981', label: 'WFH' },
   shift_change:  { color: '#f59e0b', label: 'Shift Change' },
+  company_event: { color: '#6366f1', label: 'Company Event' },
+}
+
+// Company events carry a per-event color; everything else uses its type color.
+function evColor(ev) {
+  if (ev.type === 'company_event' && ev.meta?.color) return ev.meta.color
+  return TYPE_STYLE[ev.type]?.color || '#94a3b8'
 }
 
 const MONTH_NAMES = [
@@ -27,7 +34,7 @@ const MONTH_NAMES = [
 ]
 
 function eventLabel(ev) {
-  if (ev.type === 'holiday') return ev.title
+  if (ev.type === 'holiday' || ev.type === 'company_event') return ev.title
   const who = ev.employee_name ? `${ev.employee_name} — ` : ''
   return `${who}${ev.title}`
 }
@@ -35,6 +42,9 @@ function eventLabel(ev) {
 function eventTooltip(ev) {
   if (ev.type === 'holiday') {
     return `${ev.title}${ev.meta?.holiday_type ? ` (${capitalize(ev.meta.holiday_type)})` : ''}`
+  }
+  if (ev.type === 'company_event') {
+    return `${ev.title}${ev.meta?.location ? ` @ ${ev.meta.location}` : ''}`
   }
   return `${ev.employee_name || 'Employee'} — ${ev.title}`
 }
@@ -73,7 +83,7 @@ function eventsForDay(events, day) {
 function EventDetailRow({ ev, fmtDate }) {
   const style = TYPE_STYLE[ev.type] || { color: '#94a3b8', label: ev.type }
   return (
-    <div className="rounded-lg p-3" style={{ background: 'var(--bg-hover)', borderLeft: `3px solid ${style.color}` }}>
+    <div className="rounded-lg p-3" style={{ background: 'var(--bg-hover)', borderLeft: `3px solid ${evColor(ev)}` }}>
       <div className="flex items-center justify-between gap-2 mb-1">
         <span className="text-xs font-semibold" style={{ color: 'var(--text-heading)' }}>{style.label}</span>
       </div>
@@ -105,6 +115,28 @@ function EventDetailRow({ ev, fmtDate }) {
         <div className="space-y-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
           <p className="font-medium" style={{ color: 'var(--text-heading)' }}>{ev.employee_name || 'Employee'}</p>
           <p>Effective From: {fmtDate(ev.date_start)} · To: {fmtDate(ev.date_end)}</p>
+        </div>
+      )}
+      {ev.type === 'company_event' && (
+        <div className="space-y-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
+          <p className="font-medium" style={{ color: 'var(--text-heading)' }}>{ev.title}</p>
+          {ev.meta?.description && <p>{ev.meta.description}</p>}
+          <p>
+            {fmtDate(ev.date_start)}{ev.date_end && ev.date_end !== ev.date_start ? ` · to ${fmtDate(ev.date_end)}` : ''}
+            {!ev.meta?.all_day && ev.meta?.start_time ? ` · ${ev.meta.start_time}${ev.meta?.end_time ? `–${ev.meta.end_time}` : ''}` : ' · All day'}
+          </p>
+          {ev.meta?.location && <p>Location: {ev.meta.location}</p>}
+          {ev.meta?.meeting_link && (
+            <p>
+              Meeting:{' '}
+              <a href={ev.meta.meeting_link} target="_blank" rel="noopener noreferrer"
+                 className="underline" style={{ color: evColor(ev) }}>
+                Join link
+              </a>
+            </p>
+          )}
+          {ev.meta?.repeat && ev.meta.repeat !== 'none' && <p>Repeats: {capitalize(ev.meta.repeat)}</p>}
+          {ev.meta?.created_by_name && <p style={{ color: 'var(--text-muted)' }}>By {ev.meta.created_by_name}</p>}
         </div>
       )}
     </div>
@@ -271,7 +303,7 @@ export default function CompanyCalendar({ events = [], loading = false, month, o
                 <div className="flex flex-col gap-0.5">
                   {dEvents.slice(0, 2).map(ev => (
                     <span key={ev.id} title={eventTooltip(ev)} className="text-[9px] sm:text-[10px] px-1 rounded truncate"
-                      style={{ background: (TYPE_STYLE[ev.type]?.color || '#94a3b8') + '22', color: TYPE_STYLE[ev.type]?.color || '#94a3b8' }}>
+                      style={{ background: evColor(ev) + '22', color: evColor(ev) }}>
                       {eventLabel(ev)}
                     </span>
                   ))}

@@ -26,7 +26,7 @@ def _dates_to_datetime(obj):
 
 from app.models.company.employee import (
     EmployeeCreate, EmployeeUpdate, EmploymentStatus, AccountInfoCreate,
-    calculate_profile_completion,
+    calculate_profile_completion, compute_workflow_status,
 )
 
 
@@ -207,9 +207,15 @@ class EmployeeService:
                     {"$set": {"crm_user_id": user_id, "updated_at": now}},
                 )
                 doc["crm_user_id"] = user_id
+                # Mirror the canonical joining date onto the linked user (see
+                # update()'s single-source-of-truth note). doc has already passed
+                # through _dates_to_datetime.
+                _link = {"hrm_employee_id": doc["_id"], "updated_at": now}
+                if doc.get("date_of_joining"):
+                    _link["joining_date"] = doc["date_of_joining"]
                 await self.db.users.update_one(
                     {"_id": user_id},
-                    {"$set": {"hrm_employee_id": doc["_id"], "updated_at": now}},
+                    {"$set": _link},
                 )
 
             elif data.account_info and data.account_info.username and data.account_info.password:
@@ -261,11 +267,19 @@ class EmployeeService:
         from app.services.user_service import UserService
         from app.models.company.user import UserCreate
 
-        # joining_date: convert from ISO date string to datetime if present
+        # joining_date single source of truth: prefer the employee record's
+        # canonical date_of_joining (already a tz-aware datetime after
+        # _dates_to_datetime); fall back to the account section's ISO string only
+        # when the employee profile has none.
+        from datetime import date as _date
         joining_dt = None
-        if account_info.joining_date:
+        emp_doj = employee_doc.get("date_of_joining")
+        if isinstance(emp_doj, datetime):
+            joining_dt = emp_doj
+        elif isinstance(emp_doj, _date):
+            joining_dt = datetime(emp_doj.year, emp_doj.month, emp_doj.day, tzinfo=timezone.utc)
+        if joining_dt is None and account_info.joining_date:
             try:
-                from datetime import date as _date
                 parsed = _date.fromisoformat(account_info.joining_date[:10])
                 joining_dt = datetime(parsed.year, parsed.month, parsed.day, tzinfo=timezone.utc)
             except Exception:
@@ -358,14 +372,21 @@ class EmployeeService:
         items = []
         for d in docs:
             profile_status = calculate_profile_completion(d)
+            workflow_status = compute_workflow_status(d)
             item = self._serialize(d)
             item["employee_profile_status"] = profile_status
+            item["workflow_status"] = workflow_status
             items.append(item)
         return {"items": items, "total": total, "page": page, "page_size": page_size}
 
     async def get(self, employee_id: str, company_id: str) -> Optional[dict]:
         doc = await self.col.find_one({"_id": employee_id, "company_id": company_id, "is_deleted": False})
-        return self._serialize(doc) if doc else None
+        if not doc:
+            return None
+        item = self._serialize(doc)
+        item["employee_profile_status"] = calculate_profile_completion(doc)
+        item["workflow_status"] = compute_workflow_status(doc)
+        return item
 
     async def update(self, employee_id: str, data: EmployeeUpdate, company_id: str) -> Optional[dict]:
         update_data = {k: v for k, v in data.model_dump(exclude_none=True).items()}
@@ -405,6 +426,12 @@ class EmployeeService:
             if "phone" in update_data:           shared["mobile"] = update_data["phone"]
             if "department_name" in update_data: shared["department"] = update_data["department_name"]
             if "department_id" in update_data:   shared["department_id"] = update_data["department_id"]
+            # Joining date single source of truth: the employee record's
+            # date_of_joining is canonical (payroll/attendance read it); mirror
+            # it onto the linked user's joining_date so CRM never diverges.
+            # (update_data has already passed through _dates_to_datetime, so this
+            # is a BSON-safe tz-aware datetime.)
+            if "date_of_joining" in update_data: shared["joining_date"] = update_data["date_of_joining"]
             if shared:
                 emp_doc = await self.col.find_one({"_id": employee_id}, {"crm_user_id": 1})
                 crm_user_id = emp_doc.get("crm_user_id") if emp_doc else None

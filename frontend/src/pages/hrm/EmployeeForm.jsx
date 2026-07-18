@@ -1931,8 +1931,12 @@ export default function EmployeeForm() {
               </select>
             </Field>
             <Field label="Date of Joining" required error={sectionErrors.employment && !form.date_of_joining ? 'Required' : ''}>
+              {/* Single source of truth: employment DOJ mirrors to the account
+                  joining_date so the two never diverge on screen (the account
+                  input mirrors back the same way). */}
               <input type="date" className={sectionErrors.employment && !form.date_of_joining ? inpErr : inp}
-                value={form.date_of_joining} onChange={e => set('date_of_joining', e.target.value)} />
+                value={form.date_of_joining}
+                onChange={e => { set('date_of_joining', e.target.value); handleUChange({ target: { name: 'joining_date', value: e.target.value } }) }} />
             </Field>
             <Field label="Work Location" required error={sectionErrors.employment && !form.work_location.trim() ? 'Required' : ''}>
               <input className={sectionErrors.employment && !form.work_location.trim() ? inpErr : inp}

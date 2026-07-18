@@ -788,6 +788,48 @@ class NotificationService:
         }
         await self.notifications_collection.insert_one(doc)
 
+    async def notify_interview_assigned(
+        self,
+        company_id: str,
+        user_ids: list,
+        candidate_name: str,
+        round_name: str,
+        scheduled_at,
+        job_title: str = "",
+    ) -> None:
+        """Hiring: notify each employee assigned as an interviewer (in-app)."""
+        from bson import ObjectId
+        clean_ids = [u for u in dict.fromkeys(user_ids or []) if u]
+        if not clean_ids:
+            return
+        now = datetime.now(timezone.utc)
+        when = ""
+        try:
+            dt = scheduled_at if isinstance(scheduled_at, datetime) else datetime.fromisoformat(str(scheduled_at).replace("Z", "+00:00"))
+            when = dt.strftime("%d %b %Y, %I:%M %p")
+        except Exception:
+            when = str(scheduled_at or "")
+        job_suffix = f" for {job_title}" if job_title else ""
+        docs = [{
+            "_id": str(ObjectId()),
+            "id": str(ObjectId()),
+            "company_id": company_id,
+            "user_id": uid,
+            "user_type": "user",
+            "type": "interview_assigned",
+            "title": "You've been assigned as an interviewer",
+            "message": f"{round_name} with {candidate_name}{job_suffix}" + (f" on {when}." if when else "."),
+            "channels": ["in_app"],
+            "channel_status": {"in_app": "delivered"},
+            "is_read": False,
+            "priority": "medium",
+            "created_at": now,
+            "updated_at": now,
+            "is_deleted": False,
+        } for uid in clean_ids]
+        if docs:
+            await self.notifications_collection.insert_many(docs)
+
     async def notify_announcement_created(
         self,
         company_id: str,

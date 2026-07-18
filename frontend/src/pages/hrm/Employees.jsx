@@ -26,6 +26,8 @@ const STATUS_STYLE = {
   on_leave:           { bg: 'var(--bg-warning)', color: 'var(--text-warning)',  label: 'On Leave' },
   resigned:           { bg: 'var(--bg-card-alt)', color: 'var(--text-muted)',   label: 'Resigned' },
   pending_hr_review:  { bg: '#fef3c7',            color: '#92400e',              label: 'Pending HR Review' },
+  profile_incomplete: { bg: 'var(--bg-card-alt)', color: 'var(--text-muted)',   label: 'Profile Incomplete' },
+  ready_for_approval: { bg: 'var(--bg-info)',     color: 'var(--text-info)',     label: 'Ready for Approval' },
 }
 
 function calcProfilePct(emp) {
@@ -281,6 +283,18 @@ export default function Employees() {
     load()
     refreshSeatStatus()
     publish(LIVE_TOPICS.EMPLOYEES); publish(LIVE_TOPICS.DASHBOARD)
+  }
+
+  // HR approves a "Ready for Approval" employee → moves them to Active/Probation.
+  const [approvingId, setApprovingId] = useState(null)
+  const handleApprove = async (emp) => {
+    setApprovingId(emp.id)
+    try {
+      await hrmService.approveEmployee(emp.id)
+      await load()
+      publish(LIVE_TOPICS.EMPLOYEES); publish(LIVE_TOPICS.DASHBOARD)
+    } catch { /* swallow — consistent with this list's error handling */ }
+    setApprovingId(null)
   }
 
   // ── Send Form Link (general or per-employee individual link) ────────
@@ -579,9 +593,22 @@ export default function Employees() {
                       </p>
                     </td>
 
-                    {/* Status */}
+                    {/* Status — auto-derived workflow status (falls back to the
+                        raw employment_status for older payloads). */}
                     <td className="px-4 py-3">
-                      <StatusBadge status={emp.employment_status} />
+                      <div className="space-y-1.5">
+                        <StatusBadge status={emp.workflow_status || emp.employment_status} />
+                        {(emp.workflow_status || emp.employment_status) === 'ready_for_approval' && (
+                          <button
+                            onClick={() => handleApprove(emp)}
+                            disabled={approvingId === emp.id}
+                            className="block text-xs hover:underline"
+                            style={{ color: 'var(--text-success)' }}
+                          >
+                            {approvingId === emp.id ? 'Approving…' : 'Approve'}
+                          </button>
+                        )}
+                      </div>
                     </td>
 
                     {/* Profile */}

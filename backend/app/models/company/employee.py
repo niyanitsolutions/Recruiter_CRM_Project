@@ -184,6 +184,40 @@ def calculate_profile_completion(emp: dict) -> str:
     return "incomplete"
 
 
+# Business lifecycle statuses — once an employee reaches any of these, HR has
+# finalized them and the onboarding workflow no longer applies.
+_FINALIZED_STATUSES = {
+    "active", "probation", "notice_period", "terminated", "resigned",
+    "inactive", "on_leave",
+}
+
+
+def compute_workflow_status(emp: dict) -> str:
+    """Automatically derive the employee's onboarding workflow status
+    (section 2) from profile completeness + background verification, WITHOUT
+    mutating employment_status (which keeps its business meaning for payroll /
+    attendance). Returns one of:
+
+        profile_incomplete → pending_hr_review → ready_for_approval
+                                                → <finalized employment_status>
+
+    Fixes the reported bug where an employee with a Verified background check
+    still showed 'Pending HR Review': a verified check now advances the derived
+    status to 'ready_for_approval' automatically.
+    """
+    status = str(getattr(emp.get("employment_status"), "value", emp.get("employment_status")) or "")
+    if status in _FINALIZED_STATUSES:
+        return status
+    # Still in the onboarding pipeline (pending_hr_review / unset).
+    if calculate_profile_completion(emp) != "complete":
+        return "profile_incomplete"
+    bg = emp.get("background_check")
+    bg_status = (bg.get("status") if isinstance(bg, dict) else getattr(bg, "status", None)) if bg else None
+    if bg_status == "verified":
+        return "ready_for_approval"
+    return "pending_hr_review"
+
+
 class EmployeeModel(BaseModel):
     """Core HR employee record — stored in company_db.hrm_employees"""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), alias="_id")
