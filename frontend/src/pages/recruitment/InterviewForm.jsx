@@ -73,6 +73,8 @@ const InterviewForm = () => {
   const [loadingCandidates,setLoadingCandidates]= useState(false)
   const [validating,       setValidating]       = useState(false)
   const [validationResult, setValidationResult] = useState(null)
+  const [latestApp,        setLatestApp]        = useState(null)
+  const [overrideAts,      setOverrideAts]      = useState(false)
 
   const _validateTimer = useRef(null)
 
@@ -123,9 +125,13 @@ const InterviewForm = () => {
     }
   }, [prefillApplicationId])
 
-  // Run pre-flight validation 400ms after candidate selection
+  // Run pre-flight validation 400ms after candidate selection.
+  // Always re-fetches the latest application from the DB so ATS refresh /
+  // profile updates (e.g. Rejected → Eligible) take effect immediately.
   useEffect(() => {
     clearTimeout(_validateTimer.current)
+    setLatestApp(null)
+    setOverrideAts(false)
     if (formData.application_id) {
       setValidating(true)
       setValidationResult(null)
@@ -135,9 +141,14 @@ const InterviewForm = () => {
           setValidationResult(res.data)
         } catch {
           setValidationResult(null)
-        } finally {
-          setValidating(false)
         }
+        try {
+          const appRes = await applicationService.getApplication(formData.application_id)
+          setLatestApp(appRes.data || null)
+        } catch {
+          setLatestApp(null)
+        }
+        setValidating(false)
       }, 400)
     } else {
       setValidationResult(null)
@@ -189,7 +200,10 @@ const InterviewForm = () => {
   }
 
   const isBlocked = validationResult && !validationResult.can_schedule
-  const canSubmit = !saving && !validating && !isBlocked
+  // Latest application status from the DB (not the cached dropdown list)
+  const isAtsRejected   = latestApp?.status === 'rejected'
+  const rejectedBlocked = isAtsRejected && !overrideAts
+  const canSubmit = !saving && !validating && !isBlocked && !rejectedBlocked
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -199,6 +213,10 @@ const InterviewForm = () => {
     if (!formData.scheduled_time)  { toast.error('Please select Round 1 time');     return }
     if (isBlocked) {
       toast.error(validationResult.blocks[0]?.message || 'Candidate is not eligible')
+      return
+    }
+    if (rejectedBlocked) {
+      toast.error('This application is rejected. Tick the override checkbox to schedule anyway.')
       return
     }
     try {
@@ -211,6 +229,7 @@ const InterviewForm = () => {
         meeting_link:    formData.meeting_link || undefined,
         assessment_link: formData.assessment_link || undefined,
         send_notification: notifyCandidate,
+        override_ats_rejection: (isAtsRejected && overrideAts) || undefined,
       })
       setSubmitted(true)
       toast.success('Interview scheduled successfully')
@@ -371,6 +390,31 @@ const InterviewForm = () => {
               {formData.application_id && (
                 <div className="mt-4">
                   <ValidationPanel result={validationResult} loading={validating} />
+
+                  {/* ATS rejection warning + manual recruiter override */}
+                  {!validating && isAtsRejected && (
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-sm"
+                        style={{ background: 'rgba(255,71,87,0.1)', border: '1px solid rgba(255,71,87,0.25)', color: '#FF4757' }}>
+                        <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>
+                          This application is Rejected
+                          {latestApp?.rejection_reason ? ` — ${latestApp.rejection_reason}` : ''}.
+                        </span>
+                      </div>
+                      <label className="flex items-start gap-2 text-sm cursor-pointer"
+                        style={{ color: 'var(--text-secondary)' }}>
+                        <input
+                          type="checkbox"
+                          checked={overrideAts}
+                          onChange={e => setOverrideAts(e.target.checked)}
+                          className="w-4 h-4 mt-0.5 rounded flex-shrink-0"
+                          style={{ accentColor: 'var(--accent)' }}
+                        />
+                        Anyway schedule this interview (Override ATS recommendation)
+                      </label>
+                    </div>
+                  )}
                 </div>
               )}
             </>

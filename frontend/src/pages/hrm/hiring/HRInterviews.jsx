@@ -68,6 +68,33 @@ const MODE_FIELD = {
 // Employment statuses that count as "active" staff eligible to interview.
 const ACTIVE_EMP_STATUSES = new Set(['active', 'probation', 'notice_period', 'on_leave'])
 
+// Rating field validation — numbers only, 1 to 5. Returns '' when valid (or
+// when left blank, since every rating is optional).
+const ratingError = (value) => {
+  if (value === '' || value === null || value === undefined) return ''
+  const n = Number(value)
+  if (Number.isNaN(n)) return 'Enter a number'
+  if (n < 1 || n > 5) return 'Must be between 1 and 5'
+  return ''
+}
+
+/**
+ * Safely turn an API error into a display string. FastAPI validation errors
+ * return `detail` as an ARRAY of objects; passing that straight to toast makes
+ * React try to render an object as a child, which throws and trips the global
+ * error boundary. Always collapse to a string.
+ */
+const apiErrorMessage = (err, fallback) => {
+  const d = err?.response?.data?.detail
+  if (typeof d === 'string' && d.trim()) return d
+  if (Array.isArray(d)) {
+    const msgs = d.map(x => (typeof x === 'string' ? x : x?.msg)).filter(Boolean)
+    if (msgs.length) return msgs.join(', ')
+  }
+  if (d && typeof d === 'object' && typeof d.msg === 'string') return d.msg
+  return fallback
+}
+
 const emptyFeedbackForm = () => ({
   interviewer_name: '', technical_rating: '', communication_rating: '',
   problem_solving_rating: '', behaviour_rating: '', overall_rating: '',
@@ -347,10 +374,18 @@ export default function HRInterviews() {
 
   const handleRatingChange = (field, value) => {
     setFbForm(f => {
-      const next = { ...f, [field]: value }
+      const next = { ...f, [field]: value, [`${field}_error`]: ratingError(value) }
       if (!next.overallTouched) {
-        const vals = RATING_FIELDS.map(([k]) => Number(next[k])).filter(v => !isNaN(v) && next[k] !== '')
-        next.overall_rating = vals.length ? String(Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10) : ''
+        // Average only the sub-ratings that actually hold a number. Each raw
+        // value is filtered BEFORE converting, so the key stays in scope.
+        const vals = RATING_FIELDS
+          .map(([k]) => next[k])
+          .filter(raw => raw !== '' && raw !== null && raw !== undefined)
+          .map(Number)
+          .filter(n => !Number.isNaN(n))
+        next.overall_rating = vals.length
+          ? String(Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10)
+          : ''
       }
       return next
     })
@@ -362,6 +397,17 @@ export default function HRInterviews() {
     if (!fbForm.feedback.trim()) { toast.error('Feedback comments are required'); return }
     if (!fbForm.interviewer_name.trim()) { toast.error('Please select an interviewer'); return }
     if (fbForm.result === 'failed' && !fbForm.rejection_reason) { toast.error('Please select a rejection reason'); return }
+
+    // Ratings are optional, but any value provided must be a number from 1-5.
+    // Surfaced inline per field rather than as an unhandled failure.
+    const ratingErrors = {}
+    for (const [key] of RATING_FIELDS) ratingErrors[`${key}_error`] = ratingError(fbForm[key])
+    ratingErrors.overall_rating_error = ratingError(fbForm.overall_rating)
+    if (Object.values(ratingErrors).some(Boolean)) {
+      setFbForm(f => ({ ...f, ...ratingErrors }))
+      toast.error('Ratings must be between 1 and 5')
+      return
+    }
 
     setSaving(true)
     try {
@@ -390,7 +436,7 @@ export default function HRInterviews() {
         toast.success('Feedback saved — candidate remains On Hold')
       }
     } catch (err) {
-      toast.error(err?.response?.data?.detail || 'Failed to submit feedback')
+      toast.error(apiErrorMessage(err, 'Failed to submit feedback'))
     }
     setSaving(false)
   }
@@ -698,6 +744,7 @@ export default function HRInterviews() {
                   <label className="text-sm font-medium text-gray-700">{label} (1-5)</label>
                   <input type="number" min="1" max="5" step="0.5" className="input w-full mt-1"
                     value={fbForm[key]} onChange={e => handleRatingChange(key, e.target.value)} />
+                  {fbForm[`${key}_error`] && <p className="text-xs text-red-600 mt-1">{fbForm[`${key}_error`]}</p>}
                 </div>
               ))}
             </div>
@@ -706,7 +753,13 @@ export default function HRInterviews() {
               <label className="text-sm font-medium text-gray-700">Overall Rating (auto-averaged, editable)</label>
               <input type="number" min="1" max="5" step="0.1" className="input w-full mt-1"
                 value={fbForm.overall_rating}
-                onChange={e => setFbForm(f => ({ ...f, overall_rating: e.target.value, overallTouched: true }))} />
+                onChange={e => setFbForm(f => ({
+                  ...f,
+                  overall_rating: e.target.value,
+                  overall_rating_error: ratingError(e.target.value),
+                  overallTouched: true,
+                }))} />
+              {fbForm.overall_rating_error && <p className="text-xs text-red-600 mt-1">{fbForm.overall_rating_error}</p>}
             </div>
 
             <div>

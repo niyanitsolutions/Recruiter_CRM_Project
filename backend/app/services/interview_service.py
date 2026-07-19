@@ -330,10 +330,15 @@ class InterviewService:
             client_id = job_doc.get("client_id")
             client_name = job_doc.get("client_name")
 
-        # Concluded applications cannot receive new interviews
+        # Concluded applications cannot receive new interviews.
+        # Exception: an ATS-rejected application may be scheduled when the recruiter
+        # explicitly overrides (override_ats_rejection) — other terminal statuses never can.
+        ats_override_used = False
         if application is not None:
             app_status = application.get("status")
-            if app_status in ("rejected", "withdrawn", "joined", "offer_accepted", "offer_declined"):
+            if app_status == "rejected" and interview_data.override_ats_rejection:
+                ats_override_used = True
+            elif app_status in ("rejected", "withdrawn", "joined", "offer_accepted", "offer_declined"):
                 raise HTTPException(
                     status_code=400,
                     detail=f"Cannot schedule an interview: application status is '{app_status}'."
@@ -478,6 +483,7 @@ class InterviewService:
             "panel_size": len(interview_data.interviewer_ids),
             "status": InterviewStatus.SCHEDULED.value,
             "result": InterviewResult.PENDING.value,
+            "ats_override": ats_override_used,
             "instructions": interview_data.instructions,
             "internal_notes": interview_data.internal_notes,
             "scheduled_by": scheduled_by,

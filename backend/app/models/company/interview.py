@@ -253,6 +253,10 @@ class InterviewCreate(BaseModel):
     # Notify the candidate by email once the interview is scheduled
     send_notification: bool = Field(default=True)
 
+    # Recruiter override: schedule even though the application is ATS-rejected
+    # (used when a client requests an interview despite ATS rejection)
+    override_ats_rejection: bool = Field(default=False)
+
 
 class RoundResultSubmit(BaseModel):
     """Submit result for the current active round"""
