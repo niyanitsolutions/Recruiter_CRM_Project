@@ -1052,11 +1052,22 @@ async def send_hrm_interview_invitation_email(
 ) -> bool:
     """Notify a candidate that an internal-hiring interview round was scheduled."""
     when = scheduled_at.strftime("%B %d, %Y at %I:%M %p") if hasattr(scheduled_at, "strftime") else str(scheduled_at)
-    link_row = (
-        f'<p style="color:#374151;font-size:14px"><strong>Meeting Link:</strong> '
-        f'<a href="{location_or_link}" style="color:#4F46E5">{location_or_link}</a></p>'
-        if location_or_link else ""
-    )
+    # The detail field means different things per interview type — label it
+    # accordingly and only hyperlink an actual meeting URL.
+    _mode_labels = {"video": "Video", "phone": "Phone", "in_person": "Face-to-Face", "online": "Online"}
+    mode_label = _mode_labels.get(mode, (mode or "").replace("_", " ").title())
+    _detail_labels = {"video": "Meeting Link", "online": "Meeting Link",
+                      "in_person": "Office Location", "phone": "Phone Number"}
+    detail_label = _detail_labels.get(mode, "Meeting Link / Location")
+    if location_or_link and mode in ("video", "online"):
+        link_row = (
+            f'<p style="color:#374151;font-size:14px"><strong>{detail_label}:</strong> '
+            f'<a href="{location_or_link}" style="color:#4F46E5">{location_or_link}</a></p>'
+        )
+    elif location_or_link:
+        link_row = f'<p style="color:#374151;font-size:14px"><strong>{detail_label}:</strong> {location_or_link}</p>'
+    else:
+        link_row = ""
     subject = f"Interview Scheduled — {round_name} for {job_title}"
     html = _wrap(f"""
       <h2 style="color:#4F46E5;margin-top:0">Interview Scheduled</h2>
@@ -1064,16 +1075,18 @@ async def send_hrm_interview_invitation_email(
       <p>Your <strong>{round_name}</strong> interview for the <strong>{job_title}</strong> position
          at <strong>{company_name}</strong> has been scheduled.</p>
       <div style="background:#F9FAFB;border-radius:8px;padding:16px;margin:20px 0">
+        <p style="margin:0 0 6px;font-size:14px"><strong>Position:</strong> {job_title}</p>
+        <p style="margin:0 0 6px;font-size:14px"><strong>Round:</strong> {round_name}</p>
         <p style="margin:0 0 6px;font-size:14px"><strong>Date/Time:</strong> {when}</p>
         <p style="margin:0 0 6px;font-size:14px"><strong>Duration:</strong> {duration_minutes} minutes</p>
-        <p style="margin:0;font-size:14px"><strong>Mode:</strong> {mode}</p>
+        <p style="margin:0;font-size:14px"><strong>Mode:</strong> {mode_label}</p>
       </div>
       {link_row}
       <p style="color:#6B7280;font-size:13px">Please be available at the scheduled time. Good luck!</p>""")
     text = (
         f"Interview Scheduled — {round_name} for {job_title}\n\n"
-        f"Date/Time: {when}\nDuration: {duration_minutes} minutes\nMode: {mode}\n"
-        + (f"Meeting Link: {location_or_link}\n" if location_or_link else "")
+        f"Date/Time: {when}\nDuration: {duration_minutes} minutes\nMode: {mode_label}\n"
+        + (f"{detail_label}: {location_or_link}\n" if location_or_link else "")
     )
     return await send_email(
         to_email, subject, html, text, "hrm_interview_invitation", company_id=company_id
@@ -1302,13 +1315,20 @@ async def send_interviewer_assigned_email(
     venue_or_link: str,
     duration_minutes: int,
     company_id: str = "",
+    round_name: str = "",
 ) -> bool:
     subject = f"Interview Assignment — {candidate_name} for {job_title}"
-    mode_label = interview_mode.replace("_", " ").title() if interview_mode else ""
+    mode_label = "Face-to-Face" if interview_mode == "in_person" else (
+        interview_mode.replace("_", " ").title() if interview_mode else ""
+    )
     loc_label = "Venue" if interview_mode in ("in_person", "walk_in") else "Meeting Link"
     loc_line = (
         f"<p style='margin:0 0 6px'><strong>{loc_label}:</strong> {venue_or_link}</p>"
         if venue_or_link else ""
+    )
+    round_line = (
+        f"<p style='margin:0 0 6px'><strong>Round:</strong> {round_name}</p>"
+        if round_name else ""
     )
     html = _wrap(f"""
       <h2 style="color:#4F46E5;margin-top:0">Interview Assignment</h2>
@@ -1318,6 +1338,7 @@ async def send_interviewer_assigned_email(
                   padding:16px;margin:16px 0">
         <p style="margin:0 0 6px"><strong>Candidate:</strong> {candidate_name}</p>
         <p style="margin:0 0 6px"><strong>Position:</strong> {job_title}</p>
+        {round_line}
         <p style="margin:0 0 6px"><strong>Date:</strong> {interview_date}</p>
         <p style="margin:0 0 6px"><strong>Time:</strong> {interview_time}</p>
         <p style="margin:0 0 6px"><strong>Duration:</strong> {duration_minutes} minutes</p>

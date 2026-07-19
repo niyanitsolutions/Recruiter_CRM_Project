@@ -3,7 +3,7 @@ import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
   addMonths, subMonths, addWeeks, subWeeks, isSameMonth, isSameDay,
 } from 'date-fns'
-import { ChevronLeft, ChevronRight, CalendarDays, Loader2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, Loader2, X, Pencil, Trash2 } from 'lucide-react'
 import { useLocalization } from '../../hooks/useLocalization'
 import ModalPortal from '../common/ModalPortal'
 
@@ -80,12 +80,29 @@ function eventsForDay(events, day) {
 
 // ── Event detail popup (day click) ──────────────────────────────────────────
 
-function EventDetailRow({ ev, fmtDate }) {
+function EventDetailRow({ ev, fmtDate, canManage, onEdit, onDelete }) {
   const style = TYPE_STYLE[ev.type] || { color: '#94a3b8', label: ev.type }
+  // Company events the host says this user may manage get inline Edit/Delete,
+  // so nobody has to scroll to the list below the calendar to change one.
+  const manageable = ev.type === 'company_event' && canManage?.(ev)
   return (
     <div className="rounded-lg p-3" style={{ background: 'var(--bg-hover)', borderLeft: `3px solid ${evColor(ev)}` }}>
       <div className="flex items-center justify-between gap-2 mb-1">
         <span className="text-xs font-semibold" style={{ color: 'var(--text-heading)' }}>{style.label}</span>
+        {manageable && (
+          <span className="flex items-center gap-1">
+            <button type="button" onClick={() => onEdit?.(ev)}
+              className="p-1 rounded transition-colors" title="Edit event" aria-label="Edit event"
+              style={{ color: 'var(--text-muted)' }}>
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button type="button" onClick={() => onDelete?.(ev)}
+              className="p-1 rounded transition-colors" title="Delete event" aria-label="Delete event"
+              style={{ color: '#ef4444' }}>
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </span>
+        )}
       </div>
       {ev.type === 'holiday' && (
         <div className="space-y-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
@@ -143,7 +160,7 @@ function EventDetailRow({ ev, fmtDate }) {
   )
 }
 
-function DayEventsModal({ day, events, onClose, fmtDate }) {
+function DayEventsModal({ day, events, onClose, fmtDate, canManage, onEdit, onDelete }) {
   return (
     <ModalPortal isOpen={!!day}>
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -162,7 +179,10 @@ function DayEventsModal({ day, events, onClose, fmtDate }) {
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No events on this day.</p>
           ) : (
             <div className="space-y-2">
-              {events.map(ev => <EventDetailRow key={ev.id} ev={ev} fmtDate={fmtDate} />)}
+              {events.map(ev => (
+                <EventDetailRow key={ev.id} ev={ev} fmtDate={fmtDate}
+                  canManage={canManage} onEdit={onEdit} onDelete={onDelete} />
+              ))}
             </div>
           )}
         </div>
@@ -183,7 +203,12 @@ function CalendarSkeleton() {
   )
 }
 
-export default function CompanyCalendar({ events = [], loading = false, month, onMonthChange, view = 'month', onViewChange }) {
+export default function CompanyCalendar({
+  events = [], loading = false, month, onMonthChange, view = 'month', onViewChange,
+  // Optional company-event management from inside the calendar. When the host
+  // supplies these, manageable events get Edit/Delete in the day popup.
+  canManageEvent, onEditEvent, onDeleteEvent,
+}) {
   const { fmtDate } = useLocalization()
   const [selectedDay, setSelectedDay] = useState(null)
 
@@ -317,7 +342,12 @@ export default function CompanyCalendar({ events = [], loading = false, month, o
         </div>
       )}
 
-      <DayEventsModal day={selectedDay} events={dayEvents} onClose={() => setSelectedDay(null)} fmtDate={fmtDate} />
+      <DayEventsModal
+        day={selectedDay} events={dayEvents} onClose={() => setSelectedDay(null)} fmtDate={fmtDate}
+        canManage={canManageEvent}
+        onEdit={ev => { setSelectedDay(null); onEditEvent?.(ev) }}
+        onDelete={ev => onDeleteEvent?.(ev)}
+      />
 
       {!loading && events.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-6 px-4" style={{ color: 'var(--text-muted)' }}>

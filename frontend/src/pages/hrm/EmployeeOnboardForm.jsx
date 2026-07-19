@@ -394,13 +394,19 @@ export default function EmployeeOnboardForm() {
       errs.addr_zip = 'PIN must be 6 digits'
       messages.push('PIN / ZIP code must be 6 digits.')
     }
-    // PAN — validate format only when provided (same style as HR forms)
-    if (form.pan_number.trim() && !/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(form.pan_number.trim())) {
+    // PAN — mandatory; same format rule as the HR Employee form
+    if (!form.pan_number.trim()) {
+      errs.pan_number = 'Required'
+      messages.push('PAN number is required.')
+    } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(form.pan_number.trim())) {
       errs.pan_number = 'Invalid PAN'
       messages.push('Please enter a valid PAN (e.g. ABCDE1234F).')
     }
-    // Aadhaar — 12 digits when provided
-    if (form.aadhaar_number.trim() && form.aadhaar_number.replace(/\D/g, '').length !== 12) {
+    // Aadhaar — mandatory; 12 digits
+    if (!form.aadhaar_number.trim()) {
+      errs.aadhaar_number = 'Required'
+      messages.push('Aadhaar number is required.')
+    } else if (form.aadhaar_number.replace(/\D/g, '').length !== 12) {
       errs.aadhaar_number = 'Aadhaar must be 12 digits'
       messages.push('Aadhaar number must be 12 digits.')
     }
@@ -790,6 +796,26 @@ export default function EmployeeOnboardForm() {
                   <option value="">Select</option>
                   {BLOOD_GROUPS.map(bg => <option key={bg} value={bg}>{bg}</option>)}
                 </select>
+              </div>
+
+              {/* Identity — same employee fields as HR → Employees → Add/Edit */}
+              <div>
+                <label className={lbl}>PAN Number <span className="text-red-500">*</span></label>
+                <input
+                  name="pan_number" value={form.pan_number}
+                  onChange={e => setForm(f => ({ ...f, pan_number: e.target.value.toUpperCase() }))}
+                  className={inpErr('pan_number')} placeholder="ABCDE1234F" maxLength={10}
+                />
+                {fieldErrors.pan_number && <p className={err}>{fieldErrors.pan_number}</p>}
+              </div>
+
+              <div>
+                <label className={lbl}>Aadhaar Number <span className="text-red-500">*</span></label>
+                <input
+                  type="tel" name="aadhaar_number" value={form.aadhaar_number} onChange={handleChange}
+                  className={inpErr('aadhaar_number')} placeholder="123412341234" maxLength={12}
+                />
+                {fieldErrors.aadhaar_number && <p className={err}>{fieldErrors.aadhaar_number}</p>}
               </div>
 
               {/* Current Address (split) */}

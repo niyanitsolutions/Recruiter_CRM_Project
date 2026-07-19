@@ -18,6 +18,7 @@ import ModalPortal from '../../components/common/ModalPortal'
 import DraftRecoveryBanner from '../../components/common/DraftRecoveryBanner'
 import { useDraftRecovery } from '../../hooks/useDraftRecovery'
 import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
+import { toDateInput } from '../../utils/format'
 import EmployeeAvatar, { resolvePhotoUrl } from '../../components/common/EmployeeAvatar'
 import ImageCropModal from '../../components/common/ImageCropModal'
 
@@ -780,7 +781,7 @@ export default function EmployeeForm() {
         email:            e.email              || '',
         phone:            e.phone              || '',
         gender:           e.gender             || '',
-        date_of_birth:    e.date_of_birth      || '',
+        date_of_birth:    toDateInput(e.date_of_birth),
         blood_group:      e.blood_group        || '',
         street:           e.address_info?.street    || '',
         city:             e.address_info?.city      || '',
@@ -793,7 +794,7 @@ export default function EmployeeForm() {
         department_name:  e.department_name   || '',
         reporting_manager_id: e.reporting_manager_id || '',
         employment_type:  e.employment_type   || 'full_time',
-        date_of_joining:  e.date_of_joining   || '',
+        date_of_joining:  toDateInput(e.date_of_joining),
         probation_use_company_default: e.probation_use_company_default !== false,
         probation_days:   e.probation_days != null ? String(e.probation_days) : '',
         notice_use_company_default: e.notice_use_company_default !== false,
@@ -823,7 +824,9 @@ export default function EmployeeForm() {
       if (e.photo_url)                    setPhotoUrl(e.photo_url)
       if (e.emergency_contacts?.length) setEmergencyContacts(e.emergency_contacts)
       if (e.qualifications?.length)     setQualifications(e.qualifications)
-      if (e.disciplinary_records?.length) setDisciplinary(e.disciplinary_records)
+      if (e.disciplinary_records?.length) {
+        setDisciplinary(e.disciplinary_records.map(d => ({ ...d, date: toDateInput(d.date) })))
+      }
       if (e.documents?.length)           setDocuments(e.documents)
 
       if (e.crm_user_id) {

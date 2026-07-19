@@ -8,6 +8,7 @@ import {
 import hrmService from '../../services/hrmService'
 import userService from '../../services/userService'
 import EmployeeAvatar from '../../components/common/EmployeeAvatar'
+import { formatDate } from '../../utils/format'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ function OverviewTab({ emp, linkedUser }) {
           <InfoRow label="Email"      value={emp.email} />
           <InfoRow label="Phone"      value={emp.phone} />
           <InfoRow label="Gender"     value={emp.gender} />
-          <InfoRow label="Date of Birth" value={emp.date_of_birth} />
+          <InfoRow label="Date of Birth" value={formatDate(emp.date_of_birth)} />
           <InfoRow label="Blood Group"   value={emp.blood_group} />
         </Card>
 
@@ -140,7 +141,7 @@ function OverviewTab({ emp, linkedUser }) {
           <InfoRow label="Department"       value={emp.department_name} />
           <InfoRow label="Designation"      value={emp.designation_name} />
           <InfoRow label="Employment Type"  value={emp.employment_type?.replace(/_/g, ' ')} />
-          <InfoRow label="Date of Joining"  value={emp.date_of_joining} />
+          <InfoRow label="Date of Joining"  value={formatDate(emp.date_of_joining)} />
           <InfoRow label="Work Location"    value={emp.work_location} />
           <InfoRow label="Shift"
             value={emp.shift_start_time && emp.shift_end_time
@@ -199,7 +200,7 @@ function PersonalTab({ emp }) {
           <InfoRow label="Email"         value={emp.email} />
           <InfoRow label="Phone"         value={emp.phone} />
           <InfoRow label="Gender"        value={emp.gender} />
-          <InfoRow label="Date of Birth" value={emp.date_of_birth} />
+          <InfoRow label="Date of Birth" value={formatDate(emp.date_of_birth)} />
           <InfoRow label="Blood Group"   value={emp.blood_group} />
           <InfoRow label="PAN Number"    value={emp.pan_number}    mono />
           <InfoRow label="Aadhaar"       value={emp.aadhaar_number} mono />
@@ -273,7 +274,7 @@ function EmploymentTab({ emp, payrollStructure }) {
           <InfoRow label="Department"      value={emp.department_name} />
           <InfoRow label="Designation"     value={emp.designation_name} />
           <InfoRow label="Employment Type" value={emp.employment_type?.replace(/_/g, ' ')} />
-          <InfoRow label="Date of Joining" value={emp.date_of_joining} />
+          <InfoRow label="Date of Joining" value={formatDate(emp.date_of_joining)} />
           <InfoRow label="Work Location"   value={emp.work_location} />
           <InfoRow label="Shift"
             value={emp.shift_start_time && emp.shift_end_time
@@ -320,7 +321,7 @@ function EmploymentTab({ emp, payrollStructure }) {
             {emp.disciplinary_records.map((d, i) => (
               <div key={i} className="p-3 rounded-lg" style={{ background: '#fee2e21a' }}>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <InfoRow label="Date"         value={d.date?.toString()} />
+                  <InfoRow label="Date"         value={formatDate(d.date)} />
                   <InfoRow label="Incident"     value={d.incident} />
                   <InfoRow label="Action Taken" value={d.action_taken} />
                 </div>
@@ -541,7 +542,7 @@ export default function EmployeeView() {
             {emp.date_of_joining && (
               <span className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--text-muted)' }}>
                 <Calendar className="w-4 h-4" />
-                Joined {emp.date_of_joining}
+                Joined {formatDate(emp.date_of_joining)}
               </span>
             )}
             {emp.work_location && (

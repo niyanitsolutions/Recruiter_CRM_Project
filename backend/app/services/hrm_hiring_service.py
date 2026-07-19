@@ -462,6 +462,7 @@ class HRMHiringService:
             "scheduled_at": data["scheduled_at"],
             "duration_minutes": data.get("duration_minutes", 60),
             "location_or_link": data.get("location_or_link"),
+            "notes": data.get("notes"),
             "interviewers": data.get("interviewers") or [],
             "result": "pending",
             "invitation_email_sent": bool(send_invite),

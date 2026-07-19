@@ -43,15 +43,26 @@ const emptyScheduleForm = () => ({
   // job → rounds come from the job's configured interview_rounds (HR no longer
   // types round names). interviewers = [{id, name, email}] chosen from Active
   // Employees; the round is auto-determined server-side.
-  job_id: '', candidate_id: '', mode: 'video', scheduled_at: '', duration_minutes: 60,
-  location_or_link: '', send_invitation_email: true, interviewers: [],
+  job_id: '', candidate_id: '', mode: 'video',
+  date: '', time: '', duration_minutes: 60,
+  location_or_link: '', notes: '', interviewers: [],
+  send_candidate_email: true, send_interviewer_email: true,
 })
 
-// Mode → the label + placeholder for the single location/link field.
+// Interview types. `in_person` keeps its stored value but reads "Face-to-Face".
+// Each type drives which detail field is shown and required.
+const INTERVIEW_TYPES = [
+  { value: 'video',     label: 'Video' },
+  { value: 'phone',     label: 'Phone' },
+  { value: 'in_person', label: 'Face-to-Face' },
+  { value: 'online',    label: 'Online' },
+]
+
 const MODE_FIELD = {
-  video:     { label: 'Meeting Link',  placeholder: 'https://meet.google.com/…' },
-  in_person: { label: 'Location / Venue', placeholder: 'e.g. HQ, 4th Floor, Room 2' },
-  phone:     { label: 'Phone Number',  placeholder: 'e.g. +91 98765 43210' },
+  video:     { label: 'Meeting Link',    placeholder: 'https://meet.google.com/…', error: 'Meeting link is required for a video interview' },
+  online:    { label: 'Meeting Link',    placeholder: 'https://…',                 error: 'Meeting link is required for an online interview' },
+  in_person: { label: 'Office Location', placeholder: 'e.g. HQ, 4th Floor, Room 2', error: 'Office location is required for a face-to-face interview' },
+  phone:     { label: 'Phone Number',    placeholder: 'e.g. +91 98765 43210',       error: 'Phone number is required for a phone interview' },
 }
 
 // Employment statuses that count as "active" staff eligible to interview.
@@ -194,7 +205,10 @@ export default function HRInterviews() {
         .map(j => ({ value: j.id, label: j.job_title, job: j })))
       setActiveEmployees((empRes.data.items || [])
         .filter(e => ACTIVE_EMP_STATUSES.has(e.employment_status))
-        .map(e => ({ id: e.id, name: e.full_name, email: e.email || '' })))
+        .map(e => ({
+          id: e.id, name: e.full_name, email: e.email || '',
+          designation: e.designation_name || '', department: e.department_name || '',
+        })))
     } catch {}
   }
 
@@ -275,17 +289,25 @@ export default function HRInterviews() {
 
   const handleCreate = async (e) => {
     e.preventDefault()
-    if (!form.job_id) { toast.error('Please select a job'); return }
+    if (!form.job_id)       { toast.error('Please select a job'); return }
     if (!form.candidate_id) { toast.error('Please select a candidate'); return }
-    if (!form.scheduled_at) { toast.error('Please pick a date & time'); return }
+    if (!form.interviewers.length) { toast.error('Please select at least one interviewer'); return }
+    if (!form.date) { toast.error('Please pick a date'); return }
+    if (!form.time) { toast.error('Please pick a time'); return }
+    // Type-driven detail field is mandatory (link / location / phone).
+    const modeField = MODE_FIELD[form.mode] || MODE_FIELD.video
+    if (!form.location_or_link.trim()) { toast.error(modeField.error); return }
+
     const payload = {
       candidate_id: form.candidate_id,
       job_id: form.job_id,
       mode: form.mode,
-      scheduled_at: form.scheduled_at,
+      scheduled_at: `${form.date}T${form.time}`,
       duration_minutes: form.duration_minutes,
-      location_or_link: form.location_or_link,
-      send_invitation_email: form.send_invitation_email,
+      location_or_link: form.location_or_link.trim(),
+      notes: form.notes.trim() || null,
+      send_candidate_email: form.send_candidate_email,
+      send_interviewer_email: form.send_interviewer_email,
       interviewers: form.interviewers.map(i => ({ id: i.id, name: i.name, email: i.email })),
     }
     setSaving(true)
@@ -426,137 +448,206 @@ export default function HRInterviews() {
       {/* Schedule modal — job-first flow */}
       <ModalPortal isOpen={showForm}>
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
-          <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold">Schedule Interview</h2>
-
-            {/* 1 — Job */}
-            <div>
-              <label className="text-sm font-medium text-gray-700">Job *</label>
-              <SearchableSelect
-                value={form.job_id}
-                onChange={handleSelectJob}
-                options={jobOptions}
-                placeholder="Select an open job…"
-                minChars={0}
-                className="mt-1"
-              />
+          <form onSubmit={handleCreate} className="bg-white rounded-xl w-full max-w-2xl shadow-xl max-h-[92vh] flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+              <h2 className="text-lg font-semibold text-gray-900">Schedule Interview</h2>
+              <button type="button" onClick={() => setShowForm(false)} className="p-1 rounded-lg text-gray-400 hover:text-gray-600" aria-label="Close">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            {/* 2 — Candidate (filtered by job) */}
-            {form.job_id && (
-              <div>
-                <label className="text-sm font-medium text-gray-700">Candidate *</label>
-                <SearchableSelect
-                  value={form.candidate_id}
-                  onChange={handleSelectCandidate}
-                  options={candidateOptions}
-                  placeholder={candLoading ? 'Loading candidates…' : 'Search candidate by name or email…'}
-                  minChars={0}
-                  className="mt-1"
-                />
-                {!candLoading && candidateOptions.length === 0 && (
-                  <p className="text-xs text-gray-400 mt-1">No candidates in this job's pipeline yet.</p>
-                )}
-              </div>
-            )}
+            <div className="px-6 py-5 space-y-6 overflow-y-auto">
+              {/* ── Position & Candidate ─────────────────────────────────── */}
+              <section className="space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Position & Candidate</h3>
 
-            {/* 3 — Auto round + stage (from the job's configured rounds) */}
-            {form.candidate_id && (
-              <div className="bg-gray-50 rounded-lg p-3 text-sm border border-gray-200">
-                {nextRoundLoading ? (
-                  <span className="text-gray-400">Determining round…</span>
-                ) : nextRoundInfo ? (
-                  <>
-                    <p><span className="text-gray-500">Round:</span> <span className="font-medium text-gray-900">Round {nextRoundInfo.round_number} — {nextRoundInfo.round_name}</span></p>
-                    <p className="mt-1"><span className="text-gray-500">Current Stage:</span> <span className="font-medium text-gray-900 capitalize">{nextRoundInfo.current_stage}</span></p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Job <span className="text-red-500">*</span></label>
+                    {jobOptions.length === 0 ? (
+                      <p className="mt-1 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        No active jobs available. Create a job first.
+                      </p>
+                    ) : (
+                      <SearchableSelect
+                        value={form.job_id}
+                        onChange={handleSelectJob}
+                        options={jobOptions}
+                        placeholder="Select an open job…"
+                        minChars={0}
+                        className="mt-1"
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Candidate <span className="text-red-500">*</span></label>
+                    {!form.job_id ? (
+                      <p className="mt-1 text-sm text-gray-400 border border-gray-200 rounded-lg px-3 py-2 bg-gray-50">Select a job first</p>
+                    ) : (
+                      <>
+                        <SearchableSelect
+                          value={form.candidate_id}
+                          onChange={handleSelectCandidate}
+                          options={candidateOptions}
+                          placeholder={candLoading ? 'Loading candidates…' : 'Search by name or email…'}
+                          minChars={0}
+                          className="mt-1"
+                        />
+                        {!candLoading && candidateOptions.length === 0 && (
+                          <p className="text-xs text-gray-400 mt-1">No candidates have applied to this job yet.</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Read-only stage + auto round */}
+                {form.candidate_id && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Current Stage</label>
+                      <p className="mt-1 text-sm capitalize bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-700">
+                        {nextRoundLoading ? 'Loading…' : (nextRoundInfo?.current_stage?.replace(/_/g, ' ') || '—')}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Next Interview Round</label>
+                      <p className="mt-1 text-sm bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 font-medium text-indigo-800">
+                        {nextRoundLoading ? 'Determining…'
+                          : nextRoundInfo ? `Round ${nextRoundInfo.round_number} — ${nextRoundInfo.round_name}` : '—'}
+                      </p>
+                    </div>
                     {jobRounds.length > 0 && (
-                      <p className="mt-1 text-xs text-gray-400">
-                        Rounds from job: {[...jobRounds].sort((a, b) => a.round_number - b.round_number).map(r => r.round_name).join(' → ')}
+                      <p className="sm:col-span-2 text-xs text-gray-400 -mt-1">
+                        Configured rounds for this job: {[...jobRounds].sort((a, b) => a.round_number - b.round_number).map(r => r.round_name).join(' → ')}
                       </p>
                     )}
-                  </>
-                ) : (
-                  <span className="text-gray-400">Select a candidate to see their round</span>
-                )}
-              </div>
-            )}
-
-            {/* 4 — Interviewers (Active Employees) */}
-            {form.candidate_id && (
-              <div>
-                <label className="text-sm font-medium text-gray-700">Interviewers</label>
-                {form.interviewers.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-1.5">
-                    {form.interviewers.map(iv => (
-                      <span key={iv.id} className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs rounded-full px-2 py-0.5">
-                        {iv.name}
-                        <button type="button" onClick={() => toggleInterviewer(iv)} className="hover:text-indigo-900"><X className="w-3 h-3" /></button>
-                      </span>
-                    ))}
                   </div>
                 )}
-                <div className="mt-1.5 border border-gray-200 rounded-lg max-h-36 overflow-y-auto">
-                  {activeEmployees.length === 0 ? (
-                    <p className="text-xs text-gray-400 px-3 py-2">No active employees found.</p>
-                  ) : activeEmployees.map(emp => {
-                    const checked = form.interviewers.some(i => i.id === emp.id)
-                    return (
-                      <label key={emp.id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
-                        <input type="checkbox" checked={checked} onChange={() => toggleInterviewer(emp)} />
-                        <span className="flex-1 truncate">{emp.name}</span>
-                        {!emp.email && <span className="text-[10px] text-gray-400">no email</span>}
-                      </label>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
+              </section>
 
-            {/* 5 — Mode + type-conditional field + timing */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Mode</label>
-                <select className="input w-full mt-1" value={form.mode} onChange={e => setForm(f => ({ ...f, mode: e.target.value }))}>
-                  <option value="video">Video</option>
-                  <option value="in_person">In Person</option>
-                  <option value="phone">Phone</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Duration (min)</label>
-                <input type="number" className="input w-full mt-1" value={form.duration_minutes} onChange={e => setForm(f => ({ ...f, duration_minutes: Number(e.target.value) }))} />
-              </div>
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-700">Scheduled At *</label>
-                <input type="datetime-local" className="input w-full mt-1" value={form.scheduled_at} onChange={e => setForm(f => ({ ...f, scheduled_at: e.target.value }))} required />
-              </div>
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-700">{(MODE_FIELD[form.mode] || MODE_FIELD.video).label}</label>
-                <input className="input w-full mt-1" value={form.location_or_link}
-                  onChange={e => setForm(f => ({ ...f, location_or_link: e.target.value }))}
-                  placeholder={(MODE_FIELD[form.mode] || MODE_FIELD.video).placeholder} />
-              </div>
+              {/* ── Panel ───────────────────────────────────────────────── */}
+              <section className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Interview Panel</h3>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Interviewer <span className="text-red-500">*</span></label>
+                  {form.interviewers.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {form.interviewers.map(iv => (
+                        <span key={iv.id} className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs rounded-full pl-2.5 pr-1.5 py-1">
+                          {iv.name}
+                          <button type="button" onClick={() => toggleInterviewer(iv)} className="hover:text-indigo-900" aria-label={`Remove ${iv.name}`}>
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-2 border border-gray-200 rounded-lg max-h-44 overflow-y-auto divide-y divide-gray-100">
+                    {activeEmployees.length === 0 ? (
+                      <p className="text-sm text-gray-400 px-3 py-2.5">No active employees available.</p>
+                    ) : activeEmployees.map(emp => {
+                      const checked = form.interviewers.some(i => i.id === emp.id)
+                      const sub = [emp.designation, emp.department].filter(Boolean).join(' · ')
+                      return (
+                        <label key={emp.id} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                          <input type="checkbox" checked={checked} onChange={() => toggleInterviewer(emp)} className="shrink-0" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm text-gray-900 truncate">{emp.name}</span>
+                            {sub && <span className="block text-xs text-gray-500 truncate">{sub}</span>}
+                          </span>
+                          {!emp.email && <span className="text-[10px] text-gray-400 shrink-0">no email</span>}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              </section>
+
+              {/* ── Schedule ────────────────────────────────────────────── */}
+              <section className="space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Schedule</h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Interview Type <span className="text-red-500">*</span></label>
+                    <select className="input w-full mt-1" value={form.mode}
+                      onChange={e => setForm(f => ({ ...f, mode: e.target.value }))}>
+                      {INTERVIEW_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Date <span className="text-red-500">*</span></label>
+                    <input type="date" className="input w-full mt-1" value={form.date}
+                      onChange={e => setForm(f => ({ ...f, date: e.target.value }))} required />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Time <span className="text-red-500">*</span></label>
+                    <input type="time" className="input w-full mt-1" value={form.time}
+                      onChange={e => setForm(f => ({ ...f, time: e.target.value }))} required />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Duration (min) <span className="text-red-500">*</span></label>
+                    <input type="number" min="5" step="5" className="input w-full mt-1" value={form.duration_minutes}
+                      onChange={e => setForm(f => ({ ...f, duration_minutes: Number(e.target.value) }))} required />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      {(MODE_FIELD[form.mode] || MODE_FIELD.video).label} <span className="text-red-500">*</span>
+                    </label>
+                    <input className="input w-full mt-1" value={form.location_or_link}
+                      onChange={e => setForm(f => ({ ...f, location_or_link: e.target.value }))}
+                      placeholder={(MODE_FIELD[form.mode] || MODE_FIELD.video).placeholder} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Notes</label>
+                  <textarea rows={2} className="input w-full mt-1" value={form.notes}
+                    onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                    placeholder="Anything the panel should know before the interview (optional)" />
+                </div>
+              </section>
+
+              {/* ── Notifications ───────────────────────────────────────── */}
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Email Notifications</h3>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={form.send_candidate_email}
+                    onChange={e => setForm(f => ({ ...f, send_candidate_email: e.target.checked }))} />
+                  Send Email to Candidate
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input type="checkbox" checked={form.send_interviewer_email}
+                    onChange={e => setForm(f => ({ ...f, send_interviewer_email: e.target.checked }))} />
+                  Send Email to Interviewer
+                </label>
+              </section>
+
+              {/* ── Summary ─────────────────────────────────────────────── */}
+              {form.candidate_id && nextRoundInfo && (
+                <div className="rounded-lg p-3 text-xs border border-indigo-100 bg-indigo-50/50 space-y-1">
+                  <p className="font-semibold text-indigo-800 mb-1">Summary</p>
+                  <p><span className="text-gray-500">Job:</span> {selectedJob?.job_title || '—'}</p>
+                  <p><span className="text-gray-500">Round:</span> Round {nextRoundInfo.round_number} — {nextRoundInfo.round_name}</p>
+                  <p><span className="text-gray-500">Type:</span> {(INTERVIEW_TYPES.find(t => t.value === form.mode) || {}).label}</p>
+                  <p><span className="text-gray-500">When:</span> {form.date && form.time
+                    ? new Date(`${form.date}T${form.time}`).toLocaleString('en-IN', { timeZone: getTenantTimezone(), day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                    : '—'} ({form.duration_minutes} min)</p>
+                  <p><span className="text-gray-500">Interviewers:</span> {form.interviewers.length ? form.interviewers.map(i => i.name).join(', ') : 'None'}</p>
+                </div>
+              )}
             </div>
 
-            {/* 6 — Summary */}
-            {form.candidate_id && nextRoundInfo && (
-              <div className="rounded-lg p-3 text-xs border border-indigo-100 bg-indigo-50/50 space-y-1">
-                <p className="font-semibold text-indigo-800 mb-1">Summary</p>
-                <p><span className="text-gray-500">Job:</span> {selectedJob?.job_title || '—'}</p>
-                <p><span className="text-gray-500">Round:</span> Round {nextRoundInfo.round_number} — {nextRoundInfo.round_name}</p>
-                <p><span className="text-gray-500">Mode:</span> <span className="capitalize">{form.mode.replace('_', ' ')}</span></p>
-                <p><span className="text-gray-500">When:</span> {form.scheduled_at ? new Date(form.scheduled_at).toLocaleString('en-IN', { timeZone: getTenantTimezone(), day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'} ({form.duration_minutes} min)</p>
-                <p><span className="text-gray-500">Interviewers:</span> {form.interviewers.length ? form.interviewers.map(i => i.name).join(', ') : 'None'}</p>
-              </div>
-            )}
-
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input type="checkbox" checked={form.send_invitation_email} onChange={e => setForm(f => ({ ...f, send_invitation_email: e.target.checked }))} />
-              Send Interview Invitation Email
-            </label>
-            <div className="flex justify-end gap-3">
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3 shrink-0">
               <button type="button" onClick={() => setShowForm(false)} className="btn-secondary">Cancel</button>
-              <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Scheduling…' : 'Schedule'}</button>
+              <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Scheduling…' : 'Schedule Interview'}</button>
             </div>
           </form>
         </div>
@@ -687,11 +778,9 @@ export default function HRInterviews() {
             {editModal?.action === 'edit' && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Mode</label>
+                  <label className="text-sm font-medium text-gray-700">Interview Type</label>
                   <select className="input w-full mt-1" value={editForm.mode} onChange={e => setEditForm(f => ({ ...f, mode: e.target.value }))}>
-                    <option value="video">Video</option>
-                    <option value="in_person">In Person</option>
-                    <option value="phone">Phone</option>
+                    {INTERVIEW_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
                 <div>

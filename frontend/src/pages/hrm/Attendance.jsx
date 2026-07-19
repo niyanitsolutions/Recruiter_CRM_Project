@@ -1342,6 +1342,9 @@ function CalendarTab() {
 
   const onSaved = () => { loadManageable(); load(true); publish(LIVE_TOPICS.CALENDAR) }
 
+  // event_id → full event, for Edit/Delete triggered from inside the calendar.
+  const manageableById = useMemo(() => new Map(manageable.map(ev => [ev.id, ev])), [manageable])
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-4">
       {canCreate && (
@@ -1361,6 +1364,18 @@ function CalendarTab() {
         onMonthChange={setMonth}
         view={view}
         onViewChange={setView}
+        // Edit/Delete straight from the calendar. The manageable list is exactly
+        // what the server says this user may manage (HR/owner → all, else own),
+        // so membership in it is the permission check.
+        canManageEvent={ev => manageableById.has(ev.meta?.event_id)}
+        onEditEvent={ev => {
+          const full = manageableById.get(ev.meta?.event_id)
+          if (full) openDialog(full)
+        }}
+        onDeleteEvent={ev => {
+          const full = manageableById.get(ev.meta?.event_id)
+          if (full) handleDelete(full)
+        }}
       />
 
       {canCreate && manageable.length > 0 && (

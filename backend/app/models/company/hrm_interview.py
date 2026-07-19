@@ -7,9 +7,12 @@ import uuid
 
 
 class InterviewMode(str, Enum):
+    # "in_person" is surfaced in the UI as "Face-to-Face" — the stored value is
+    # unchanged so existing interview records keep working.
     IN_PERSON = "in_person"
     VIDEO = "video"
     PHONE = "phone"
+    ONLINE = "online"
 
 
 class InterviewResult(str, Enum):
@@ -43,8 +46,10 @@ class HRMInterviewModel(BaseModel):
     scheduled_at: datetime
     duration_minutes: int = 60
     location_or_link: Optional[str] = None
+    # Free-text notes for the interview panel (additive, optional).
+    notes: Optional[str] = None
 
-    interviewers: List[dict] = Field(default_factory=list)   # [{id, name}]
+    interviewers: List[dict] = Field(default_factory=list)   # [{id, name, email}]
 
     result: InterviewResult = InterviewResult.PENDING
     feedback: Optional[str] = None
@@ -97,8 +102,20 @@ class HRMInterviewCreate(BaseModel):
     scheduled_at: datetime
     duration_minutes: int = 60
     location_or_link: Optional[str] = None
+    notes: Optional[str] = None
     interviewers: Optional[List[dict]] = None
+    # Legacy single toggle — still honored for older callers.
     send_invitation_email: bool = True
+    # Separate per-recipient toggles. None = "not specified", in which case the
+    # legacy send_invitation_email decides (backward compatible).
+    send_candidate_email: Optional[bool] = None
+    send_interviewer_email: Optional[bool] = None
+
+    def wants_candidate_email(self) -> bool:
+        return self.send_invitation_email if self.send_candidate_email is None else self.send_candidate_email
+
+    def wants_interviewer_email(self) -> bool:
+        return self.send_invitation_email if self.send_interviewer_email is None else self.send_interviewer_email
 
 
 class HRMInterviewFeedback(BaseModel):

@@ -231,9 +231,9 @@ async def create_interview(
     result = await HRMHiringService(db).create_interview(
         cu["company_id"], data.model_dump(exclude_none=True), cu["id"], cu.get("full_name", "HR Team")
     )
-    if data.send_invitation_email:
-        from app.core.config import settings as _settings
-        if _settings.EMAIL_ENABLED:
+    from app.core.config import settings as _settings
+    if _settings.EMAIL_ENABLED:
+        if data.wants_candidate_email():
             candidate = await HRMHiringService(db).get_candidate(data.candidate_id, cu["company_id"])
             if candidate and candidate.get("email"):
                 from app.services.email_service import send_hrm_interview_invitation_email
@@ -250,7 +250,8 @@ async def create_interview(
                     company_name=cu.get("company_name", ""),
                     company_id=cu.get("company_id", ""),
                 )
-            # Notify each assigned interviewer who has an email on file.
+        # Each assigned interviewer with an email on file.
+        if data.wants_interviewer_email():
             _mail_interviewers(background_tasks, result, cu)
     return result
 
@@ -284,6 +285,7 @@ def _mail_interviewers(background_tasks: BackgroundTasks, result: dict, cu: dict
             venue_or_link=result.get("location_or_link") or "",
             duration_minutes=result.get("duration_minutes", 60),
             company_id=cu.get("company_id", ""),
+            round_name=result.get("round_name", ""),
         )
 
 

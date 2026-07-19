@@ -111,6 +111,27 @@ export const formatDate = (date, formatStr) => {
 }
 
 /**
+ * Normalize any stored date value to the `YYYY-MM-DD` string that an
+ * `<input type="date">` requires.
+ *
+ * Stored dates come back as BSON datetimes serialized like
+ * "2001-12-01T00:00:00". A date input silently renders EMPTY for any value
+ * that isn't exactly `YYYY-MM-DD` — which is why edit forms appeared to lose
+ * saved dates. An ISO-prefixed string is sliced rather than parsed through a
+ * timezone, so a plain calendar date can never shift by a day.
+ */
+export const toDateInput = (value) => {
+  if (!value) return ''
+  if (typeof value === 'string') {
+    const iso = value.match(/^(\d{4}-\d{2}-\d{2})/)
+    if (iso) return iso[1]
+  }
+  const d = value instanceof Date ? value : new Date(value)
+  if (isNaN(d.getTime())) return ''
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
  * Format date with time in the tenant's saved Localization timezone, date
  * format, and time format (12h/24h). Delegates to `dateFormatter.js`.
  */
