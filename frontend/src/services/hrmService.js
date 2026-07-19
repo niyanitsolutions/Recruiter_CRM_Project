@@ -90,6 +90,14 @@ const createHiringCandidate = (data) => api.post(`${BASE}/hiring/candidates`, da
 const listHiringCandidates = (params) => api.get(`${BASE}/hiring/candidates`, { params })
 const getHiringCandidate = (id) => api.get(`${BASE}/hiring/candidates/${id}`)
 const updateHiringCandidate = (id, data) => api.put(`${BASE}/hiring/candidates/${id}`, data)
+// Attach/replace a candidate resume — same storage as the public apply flow.
+const uploadHiringCandidateResume = (id, file) => {
+  const fd = new FormData()
+  fd.append('file', file)
+  return api.post(`${BASE}/hiring/candidates/${id}/resume`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
 
 // ── Hiring — Interviews ────────────────────────────────────────────────────
 const getNextRound = (candidateId) => api.get(`${BASE}/hiring/candidates/${candidateId}/next-round`)
@@ -299,6 +307,7 @@ const hrmService = {
   markAnnouncementRead, getAnnouncementReadStats,
   createJob, listJobs, getJob, updateJob, deleteJob,
   createHiringCandidate, listHiringCandidates, getHiringCandidate, updateHiringCandidate,
+  uploadHiringCandidateResume,
   getNextRound, createInterview, listInterviews, submitInterviewFeedback, updateInterview, cancelInterview,
   createOffer, listOffers, getOffer, respondOffer, generateOfferLetter,
   createOnboarding, listOnboardings, getOnboarding, updateOnboarding, completeOnboarding,

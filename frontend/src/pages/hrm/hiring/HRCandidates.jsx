@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Users, Eye, Edit, CalendarPlus, XCircle, LogOut, Clock, Download } from 'lucide-react'
+import { Plus, Users, Eye, Edit, CalendarPlus, XCircle, LogOut, Clock, Download, Upload } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
@@ -66,6 +66,7 @@ const candidateFormFrom = (c = {}) => ({
   skills:                 Array.isArray(c.skills) ? c.skills.join(', ') : '',
   notes:                  c.notes || '',
   resume_url:             c.resume_url || '',
+  resume_filename:        c.resume_filename || '',
 })
 
 // Resolve a stored path (relative or absolute) to a full URL. In dev, Vite
@@ -79,11 +80,12 @@ const resolveFileUrl = (path) => {
 
 // Download the original uploaded file, falling back to opening it in a tab.
 // The storage path is never shown to the user.
-const downloadResume = async (resumeUrl, candidateName = 'Candidate') => {
+const downloadResume = async (resumeUrl, candidateName = 'Candidate', originalFilename = '') => {
   const full = resolveFileUrl(resumeUrl)
   if (!full) return
   const ext = (resumeUrl.split('.').pop() || 'pdf').toLowerCase()
-  const filename = `${candidateName.replace(/\s+/g, '_')}_Resume.${ext}`
+  // Prefer the original uploaded filename when the record has one.
+  const filename = originalFilename || `${candidateName.replace(/\s+/g, '_')}_Resume.${ext}`
   try {
     const resp = await fetch(full)
     if (!resp.ok) throw new Error()
@@ -101,31 +103,78 @@ const downloadResume = async (resumeUrl, candidateName = 'Candidate') => {
   }
 }
 
-// Resume block — View / Download actions in place of the raw storage path.
-function ResumeActions({ resumeUrl, candidateName }) {
+// Accepted resume types / size — mirrors the backend's own validation so the
+// user gets immediate feedback instead of a round-trip 422.
+const RESUME_EXTS = ['.pdf', '.doc', '.docx']
+const RESUME_MAX_BYTES = 10 * 1024 * 1024
+
+// Validate a picked resume file. Returns an error string, or '' when valid.
+const validateResumeFile = (file) => {
+  const name = (file?.name || '').toLowerCase()
+  if (!RESUME_EXTS.some(ext => name.endsWith(ext))) return 'Only PDF, DOC, or DOCX resumes are allowed.'
+  if (file.size > RESUME_MAX_BYTES) return 'Resume must be smaller than 10 MB.'
+  return ''
+}
+
+/**
+ * Resume block — View / Download actions in place of the raw storage path.
+ * When `onPickFile` is supplied the block also offers an upload control, so
+ * Add and Edit share one resume UI. `pendingFile` is a chosen-but-not-yet
+ * -uploaded file (Add uploads only after the candidate record exists).
+ */
+function ResumeActions({ resumeUrl, resumeFilename, candidateName, onPickFile, pendingFile }) {
+  const inputRef = React.useRef(null)
+  const handlePick = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''            // allow re-picking the same file
+    if (!file) return
+    const err = validateResumeFile(file)
+    if (err) { toast.error(err); return }
+    onPickFile(file)
+  }
   return (
     <div>
       <label className="text-sm font-medium text-gray-700">Resume</label>
-      {resumeUrl ? (
-        <div className="flex flex-wrap gap-2 mt-1">
-          <button
-            type="button"
-            onClick={() => window.open(resolveFileUrl(resumeUrl), '_blank', 'noopener,noreferrer')}
-            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
-          >
-            <Eye className="w-4 h-4" /> View Resume
-          </button>
-          <button
-            type="button"
-            onClick={() => downloadResume(resumeUrl, candidateName)}
-            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
-          >
-            <Download className="w-4 h-4" /> Download Resume
-          </button>
-        </div>
-      ) : (
-        <p className="text-sm text-gray-400 mt-1">No resume uploaded.</p>
+      <div className="flex flex-wrap items-center gap-2 mt-1">
+        {resumeUrl && (
+          <>
+            <button
+              type="button"
+              onClick={() => window.open(resolveFileUrl(resumeUrl), '_blank', 'noopener,noreferrer')}
+              className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              <Eye className="w-4 h-4" /> View Resume
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadResume(resumeUrl, candidateName, resumeFilename)}
+              className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              <Download className="w-4 h-4" /> Download Resume
+            </button>
+          </>
+        )}
+        {onPickFile && (
+          <>
+            <input
+              ref={inputRef} type="file" className="hidden"
+              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={handlePick}
+            />
+            <button
+              type="button" onClick={() => inputRef.current?.click()}
+              className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+            >
+              <Upload className="w-4 h-4" /> {resumeUrl ? 'Replace Resume' : 'Upload Resume'}
+            </button>
+          </>
+        )}
+        {!resumeUrl && !pendingFile && <span className="text-sm text-gray-400">No resume uploaded.</span>}
+      </div>
+      {pendingFile && (
+        <p className="text-xs text-gray-500 mt-1">Selected: {pendingFile.name} — uploads when you save.</p>
       )}
+      {onPickFile && <p className="text-xs text-gray-400 mt-1">PDF, DOC or DOCX · max 10 MB</p>}
     </div>
   )
 }
@@ -136,7 +185,7 @@ function ResumeActions({ resumeUrl, candidateName }) {
  * `isEdit` marks Source read-only, since the update API intentionally does not
  * accept a source change.
  */
-function CandidateFields({ form, setForm, isEdit }) {
+function CandidateFields({ form, setForm, isEdit, resumeFile, setResumeFile }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -193,7 +242,13 @@ function CandidateFields({ form, setForm, isEdit }) {
         <input className="input w-full mt-1" value={form.skills} onChange={e => set('skills', e.target.value)} placeholder="React, Node.js, SQL" />
       </div>
       <div className="sm:col-span-2">
-        <ResumeActions resumeUrl={form.resume_url} candidateName={form.full_name} />
+        <ResumeActions
+          resumeUrl={form.resume_url}
+          resumeFilename={form.resume_filename}
+          candidateName={form.full_name}
+          onPickFile={setResumeFile}
+          pendingFile={resumeFile}
+        />
       </div>
       <div className="sm:col-span-2">
         <label className="text-sm font-medium text-gray-700">Remarks</label>
@@ -218,6 +273,9 @@ export default function HRCandidates() {
   const [editModal, setEditModal]         = useState(null)   // candidate being edited
   const [editForm, setEditForm]           = useState(candidateFormFrom())
   const [editSaving, setEditSaving]       = useState(false)
+  // Resume chosen in the form but not yet uploaded (Add uploads after create).
+  const [addResumeFile, setAddResumeFile]   = useState(null)
+  const [editResumeFile, setEditResumeFile] = useState(null)
   const [viewModal, setViewModal]         = useState(null)   // candidate being viewed
   const [timelineModal, setTimelineModal] = useState(null)   // candidate whose timeline is open
   const [timeline, setTimeline]           = useState({ loading: false, events: [] })
@@ -234,7 +292,7 @@ export default function HRCandidates() {
 
   useEffect(() => { load() }, [page, stage])
 
-  const openAdd = () => { setForm(candidateFormFrom()); setShowForm(true) }
+  const openAdd = () => { setForm(candidateFormFrom()); setAddResumeFile(null); setShowForm(true) }
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -242,11 +300,22 @@ export default function HRCandidates() {
     try {
       // Same field set as Edit; `source` is create-only (the update API does
       // not accept it), and resume_url is carried through untouched.
-      await hrmService.createHiringCandidate({
+      const res = await hrmService.createHiringCandidate({
         ...candidatePayload(form),
         source: form.source || 'direct',
       })
+      // The resume endpoint attaches to an existing record, so upload once the
+      // candidate exists — same flow the public apply form uses.
+      const newId = res.data?.id
+      if (addResumeFile && newId) {
+        try {
+          await hrmService.uploadHiringCandidateResume(newId, addResumeFile)
+        } catch (upErr) {
+          toast.error(upErr?.response?.data?.detail || 'Candidate saved, but the resume upload failed.')
+        }
+      }
       toast.success('Candidate added')
+      setAddResumeFile(null)
       setShowForm(false); load()
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to add candidate')
@@ -255,14 +324,22 @@ export default function HRCandidates() {
   }
 
   // ── Edit (Section 1) ────────────────────────────────────────────────────────
-  const openEdit = (c) => { setEditForm(candidateFormFrom(c)); setEditModal(c) }
+  const openEdit = (c) => { setEditForm(candidateFormFrom(c)); setEditResumeFile(null); setEditModal(c) }
 
   const handleEditSave = async (e) => {
     e.preventDefault()
     setEditSaving(true)
     try {
       await hrmService.updateHiringCandidate(editModal.id, candidatePayload(editForm))
+      if (editResumeFile) {
+        try {
+          await hrmService.uploadHiringCandidateResume(editModal.id, editResumeFile)
+        } catch (upErr) {
+          toast.error(upErr?.response?.data?.detail || 'Candidate saved, but the resume upload failed.')
+        }
+      }
       toast.success('Candidate updated')
+      setEditResumeFile(null)
       setEditModal(null); load()
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to update candidate')
@@ -348,7 +425,7 @@ export default function HRCandidates() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
           <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-2xl space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold">Add Candidate</h2>
-            <CandidateFields form={form} setForm={setForm} isEdit={false} />
+            <CandidateFields form={form} setForm={setForm} isEdit={false} resumeFile={addResumeFile} setResumeFile={setAddResumeFile} />
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setShowForm(false)} className="btn-secondary">Cancel</button>
               <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Adding…' : 'Add Candidate'}</button>
@@ -362,7 +439,7 @@ export default function HRCandidates() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
           <form onSubmit={handleEditSave} className="bg-white rounded-xl p-6 w-full max-w-2xl space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold">Edit Candidate</h2>
-            <CandidateFields form={editForm} setForm={setEditForm} isEdit />
+            <CandidateFields form={editForm} setForm={setEditForm} isEdit resumeFile={editResumeFile} setResumeFile={setEditResumeFile} />
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setEditModal(null)} className="btn-secondary">Cancel</button>
               <button type="submit" disabled={editSaving} className="btn-primary">{editSaving ? 'Saving…' : 'Update Candidate'}</button>
@@ -404,7 +481,7 @@ export default function HRCandidates() {
                 </div>
                 {viewModal.resume_url && (
                   <div className="col-span-2">
-                    <ResumeActions resumeUrl={viewModal.resume_url} candidateName={viewModal.full_name} />
+                    <ResumeActions resumeUrl={viewModal.resume_url} resumeFilename={viewModal.resume_filename} candidateName={viewModal.full_name} />
                   </div>
                 )}
                 {viewModal.notes && (

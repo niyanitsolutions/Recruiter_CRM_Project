@@ -535,19 +535,12 @@ async def submit_public_job_application(slug: str, data: dict):
     }
 
 
-@public_router.post("/apply/{slug}/resume")
-async def upload_public_resume(slug: str, candidate_id: str, file: UploadFile = File(...)):
-    """Public — no auth. Attach a resume to the applicant just created via
-    the public submit above (mirrors public_forms.py's resume upload step)."""
-    from app.core.database import DatabaseManager
+async def _store_candidate_resume(cdb, company_id: str, candidate_id: str, file: UploadFile) -> dict:
+    """Single implementation of HRM hiring resume storage — shared by the public
+    apply flow and the authenticated Add/Edit Candidate flow. Same validation,
+    same directory, same URL shape, so there is only one upload implementation.
+    Also records the original filename so downloads can restore it."""
     from datetime import datetime, timezone
-
-    job_meta = await HRMHiringService(None).get_public_job_by_slug(slug)
-    company_id = job_meta["company_id"]
-    cdb = DatabaseManager.get_company_db(company_id)
-    candidate = await cdb["hrm_candidates"].find_one({"_id": candidate_id, "company_id": company_id})
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found.")
 
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in {".pdf", ".doc", ".docx"}:
@@ -567,6 +560,44 @@ async def upload_public_resume(slug: str, candidate_id: str, file: UploadFile = 
     resume_url = f"/uploads/{company_id}/hrm_hiring_resumes/{safe_name}"
     await cdb["hrm_candidates"].update_one(
         {"_id": candidate_id},
-        {"$set": {"resume_url": resume_url, "updated_at": datetime.now(timezone.utc)}},
+        {"$set": {
+            "resume_url": resume_url,
+            "resume_filename": os.path.basename(file.filename or "") or None,
+            "updated_at": datetime.now(timezone.utc),
+        }},
     )
-    return {"success": True, "resume_url": resume_url}
+    return {"resume_url": resume_url, "resume_filename": os.path.basename(file.filename or "") or None}
+
+
+@router.post("/candidates/{cand_id}/resume")
+async def upload_candidate_resume(
+    cand_id: str,
+    file: UploadFile = File(...),
+    cu: dict = Depends(require_hrm_module),
+    db=Depends(get_company_db),
+    _perm=Depends(require_any_permission([["hrm:hiring:manage"], ["hrm:hiring:create"], ["hrm:hiring:edit"]])),
+):
+    """Attach/replace a resume on an existing applicant (Add / Edit Candidate).
+    Reuses the same storage helper as the public apply flow."""
+    candidate = await db["hrm_candidates"].find_one({"_id": cand_id, "company_id": cu["company_id"]})
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+    stored = await _store_candidate_resume(db, cu["company_id"], cand_id, file)
+    return {"success": True, **stored}
+
+
+@public_router.post("/apply/{slug}/resume")
+async def upload_public_resume(slug: str, candidate_id: str, file: UploadFile = File(...)):
+    """Public — no auth. Attach a resume to the applicant just created via
+    the public submit above (mirrors public_forms.py's resume upload step)."""
+    from app.core.database import DatabaseManager
+
+    job_meta = await HRMHiringService(None).get_public_job_by_slug(slug)
+    company_id = job_meta["company_id"]
+    cdb = DatabaseManager.get_company_db(company_id)
+    candidate = await cdb["hrm_candidates"].find_one({"_id": candidate_id, "company_id": company_id})
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found.")
+
+    stored = await _store_candidate_resume(cdb, company_id, candidate_id, file)
+    return {"success": True, **stored}

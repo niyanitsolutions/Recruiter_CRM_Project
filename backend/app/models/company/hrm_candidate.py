@@ -46,6 +46,9 @@ class HRMCandidateModel(BaseModel):
     source: HRMCandidateSource = HRMCandidateSource.DIRECT
     referral_by: Optional[str] = None
     resume_url: Optional[str] = None
+    # Original uploaded filename, so downloads can restore it. Optional — older
+    # records predate it and fall back to a generated name.
+    resume_filename: Optional[str] = None
 
     current_stage: HiringStage = HiringStage.APPLIED
     stage_history: List[dict] = Field(default_factory=list)

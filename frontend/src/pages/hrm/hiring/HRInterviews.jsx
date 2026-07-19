@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import toast from 'react-hot-toast'
-import { Plus, Calendar, History, X } from 'lucide-react'
+import { Plus, Calendar, History, X, CalendarPlus, FileText } from 'lucide-react'
 import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
 import TableScroll from '../../../components/common/TableScroll'
@@ -160,6 +160,7 @@ export default function HRInterviews() {
   const [editForm, setEditForm] = useState(emptyEditForm())
   const [passPrompt, setPassPrompt] = useState(null) // { candidateId, candidateName, nextRound }
   const [historyGroup, setHistoryGroup] = useState(null)
+  const [feedbackViewModal, setFeedbackViewModal] = useState(null) // recorded feedback (read-only)
   const [candidateOptions, setCandidateOptions] = useState([])
   const [candLoading, setCandLoading] = useState(false)
   // Job-first flow support: the list of open jobs for the Job picker and the
@@ -860,6 +861,58 @@ export default function HRInterviews() {
         </div>
       </ModalPortal>
 
+      {/* Interview Feedback — recorded feedback for the latest round (read-only) */}
+      <ModalPortal isOpen={!!feedbackViewModal}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Interview Feedback — {feedbackViewModal?.candidate_name}</h2>
+              <button onClick={() => setFeedbackViewModal(null)} className="p-1 text-gray-400 hover:text-gray-600" aria-label="Close">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {feedbackViewModal && (
+              <div className="border border-gray-200 rounded-lg p-3 text-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-gray-900">
+                    Round {feedbackViewModal.round_number} — {feedbackViewModal.round_name}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${RESULT_COLORS[feedbackViewModal.result] || ''}`}>
+                    {RESULT_LABELS[feedbackViewModal.result] || feedbackViewModal.result}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-500 text-xs">
+                  <p>Interviewer: <span className="text-gray-700">{feedbackViewModal.interviewer_name || '—'}</span></p>
+                  <p>Scheduled Time: <span className="text-gray-700">{fmtFull(feedbackViewModal.scheduled_at)}</span></p>
+                  <p>Completed Time: <span className="text-gray-700">{fmtFull(feedbackViewModal.completed_at)}</span></p>
+                  {feedbackViewModal.rejection_reason && (
+                    <p>Reject Reason: <span className="text-gray-700">{feedbackViewModal.rejection_reason}</span></p>
+                  )}
+                </div>
+                {(feedbackViewModal.technical_rating != null || feedbackViewModal.communication_rating != null
+                  || feedbackViewModal.problem_solving_rating != null || feedbackViewModal.behaviour_rating != null
+                  || feedbackViewModal.rating != null) && (
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-gray-500 text-xs mt-2">
+                    {feedbackViewModal.technical_rating != null && <p>Technical: <span className="text-gray-700">{feedbackViewModal.technical_rating}/5</span></p>}
+                    {feedbackViewModal.communication_rating != null && <p>Communication: <span className="text-gray-700">{feedbackViewModal.communication_rating}/5</span></p>}
+                    {feedbackViewModal.problem_solving_rating != null && <p>Problem Solving: <span className="text-gray-700">{feedbackViewModal.problem_solving_rating}/5</span></p>}
+                    {feedbackViewModal.behaviour_rating != null && <p>Behaviour: <span className="text-gray-700">{feedbackViewModal.behaviour_rating}/5</span></p>}
+                    {feedbackViewModal.rating != null && <p className="font-medium">Overall: <span className="text-gray-700">{feedbackViewModal.rating}/5</span></p>}
+                  </div>
+                )}
+                {feedbackViewModal.strengths && (
+                  <p className="mt-2 text-xs text-gray-600"><span className="text-gray-400">Strengths:</span> {feedbackViewModal.strengths}</p>
+                )}
+                {feedbackViewModal.weaknesses && (
+                  <p className="mt-1 text-xs text-gray-600"><span className="text-gray-400">Areas to improve:</span> {feedbackViewModal.weaknesses}</p>
+                )}
+                {feedbackViewModal.feedback && <p className="mt-2 text-xs text-gray-600">{feedbackViewModal.feedback}</p>}
+              </div>
+            )}
+          </div>
+        </div>
+      </ModalPortal>
+
       <div className="rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
         <TableScroll>
         <table className="w-full text-sm">
@@ -885,6 +938,15 @@ export default function HRInterviews() {
               const status = overallStatus(g, totalRounds)
               const roundNames = roundNamesFor(g)
               const isPending = g.current.result === 'pending'
+              // A completed round is resumable when the candidate passed and the
+              // configured pipeline still has a round left. This is what makes
+              // "Later" on the pass prompt safe — the next round stays reachable
+              // from the actions menu instead of being lost.
+              const canScheduleNext = !isPending
+                && g.current.result === 'passed'
+                && g.current.round_number < roundNames.length
+              // Feedback already recorded on the latest round (view-only).
+              const hasFeedback = !isPending && !!g.current.result && g.current.result !== 'cancelled'
               return (
                 <tr key={g.candidate_id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900 align-top">{g.candidate_name}</td>
@@ -906,6 +968,23 @@ export default function HRInterviews() {
                               <ActionMenuItem label="Reschedule Interview" onClick={() => { openEdit(g.current, 'reschedule'); close() }} />
                               <ActionMenuItem divider />
                               <ActionMenuItem label="Cancel Interview" danger onClick={() => { handleCancelInterview(g.current); close() }} />
+                            </>
+                          )}
+                          {!isPending && (hasFeedback || canScheduleNext) && (
+                            <>
+                              <ActionMenuItem divider />
+                              {canScheduleNext && (
+                                <ActionMenuItem
+                                  label="Schedule Next Round" icon={CalendarPlus}
+                                  onClick={() => { openFormForCandidate(g.candidate_id, g.candidate_name); close() }}
+                                />
+                              )}
+                              {hasFeedback && (
+                                <ActionMenuItem
+                                  label="Interview Feedback" icon={FileText}
+                                  onClick={() => { setFeedbackViewModal(g.current); close() }}
+                                />
+                              )}
                             </>
                           )}
                         </>
