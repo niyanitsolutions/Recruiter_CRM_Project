@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Users, Eye, Edit, CalendarPlus, XCircle, LogOut, Clock } from 'lucide-react'
+import { Plus, Users, Eye, Edit, CalendarPlus, XCircle, LogOut, Clock, Download } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
@@ -21,23 +21,187 @@ const STAGE_COLORS = {
 // Stages past which a candidate can no longer be rejected/withdrawn by HR.
 const TERMINAL_STAGES = new Set(['hired', 'rejected', 'withdrawn'])
 
-// Build the edit-form state from a candidate record. Numbers are kept as
-// strings for controlled inputs; skills join to a comma list.
-const editFormFrom = (c) => ({
+const SOURCES = ['direct', 'referral', 'job_portal', 'linkedin', 'campus', 'agency', 'other']
+
+// Shared payload builder for both Add and Edit — identical field handling, so
+// the two flows can't diverge. Empty values are omitted (the API $sets only
+// what's sent); numbers are parsed; skills split to a list. `source` is added
+// by the create path only, since the update API doesn't accept it.
+const candidatePayload = (f) => {
+  const num = (v) => (v === '' || v === null || v === undefined ? undefined : Number(v))
+  return {
+    full_name:              f.full_name.trim() || undefined,
+    email:                  f.email.trim() || undefined,
+    phone:                  f.phone.trim() || undefined,
+    current_company:        f.current_company.trim() || undefined,
+    current_designation:    f.current_designation.trim() || undefined,
+    total_experience_years: num(f.total_experience_years),
+    notice_period_days:     num(f.notice_period_days),
+    current_salary:         num(f.current_salary),
+    expected_salary:        num(f.expected_salary),
+    location:               f.location.trim() || undefined,
+    skills:                 f.skills.trim()
+      ? f.skills.split(',').map(s => s.trim()).filter(Boolean)
+      : undefined,
+    notes:                  f.notes.trim() || undefined,
+    resume_url:             f.resume_url.trim() || undefined,
+  }
+}
+
+// One form shape for BOTH Add and Edit so the two can never drift apart.
+// Numbers are kept as strings for controlled inputs; skills join to a comma
+// list. resume_url is carried through untouched (never edited as raw text).
+const candidateFormFrom = (c = {}) => ({
   full_name:              c.full_name || '',
   email:                  c.email || '',
   phone:                  c.phone || '',
   current_company:        c.current_company || '',
   current_designation:    c.current_designation || '',
   total_experience_years: c.total_experience_years ?? '',
-  skills:                 Array.isArray(c.skills) ? c.skills.join(', ') : '',
-  resume_url:             c.resume_url || '',
+  notice_period_days:     c.notice_period_days ?? '',
   current_salary:         c.current_salary ?? '',
   expected_salary:        c.expected_salary ?? '',
-  notice_period_days:     c.notice_period_days ?? '',
   location:               c.location || '',
+  source:                 c.source || 'direct',
+  skills:                 Array.isArray(c.skills) ? c.skills.join(', ') : '',
   notes:                  c.notes || '',
+  resume_url:             c.resume_url || '',
 })
+
+// Resolve a stored path (relative or absolute) to a full URL. In dev, Vite
+// proxies /uploads → backend, so a relative path just works.
+const resolveFileUrl = (path) => {
+  if (!path) return ''
+  if (path.startsWith('http')) return path
+  const base = (import.meta.env.VITE_API_URL || '').replace(/\/api\/v1\/?$/, '')
+  return `${base}${path}`
+}
+
+// Download the original uploaded file, falling back to opening it in a tab.
+// The storage path is never shown to the user.
+const downloadResume = async (resumeUrl, candidateName = 'Candidate') => {
+  const full = resolveFileUrl(resumeUrl)
+  if (!full) return
+  const ext = (resumeUrl.split('.').pop() || 'pdf').toLowerCase()
+  const filename = `${candidateName.replace(/\s+/g, '_')}_Resume.${ext}`
+  try {
+    const resp = await fetch(full)
+    if (!resp.ok) throw new Error()
+    const blob = await resp.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = objectUrl
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(objectUrl)
+  } catch {
+    window.open(full, '_blank', 'noopener,noreferrer')
+  }
+}
+
+// Resume block — View / Download actions in place of the raw storage path.
+function ResumeActions({ resumeUrl, candidateName }) {
+  return (
+    <div>
+      <label className="text-sm font-medium text-gray-700">Resume</label>
+      {resumeUrl ? (
+        <div className="flex flex-wrap gap-2 mt-1">
+          <button
+            type="button"
+            onClick={() => window.open(resolveFileUrl(resumeUrl), '_blank', 'noopener,noreferrer')}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+          >
+            <Eye className="w-4 h-4" /> View Resume
+          </button>
+          <button
+            type="button"
+            onClick={() => downloadResume(resumeUrl, candidateName)}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+          >
+            <Download className="w-4 h-4" /> Download Resume
+          </button>
+        </div>
+      ) : (
+        <p className="text-sm text-gray-400 mt-1">No resume uploaded.</p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The single set of candidate fields shared by Add and Edit. Only the action
+ * differs (Add Candidate / Update Candidate) — the field structure is identical.
+ * `isEdit` marks Source read-only, since the update API intentionally does not
+ * accept a source change.
+ */
+function CandidateFields({ form, setForm, isEdit }) {
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="sm:col-span-2">
+        <label className="text-sm font-medium text-gray-700">Full Name <span className="text-red-500">*</span></label>
+        <input className="input w-full mt-1" value={form.full_name} onChange={e => set('full_name', e.target.value)} required />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-700">Email <span className="text-red-500">*</span></label>
+        <input type="email" className="input w-full mt-1" value={form.email} onChange={e => set('email', e.target.value)} required />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-700">Mobile <span className="text-red-500">*</span></label>
+        <input className="input w-full mt-1" value={form.phone} onChange={e => set('phone', e.target.value)} required />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-700">Current Company</label>
+        <input className="input w-full mt-1" value={form.current_company} onChange={e => set('current_company', e.target.value)} />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-700">Current Designation</label>
+        <input className="input w-full mt-1" value={form.current_designation} onChange={e => set('current_designation', e.target.value)} />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-700">Experience (years)</label>
+        <input type="number" step="0.5" min="0" className="input w-full mt-1" value={form.total_experience_years} onChange={e => set('total_experience_years', e.target.value)} />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-700">Notice Period (days)</label>
+        <input type="number" min="0" className="input w-full mt-1" value={form.notice_period_days} onChange={e => set('notice_period_days', e.target.value)} />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-700">Current Salary</label>
+        <input type="number" min="0" className="input w-full mt-1" value={form.current_salary} onChange={e => set('current_salary', e.target.value)} />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-700">Expected Salary</label>
+        <input type="number" min="0" className="input w-full mt-1" value={form.expected_salary} onChange={e => set('expected_salary', e.target.value)} />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-700">Location</label>
+        <input className="input w-full mt-1" value={form.location} onChange={e => set('location', e.target.value)} />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-gray-700">Source</label>
+        <select className="input w-full mt-1" value={form.source} disabled={isEdit}
+          onChange={e => set('source', e.target.value)}>
+          {SOURCES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+        </select>
+        {isEdit && <p className="text-xs text-gray-400 mt-1">Source is set when the candidate is created.</p>}
+      </div>
+      <div className="sm:col-span-2">
+        <label className="text-sm font-medium text-gray-700">Skills (comma separated)</label>
+        <input className="input w-full mt-1" value={form.skills} onChange={e => set('skills', e.target.value)} placeholder="React, Node.js, SQL" />
+      </div>
+      <div className="sm:col-span-2">
+        <ResumeActions resumeUrl={form.resume_url} candidateName={form.full_name} />
+      </div>
+      <div className="sm:col-span-2">
+        <label className="text-sm font-medium text-gray-700">Remarks</label>
+        <textarea className="input w-full mt-1" rows={2} value={form.notes} onChange={e => set('notes', e.target.value)} />
+      </div>
+    </div>
+  )
+}
 
 export default function HRCandidates() {
   const navigate = useNavigate()
@@ -48,11 +212,11 @@ export default function HRCandidates() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving]   = useState(false)
-  const [form, setForm] = useState({ full_name: '', email: '', phone: '', current_designation: '', total_experience_years: '', source: 'direct' })
+  const [form, setForm] = useState(candidateFormFrom())
 
   // ── Section 1: applicant actions state ──────────────────────────────────────
   const [editModal, setEditModal]         = useState(null)   // candidate being edited
-  const [editForm, setEditForm]           = useState(editFormFrom({}))
+  const [editForm, setEditForm]           = useState(candidateFormFrom())
   const [editSaving, setEditSaving]       = useState(false)
   const [viewModal, setViewModal]         = useState(null)   // candidate being viewed
   const [timelineModal, setTimelineModal] = useState(null)   // candidate whose timeline is open
@@ -70,44 +234,34 @@ export default function HRCandidates() {
 
   useEffect(() => { load() }, [page, stage])
 
+  const openAdd = () => { setForm(candidateFormFrom()); setShowForm(true) }
+
   const handleCreate = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
-      const payload = { ...form, total_experience_years: form.total_experience_years ? Number(form.total_experience_years) : undefined }
-      await hrmService.createHiringCandidate(payload)
+      // Same field set as Edit; `source` is create-only (the update API does
+      // not accept it), and resume_url is carried through untouched.
+      await hrmService.createHiringCandidate({
+        ...candidatePayload(form),
+        source: form.source || 'direct',
+      })
+      toast.success('Candidate added')
       setShowForm(false); load()
-    } catch {}
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to add candidate')
+    }
     setSaving(false)
   }
 
   // ── Edit (Section 1) ────────────────────────────────────────────────────────
-  const openEdit = (c) => { setEditForm(editFormFrom(c)); setEditModal(c) }
+  const openEdit = (c) => { setEditForm(candidateFormFrom(c)); setEditModal(c) }
 
   const handleEditSave = async (e) => {
     e.preventDefault()
     setEditSaving(true)
     try {
-      // Only send fields that changed to something non-empty; numbers parsed.
-      const num = (v) => (v === '' || v === null || v === undefined ? undefined : Number(v))
-      const payload = {
-        full_name:              editForm.full_name.trim() || undefined,
-        email:                  editForm.email.trim() || undefined,
-        phone:                  editForm.phone.trim() || undefined,
-        current_company:        editForm.current_company.trim() || undefined,
-        current_designation:    editForm.current_designation.trim() || undefined,
-        total_experience_years: num(editForm.total_experience_years),
-        skills:                 editForm.skills.trim()
-          ? editForm.skills.split(',').map(s => s.trim()).filter(Boolean)
-          : undefined,
-        resume_url:             editForm.resume_url.trim() || undefined,
-        current_salary:         num(editForm.current_salary),
-        expected_salary:        num(editForm.expected_salary),
-        notice_period_days:     num(editForm.notice_period_days),
-        location:               editForm.location.trim() || undefined,
-        notes:                  editForm.notes.trim() || undefined,
-      }
-      await hrmService.updateHiringCandidate(editModal.id, payload)
+      await hrmService.updateHiringCandidate(editModal.id, candidatePayload(editForm))
       toast.success('Candidate updated')
       setEditModal(null); load()
     } catch (err) {
@@ -175,7 +329,7 @@ export default function HRCandidates() {
           <h1 className="text-2xl font-bold text-gray-900">Candidates</h1>
           <p className="text-sm text-gray-500">{total} in pipeline</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-2 text-sm">
+        <button onClick={openAdd} className="btn-primary flex items-center gap-2 text-sm">
           <Plus className="w-4 h-4" /> Add Candidate
         </button>
       </div>
@@ -189,107 +343,29 @@ export default function HRCandidates() {
         ))}
       </div>
 
-      {/* Add Candidate modal (unchanged) */}
+      {/* Add Candidate — same fields as Edit (shared CandidateFields) */}
       <ModalPortal isOpen={showForm}>
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
-          <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-md space-y-4 shadow-xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+          <form onSubmit={handleCreate} className="bg-white rounded-xl p-6 w-full max-w-2xl space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold">Add Candidate</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-700">Full Name *</label>
-                <input className="input w-full mt-1" value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} required />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Email *</label>
-                <input type="email" className="input w-full mt-1" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Phone *</label>
-                <input className="input w-full mt-1" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} required />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Current Designation</label>
-                <input className="input w-full mt-1" value={form.current_designation} onChange={e => setForm(f => ({ ...f, current_designation: e.target.value }))} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Experience (years)</label>
-                <input type="number" step="0.5" className="input w-full mt-1" value={form.total_experience_years} onChange={e => setForm(f => ({ ...f, total_experience_years: e.target.value }))} />
-              </div>
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-700">Source</label>
-                <select className="input w-full mt-1" value={form.source} onChange={e => setForm(f => ({ ...f, source: e.target.value }))}>
-                  {['direct','referral','job_portal','linkedin','campus','agency','other'].map(s => (
-                    <option key={s} value={s}>{s.replace('_', ' ')}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <CandidateFields form={form} setForm={setForm} isEdit={false} />
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setShowForm(false)} className="btn-secondary">Cancel</button>
-              <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Adding…' : 'Add'}</button>
+              <button type="submit" disabled={saving} className="btn-primary">{saving ? 'Adding…' : 'Add Candidate'}</button>
             </div>
           </form>
         </div>
       </ModalPortal>
 
-      {/* Edit Candidate modal (Section 1) */}
+      {/* Edit Candidate — identical field structure, different action */}
       <ModalPortal isOpen={!!editModal}>
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
           <form onSubmit={handleEditSave} className="bg-white rounded-xl p-6 w-full max-w-2xl space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold">Edit Candidate</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-700">Full Name</label>
-                <input className="input w-full mt-1" value={editForm.full_name} onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Email</label>
-                <input type="email" className="input w-full mt-1" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Mobile</label>
-                <input className="input w-full mt-1" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Current Company</label>
-                <input className="input w-full mt-1" value={editForm.current_company} onChange={e => setEditForm(f => ({ ...f, current_company: e.target.value }))} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Current Designation</label>
-                <input className="input w-full mt-1" value={editForm.current_designation} onChange={e => setEditForm(f => ({ ...f, current_designation: e.target.value }))} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Experience (years)</label>
-                <input type="number" step="0.5" className="input w-full mt-1" value={editForm.total_experience_years} onChange={e => setEditForm(f => ({ ...f, total_experience_years: e.target.value }))} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Notice Period (days)</label>
-                <input type="number" className="input w-full mt-1" value={editForm.notice_period_days} onChange={e => setEditForm(f => ({ ...f, notice_period_days: e.target.value }))} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Current Salary</label>
-                <input type="number" className="input w-full mt-1" value={editForm.current_salary} onChange={e => setEditForm(f => ({ ...f, current_salary: e.target.value }))} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Expected Salary</label>
-                <input type="number" className="input w-full mt-1" value={editForm.expected_salary} onChange={e => setEditForm(f => ({ ...f, expected_salary: e.target.value }))} />
-              </div>
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-700">Skills (comma separated)</label>
-                <input className="input w-full mt-1" value={editForm.skills} onChange={e => setEditForm(f => ({ ...f, skills: e.target.value }))} placeholder="React, Node.js, SQL" />
-              </div>
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-700">Resume URL</label>
-                <input className="input w-full mt-1" value={editForm.resume_url} onChange={e => setEditForm(f => ({ ...f, resume_url: e.target.value }))} placeholder="/api/v1/uploads/resumes/…" />
-              </div>
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-700">Remarks</label>
-                <textarea className="input w-full mt-1" rows={2} value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
-              </div>
-            </div>
+            <CandidateFields form={editForm} setForm={setEditForm} isEdit />
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setEditModal(null)} className="btn-secondary">Cancel</button>
-              <button type="submit" disabled={editSaving} className="btn-primary">{editSaving ? 'Saving…' : 'Save'}</button>
+              <button type="submit" disabled={editSaving} className="btn-primary">{editSaving ? 'Saving…' : 'Update Candidate'}</button>
             </div>
           </form>
         </div>
@@ -328,8 +404,7 @@ export default function HRCandidates() {
                 </div>
                 {viewModal.resume_url && (
                   <div className="col-span-2">
-                    <div className="text-xs text-gray-400">Resume</div>
-                    <a href={viewModal.resume_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all">{viewModal.resume_url}</a>
+                    <ResumeActions resumeUrl={viewModal.resume_url} candidateName={viewModal.full_name} />
                   </div>
                 )}
                 {viewModal.notes && (

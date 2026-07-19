@@ -166,6 +166,7 @@ export default function HRInterviews() {
   // list of Active Employees for the interviewer picker (loaded on modal open).
   const [jobOptions, setJobOptions] = useState([])
   const [activeEmployees, setActiveEmployees] = useState([])
+  const [refLoading, setRefLoading] = useState(false)
   // candidate_id → their interview_pipeline ([{round_number, round_name}]) so
   // the progress timeline can show the full pipeline (snapshotted from the job).
   const [pipelineByCandidate, setPipelineByCandidate] = useState({})
@@ -194,22 +195,37 @@ export default function HRInterviews() {
   const groups = useMemo(() => groupByCandidate(interviews), [interviews])
 
   // Load the pickers a schedule modal needs: open jobs + active employees.
+  // The two are loaded independently on purpose — a failure fetching one must
+  // never leave the other silently empty (which reads as "nothing exists").
+  // page_size is capped at the API maximum (200); asking for more is a 422.
   const loadFormRefData = async () => {
-    try {
-      const [jobsRes, empRes] = await Promise.all([
-        hrmService.listJobs({ page: 1, page_size: 200 }),
-        hrmService.listEmployees({ page: 1, page_size: 500 }),
-      ])
-      setJobOptions((jobsRes.data.items || [])
+    setRefLoading(true)
+    const [jobsRes, empRes] = await Promise.allSettled([
+      hrmService.listJobs({ page: 1, page_size: 200 }),
+      hrmService.listEmployees({ page: 1, page_size: 200 }),
+    ])
+
+    if (jobsRes.status === 'fulfilled') {
+      setJobOptions((jobsRes.value.data.items || [])
         .filter(j => j.status === 'open')
         .map(j => ({ value: j.id, label: j.job_title, job: j })))
-      setActiveEmployees((empRes.data.items || [])
+    } else {
+      setJobOptions([])
+      toast.error('Could not load jobs. Please try again.')
+    }
+
+    if (empRes.status === 'fulfilled') {
+      setActiveEmployees((empRes.value.data.items || [])
         .filter(e => ACTIVE_EMP_STATUSES.has(e.employment_status))
         .map(e => ({
           id: e.id, name: e.full_name, email: e.email || '',
           designation: e.designation_name || '', department: e.department_name || '',
         })))
-    } catch {}
+    } else {
+      setActiveEmployees([])
+      toast.error('Could not load employees. Please try again.')
+    }
+    setRefLoading(false)
   }
 
   const openForm = async () => {
@@ -465,7 +481,9 @@ export default function HRInterviews() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm font-medium text-gray-700">Job <span className="text-red-500">*</span></label>
-                    {jobOptions.length === 0 ? (
+                    {refLoading ? (
+                      <p className="mt-1 text-sm text-gray-400 border border-gray-200 rounded-lg px-3 py-2 bg-gray-50">Loading jobs…</p>
+                    ) : jobOptions.length === 0 ? (
                       <p className="mt-1 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                         No active jobs available. Create a job first.
                       </p>
@@ -546,7 +564,9 @@ export default function HRInterviews() {
                     </div>
                   )}
                   <div className="mt-2 border border-gray-200 rounded-lg max-h-44 overflow-y-auto divide-y divide-gray-100">
-                    {activeEmployees.length === 0 ? (
+                    {refLoading ? (
+                      <p className="text-sm text-gray-400 px-3 py-2.5">Loading employees…</p>
+                    ) : activeEmployees.length === 0 ? (
                       <p className="text-sm text-gray-400 px-3 py-2.5">No active employees available.</p>
                     ) : activeEmployees.map(emp => {
                       const checked = form.interviewers.some(i => i.id === emp.id)
