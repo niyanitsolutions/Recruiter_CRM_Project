@@ -151,7 +151,7 @@ async def global_search(db: AsyncIOMotorDatabase, current_user: dict, query: str
     if has("hrm:employees:view"):
         base = {"is_deleted": False}
         base["$or"] = [{"full_name": pattern}, {"employee_code": pattern}, {"email": pattern}]
-        await add("employee", "full_name", db.employees, base, "full_name", ["employee_code", "email"],
+        await add("employee", "full_name", db.hrm_employees, base, "full_name", ["employee_code", "email"],
                    lambda d: {"id": d["_id"], "label": d.get("full_name"), "sub": d.get("employee_code") or "",
                               "path": f"/hrm/employees/{d['_id']}"})
 

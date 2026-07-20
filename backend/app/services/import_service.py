@@ -23,8 +23,11 @@ class ImportService:
     
     def __init__(self, db):
         self.db = db
-        self.import_jobs = db.import_jobs
-        self.import_templates = db.import_templates
+        # data_jobs holds import jobs (kind="import"), export jobs
+        # (kind="export", ExportService) and import templates
+        # (kind="import_template").
+        self.import_jobs = db.data_jobs
+        self.import_templates = db.data_jobs
     
     # ============== Template Management ==============
     
@@ -35,6 +38,7 @@ class ImportService:
     ) -> TemplateListResponse:
         """Get import templates"""
         query = {
+            "kind": "import_template",
             "$or": [
                 {"company_id": company_id},
                 {"is_system": True}
@@ -330,6 +334,7 @@ class ImportService:
         """Start an import job"""
         job = {
             "id": str(ObjectId()),
+            "kind": "import",
             "company_id": company_id,
             "entity_type": data.entity_type.value,
             "file_name": data.file_name,
@@ -359,7 +364,7 @@ class ImportService:
         await self._process_import(job["id"], company_id, file_data, user_id)
         
         # Get updated job
-        updated_job = await self.import_jobs.find_one({"id": job["id"]})
+        updated_job = await self.import_jobs.find_one({"id": job["id"], "kind": "import"})
         
         response = ImportJobResponse(**updated_job)
         response.entity_type_display = IMPORT_EXPORT_TYPE_DISPLAY.get(
@@ -381,7 +386,7 @@ class ImportService:
         user_id: str
     ):
         """Process an import job"""
-        job = await self.import_jobs.find_one({"id": import_id})
+        job = await self.import_jobs.find_one({"id": import_id, "kind": "import"})
         if not job:
             return
         
@@ -617,6 +622,7 @@ class ImportService:
         """Get import job by ID"""
         job = await self.import_jobs.find_one({
             "id": import_id,
+            "kind": "import",
             "company_id": company_id,
             "is_deleted": False
         })
@@ -643,7 +649,7 @@ class ImportService:
         status: Optional[ImportStatus] = None
     ) -> ImportJobListResponse:
         """List import jobs"""
-        query = {"company_id": company_id, "is_deleted": False}
+        query = {"kind": "import", "company_id": company_id, "is_deleted": False}
         
         if entity_type:
             query["entity_type"] = entity_type.value

@@ -22,7 +22,9 @@ class AnalyticsService:
     
     def __init__(self, db):
         self.db = db
-        self.dashboard_layouts = db.dashboard_layouts
+        # Dashboard layouts are embedded on the user document at
+        # users.preferences.dashboard_layout (one layout per user — matches
+        # the old collection's find_one-per-user access pattern).
     
     # ============== Dashboard KPIs ==============
     
@@ -891,13 +893,13 @@ class AnalyticsService:
         company_id: str
     ) -> Optional[DashboardLayout]:
         """Get user's dashboard layout"""
-        layout = await self.dashboard_layouts.find_one({
-            "user_id": user_id,
-            "company_id": company_id,
-            "is_deleted": False
-        })
-        
-        if layout:
+        user_doc = await self.db.users.find_one(
+            {"$or": [{"_id": user_id}, {"id": user_id}]},
+            {"preferences.dashboard_layout": 1},
+        )
+        layout = ((user_doc or {}).get("preferences") or {}).get("dashboard_layout")
+
+        if layout and not layout.get("is_deleted"):
             return DashboardLayout(**layout)
         
         # Return default layout
@@ -933,7 +935,10 @@ class AnalyticsService:
             "is_deleted": False
         }
         
-        await self.dashboard_layouts.insert_one(layout_data)
+        await self.db.users.update_one(
+            {"$or": [{"_id": user_id}, {"id": user_id}]},
+            {"$set": {"preferences.dashboard_layout": layout_data}},
+        )
         return DashboardLayout(**layout_data)
     
     async def update_dashboard_layout(
@@ -952,13 +957,17 @@ class AnalyticsService:
         if name:
             update_data["name"] = name
         
-        result = await self.dashboard_layouts.find_one_and_update(
-            {"id": layout_id, "user_id": user_id, "company_id": company_id, "is_deleted": False},
-            {"$set": update_data},
+        sets = {f"preferences.dashboard_layout.{k}": v for k, v in update_data.items()}
+        result = await self.db.users.find_one_and_update(
+            {"$or": [{"_id": user_id}, {"id": user_id}],
+             "preferences.dashboard_layout.id": layout_id,
+             "preferences.dashboard_layout.is_deleted": False},
+            {"$set": sets},
             return_document=True
         )
-        
-        return DashboardLayout(**result) if result else None
+
+        layout = ((result or {}).get("preferences") or {}).get("dashboard_layout")
+        return DashboardLayout(**layout) if layout else None
     
     # ============== Helper Methods ==============
     

@@ -518,11 +518,13 @@ class EmployeeService:
                 pass
 
         # ── 4. Invalidate/remove onboarding link tokens for this employee ──
-        for col_name in ("employee_onboarding_tokens", "hrm_doc_upload_tokens"):
-            try:
-                await self.db[col_name].delete_many({"employee_id": employee_id})
-            except Exception:
-                pass
+        try:
+            await self.db.tokens.delete_many({
+                "employee_id": employee_id,
+                "token_type": {"$in": ["employee_onboarding", "doc_upload"]},
+            })
+        except Exception:
+            pass
 
         # ── 5. Soft-delete generated documents (Document Center) — matches
         # that module's existing single-document delete semantics. ─────────

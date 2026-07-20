@@ -533,7 +533,7 @@ async def _fetch_employee_fields(db: AsyncIOMotorDatabase, employee_id: str) -> 
     fields: Dict[str, str] = {}
     if not employee_id:
         return fields
-    emp = await db.employees.find_one({"_id": employee_id, "is_deleted": False})
+    emp = await db.hrm_employees.find_one({"_id": employee_id, "is_deleted": False})
     if not emp:
         return fields
     now = datetime.now(timezone.utc)
@@ -922,7 +922,7 @@ class DocumentCenterService:
         emp_name  = resolved.get("employee_name", "")
         emp_email = resolved.get("employee_email", "")
         if req.employee_id and not emp_name:
-            emp = await db.employees.find_one({"_id": req.employee_id}) or {}
+            emp = await db.hrm_employees.find_one({"_id": req.employee_id}) or {}
             emp_name  = emp.get("full_name", "")
             emp_email = emp.get("email", "")
 

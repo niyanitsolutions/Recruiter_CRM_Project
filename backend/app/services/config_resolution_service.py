@@ -392,8 +392,9 @@ async def get_smtp_status(company_id: str = "") -> dict:
         from app.core.database import get_company_db
         db = get_company_db(company_id)
 
-        # Primary: smtp_config collection (company_settings.py path)
-        sc = await db.smtp_config.find_one({"_id": "smtp"})
+        # Primary: company_settings.smtp subdocument (company_settings.py path)
+        _cs = await db.company_settings.find_one({}, {"smtp": 1})
+        sc = (_cs or {}).get("smtp")
         if sc and sc.get("is_active") and sc.get("is_verified"):
             tenant_active = True
             tenant_verified = True

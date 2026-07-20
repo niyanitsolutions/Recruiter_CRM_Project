@@ -113,7 +113,7 @@ async def list_teams(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    cursor = db.teams.find({"company_id": company_id, "is_deleted": {"$ne": True}})
+    cursor = db.catalogs.find({"kind": "team", "company_id": company_id, "is_deleted": {"$ne": True}})
     teams = [_doc_to_dict(t) async for t in cursor]
     return {"success": True, "data": teams}
 
@@ -132,8 +132,8 @@ async def create_team(
         "created_at": _now(),
         "updated_at": _now(),
     }
-    result = await db.teams.insert_one(doc)
-    created = await db.teams.find_one({"_id": result.inserted_id})
+    result = await db.catalogs.insert_one({**doc, "kind": "team"})
+    created = await db.catalogs.find_one({"_id": result.inserted_id})
     return {"success": True, "data": _doc_to_dict(created), "message": "Team created"}
 
 
@@ -147,13 +147,13 @@ async def update_team(
     company_id = current_user["company_id"]
     update = {k: v for k, v in data.model_dump().items() if v is not None}
     update["updated_at"] = _now()
-    result = await db.teams.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(team_id), "company_id": company_id},
         {"$set": update}
     )
     if result.matched_count == 0:
         raise HTTPException(404, "Team not found")
-    updated = await db.teams.find_one({"_id": ObjectId(team_id)})
+    updated = await db.catalogs.find_one({"_id": ObjectId(team_id)})
     return {"success": True, "data": _doc_to_dict(updated), "message": "Team updated"}
 
 
@@ -164,7 +164,7 @@ async def delete_team(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    result = await db.teams.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(team_id), "company_id": company_id},
         {"$set": {"is_deleted": True, "updated_at": _now()}}
     )
@@ -209,7 +209,7 @@ async def list_branches(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    cursor = db.branches.find({"company_id": company_id, "is_deleted": {"$ne": True}})
+    cursor = db.catalogs.find({"kind": "branch", "company_id": company_id, "is_deleted": {"$ne": True}})
     branches = [_doc_to_dict(b) async for b in cursor]
     return {"success": True, "data": branches}
 
@@ -223,8 +223,7 @@ async def create_branch(
     company_id = current_user["company_id"]
     # Ensure only one head office
     if data.is_head_office:
-        await db.branches.update_many(
-            {"company_id": company_id, "is_head_office": True},
+        await db.catalogs.update_many({"kind": "branch", "company_id": company_id, "is_head_office": True},
             {"$set": {"is_head_office": False}}
         )
     doc = {
@@ -234,8 +233,8 @@ async def create_branch(
         "created_at": _now(),
         "updated_at": _now(),
     }
-    result = await db.branches.insert_one(doc)
-    created = await db.branches.find_one({"_id": result.inserted_id})
+    result = await db.catalogs.insert_one({**doc, "kind": "branch"})
+    created = await db.catalogs.find_one({"_id": result.inserted_id})
     return {"success": True, "data": _doc_to_dict(created), "message": "Branch created"}
 
 
@@ -249,18 +248,17 @@ async def update_branch(
     company_id = current_user["company_id"]
     update = {k: v for k, v in data.model_dump().items() if v is not None}
     if data.is_head_office is True:
-        await db.branches.update_many(
-            {"company_id": company_id, "is_head_office": True},
+        await db.catalogs.update_many({"kind": "branch", "company_id": company_id, "is_head_office": True},
             {"$set": {"is_head_office": False}}
         )
     update["updated_at"] = _now()
-    result = await db.branches.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(branch_id), "company_id": company_id},
         {"$set": update}
     )
     if result.matched_count == 0:
         raise HTTPException(404, "Branch not found")
-    updated = await db.branches.find_one({"_id": ObjectId(branch_id)})
+    updated = await db.catalogs.find_one({"_id": ObjectId(branch_id)})
     return {"success": True, "data": _doc_to_dict(updated), "message": "Branch updated"}
 
 
@@ -271,7 +269,7 @@ async def delete_branch(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    result = await db.branches.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(branch_id), "company_id": company_id},
         {"$set": {"is_deleted": True, "updated_at": _now()}}
     )
@@ -312,8 +310,7 @@ async def list_pipeline_stages(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    cursor = db.pipeline_stages.find(
-        {"company_id": company_id, "is_deleted": {"$ne": True}},
+    cursor = db.catalogs.find({"kind": "pipeline_stage", "company_id": company_id, "is_deleted": {"$ne": True}},
         sort=[("order", 1)]
     )
     stages = [_doc_to_dict(s) async for s in cursor]
@@ -328,7 +325,7 @@ async def create_pipeline_stage(
 ):
     company_id = current_user["company_id"]
     # Auto-set order to last position if not specified
-    count = await db.pipeline_stages.count_documents({"company_id": company_id, "is_deleted": {"$ne": True}})
+    count = await db.catalogs.count_documents({"kind": "pipeline_stage", "company_id": company_id, "is_deleted": {"$ne": True}})
     doc = {
         **data.model_dump(),
         "order": data.order if data.order > 0 else count,
@@ -337,8 +334,8 @@ async def create_pipeline_stage(
         "created_at": _now(),
         "updated_at": _now(),
     }
-    result = await db.pipeline_stages.insert_one(doc)
-    created = await db.pipeline_stages.find_one({"_id": result.inserted_id})
+    result = await db.catalogs.insert_one({**doc, "kind": "pipeline_stage"})
+    created = await db.catalogs.find_one({"_id": result.inserted_id})
     return {"success": True, "data": _doc_to_dict(created), "message": "Pipeline stage created"}
 
 
@@ -350,7 +347,7 @@ async def reorder_pipeline_stages(
 ):
     company_id = current_user["company_id"]
     for idx, stage_id in enumerate(data.stage_ids):
-        await db.pipeline_stages.update_one(
+        await db.catalogs.update_one(
             {"_id": ObjectId(stage_id), "company_id": company_id},
             {"$set": {"order": idx, "updated_at": _now()}}
         )
@@ -367,13 +364,13 @@ async def update_pipeline_stage(
     company_id = current_user["company_id"]
     update = {k: v for k, v in data.model_dump().items() if v is not None}
     update["updated_at"] = _now()
-    result = await db.pipeline_stages.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(stage_id), "company_id": company_id},
         {"$set": update}
     )
     if result.matched_count == 0:
         raise HTTPException(404, "Stage not found")
-    updated = await db.pipeline_stages.find_one({"_id": ObjectId(stage_id)})
+    updated = await db.catalogs.find_one({"_id": ObjectId(stage_id)})
     return {"success": True, "data": _doc_to_dict(updated), "message": "Stage updated"}
 
 
@@ -384,7 +381,7 @@ async def delete_pipeline_stage(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    result = await db.pipeline_stages.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(stage_id), "company_id": company_id},
         {"$set": {"is_deleted": True, "updated_at": _now()}}
     )
@@ -431,7 +428,7 @@ async def list_job_categories(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    cursor = db.job_categories.find({"company_id": company_id, "is_deleted": {"$ne": True}})
+    cursor = db.catalogs.find({"kind": "job_category", "company_id": company_id, "is_deleted": {"$ne": True}})
     cats = [_doc_to_dict(c) async for c in cursor]
     return {"success": True, "data": cats}
 
@@ -445,8 +442,8 @@ async def create_job_category(
     company_id = current_user["company_id"]
     doc = {**data.model_dump(), "company_id": company_id, "created_by": current_user["id"],
            "created_at": _now(), "updated_at": _now()}
-    result = await db.job_categories.insert_one(doc)
-    created = await db.job_categories.find_one({"_id": result.inserted_id})
+    result = await db.catalogs.insert_one({**doc, "kind": "job_category"})
+    created = await db.catalogs.find_one({"_id": result.inserted_id})
     return {"success": True, "data": _doc_to_dict(created), "message": "Category created"}
 
 
@@ -460,12 +457,12 @@ async def update_job_category(
     company_id = current_user["company_id"]
     update = {k: v for k, v in data.model_dump().items() if v is not None}
     update["updated_at"] = _now()
-    result = await db.job_categories.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(cat_id), "company_id": company_id}, {"$set": update}
     )
     if result.matched_count == 0:
         raise HTTPException(404, "Category not found")
-    updated = await db.job_categories.find_one({"_id": ObjectId(cat_id)})
+    updated = await db.catalogs.find_one({"_id": ObjectId(cat_id)})
     return {"success": True, "data": _doc_to_dict(updated), "message": "Category updated"}
 
 
@@ -476,7 +473,7 @@ async def delete_job_category(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    result = await db.job_categories.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(cat_id), "company_id": company_id},
         {"$set": {"is_deleted": True, "updated_at": _now()}}
     )
@@ -491,7 +488,7 @@ async def list_skills(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    cursor = db.skills.find({"company_id": company_id, "is_deleted": {"$ne": True}})
+    cursor = db.catalogs.find({"kind": "skill", "company_id": company_id, "is_deleted": {"$ne": True}})
     skills = [_doc_to_dict(s) async for s in cursor]
     return {"success": True, "data": skills}
 
@@ -505,8 +502,8 @@ async def create_skill(
     company_id = current_user["company_id"]
     doc = {**data.model_dump(), "company_id": company_id, "created_by": current_user["id"],
            "created_at": _now(), "updated_at": _now()}
-    result = await db.skills.insert_one(doc)
-    created = await db.skills.find_one({"_id": result.inserted_id})
+    result = await db.catalogs.insert_one({**doc, "kind": "skill"})
+    created = await db.catalogs.find_one({"_id": result.inserted_id})
     return {"success": True, "data": _doc_to_dict(created), "message": "Skill created"}
 
 
@@ -520,12 +517,12 @@ async def update_skill(
     company_id = current_user["company_id"]
     update = {k: v for k, v in data.model_dump().items() if v is not None}
     update["updated_at"] = _now()
-    result = await db.skills.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(skill_id), "company_id": company_id}, {"$set": update}
     )
     if result.matched_count == 0:
         raise HTTPException(404, "Skill not found")
-    updated = await db.skills.find_one({"_id": ObjectId(skill_id)})
+    updated = await db.catalogs.find_one({"_id": ObjectId(skill_id)})
     return {"success": True, "data": _doc_to_dict(updated), "message": "Skill updated"}
 
 
@@ -536,7 +533,7 @@ async def delete_skill(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    result = await db.skills.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(skill_id), "company_id": company_id},
         {"$set": {"is_deleted": True, "updated_at": _now()}}
     )
@@ -571,7 +568,7 @@ async def list_document_templates(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    cursor = db.document_templates.find({"company_id": company_id, "is_deleted": {"$ne": True}})
+    cursor = db.catalogs.find({"kind": "document_template", "company_id": company_id, "is_deleted": {"$ne": True}})
     templates = [_doc_to_dict(t) async for t in cursor]
     return {"success": True, "data": templates}
 
@@ -585,8 +582,8 @@ async def create_document_template(
     company_id = current_user["company_id"]
     doc = {**data.model_dump(), "company_id": company_id, "created_by": current_user["id"],
            "created_at": _now(), "updated_at": _now()}
-    result = await db.document_templates.insert_one(doc)
-    created = await db.document_templates.find_one({"_id": result.inserted_id})
+    result = await db.catalogs.insert_one({**doc, "kind": "document_template"})
+    created = await db.catalogs.find_one({"_id": result.inserted_id})
     return {"success": True, "data": _doc_to_dict(created), "message": "Template created"}
 
 
@@ -600,12 +597,12 @@ async def update_document_template(
     company_id = current_user["company_id"]
     update = {k: v for k, v in data.model_dump().items() if v is not None}
     update["updated_at"] = _now()
-    result = await db.document_templates.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(tmpl_id), "company_id": company_id}, {"$set": update}
     )
     if result.matched_count == 0:
         raise HTTPException(404, "Template not found")
-    updated = await db.document_templates.find_one({"_id": ObjectId(tmpl_id)})
+    updated = await db.catalogs.find_one({"_id": ObjectId(tmpl_id)})
     return {"success": True, "data": _doc_to_dict(updated), "message": "Template updated"}
 
 
@@ -616,7 +613,7 @@ async def delete_document_template(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    result = await db.document_templates.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(tmpl_id), "company_id": company_id},
         {"$set": {"is_deleted": True, "updated_at": _now()}}
     )
@@ -661,7 +658,7 @@ async def list_commission_rules(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    cursor = db.commission_rules.find({"company_id": company_id, "is_deleted": {"$ne": True}})
+    cursor = db.catalogs.find({"kind": "commission_rule", "company_id": company_id, "is_deleted": {"$ne": True}})
     rules = [_doc_to_dict(r) async for r in cursor]
     return {"success": True, "data": rules}
 
@@ -675,8 +672,8 @@ async def create_commission_rule(
     company_id = current_user["company_id"]
     doc = {**data.model_dump(), "company_id": company_id, "created_by": current_user["id"],
            "created_at": _now(), "updated_at": _now()}
-    result = await db.commission_rules.insert_one(doc)
-    created = await db.commission_rules.find_one({"_id": result.inserted_id})
+    result = await db.catalogs.insert_one({**doc, "kind": "commission_rule"})
+    created = await db.catalogs.find_one({"_id": result.inserted_id})
     return {"success": True, "data": _doc_to_dict(created), "message": "Commission rule created"}
 
 
@@ -690,12 +687,12 @@ async def update_commission_rule(
     company_id = current_user["company_id"]
     update = {k: v for k, v in data.model_dump().items() if v is not None}
     update["updated_at"] = _now()
-    result = await db.commission_rules.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(rule_id), "company_id": company_id}, {"$set": update}
     )
     if result.matched_count == 0:
         raise HTTPException(404, "Rule not found")
-    updated = await db.commission_rules.find_one({"_id": ObjectId(rule_id)})
+    updated = await db.catalogs.find_one({"_id": ObjectId(rule_id)})
     return {"success": True, "data": _doc_to_dict(updated), "message": "Rule updated"}
 
 
@@ -706,7 +703,7 @@ async def delete_commission_rule(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    result = await db.commission_rules.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(rule_id), "company_id": company_id},
         {"$set": {"is_deleted": True, "updated_at": _now()}}
     )
@@ -1305,7 +1302,7 @@ async def list_sla_rules(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    cursor = db.sla_rules.find({"company_id": company_id, "is_deleted": {"$ne": True}})
+    cursor = db.catalogs.find({"kind": "sla_rule", "company_id": company_id, "is_deleted": {"$ne": True}})
     rules = [_doc_to_dict(r) async for r in cursor]
     return {"success": True, "data": rules}
 
@@ -1319,8 +1316,8 @@ async def create_sla_rule(
     company_id = current_user["company_id"]
     doc = {**data.model_dump(), "company_id": company_id, "created_by": current_user["id"],
            "created_at": _now(), "updated_at": _now()}
-    result = await db.sla_rules.insert_one(doc)
-    created = await db.sla_rules.find_one({"_id": result.inserted_id})
+    result = await db.catalogs.insert_one({**doc, "kind": "sla_rule"})
+    created = await db.catalogs.find_one({"_id": result.inserted_id})
     return {"success": True, "data": _doc_to_dict(created), "message": "SLA rule created"}
 
 
@@ -1334,12 +1331,12 @@ async def update_sla_rule(
     company_id = current_user["company_id"]
     update = {k: v for k, v in data.model_dump().items() if v is not None}
     update["updated_at"] = _now()
-    result = await db.sla_rules.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(rule_id), "company_id": company_id}, {"$set": update}
     )
     if result.matched_count == 0:
         raise HTTPException(404, "SLA rule not found")
-    updated = await db.sla_rules.find_one({"_id": ObjectId(rule_id)})
+    updated = await db.catalogs.find_one({"_id": ObjectId(rule_id)})
     return {"success": True, "data": _doc_to_dict(updated), "message": "SLA rule updated"}
 
 
@@ -1350,7 +1347,7 @@ async def delete_sla_rule(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    result = await db.sla_rules.update_one(
+    result = await db.catalogs.update_one(
         {"_id": ObjectId(rule_id), "company_id": company_id},
         {"$set": {"is_deleted": True, "updated_at": _now()}}
     )
@@ -1490,7 +1487,7 @@ async def list_candidate_sources(
     company_id = current_user["company_id"]
 
     # Fetch custom sources from DB
-    cursor = db.candidate_sources.find({"company_id": company_id, "is_deleted": {"$ne": True}})
+    cursor = db.catalogs.find({"kind": "candidate_source", "company_id": company_id, "is_deleted": {"$ne": True}})
     custom = [_doc_to_dict(d) for d in await cursor.to_list(length=200)]
     custom_names = {s["name"] for s in custom}
 
@@ -1518,7 +1515,7 @@ async def create_candidate_source(
         raise HTTPException(400, "Source name is required")
 
     # Prevent duplicates
-    existing = await db.candidate_sources.find_one({
+    existing = await db.catalogs.find_one({
         "company_id": company_id, "name": name, "is_deleted": {"$ne": True}
     })
     if existing:
@@ -1537,7 +1534,7 @@ async def create_candidate_source(
         "updated_at": now,
         "is_deleted": False,
     }
-    await db.candidate_sources.insert_one(doc)
+    await db.catalogs.insert_one({**doc, "kind": "candidate_source"})
     return {"success": True, "data": _doc_to_dict(doc), "message": "Source created"}
 
 
@@ -1554,13 +1551,13 @@ async def update_candidate_source(
         raise HTTPException(400, "No fields to update")
     update["updated_at"] = _now()
 
-    result = await db.candidate_sources.update_one(
+    result = await db.catalogs.update_one(
         {"_id": source_id, "company_id": company_id, "is_deleted": {"$ne": True}},
         {"$set": update}
     )
     if result.matched_count == 0:
         raise HTTPException(404, "Source not found")
-    updated = await db.candidate_sources.find_one({"_id": source_id})
+    updated = await db.catalogs.find_one({"_id": source_id})
     return {"success": True, "data": _doc_to_dict(updated), "message": "Source updated"}
 
 
@@ -1571,7 +1568,7 @@ async def delete_candidate_source(
     db=Depends(get_company_db),
 ):
     company_id = current_user["company_id"]
-    result = await db.candidate_sources.update_one(
+    result = await db.catalogs.update_one(
         {"_id": source_id, "company_id": company_id},
         {"$set": {"is_deleted": True, "updated_at": _now()}}
     )

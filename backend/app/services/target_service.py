@@ -22,9 +22,11 @@ class TargetService:
     
     def __init__(self, db):
         self.db = db
+        # Progress history lives in the same collection with doc_type="history".
+        # History docs never carry is_deleted, so every read path (all filter
+        # on is_deleted) keeps excluding them exactly as when they lived in
+        # the separate target_history collection.
         self.targets = db.targets
-        self.target_history = db.target_history
-        self.target_templates = db.target_templates
     
     # ============== Target CRUD ==============
     
@@ -318,7 +320,9 @@ class TargetService:
         user_id: str
     ) -> bool:
         """Soft delete a target. Access: creator (created_by) ONLY — mirrors task delete."""
-        doc = await self.targets.find_one({"id": target_id, "company_id": company_id})
+        doc = await self.targets.find_one(
+            {"id": target_id, "company_id": company_id, "doc_type": {"$ne": "history"}}
+        )
         if not doc:
             return False
 
@@ -415,6 +419,7 @@ class TargetService:
         # Log history
         history = {
             "id": str(ObjectId()),
+            "doc_type": "history",
             "target_id": target_id,
             "company_id": company_id,
             "previous_value": previous_value,
@@ -426,7 +431,7 @@ class TargetService:
             "recorded_at": datetime.now(timezone.utc),
             "recorded_by": user_id
         }
-        await self.target_history.insert_one(history)
+        await self.targets.insert_one(history)
         
         # Calculate new status
         target_value = target.get("target_value", 0)

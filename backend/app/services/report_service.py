@@ -24,7 +24,9 @@ class ReportService:
         self.db = db
         self.master_db = master_db
         self.saved_reports = db.saved_reports
-        self.execution_logs = db.report_execution_logs
+        # Shared with SchedulerService's task runs — report runs carry
+        # log_type="report" (see _execute_task's log_type="task").
+        self.execution_logs = db.execution_logs
     
     # ============== Report Generation ==============
     
@@ -2076,6 +2078,7 @@ class ReportService:
             "status": "completed",
             "triggered_by": user_id,
             "trigger_type": "manual",
-            "executed_at": datetime.now(timezone.utc)
+            "executed_at": datetime.now(timezone.utc),
+            "log_type": "report"
         }
         await self.execution_logs.insert_one(log)

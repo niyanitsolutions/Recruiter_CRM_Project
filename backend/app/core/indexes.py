@@ -115,19 +115,16 @@ async def ensure_company_indexes(db) -> None:
             IndexModel([("company_id", ASCENDING), ("employee_id", ASCENDING), ("status", ASCENDING)],
                        name="perf_emp_status"),
         ],
-        "hrm_documents": [
-            IndexModel([("company_id", ASCENDING), ("employee_id", ASCENDING)],
-                       name="doc_emp"),
-            IndexModel([("company_id", ASCENDING), ("employee_id", ASCENDING), ("doc_type", ASCENDING)],
-                       name="doc_emp_type"),
-        ],
         "hrm_assets": [
             IndexModel([("company_id", ASCENDING), ("assigned_to", ASCENDING)],
                        name="asset_assignee"),
             IndexModel([("company_id", ASCENDING), ("asset_tag", ASCENDING)],
                        name="asset_tag", unique=True, sparse=True),
         ],
-        "hrm_exit_requests": [
+        # NOTE: exit workflow lives in "hrm_exit" (hrm_exit.py API) — the old
+        # "hrm_exit_requests" name here was a ghost that indexed an unused
+        # collection while the real one had no coverage.
+        "hrm_exit": [
             IndexModel([("company_id", ASCENDING), ("status", ASCENDING)],
                        name="exit_status"),
         ],
@@ -222,6 +219,38 @@ async def ensure_company_indexes(db) -> None:
         "clients": [
             IndexModel([("company_id", ASCENDING), ("status", ASCENDING)],
                        name="client_status"),
+        ],
+        # ── Consolidated collections (storage-optimization rollout) ───────────
+        # tokens: the unique {token:1} lookup index is owned by
+        # create_company_database()'s map (database.py) — defining it here too
+        # with different options would raise IndexOptionsConflict at startup.
+        "tokens": [
+            IndexModel([("token_type", ASCENDING), ("company_id", ASCENDING)],
+                       name="token_type_company"),
+        ],
+        # catalogs: every settings-catalog list/count filters kind + company_id.
+        "catalogs": [
+            IndexModel([("kind", ASCENDING), ("company_id", ASCENDING), ("is_deleted", ASCENDING)],
+                       name="catalog_kind_company"),
+        ],
+        # scheduler_jobs: due-task sweep (job_kind + is_active + next_run) and
+        # due-reminder sweep (job_kind + company_id + status + scheduled_date).
+        "scheduler_jobs": [
+            IndexModel([("job_kind", ASCENDING), ("is_active", ASCENDING), ("next_run", ASCENDING)],
+                       name="schedjob_due_tasks"),
+            IndexModel([("job_kind", ASCENDING), ("company_id", ASCENDING),
+                        ("status", ASCENDING), ("scheduled_date", ASCENDING)],
+                       name="schedjob_due_reminders"),
+        ],
+        # execution_logs: task-log listing sorts started_at desc under log_type.
+        "execution_logs": [
+            IndexModel([("log_type", ASCENDING), ("started_at", DESCENDING)],
+                       name="execlog_type_date"),
+        ],
+        # data_jobs: import/export job listings sort created_at desc per kind.
+        "data_jobs": [
+            IndexModel([("kind", ASCENDING), ("company_id", ASCENDING), ("created_at", DESCENDING)],
+                       name="datajob_kind_company_date"),
         ],
         # company_settings (singleton per tenant — already tiny): no indexes
         # needed; find_one({}) on a tiny collection is instant.

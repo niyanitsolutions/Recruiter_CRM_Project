@@ -21,7 +21,9 @@ class ExportService:
     
     def __init__(self, db):
         self.db = db
-        self.export_jobs = db.export_jobs
+        # Shared data_jobs collection — export jobs carry kind="export"
+        # (import jobs / templates from ImportService use other kinds).
+        self.export_jobs = db.data_jobs
     
     # ============== Export Job Management ==============
     
@@ -37,6 +39,7 @@ class ExportService:
         
         job = {
             "id": str(ObjectId()),
+            "kind": "export",
             "company_id": company_id,
             "entity_type": data.entity_type.value,
             "export_name": export_name,
@@ -60,7 +63,7 @@ class ExportService:
         await self._process_export(job["id"], company_id)
         
         # Get updated job
-        updated_job = await self.export_jobs.find_one({"id": job["id"]})
+        updated_job = await self.export_jobs.find_one({"id": job["id"], "kind": "export"})
         
         response = ExportJobResponse(**updated_job)
         response.entity_type_display = IMPORT_EXPORT_TYPE_DISPLAY.get(
@@ -78,6 +81,7 @@ class ExportService:
         """Get export job by ID"""
         job = await self.export_jobs.find_one({
             "id": export_id,
+            "kind": "export",
             "company_id": company_id,
             "is_deleted": False
         })
@@ -100,7 +104,7 @@ class ExportService:
         status: Optional[ExportStatus] = None
     ) -> ExportJobListResponse:
         """List export jobs"""
-        query = {"company_id": company_id, "is_deleted": False}
+        query = {"kind": "export", "company_id": company_id, "is_deleted": False}
         
         if entity_type:
             query["entity_type"] = entity_type.value
@@ -132,7 +136,7 @@ class ExportService:
     
     async def _process_export(self, export_id: str, company_id: str):
         """Process an export job"""
-        job = await self.export_jobs.find_one({"id": export_id})
+        job = await self.export_jobs.find_one({"id": export_id, "kind": "export"})
         if not job:
             return
         

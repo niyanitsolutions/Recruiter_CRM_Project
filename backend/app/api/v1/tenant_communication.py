@@ -60,11 +60,15 @@ async def get_tenant_announcements(
         return {"items": []}
 
     try:
-        dismissed_cursor = company_db["announcement_dismissals"].find(
-            {"user_id": current_user["id"], "permanent": True},
-            {"announcement_id": 1},
+        # Dismissals are embedded on the user doc as a map keyed by
+        # announcement id: users.announcement_dismissals.{id} -> {permanent, ...}
+        _user_doc = await company_db.users.find_one(
+            {"$or": [{"_id": current_user["id"]}, {"id": current_user["id"]}]},
+            {"announcement_dismissals": 1},
         )
-        dismissed_ids = [d["announcement_id"] async for d in dismissed_cursor]
+        _dismissals = (_user_doc or {}).get("announcement_dismissals") or {}
+        dismissed_ids = [aid for aid, d in _dismissals.items()
+                         if isinstance(d, dict) and d.get("permanent")]
     except Exception:
         dismissed_ids = []
 
@@ -95,15 +99,14 @@ async def dismiss_announcement(
     from datetime import datetime, timezone
 
     try:
-        await company_db["announcement_dismissals"].update_one(
-            {"user_id": current_user["id"], "announcement_id": body.announcement_id},
+        await company_db.users.update_one(
+            {"$or": [{"_id": current_user["id"]}, {"id": current_user["id"]}]},
             {"$set": {
-                "user_id":         current_user["id"],
-                "announcement_id": body.announcement_id,
-                "permanent":       body.permanent,
-                "dismissed_at":    datetime.now(timezone.utc),
+                f"announcement_dismissals.{body.announcement_id}": {
+                    "permanent":    body.permanent,
+                    "dismissed_at": datetime.now(timezone.utc),
+                },
             }},
-            upsert=True,
         )
     except Exception as exc:
         logger.warning("Failed to record announcement dismissal: %s", exc)

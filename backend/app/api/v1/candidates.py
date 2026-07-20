@@ -1411,8 +1411,9 @@ async def generate_candidate_form_link(
 
     token = uuid.uuid4().hex
     now = datetime.now(timezone.utc)
-    await db.candidate_form_tokens.insert_one({
+    await db.tokens.insert_one({
         "_id": token,
+        "token_type": "candidate_form",
         "candidate_email": body.email,
         "created_by": current_user["id"],
         "created_at": now,
@@ -1524,7 +1525,7 @@ async def get_candidate_form_meta(token: str):
             continue
         from app.core.database import get_company_db as _cdb
         cdb = _cdb(cid)
-        doc = await cdb.candidate_form_tokens.find_one({"_id": token})
+        doc = await cdb.tokens.find_one({"_id": token, "token_type": "candidate_form"})
         if doc:
             if doc.get("used"):
                 raise HTTPException(status_code=410, detail="This link has already been used.")
@@ -1550,7 +1551,7 @@ async def submit_candidate_form(token: str, data: dict):
         if not cid:
             continue
         cdb = _cdb(cid)
-        doc = await cdb.candidate_form_tokens.find_one({"_id": token})
+        doc = await cdb.tokens.find_one({"_id": token, "token_type": "candidate_form"})
         if doc:
             token_doc = doc
             company_db = cdb
@@ -1614,8 +1615,8 @@ async def submit_candidate_form(token: str, data: dict):
 
     await company_db.candidates.insert_one(candidate)
     # Mark token as used
-    await company_db.candidate_form_tokens.update_one(
-        {"_id": token},
+    await company_db.tokens.update_one(
+        {"_id": token, "token_type": "candidate_form"},
         {"$set": {"used": True, "used_at": now, "candidate_id": candidate_id}},
     )
 
@@ -1645,7 +1646,7 @@ async def public_upload_candidate_resume(token: str, candidate_id: str, file: Up
         if not cid:
             continue
         cdb = _cdb(cid)
-        doc = await cdb.candidate_form_tokens.find_one({"_id": token})
+        doc = await cdb.tokens.find_one({"_id": token, "token_type": "candidate_form"})
         if doc:
             if not doc.get("used") or doc.get("candidate_id") != candidate_id:
                 raise HTTPException(status_code=403, detail="Invalid upload request.")
@@ -1706,7 +1707,7 @@ async def public_upload_candidate_photo(token: str, candidate_id: str, file: Upl
         if not cid:
             continue
         cdb = _cdb(cid)
-        doc = await cdb.candidate_form_tokens.find_one({"_id": token})
+        doc = await cdb.tokens.find_one({"_id": token, "token_type": "candidate_form"})
         if doc:
             if not doc.get("used") or doc.get("candidate_id") != candidate_id:
                 raise HTTPException(status_code=403, detail="Invalid upload request.")

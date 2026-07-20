@@ -44,7 +44,7 @@ async def _find_token(token: str):
         if not cid:
             continue
         cdb = _cdb(cid)
-        doc = await cdb.employee_onboarding_tokens.find_one({"_id": token})
+        doc = await cdb.tokens.find_one({"_id": token, "token_type": "employee_onboarding"})
         if doc:
             return doc, cdb, cid
     raise HTTPException(status_code=404, detail="Invalid or expired link.")
@@ -88,15 +88,17 @@ async def generate_employee_onboarding_link(
             raise HTTPException(status_code=404, detail="Employee not found.")
         employee_email = employee_email or emp.get("email")
         # Only one active individual link per employee — supersede any prior unused one.
-        await db.employee_onboarding_tokens.update_many(
-            {"company_id": cu["company_id"], "employee_id": body.employee_id, "used": False},
+        await db.tokens.update_many(
+            {"token_type": "employee_onboarding", "company_id": cu["company_id"],
+             "employee_id": body.employee_id, "used": False},
             {"$set": {"used": True}},
         )
 
     token = uuid.uuid4().hex
     now = datetime.now(timezone.utc)
-    await db.employee_onboarding_tokens.insert_one({
+    await db.tokens.insert_one({
         "_id": token,
+        "token_type": "employee_onboarding",
         "company_id": cu["company_id"],
         "employee_email": employee_email,
         "created_by": cu["id"],
@@ -501,8 +503,8 @@ async def submit_employee_onboarding(token: str, data: dict):
             {"_id": existing_employee_id, "company_id": company_id},
             {"$set": update_fields},
         )
-        await company_db.employee_onboarding_tokens.update_one(
-            {"_id": token},
+        await company_db.tokens.update_one(
+            {"_id": token, "token_type": "employee_onboarding"},
             {"$set": {"used": True, "used_at": now}},
         )
         return {
@@ -572,8 +574,8 @@ async def submit_employee_onboarding(token: str, data: dict):
     await company_db.hrm_employees.insert_one(emp_doc)
 
     # Mark token as used — store employee UUID for subsequent uploads
-    await company_db.employee_onboarding_tokens.update_one(
-        {"_id": token},
+    await company_db.tokens.update_one(
+        {"_id": token, "token_type": "employee_onboarding"},
         {"$set": {"used": True, "used_at": now, "employee_id": employee_uuid}},
     )
 

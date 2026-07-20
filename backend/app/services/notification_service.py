@@ -22,8 +22,9 @@ class NotificationService:
     def __init__(self, db):
         self.db = db
         self.notifications_collection = db.notifications
-        self.reminders_collection = db.scheduled_reminders
-        self.preferences_collection = db.notification_preferences
+        # Reminders share scheduler_jobs with SchedulerService's scheduled
+        # tasks; reminder docs carry job_kind="reminder".
+        self.reminders_collection = db.scheduler_jobs
     
     # ============== Notification CRUD ==============
     
@@ -210,6 +211,7 @@ class NotificationService:
         reminder_data = {
             **data.model_dump(),
             "id": str(ObjectId()),
+            "job_kind": "reminder",
             "company_id": company_id,
             "channels": [c.value for c in data.channels],
             "status": ScheduledReminderStatus.SCHEDULED.value,
@@ -229,6 +231,7 @@ class NotificationService:
         now = datetime.now(timezone.utc)
         
         cursor = self.reminders_collection.find({
+            "job_kind": "reminder",
             "company_id": company_id,
             "status": ScheduledReminderStatus.SCHEDULED.value,
             "scheduled_date": {"$lte": now},
@@ -310,6 +313,7 @@ class NotificationService:
         result = await self.reminders_collection.update_one(
             {
                 "id": reminder_id,
+                "job_kind": "reminder",
                 "company_id": company_id,
                 "status": ScheduledReminderStatus.SCHEDULED.value
             },
@@ -402,15 +406,17 @@ class NotificationService:
         user_id: str,
         company_id: str
     ) -> NotificationPreference:
-        """Get user notification preferences"""
-        prefs = await self.preferences_collection.find_one({
-            "user_id": user_id,
-            "company_id": company_id
-        })
-        
+        """Get user notification preferences (embedded on the user document)"""
+        user_doc = await self.db.users.find_one(
+            {"$or": [{"_id": user_id}, {"id": user_id}]},
+            {"preferences.notifications": 1},
+        )
+        prefs = ((user_doc or {}).get("preferences") or {}).get("notifications")
+
         if prefs:
+            prefs.setdefault("user_id", user_id)
             return NotificationPreference(**prefs)
-        
+
         # Return defaults
         return NotificationPreference(user_id=user_id)
     
@@ -420,23 +426,22 @@ class NotificationService:
         data: NotificationPreferenceUpdate,
         company_id: str
     ) -> NotificationPreference:
-        """Update user notification preferences"""
+        """Update user notification preferences (embedded on the user document)"""
         update_data = data.model_dump(exclude_unset=True)
-        
-        result = await self.preferences_collection.find_one_and_update(
-            {"user_id": user_id, "company_id": company_id},
-            {
-                "$set": update_data,
-                "$setOnInsert": {
-                    "user_id": user_id,
-                    "company_id": company_id
-                }
-            },
-            upsert=True,
-            return_document=True
+
+        sets = {f"preferences.notifications.{k}": v for k, v in update_data.items()}
+        sets["preferences.notifications.user_id"] = user_id
+        sets["preferences.notifications.company_id"] = company_id
+
+        result = await self.db.users.update_one(
+            {"$or": [{"_id": user_id}, {"id": user_id}]},
+            {"$set": sets},
         )
-        
-        return NotificationPreference(**result)
+        if result.matched_count == 0:
+            # No user document (mirrors the old upsert's first-write response)
+            return NotificationPreference(user_id=user_id, **update_data)
+
+        return await self.get_user_preferences(user_id, company_id)
     
     # ============== Event-Based Notifications ==============
     

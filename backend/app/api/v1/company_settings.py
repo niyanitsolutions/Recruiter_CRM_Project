@@ -266,7 +266,8 @@ async def get_smtp_config(
     db=Depends(get_company_db),
 ):
     """Get current tenant SMTP configuration (password masked)."""
-    doc = await db.smtp_config.find_one({"_id": "smtp"})
+    _cs = await db.company_settings.find_one({}, {"smtp": 1})
+    doc = (_cs or {}).get("smtp")
     if not doc:
         return {"success": True, "data": None}
     return {
@@ -304,10 +305,9 @@ async def save_smtp_config(
         raise HTTPException(status_code=400, detail=f"SMTP test failed: {msg}")
 
     from datetime import datetime, timezone
-    await db.smtp_config.update_one(
-        {"_id": "smtp"},
-        {"$set": {
-            "_id": "smtp",
+    await db.company_settings.update_one(
+        {},
+        {"$set": {"smtp": {
             "host": data.host,
             "port": data.port,
             "username": data.username,
@@ -317,7 +317,7 @@ async def save_smtp_config(
             "enabled": data.enabled,
             "updated_at": datetime.now(timezone.utc),
             "updated_by": current_user.get("id"),
-        }},
+        }}},
         upsert=True,
     )
     try:
@@ -339,7 +339,7 @@ async def delete_smtp_config(
     db=Depends(get_company_db),
 ):
     """Remove tenant SMTP config (will fall back to system SMTP)."""
-    await db.smtp_config.delete_one({"_id": "smtp"})
+    await db.company_settings.update_one({}, {"$unset": {"smtp": ""}})
     try:
         await AuditService(db).log(
             action="delete", entity_type="smtp_config",

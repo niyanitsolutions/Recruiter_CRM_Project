@@ -73,6 +73,7 @@ async def generate_upload_token(
 
     doc = {
         "_id": str(uuid.uuid4()),
+        "token_type": "doc_upload",
         "company_id": cu["company_id"],
         "token": token,
         "employee_id": body.employee_id,
@@ -87,7 +88,7 @@ async def generate_upload_token(
         "used_at": None,
         "upload_count": 0,
     }
-    await db.hrm_doc_upload_tokens.insert_one(doc)
+    await db.tokens.insert_one(doc)
 
     return {
         "token_id": doc["_id"],
@@ -113,20 +114,21 @@ async def list_upload_tokens(
     """List all upload tokens (HR view)."""
     # Mark expired tokens
     now = datetime.now(timezone.utc)
-    await db.hrm_doc_upload_tokens.update_many(
-        {"company_id": cu["company_id"], "status": "active", "expires_at": {"$lt": now}},
+    await db.tokens.update_many(
+        {"token_type": "doc_upload", "company_id": cu["company_id"],
+         "status": "active", "expires_at": {"$lt": now}},
         {"$set": {"status": "expired"}},
     )
 
-    query: dict = {"company_id": cu["company_id"]}
+    query: dict = {"token_type": "doc_upload", "company_id": cu["company_id"]}
     if employee_id:
         query["employee_id"] = employee_id
     if status:
         query["status"] = status
 
-    total = await db.hrm_doc_upload_tokens.count_documents(query)
+    total = await db.tokens.count_documents(query)
     skip = (page - 1) * page_size
-    cursor = db.hrm_doc_upload_tokens.find(query).sort("created_at", -1).skip(skip).limit(page_size)
+    cursor = db.tokens.find(query).sort("created_at", -1).skip(skip).limit(page_size)
     items = await cursor.to_list(page_size)
     for item in items:
         item["id"] = item.pop("_id")
@@ -151,8 +153,8 @@ async def reactivate_token(
     new_token = secrets.token_urlsafe(32)
     expires_at = now + timedelta(hours=body.expiry_hours)
 
-    result = await db.hrm_doc_upload_tokens.find_one_and_update(
-        {"_id": token_id, "company_id": cu["company_id"]},
+    result = await db.tokens.find_one_and_update(
+        {"_id": token_id, "token_type": "doc_upload", "company_id": cu["company_id"]},
         {"$set": {
             "token": new_token,
             "status": "active",
@@ -185,8 +187,8 @@ async def revoke_token(
     db=Depends(get_company_db),
     _perm=Depends(require_permissions(["hrm:documents:manage"])),
 ):
-    result = await db.hrm_doc_upload_tokens.update_one(
-        {"_id": token_id, "company_id": cu["company_id"]},
+    result = await db.tokens.update_one(
+        {"_id": token_id, "token_type": "doc_upload", "company_id": cu["company_id"]},
         {"$set": {"status": "revoked"}},
     )
     if result.matched_count == 0:
@@ -213,7 +215,7 @@ async def _find_token_across_companies(token: str):
         except Exception:
             continue
         try:
-            rec = await db.hrm_doc_upload_tokens.find_one({"token": token})
+            rec = await db.tokens.find_one({"token": token, "token_type": "doc_upload"})
         except Exception:
             continue
         if rec:
@@ -237,7 +239,7 @@ async def validate_token(token: str):
         raise HTTPException(status_code=410, detail="This upload link has been revoked.")
     expires_at = _to_utc(rec.get("expires_at"))
     if rec.get("status") == "expired" or (expires_at and expires_at < now):
-        await db.hrm_doc_upload_tokens.update_one(
+        await db.tokens.update_one(
             {"_id": rec["_id"]}, {"$set": {"status": "expired"}}
         )
         raise HTTPException(status_code=410, detail="This upload link has expired.")
@@ -269,7 +271,7 @@ async def upload_via_token(
         raise HTTPException(status_code=410, detail="This upload link has expired or already been used.")
     expires_at = _to_utc(rec.get("expires_at"))
     if expires_at and expires_at < now:
-        await db.hrm_doc_upload_tokens.update_one({"_id": rec["_id"]}, {"$set": {"status": "expired"}})
+        await db.tokens.update_one({"_id": rec["_id"]}, {"$set": {"status": "expired"}})
         raise HTTPException(status_code=410, detail="This upload link has expired.")
 
     employee_id = rec["employee_id"]
@@ -344,7 +346,7 @@ async def upload_via_token(
     )
 
     # Mark token as used
-    await db.hrm_doc_upload_tokens.update_one(
+    await db.tokens.update_one(
         {"_id": rec["_id"]},
         {"$set": {"status": "used", "used_at": now}, "$inc": {"upload_count": len(uploaded)}},
     )

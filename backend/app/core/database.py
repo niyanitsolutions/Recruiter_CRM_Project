@@ -237,12 +237,6 @@ class DatabaseManager:
                 _mk([("is_deleted", 1), ("status", 1)]),
                 _mk([("is_deleted", 1), ("created_at", -1)]),
             ],
-            "payouts": [
-                _mk([("is_deleted", 1)]),
-                _mk([("is_deleted", 1), ("status", 1)]),
-                _mk([("is_deleted", 1), ("partner_id", 1)]),
-                _mk([("is_deleted", 1), ("created_at", -1)]),
-            ],
             "targets": [
                 _mk([("is_deleted", 1)]),
                 _mk([("is_deleted", 1), ("user_id", 1)]),
@@ -256,11 +250,6 @@ class DatabaseManager:
                 _mk([("name", 1)]),
             ],
             # ── HRM ────────────────────────────────────────────────────────────
-            "employees": [
-                _mk([("is_deleted", 1)]),
-                _mk([("is_deleted", 1), ("status", 1)]),
-                _mk([("employee_id", 1)], sparse=True),
-            ],
             "hrm_employees": [
                 _mk([("is_deleted", 1)]),
                 _mk([("is_deleted", 1), ("status", 1)]),
@@ -282,24 +271,20 @@ class DatabaseManager:
                 _mk([("company_id", 1), ("status", 1), ("is_deleted", 1)]),
                 _mk([("employee_id", 1), ("company_id", 1), ("is_deleted", 1)]),
             ],
-            "hrm_doc_upload_tokens": [
+            # Unified token store (candidate_form / employee_onboarding /
+            # doc_upload token types — storage-consolidation rollout).
+            "tokens": [
                 _mk([("token", 1)], unique=True, sparse=True),
                 _mk([("company_id", 1), ("employee_id", 1)]),
                 _mk([("company_id", 1), ("status", 1)]),
                 _mk([("expires_at", 1)], sparse=True),
             ],
-            "attendance": [
-                _mk([("employee_id", 1), ("date", -1)]),
-                _mk([("date", -1)]),
-            ],
-            "leaves": [
-                _mk([("employee_id", 1)]),
-                _mk([("status", 1)]),
-            ],
-            "payroll": [
-                _mk([("employee_id", 1), ("month", -1)]),
-            ],
         }
+        # NOTE: legacy "employees", "payouts", "attendance", "leaves" and
+        # "payroll" entries removed — no code reads or writes those bare-name
+        # collections (the live ones are hrm_employees / partner_payouts /
+        # hrm_attendance / hrm_leaves / hrm_payroll); keeping them here only
+        # provisioned empty ghost collections in every new tenant DB.
 
         # One create_indexes() call per collection, and all collections run
         # concurrently — each collection's indexes are independent of every

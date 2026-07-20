@@ -209,7 +209,7 @@ async def _get_tenant_smtp(company_id: str) -> Optional[dict]:
     Load and decrypt tenant SMTP config.
 
     Checks two storage locations (in priority order):
-      1. company_db.smtp_config  (_id="smtp")  — saved via /company-settings/smtp
+      1. company_db.company_settings.smtp subdocument — saved via /company-settings/smtp
       2. company_db.tenant_settings (key="email_config") — saved via /tenant-settings/email-config
 
     Returns None if not configured or not enabled.
@@ -219,9 +219,10 @@ async def _get_tenant_smtp(company_id: str) -> Optional[dict]:
     try:
         db = get_company_db(company_id)
 
-        # ── Source 1: smtp_config collection (company_settings.py path) ────────
+        # ── Source 1: company_settings.smtp subdocument (company_settings.py path) ──
         # Accepts is_active=True (new verification flow) OR legacy enabled=True.
-        doc = await db.smtp_config.find_one({"_id": "smtp"})
+        _cs = await db.company_settings.find_one({}, {"smtp": 1})
+        doc = (_cs or {}).get("smtp")
         if doc:
             is_usable = (
                 doc.get("is_active") and doc.get("is_verified")  # new verification flow

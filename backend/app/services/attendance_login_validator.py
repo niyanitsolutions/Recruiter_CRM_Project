@@ -246,11 +246,12 @@ async def _audit(
     result: str,
     reason: str,
 ) -> None:
-    """Write one record to hrm_geo_fence_audit (fire-and-forget; never raises)."""
+    """Write one geo-fence record to hrm_security_audit (fire-and-forget; never raises)."""
     try:
         now = datetime.now(timezone.utc).replace(tzinfo=None)
-        await company_db["hrm_geo_fence_audit"].insert_one({
+        await company_db["hrm_security_audit"].insert_one({
             "_id":         str(ObjectId()),
+            "kind":        "geo_fence",
             "company_id":  company_id,
             "employee_id": employee_id,
             "work_mode":   work_mode,
@@ -329,8 +330,9 @@ async def flag_location_fraud(
 
         if flags:
             now = datetime.now(timezone.utc).replace(tzinfo=None)
-            await company_db["hrm_fraud_audit"].insert_one({
+            await company_db["hrm_security_audit"].insert_one({
                 "_id":         str(ObjectId()),
+                "kind":        "fraud",
                 "company_id":  company_id,
                 "employee_id": employee_id,
                 "work_mode":   work_mode,

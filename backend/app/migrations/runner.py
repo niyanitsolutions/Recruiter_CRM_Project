@@ -265,8 +265,10 @@ async def _m007_ensure_indexes(db, company_id: str) -> dict[str, int]:
     await _idx(db.audit_logs, [("company_id", 1), ("created_at", -1)])
     await _idx(db.audit_logs, [("company_id", 1), ("action", 1), ("created_at", -1)])
 
-    # onboards, payouts, targets, departments, designations, roles — basic list queries
-    for col in (db.onboards, db.payouts, db.targets, db.departments, db.designations, db.roles):
+    # onboards, targets, departments, designations, roles — basic list queries
+    # (legacy "payouts" removed: creating an index there materialized an empty
+    # ghost collection on fresh installs; live payouts are partner_payouts)
+    for col in (db.onboards, db.targets, db.departments, db.designations, db.roles):
         await _idx(col, [("company_id", 1), ("is_deleted", 1)])
 
     return {"indexes_created": created}
@@ -287,6 +289,134 @@ async def _m006_notifications_fields(db, company_id: str) -> dict[str, int]:
             {"$set": {fname: default}},
         )
         counts[fname] = r.modified_count
+
+    return counts
+
+
+async def _m008_storage_consolidation(db, company_id: str) -> dict[str, int]:
+    """
+    Storage-consolidation rollout (approved Collection Consolidation Report,
+    Phase 1 + the five approved nested optimizations).
+
+    Copies documents from retired collections into their consolidated targets,
+    adding the discriminator field the rewritten services filter on. Every copy
+    uses replace_one(..., upsert=True) keyed on the original _id, so re-running
+    overwrites the same target docs — never duplicates, never drops data.
+    Source collections are intentionally left in place for rollback; drop them
+    manually once the rollout is verified.
+    """
+    counts: dict[str, int] = {}
+
+    async def _copy(src_name: str, dst_name: str, extra: dict) -> int:
+        moved = 0
+        async for doc in db[src_name].find({}):
+            await db[dst_name].replace_one(
+                {"_id": doc["_id"]}, {**doc, **extra}, upsert=True)
+            moved += 1
+        return moved
+
+    # S1 — token collections → tokens
+    counts["tokens.candidate_form"] = await _copy(
+        "candidate_form_tokens", "tokens", {"token_type": "candidate_form"})
+    counts["tokens.employee_onboarding"] = await _copy(
+        "employee_onboarding_tokens", "tokens", {"token_type": "employee_onboarding"})
+    counts["tokens.doc_upload"] = await _copy(
+        "hrm_doc_upload_tokens", "tokens", {"token_type": "doc_upload"})
+
+    # S2 — geo-fence / fraud audit → hrm_security_audit
+    counts["security_audit.geo_fence"] = await _copy(
+        "hrm_geo_fence_audit", "hrm_security_audit", {"kind": "geo_fence"})
+    counts["security_audit.fraud"] = await _copy(
+        "hrm_fraud_audit", "hrm_security_audit", {"kind": "fraud"})
+
+    # S3 — target history/templates → targets (doc_type discriminator)
+    counts["targets.history"] = await _copy(
+        "target_history", "targets", {"doc_type": "history"})
+    counts["targets.template"] = await _copy(
+        "target_templates", "targets", {"doc_type": "template"})
+
+    # S4 — execution logs → execution_logs (log_type discriminator)
+    counts["execlog.task"] = await _copy(
+        "task_execution_logs", "execution_logs", {"log_type": "task"})
+    counts["execlog.report"] = await _copy(
+        "report_execution_logs", "execution_logs", {"log_type": "report"})
+
+    # S5 — import/export jobs + import templates → data_jobs
+    counts["datajob.import"] = await _copy("import_jobs", "data_jobs", {"kind": "import"})
+    counts["datajob.export"] = await _copy("export_jobs", "data_jobs", {"kind": "export"})
+    counts["datajob.import_template"] = await _copy(
+        "import_templates", "data_jobs", {"kind": "import_template"})
+
+    # S6 — settings catalogs → catalogs (kind discriminator)
+    for src, kind in [
+        ("teams", "team"), ("branches", "branch"),
+        ("pipeline_stages", "pipeline_stage"), ("job_categories", "job_category"),
+        ("skills", "skill"), ("candidate_sources", "candidate_source"),
+        ("commission_rules", "commission_rule"), ("sla_rules", "sla_rule"),
+        ("document_templates", "document_template"),
+    ]:
+        counts[f"catalog.{kind}"] = await _copy(src, "catalogs", {"kind": kind})
+
+    # S11 — scheduled tasks + reminders → scheduler_jobs
+    counts["schedjob.task"] = await _copy(
+        "scheduled_tasks", "scheduler_jobs", {"job_kind": "task"})
+    counts["schedjob.reminder"] = await _copy(
+        "scheduled_reminders", "scheduler_jobs", {"job_kind": "reminder"})
+
+    # S12/N4 — smtp_config singleton → company_settings.smtp
+    smtp = await db.smtp_config.find_one({"_id": "smtp"})
+    if smtp:
+        smtp.pop("_id", None)
+        r = await db.company_settings.update_one(
+            {"smtp": {"$exists": False}}, {"$set": {"smtp": smtp}}, upsert=True)
+        counts["company_settings.smtp"] = r.modified_count + (1 if r.upserted_id else 0)
+
+    # N1 — notification preferences → users.preferences.notifications
+    moved = 0
+    async for pref in db.notification_preferences.find({}):
+        uid = pref.get("user_id")
+        if not uid:
+            continue
+        pref.pop("_id", None)
+        r = await db.users.update_one(
+            {"$or": [{"_id": uid}, {"id": uid}],
+             "preferences.notifications": {"$exists": False}},
+            {"$set": {"preferences.notifications": pref}})
+        moved += r.modified_count
+    counts["users.pref.notifications"] = moved
+
+    # N2 — dashboard layouts → users.preferences.dashboard_layout
+    # (natural order + $exists guard preserves the old find_one-first-match
+    # semantics for users that somehow had several layout docs)
+    moved = 0
+    async for layout in db.dashboard_layouts.find({}):
+        uid = layout.get("user_id")
+        if not uid or layout.get("is_deleted"):
+            continue
+        layout.pop("_id", None)
+        r = await db.users.update_one(
+            {"$or": [{"_id": uid}, {"id": uid}],
+             "preferences.dashboard_layout": {"$exists": False}},
+            {"$set": {"preferences.dashboard_layout": layout}})
+        moved += r.modified_count
+    counts["users.pref.dashboard"] = moved
+
+    # N3 — announcement dismissals → users.announcement_dismissals map
+    moved = 0
+    async for dis in db.announcement_dismissals.find({}):
+        uid = dis.get("user_id")
+        aid = dis.get("announcement_id")
+        if not uid or not aid:
+            continue
+        r = await db.users.update_one(
+            {"$or": [{"_id": uid}, {"id": uid}],
+             f"announcement_dismissals.{aid}": {"$exists": False}},
+            {"$set": {f"announcement_dismissals.{aid}": {
+                "permanent":    dis.get("permanent", False),
+                "dismissed_at": dis.get("dismissed_at"),
+            }}})
+        moved += r.modified_count
+    counts["users.dismissals"] = moved
 
     return counts
 
@@ -337,6 +467,14 @@ MIGRATIONS: list[Migration] = [
         scope="tenant",
         fn=_m007_ensure_indexes,
         description="Create compound indexes for common query patterns",
+    ),
+    Migration(
+        id="m008_storage_consolidation",
+        scope="tenant",
+        fn=_m008_storage_consolidation,
+        description="Copy retired collections into consolidated stores (tokens, "
+                    "catalogs, scheduler_jobs, execution_logs, data_jobs, "
+                    "hrm_security_audit, targets) and embed per-user prefs + SMTP",
     ),
 ]
 

@@ -26,8 +26,12 @@ class SchedulerService:
     
     def __init__(self, db):
         self.db = db
-        self.tasks = db.scheduled_tasks
-        self.execution_logs = db.task_execution_logs
+        # scheduler_jobs holds both scheduled tasks (job_kind="task", this
+        # service) and scheduled reminders (job_kind="reminder",
+        # NotificationService); execution_logs holds task runs
+        # (log_type="task") and report runs (log_type="report").
+        self.tasks = db.scheduler_jobs
+        self.execution_logs = db.execution_logs
     
     # ============== Task Management ==============
     
@@ -42,6 +46,7 @@ class SchedulerService:
         
         task = {
             "id": task_id,
+            "job_kind": "task",
             "company_id": company_id,
             "task_type": data.task_type.value,
             "name": data.name,
@@ -73,7 +78,7 @@ class SchedulerService:
         company_id: Optional[str] = None
     ) -> Optional[TaskResponse]:
         """Get task by ID"""
-        query = {"id": task_id, "is_deleted": False}
+        query = {"id": task_id, "job_kind": "task", "is_deleted": False}
         if company_id:
             query["company_id"] = company_id
         
@@ -92,7 +97,7 @@ class SchedulerService:
         page_size: int = 20
     ) -> TaskListResponse:
         """List scheduled tasks"""
-        query = {"is_deleted": False}
+        query = {"job_kind": "task", "is_deleted": False}
         
         if company_id:
             query["$or"] = [
@@ -127,7 +132,7 @@ class SchedulerService:
         company_id: Optional[str] = None
     ) -> Optional[TaskResponse]:
         """Update a scheduled task"""
-        query = {"id": task_id, "is_deleted": False}
+        query = {"id": task_id, "job_kind": "task", "is_deleted": False}
         if company_id:
             query["company_id"] = company_id
         
@@ -154,7 +159,7 @@ class SchedulerService:
         company_id: Optional[str] = None
     ) -> bool:
         """Delete a scheduled task"""
-        query = {"id": task_id}
+        query = {"id": task_id, "job_kind": "task"}
         if company_id:
             query["company_id"] = company_id
         
@@ -171,7 +176,7 @@ class SchedulerService:
         company_id: Optional[str] = None
     ) -> bool:
         """Enable or disable a task"""
-        query = {"id": task_id, "is_deleted": False}
+        query = {"id": task_id, "job_kind": "task", "is_deleted": False}
         if company_id:
             query["company_id"] = company_id
         
@@ -198,6 +203,7 @@ class SchedulerService:
         """Run a task manually"""
         task = await self.tasks.find_one({
             "id": task_id,
+            "job_kind": "task",
             "is_deleted": False
         })
         
@@ -211,6 +217,7 @@ class SchedulerService:
         now = datetime.now(timezone.utc)
         
         cursor = self.tasks.find({
+            "job_kind": "task",
             "is_active": True,
             "is_deleted": False,
             "next_run": {"$lte": now}
@@ -239,6 +246,7 @@ class SchedulerService:
         # Create execution log
         execution = {
             "id": execution_id,
+            "log_type": "task",
             "company_id": task.get("company_id"),
             "task_id": task["id"],
             "task_type": task["task_type"],
@@ -562,7 +570,7 @@ class SchedulerService:
         page_size: int = 20
     ) -> TaskExecutionListResponse:
         """Get task execution logs"""
-        query = {}
+        query = {"log_type": "task"}
         
         if task_id:
             query["task_id"] = task_id
@@ -666,6 +674,7 @@ class SchedulerService:
         for task_config in all_defaults:
             # Check if already exists
             existing = await self.tasks.find_one({
+                "job_kind": "task",
                 "task_type": task_config["task_type"].value,
                 "company_id": company_id,
                 "is_deleted": False
