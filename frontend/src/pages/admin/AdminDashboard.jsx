@@ -32,7 +32,7 @@ import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 import ProgressRing from '../targets/components/ProgressRing'
 import { formatDateTime, formatDate, getTenantTimezone } from '../../utils/format'
 import { useLivePolling } from '../../hooks/useLivePolling'
-import { subscribe, LIVE_TOPICS } from '../../utils/liveUpdateBus'
+import { subscribe, publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
 // ── Section-level error boundary — wraps individual grid rows ────────────────
 class WidgetErrorBoundary extends Component {
@@ -90,9 +90,6 @@ class DashboardPageBoundary extends Component {
     return this.props.children
   }
 }
-
-const ATTEND_DISMISS_KEY = 'attendance_modal_dismissed'
-const todayISO = () => new Date().toISOString().slice(0, 10)
 
 // ── Module-level cache — survives SPA navigation, TTL 5 min ─────────────────
 const DASH_CACHE_TTL = 5 * 60 * 1000
@@ -303,12 +300,39 @@ const AdminDashboard = () => {
   const [insights,         setInsights]         = useState(null)
   const [trendPeriod,      setTrendPeriod]      = useState(PERIODS.find(p => p.key === 'week'))
 
-  // Attendance warning: show card if user dismissed the punch-in modal today.
-  // Do NOT gate on hrmEmployeeId — show for all non-partner internal users.
-  const [attendanceDismissed, setAttendanceDismissed] = useState(
-    () => user?.userType !== 'partner' && localStorage.getItem(ATTEND_DISMISS_KEY) === todayISO()
-  )
+  // Attendance Pending banner — visibility is derived ONLY from today's actual
+  // attendance record (backend truth: check_in), completely independent of the
+  // Punch In popup's dismiss/snooze state. It shows whenever the user has not
+  // punched in today and hides only once check_in is confirmed — never via
+  // popup "X" or "Remind me later", and it is not affected by refresh,
+  // navigation, or logout/login.
+  const [attendanceLoaded,   setAttendanceLoaded]   = useState(false)
+  const [checkedInToday,     setCheckedInToday]     = useState(true) // default true so the banner never flashes before the first load resolves
   const [showDashPunchIn, setShowDashPunchIn] = useState(false)
+
+  const loadAttendanceStatus = useCallback(async () => {
+    if (!user || user.userType === 'partner') { setAttendanceLoaded(true); return }
+    try {
+      const res  = await hrmService.getMyTodayAttendance()
+      const data = res?.data
+      if (!data || typeof data !== 'object' || data.awaiting_profile) {
+        setCheckedInToday(true) // no profile / no data — nothing to prompt for
+      } else {
+        const noPunchNeeded = !!(data.is_holiday || data.is_weekend || data.is_on_leave)
+        setCheckedInToday(!!data.check_in || noPunchNeeded)
+      }
+    } catch {
+      // Status unknown (network blip) — don't flip the banner on a guess.
+    } finally {
+      setAttendanceLoaded(true)
+    }
+  }, [user])
+
+  useEffect(() => { loadAttendanceStatus() }, [loadAttendanceStatus])
+
+  // Refresh immediately when a punch-in happens anywhere in the app (e.g. the
+  // TopBar popup), instead of waiting for the next poll tick.
+  useLivePolling(loadAttendanceStatus, 5000, true, [LIVE_TOPICS.ATTENDANCE, LIVE_TOPICS.DASHBOARD])
 
   // ── Fetch trend ──────────────────────────────────────────────────────────────
   const fetchTrend = useCallback(async (days) => {
@@ -845,17 +869,20 @@ const AdminDashboard = () => {
         </div>
       </Card>
 
-      {/* ── Attendance Warning Card ─────────────────────────────────────────────── */}
-      {attendanceDismissed && (
+      {/* ── Attendance Pending Banner ────────────────────────────────────────────
+          Independent of the Punch In popup's dismiss/snooze state — visible
+          purely because the user has not punched in today, and hidden only
+          once a punch-in is confirmed. No "Dismiss" action exists here. */}
+      {attendanceLoaded && !checkedInToday && (
         <>
           <PunchInModal
             isOpen={showDashPunchIn}
             onClose={() => setShowDashPunchIn(false)}
             onDismiss={() => setShowDashPunchIn(false)}
             onPunchedIn={() => {
-              localStorage.removeItem(ATTEND_DISMISS_KEY)
-              setAttendanceDismissed(false)
+              setCheckedInToday(true)
               setShowDashPunchIn(false)
+              publish(LIVE_TOPICS.ATTENDANCE); publish(LIVE_TOPICS.DASHBOARD)
             }}
           />
           <div
@@ -878,13 +905,6 @@ const AdminDashboard = () => {
               onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
             >
               <Clock className="w-3.5 h-3.5" /> Punch In Now
-            </button>
-            <button
-              onClick={() => setAttendanceDismissed(false)}
-              className="flex-shrink-0 text-xs px-2 py-1 rounded-lg transition-all"
-              style={{ color: 'var(--text-muted)', background: 'var(--bg-hover)' }}
-            >
-              Dismiss
             </button>
           </div>
         </>
