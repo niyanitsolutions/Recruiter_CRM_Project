@@ -33,10 +33,19 @@ import PunchInModal from './PunchInModal'
 import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
 // The punch-in popup's visibility is derived from today's attendance record
-// (backend truth: record.check_in), never from a persisted "dismissed" flag.
-// Dismissing (X / Remind Me Later) only hides it for the current view — it
-// reappears on refresh / navigation / re-login while the user has not yet
-// punched in, and it NEVER reappears once punched in.
+// (backend truth: record.check_in) combined with two dismissal signals:
+//   - "X" (close icon)     — transient, in-memory only. Reappears on refresh,
+//                            navigation, or re-login while not yet punched in.
+//   - "Remind me later"    — persisted per user for the current (tenant) day
+//                            via localStorage, so it survives refresh/hard
+//                            refresh/logout/login. It resets automatically
+//                            once the tenant-local calendar day changes.
+// Neither ever reappears once the user has actually punched in.
+const REMIND_LATER_KEY_PREFIX = 'punchin_remind_later_'
+
+function remindLaterKey(userId) {
+  return `${REMIND_LATER_KEY_PREFIX}${userId || 'anon'}`
+}
 
 // HH:MM:SS — used for live work/break timers
 function formatHMS(totalSeconds) {
@@ -65,6 +74,12 @@ function parseUTC(str) {
   return isNaN(d.getTime()) ? null : d
 }
 
+// Tenant-local calendar date as YYYY-MM-DD — used to scope the "remind me
+// later" dismissal to the current day (not the browser's UTC day).
+function tenantToday() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: getTenantTimezone() })
+}
+
 function leaveTypeLabel(lt) {
   if (!lt) return 'Leave'
   return lt.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -82,7 +97,13 @@ export default function AttendanceBanner() {
   const [loading,       setLoading]       = useState(false)
   // Transient (in-memory) — hides the popup for the current view only. Reset on
   // navigation so the reminder reappears until the user actually punches in.
+  // Set by BOTH "X" and "Remind me later" (both close the popup immediately);
+  // only "Remind me later" additionally sets `remindedToday` below.
   const [dismissed,     setDismissed]     = useState(false)
+  // Persisted (localStorage) — true once "Remind me later" has been clicked
+  // for the current tenant-local day. Survives refresh/logout/login; never
+  // set by "X". Re-derived whenever the logged-in user becomes known.
+  const [remindedToday, setRemindedToday] = useState(false)
   // True when the last /me/today load failed — we then can't confirm punch-in
   // status, so we must NOT nag with the popup (prevents the false popup on a
   // network blip / reconnect after the user already punched in).
@@ -154,6 +175,13 @@ export default function AttendanceBanner() {
     return () => clearInterval(id)
   }, [loadRecord])
 
+  // Re-derive the persisted "remind me later" flag whenever the user changes
+  // (login/logout/switch account on the same browser).
+  useEffect(() => {
+    if (!user?.id) { setRemindedToday(false); return }
+    setRemindedToday(localStorage.getItem(remindLaterKey(user.id)) === tenantToday())
+  }, [user?.id])
+
   // ── Work timer (second-level) ───────────────────────────────────────────────
   useEffect(() => {
     if (workTimerRef.current) clearInterval(workTimerRef.current)
@@ -206,15 +234,17 @@ export default function AttendanceBanner() {
   // Show ONLY when we can positively confirm the user has NOT punched in today.
   // Never show if: still loading, no real employee profile, the load errored
   // (status unknown), already punched in (record.check_in), a non-working day
-  // (holiday/weekend/approved leave), or the popup was dismissed in this view.
+  // (holiday/weekend/approved leave), dismissed via X in this view, or
+  // "remind me later" was clicked earlier today (persisted).
   useEffect(() => {
     if (!recordLoaded || !resolvedEmpId || resolvedEmpId === '__PENDING__') return
     if (loadErrored) return                              // status unknown — don't nag
     if (record?.check_in) return                         // punched in today (backend truth)
     if (isHoliday || isWeekend || leaveInfo) return      // no punch needed today
     if (dismissed) return                                // transiently dismissed this view
+    if (remindedToday) return                            // "remind me later" for today
     setShowModal(true)
-  }, [recordLoaded, resolvedEmpId, record, isHoliday, isWeekend, leaveInfo, loadErrored, dismissed])
+  }, [recordLoaded, resolvedEmpId, record, isHoliday, isWeekend, leaveInfo, loadErrored, dismissed, remindedToday])
 
   // Reset the transient dismiss when the route changes, so the reminder popup
   // reappears on navigation while the user has still not punched in (spec:
@@ -241,10 +271,23 @@ export default function AttendanceBanner() {
     return () => clearTimeout(id)
   }, [record?.check_in, record?.check_out, loadRecord])
 
-  // X or "Remind Me Later" — hide for THIS view only (no persistence). The
-  // small attendance status widget stays visible; the popup returns on the
-  // next navigation/refresh/re-login until the user actually punches in.
-  const handleDismiss = () => {
+  // "X" (close icon) — hide for THIS view only, no persistence. The small
+  // attendance status widget stays visible; the popup returns on the next
+  // navigation/refresh/re-login while the user has still not punched in.
+  const handleClose = () => {
+    setDismissed(true)
+    setShowModal(false)
+  }
+
+  // "Remind me later" — hide the popup for the rest of the current tenant-
+  // local day. Persisted so it survives refresh/hard refresh/logout/login;
+  // it is NOT a punch-in, and the dashboard Punch In button/status widget
+  // remains fully visible and functional throughout.
+  const handleRemindLater = () => {
+    if (user?.id) {
+      localStorage.setItem(remindLaterKey(user.id), tenantToday())
+    }
+    setRemindedToday(true)
     setDismissed(true)
     setShowModal(false)
   }
@@ -258,6 +301,8 @@ export default function AttendanceBanner() {
   //      have caught up yet.  1.5 s covers all observed replication windows in production.
   const handlePunchedIn = useCallback((checkInData) => {
     setDismissed(false)
+    setRemindedToday(false)
+    if (user?.id) localStorage.removeItem(remindLaterKey(user.id))
     if (checkInData && checkInData.check_in) {
       // Immediate optimistic update — timer and dashboard update at once
       setRecord(checkInData)
@@ -270,7 +315,7 @@ export default function AttendanceBanner() {
     // check_in, and keeps ESS + attendance page in sync without a page refresh.
     setTimeout(() => loadRecord(), 1500)
     publish(LIVE_TOPICS.ATTENDANCE); publish(LIVE_TOPICS.DASHBOARD)
-  }, [loadRecord])
+  }, [loadRecord, user?.id])
 
   const handlePunchOut = async () => {
     setLoading(true)
@@ -339,8 +384,8 @@ export default function AttendanceBanner() {
     <>
       <PunchInModal
         isOpen={showModal}
-        onClose={handleDismiss}
-        onDismiss={handleDismiss}
+        onClose={handleClose}
+        onDismiss={handleRemindLater}
         onPunchedIn={handlePunchedIn}
       />
 
