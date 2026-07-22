@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional, List, Tuple, Dict, Any
 import uuid
 import io
+import os
 import re
 import logging
 from html.parser import HTMLParser
@@ -224,209 +225,233 @@ def _strip_html(html: str) -> str:
 
 # ─── PDF Generator ────────────────────────────────────────────────────────────
 
+def _pdf_resolve_image_src(url: Optional[str]) -> str:
+    """Resolve a stored image URL (logo/signature) to something the PDF
+    renderer can embed directly: local disk paths are inlined as base64 data
+    URIs (no network round-trip); absolute http(s) URLs pass through as-is."""
+    if not url:
+        return ""
+    if url.startswith("data:") or url.startswith("http://") or url.startswith("https://"):
+        return url
+    marker = "/uploads/"
+    idx = url.find(marker)
+    if idx == -1:
+        return ""
+    from app.core.config import settings
+    key = url[idx + len(marker):]
+    file_path = os.path.join(settings.UPLOAD_DIR, *key.split("/"))
+    if not os.path.isfile(file_path):
+        return ""
+    import base64
+    import mimetypes
+    mime = mimetypes.guess_type(file_path)[0] or "image/png"
+    with open(file_path, "rb") as fh:
+        b64 = base64.b64encode(fh.read()).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+
+def _pdf_build_title_html(doc_title: Optional[Dict[str, Any]]) -> str:
+    if not doc_title or not doc_title.get("text"):
+        return ""
+    mt = doc_title.get("margin_top", 12)
+    mb = doc_title.get("margin_bottom", 14)
+    weight = "bold" if doc_title.get("bold") else "normal"
+    style_ = "italic" if doc_title.get("italic") else "normal"
+    decoration = "underline" if doc_title.get("underline") else "none"
+    return (
+        f'<div style="text-align:{doc_title.get("alignment", "center")};'
+        f'font-family:{doc_title.get("font_family", "Arial")},sans-serif;'
+        f'font-size:{doc_title.get("font_size", 16)}pt;'
+        f'color:{doc_title.get("color", "#111827")};'
+        f'font-weight:{weight};font-style:{style_};text-decoration:{decoration};'
+        f'margin:{mt}px 0 {mb}px;">{doc_title["text"]}</div>'
+    )
+
+
+def _pdf_build_signature_html(sig_cfg: Optional[Dict[str, Any]]) -> str:
+    if not sig_cfg or not sig_cfg.get("enabled"):
+        return ""
+    pos = sig_cfg.get("position", "left")
+    img_src = _pdf_resolve_image_src(sig_cfg.get("image_url") or sig_cfg.get("draw_data"))
+    sig_h = sig_cfg.get("height", 44)
+    align = pos if pos in ("left", "right", "center") else "left"
+    img_html = f'<img src="{img_src}" style="height:{sig_h}px;" />' if img_src else ""
+    lines = [f'<strong>{sig_cfg.get("authorized_person", "Authorized Signatory")}</strong>']
+    if sig_cfg.get("designation"):
+        lines.append(sig_cfg["designation"])
+    if sig_cfg.get("department"):
+        lines.append(sig_cfg["department"])
+    body = "<br/>".join(lines)
+    return (
+        f'<div style="margin-top:24px; text-align:{align};">'
+        f'{img_html}<div style="border-top:1px solid #374151; display:inline-block; '
+        f'padding-top:5px; font-size:11px; color:#374151;">{body}</div></div>'
+    )
+
+
+def _pdf_build_header_html(header_cfg) -> str:
+    if not header_cfg.show:
+        return ""
+    logo_src = _pdf_resolve_image_src(header_cfg.logo_url)
+    lines = []
+    if header_cfg.company_name:
+        lines.append(
+            f'<div style="font-weight:bold; font-size:{header_cfg.font_size + 2}pt; '
+            f'color:{header_cfg.font_color};">{header_cfg.company_name}</div>'
+        )
+    contact_bits = [b for b in [
+        header_cfg.company_address, header_cfg.company_phone,
+        header_cfg.company_email, header_cfg.company_website,
+    ] if b]
+    if contact_bits:
+        lines.append(
+            f'<div style="font-size:{max(6, header_cfg.font_size - 2)}pt; '
+            f'color:{header_cfg.font_color};">{" | ".join(contact_bits)}</div>'
+        )
+    reg_bits = []
+    if header_cfg.gst_number:
+        reg_bits.append(f"GSTIN: {header_cfg.gst_number}")
+    if header_cfg.reg_number:
+        reg_bits.append(f"Reg. No: {header_cfg.reg_number}")
+    if reg_bits:
+        lines.append(
+            f'<div style="font-size:{max(6, header_cfg.font_size - 2)}pt; '
+            f'color:{header_cfg.font_color};">{" | ".join(reg_bits)}</div>'
+        )
+    company_block = "".join(lines)
+    logo_html = f'<img src="{logo_src}" style="height:{header_cfg.logo_height}px;" />' if logo_src else ""
+
+    align = header_cfg.company_alignment or "left"
+    if logo_html and align != "center":
+        if align == "right":
+            cells = (
+                f'<td style="text-align:left; vertical-align:middle;">{company_block}</td>'
+                f'<td style="width:1%; text-align:right; vertical-align:middle;">{logo_html}</td>'
+            )
+        else:
+            cells = (
+                f'<td style="width:1%; text-align:left; vertical-align:middle;">{logo_html}</td>'
+                f'<td style="text-align:right; vertical-align:middle;">{company_block}</td>'
+            )
+        inner = f'<table style="width:100%; border-collapse:collapse;"><tr>{cells}</tr></table>'
+    else:
+        inner = f'<div style="text-align:{align};">{logo_html}{company_block}</div>'
+
+    border = "border-bottom:1px solid #d1d5db; padding-bottom:4px;" if header_cfg.border_bottom else ""
+    return f'<div style="{border}">{inner}</div>'
+
+
+def _pdf_build_footer_html(footer_cfg) -> str:
+    if not footer_cfg.show:
+        return ""
+    parts = []
+    if footer_cfg.text:
+        parts.append(footer_cfg.text)
+    if footer_cfg.confidential_label:
+        parts.append("CONFIDENTIAL")
+    center_text = "  |  ".join(parts)
+    border = "border-top:1px solid #d1d5db; padding-top:4px;" if footer_cfg.border_top else ""
+    left = datetime.now().strftime("%B %d, %Y") if footer_cfg.show_date else ""
+    right = "Page <pdf:pagenumber /> of <pdf:pagecount />" if footer_cfg.show_page_numbers else ""
+    return (
+        f'<table style="width:100%; font-size:{footer_cfg.font_size}pt; '
+        f'color:{footer_cfg.font_color}; {border}">'
+        f'<tr><td style="width:33%; text-align:left;">{left}</td>'
+        f'<td style="width:34%; text-align:center;">{center_text}</td>'
+        f'<td style="width:33%; text-align:right;">{right}</td></tr></table>'
+    )
+
+
+def _pdf_build_watermark_html(wm_cfg) -> str:
+    if not wm_cfg.enabled or wm_cfg.type.value != "text" or not wm_cfg.text:
+        return ""
+    return (
+        f'<div style="position:absolute; top:40%; left:0; right:0; text-align:center; '
+        f'font-size:{wm_cfg.size}pt; font-weight:bold; color:{wm_cfg.color}; '
+        f'opacity:{wm_cfg.opacity};">{wm_cfg.text}</div>'
+    )
+
+
+def _render_document_html(template: DocTemplate, html_content: str) -> str:
+    """
+    Builds the complete HTML document — header, title, rich body content,
+    signature, footer, watermark — for direct HTML-to-PDF rendering. This is
+    the Quick Builder template's own body_html (with placeholders already
+    replaced) placed as-is, so every inline style it carries (bold, italic,
+    underline, color, alignment, fonts, tables, lists) survives untouched.
+    """
+    content_obj = template.content
+    paper_cfg  = content_obj.paper
+    header_cfg = content_obj.header
+    footer_cfg = content_obj.footer
+    wm_cfg     = content_obj.watermark
+
+    header_html    = _pdf_build_header_html(header_cfg)
+    footer_html    = _pdf_build_footer_html(footer_cfg)
+    watermark_html = _pdf_build_watermark_html(wm_cfg)
+    title_html     = _pdf_build_title_html(content_obj.doc_title)
+    sig_html       = _pdf_build_signature_html(content_obj.signature_config)
+
+    # header_height/footer_height are stored in px (96dpi); PDF page geometry
+    # is in points — 1px @ 96dpi = 0.75pt.
+    header_h_pt = max(header_cfg.header_height, 40) * 0.75 if header_cfg.show else 0
+    footer_h_pt = max(footer_cfg.footer_height, 20) * 0.75 if footer_cfg.show else 0
+    margin_top    = paper_cfg.margin_top + header_h_pt
+    margin_bottom = paper_cfg.margin_bottom + footer_h_pt
+
+    frames = ""
+    running_html = ""
+    if header_cfg.show:
+        frames += f"""
+      @frame header_frame {{
+        -pdf-frame-content: header_content;
+        top: {paper_cfg.margin_top * 0.5}pt; left: {paper_cfg.margin_left}pt;
+        right: {paper_cfg.margin_right}pt; height: {header_h_pt}pt;
+      }}"""
+        running_html += f'<div id="header_content">{header_html}</div>'
+    if footer_cfg.show:
+        frames += f"""
+      @frame footer_frame {{
+        -pdf-frame-content: footer_content;
+        bottom: {paper_cfg.margin_bottom * 0.3}pt; left: {paper_cfg.margin_left}pt;
+        right: {paper_cfg.margin_right}pt; height: {footer_h_pt}pt;
+      }}"""
+        running_html += f'<div id="footer_content">{footer_html}</div>'
+
+    landscape = " landscape" if paper_cfg.orientation == PaperOrientation.LANDSCAPE else ""
+    css = f"""
+    @page {{
+      size: {paper_cfg.size.value}{landscape};
+      margin-top: {margin_top}pt;
+      margin-bottom: {margin_bottom}pt;
+      margin-left: {paper_cfg.margin_left}pt;
+      margin-right: {paper_cfg.margin_right}pt;{frames}
+    }}
+    body {{ font-family: Arial, sans-serif; font-size: 11pt; color: #1f2937; line-height: 1.5; }}
+    table {{ border-collapse: collapse; }}
+    """
+
+    return (
+        f'<html><head><meta charset="utf-8" /><style>{css}</style></head>'
+        f'<body>{running_html}{watermark_html}{title_html}{html_content}{sig_html}</body></html>'
+    )
+
+
 def _generate_pdf(template: DocTemplate, html_content: str, field_values: Dict[str, str]) -> bytes:
     """
-    Generate a PDF from a template using ReportLab.
-    Returns PDF bytes.
+    Generate a PDF directly from the rendered Quick Builder HTML (header,
+    title, rich body, signature, footer, watermark) using xhtml2pdf — a real
+    HTML+CSS renderer, so all formatting (bold/italic/underline/color/
+    alignment/tables/lists/fonts) survives into the PDF exactly as designed
+    instead of being flattened to plain text.
     """
-    from reportlab.lib.pagesizes import A4, letter, legal, landscape
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib import colors
-    from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table as RLTable,
-        TableStyle, HRFlowable, PageBreak,
-    )
-    from reportlab.platypus.flowables import Flowable
-    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
+    from xhtml2pdf import pisa
 
-    content_obj = template.content
-    paper_cfg   = content_obj.paper
-    header_cfg  = content_obj.header
-    footer_cfg  = content_obj.footer
-    wm_cfg      = content_obj.watermark
-
-    # Page size
-    size_map = {
-        PaperSize.A4:     A4,
-        PaperSize.LETTER: letter,
-        PaperSize.LEGAL:  legal,
-    }
-    page_size = size_map.get(paper_cfg.size, A4)
-    if paper_cfg.orientation == PaperOrientation.LANDSCAPE:
-        page_size = landscape(page_size)
-
+    full_html = _render_document_html(template, html_content)
     buf = io.BytesIO()
-
-    # ReportLab's native unit is already the point (inch == 72.0 units), so
-    # margin values — already stored in points — are used as-is.
-    margin_t = paper_cfg.margin_top
-    margin_b = paper_cfg.margin_bottom
-    margin_l = paper_cfg.margin_left
-    margin_r = paper_cfg.margin_right
-
-    # Build header/footer callbacks
-    def _on_page(canvas, doc):
-        canvas.saveState()
-
-        # Watermark
-        if wm_cfg.enabled and wm_cfg.type.value == "text" and wm_cfg.text:
-            canvas.setFont("Helvetica-Bold", wm_cfg.size)
-            canvas.setFillColorRGB(0.5, 0.5, 0.5, alpha=wm_cfg.opacity)
-            cx = page_size[0] / 2
-            cy = page_size[1] / 2
-            canvas.translate(cx, cy)
-            canvas.rotate(wm_cfg.rotation)
-            canvas.drawCentredString(0, 0, wm_cfg.text)
-            canvas.translate(-cx, -cy)
-
-        # Header
-        if header_cfg.show:
-            hh_pt = getattr(header_cfg, 'header_height', 120) * 0.75  # px to pt approx
-            header_y = page_size[1] - margin_t + hh_pt * 0.5 + 4
-            canvas.setFont("Helvetica-Bold", header_cfg.font_size + 2)
-            try:
-                r, g, b = int(header_cfg.font_color[1:3], 16)/255, int(header_cfg.font_color[3:5], 16)/255, int(header_cfg.font_color[5:7], 16)/255
-                canvas.setFillColorRGB(r, g, b)
-            except Exception:
-                canvas.setFillColorRGB(0, 0, 0)
-            # Use company_alignment (new field) with fallback to alignment (old field)
-            h_align = getattr(header_cfg, 'company_alignment', None) or getattr(header_cfg, 'alignment', 'left')
-            align_x = {
-                "left":   margin_l,
-                "center": page_size[0] / 2,
-                "right":  page_size[0] - margin_r,
-            }.get(h_align, margin_l)
-            draw_fn = {
-                "left":   canvas.drawString,
-                "center": canvas.drawCentredString,
-                "right":  canvas.drawRightString,
-            }.get(h_align, canvas.drawString)
-            if header_cfg.company_name:
-                draw_fn(align_x, header_y, header_cfg.company_name)
-            if header_cfg.company_address:
-                canvas.setFont("Helvetica", max(6, header_cfg.font_size - 1))
-                draw_fn(align_x, header_y - 14, header_cfg.company_address)
-            if header_cfg.border_bottom:
-                border_y = page_size[1] - margin_t
-                canvas.setStrokeColorRGB(0.7, 0.7, 0.7)
-                canvas.line(margin_l, border_y, page_size[0] - margin_r, border_y)
-
-        # Footer
-        if footer_cfg.show:
-            footer_y = margin_b - 20
-            canvas.setFont("Helvetica", footer_cfg.font_size)
-            try:
-                r, g, b = int(footer_cfg.font_color[1:3], 16)/255, int(footer_cfg.font_color[3:5], 16)/255, int(footer_cfg.font_color[5:7], 16)/255
-                canvas.setFillColorRGB(r, g, b)
-            except Exception:
-                canvas.setFillColorRGB(0.4, 0.4, 0.4)
-            if footer_cfg.border_top:
-                canvas.setStrokeColorRGB(0.7, 0.7, 0.7)
-                canvas.line(margin_l, footer_y + 10, page_size[0] - margin_r, footer_y + 10)
-            center_x = page_size[0] / 2
-            footer_parts = []
-            if footer_cfg.text:
-                footer_parts.append(footer_cfg.text)
-            if footer_cfg.confidential_label:
-                footer_parts.append("CONFIDENTIAL")
-            if footer_parts:
-                canvas.drawCentredString(center_x, footer_y, "  |  ".join(footer_parts))
-            if footer_cfg.show_page_numbers:
-                page_text = f"Page {doc.page}"
-                canvas.drawRightString(page_size[0] - margin_r, footer_y, page_text)
-            if footer_cfg.show_date:
-                canvas.drawString(margin_l, footer_y, datetime.now().strftime("%B %d, %Y"))
-
-        canvas.restoreState()
-
-    doc = SimpleDocTemplate(
-        buf,
-        pagesize=page_size,
-        topMargin=margin_t,
-        bottomMargin=margin_b,
-        leftMargin=margin_l,
-        rightMargin=margin_r,
-    )
-
-    styles   = getSampleStyleSheet()
-    story    = []
-    align_map = {"left": TA_LEFT, "center": TA_CENTER, "right": TA_RIGHT, "justify": TA_JUSTIFY}
-
-    heading_sizes = {1: 18, 2: 16, 3: 14, 4: 12, 5: 11, 6: 10}
-    blocks = _extract_blocks(html_content)
-
-    for block in blocks:
-        if block["type"] == "heading":
-            lvl = block.get("level", 1)
-            sz = heading_sizes.get(lvl, 14)
-            style = ParagraphStyle(
-                name=f"H{lvl}",
-                parent=styles["Normal"],
-                fontSize=sz,
-                fontName="Helvetica-Bold",
-                spaceAfter=8,
-                spaceBefore=12,
-            )
-            story.append(Paragraph(block["text"], style))
-
-        elif block["type"] == "paragraph":
-            style = ParagraphStyle(
-                name="Body",
-                parent=styles["Normal"],
-                fontSize=11,
-                leading=16,
-                spaceAfter=6,
-            )
-            story.append(Paragraph(block["text"], style))
-
-        elif block["type"] == "list":
-            for i, item in enumerate(block["items"]):
-                bullet = "•" if block["list_type"] == "ul" else f"{i+1}."
-                style = ParagraphStyle(
-                    name="ListItem",
-                    parent=styles["Normal"],
-                    fontSize=11,
-                    leading=15,
-                    leftIndent=20,
-                    spaceAfter=3,
-                )
-                story.append(Paragraph(f"{bullet}  {item}", style))
-            story.append(Spacer(1, 6))
-
-        elif block["type"] == "table":
-            rows_data = block["rows"]
-            if not rows_data:
-                continue
-            col_count = max(len(r) for r in rows_data)
-            # Normalize rows
-            table_data = [
-                [Paragraph(cell, styles["Normal"]) for cell in (row + [""] * col_count)[:col_count]]
-                for row in rows_data
-            ]
-            col_width = (page_size[0] - margin_l - margin_r) / col_count
-            tbl = RLTable(table_data, colWidths=[col_width] * col_count)
-            tbl.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#7c3aed")),
-                ("TEXTCOLOR",  (0, 0), (-1, 0), colors.white),
-                ("FONTNAME",   (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTSIZE",   (0, 0), (-1, -1), 10),
-                ("GRID",       (0, 0), (-1, -1), 0.5, colors.HexColor("#e5e7eb")),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9fafb")]),
-                ("VALIGN",     (0, 0), (-1, -1), "MIDDLE"),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                ("LEFTPADDING",   (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
-            ]))
-            story.append(tbl)
-            story.append(Spacer(1, 10))
-
-        story.append(Spacer(1, 4))
-
-    if not story:
-        story.append(Paragraph("No content.", styles["Normal"]))
-
-    doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page)
+    result = pisa.CreatePDF(full_html, dest=buf, encoding="utf-8")
+    if result.err:
+        raise RuntimeError(f"PDF rendering failed ({result.err} error(s))")
     return buf.getvalue()
 
 

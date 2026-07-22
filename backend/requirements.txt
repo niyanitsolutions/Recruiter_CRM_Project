@@ -45,7 +45,11 @@ python-dotenv==1.0.0
 boto3==1.34.34
 
 # PDF Generation
-reportlab==4.1.0
+reportlab==4.5.1
+# HTML+CSS -> PDF rendering (Document Center: preserves Quick Builder formatting
+# — fonts, bold/italic/underline, colors, alignment, tables, lists — instead of
+# flattening to plain text). Pure-Python, no native system libraries required.
+xhtml2pdf==0.2.17
 
 # Excel / Spreadsheet
 openpyxl==3.1.2
