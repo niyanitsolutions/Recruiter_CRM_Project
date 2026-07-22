@@ -169,6 +169,51 @@ async def upload_bytes(
     return url
 
 
+async def download_bytes(url: str) -> bytes:
+    """
+    Read back raw bytes previously stored via upload_bytes()/upload_file().
+    Mirrors upload_bytes()'s storage branching: S3 GetObject in production,
+    local disk read in development — used to serve an already-generated file
+    (e.g. Document Center downloads/email attachments) without regenerating it.
+
+    Raises:
+        FileNotFoundError: If the URL is empty, unrecognized, or the object
+            is missing from storage — callers should surface this as a clear
+            "file not found" error rather than silently regenerating.
+    """
+    url = (url or "").strip()
+    if not url:
+        raise FileNotFoundError("No storage URL provided")
+
+    s3_host = f"{settings.AWS_S3_BUCKET_NAME}.s3.{settings.AWS_REGION}.amazonaws.com/"
+    if settings.s3_enabled() and s3_host in url:
+        import asyncio
+
+        key = url.split(s3_host, 1)[-1]
+
+        def _get() -> bytes:
+            obj = _s3_client().get_object(Bucket=settings.AWS_S3_BUCKET_NAME, Key=key)
+            return obj["Body"].read()
+
+        try:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, _get)
+        except Exception as exc:
+            raise FileNotFoundError(f"Object not found in storage: {key}") from exc
+
+    # ── Local disk fallback — url looks like "/api/v1/uploads/<key>" ─────────
+    marker = "/uploads/"
+    idx = url.find(marker)
+    if idx == -1:
+        raise FileNotFoundError(f"Unrecognized storage URL: {url}")
+    key = url[idx + len(marker):]
+    file_path = os.path.join(settings.UPLOAD_DIR, *key.split("/"))
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"File not found on disk: {file_path}")
+    with open(file_path, "rb") as fh:
+        return fh.read()
+
+
 async def _upload_to_s3(content: bytes, folder: str, filename: str, ext: str) -> str:
     """Upload bytes to S3 and return the public HTTPS URL."""
     import asyncio

@@ -293,24 +293,21 @@ async def download_pdf(
     db   = Depends(get_company_db),
     user = Depends(PERM_VIEW),
 ):
+    """Streams the already-generated PDF back from storage. Never regenerates —
+    the file produced at generation time is the one downloaded, byte-for-byte."""
     gen = await db.doc_generated.find_one({"_id": doc_id, "is_deleted": {"$ne": True}})
     if not gen:
         raise HTTPException(status_code=404, detail="Document not found")
+    if not gen.get("pdf_url"):
+        raise HTTPException(status_code=404, detail="Generated document file not found.")
 
-    if gen.get("pdf_url"):
-        return {"success": True, "pdf_url": gen["pdf_url"]}
+    from app.utils.s3 import download_bytes
+    try:
+        pdf_bytes = await download_bytes(gen["pdf_url"])
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Generated document file not found.")
 
-    tmpl = await db.doc_templates.find_one({"_id": gen["template_id"]})
-    if not tmpl:
-        raise HTTPException(status_code=404, detail="Template not found")
-
-    from app.models.company.document_center import TemplateContent, DocTemplate as DocTemplateModel
-    content_obj = TemplateContent(**tmpl.get("content", {}))
-    tmpl_obj    = DocTemplateModel(**{**tmpl, "content": content_obj})
-
-    from app.services.document_center_service import _generate_pdf
-    pdf_bytes = _generate_pdf(tmpl_obj, gen.get("html_content", ""), gen.get("field_values", {}))
-    filename  = gen.get("document_name", "document").replace(" ", "_")
+    filename = gen.get("document_name", "document").replace(" ", "_")
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -324,21 +321,21 @@ async def download_docx(
     db   = Depends(get_company_db),
     user = Depends(PERM_VIEW),
 ):
+    """Streams the already-generated DOCX back from storage. Never regenerates —
+    the file produced at generation time is the one downloaded, byte-for-byte."""
     gen = await db.doc_generated.find_one({"_id": doc_id, "is_deleted": {"$ne": True}})
     if not gen:
         raise HTTPException(status_code=404, detail="Document not found")
+    if not gen.get("docx_url"):
+        raise HTTPException(status_code=404, detail="Generated document file not found.")
 
-    tmpl = await db.doc_templates.find_one({"_id": gen["template_id"]})
-    if not tmpl:
-        raise HTTPException(status_code=404, detail="Template not found")
+    from app.utils.s3 import download_bytes
+    try:
+        docx_bytes = await download_bytes(gen["docx_url"])
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Generated document file not found.")
 
-    from app.models.company.document_center import TemplateContent, DocTemplate as DocTemplateModel
-    content_obj = TemplateContent(**tmpl.get("content", {}))
-    tmpl_obj    = DocTemplateModel(**{**tmpl, "content": content_obj})
-
-    from app.services.document_center_service import _generate_docx
-    docx_bytes = _generate_docx(tmpl_obj, gen.get("html_content", ""), gen.get("field_values", {}))
-    filename   = gen.get("document_name", "document").replace(" ", "_")
+    filename = gen.get("document_name", "document").replace(" ", "_")
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

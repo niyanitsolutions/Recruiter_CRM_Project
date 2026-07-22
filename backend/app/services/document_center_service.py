@@ -231,7 +231,6 @@ def _generate_pdf(template: DocTemplate, html_content: str, field_values: Dict[s
     """
     from reportlab.lib.pagesizes import A4, letter, legal, landscape
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import pt, inch
     from reportlab.lib import colors
     from reportlab.platypus import (
         SimpleDocTemplate, Paragraph, Spacer, Table as RLTable,
@@ -258,10 +257,12 @@ def _generate_pdf(template: DocTemplate, html_content: str, field_values: Dict[s
 
     buf = io.BytesIO()
 
-    margin_t = paper_cfg.margin_top   * pt
-    margin_b = paper_cfg.margin_bottom * pt
-    margin_l = paper_cfg.margin_left  * pt
-    margin_r = paper_cfg.margin_right * pt
+    # ReportLab's native unit is already the point (inch == 72.0 units), so
+    # margin values — already stored in points — are used as-is.
+    margin_t = paper_cfg.margin_top
+    margin_b = paper_cfg.margin_bottom
+    margin_l = paper_cfg.margin_left
+    margin_r = paper_cfg.margin_right
 
     # Build header/footer callbacks
     def _on_page(canvas, doc):
@@ -462,7 +463,7 @@ def _generate_docx(template: DocTemplate, html_content: str, field_values: Dict[
             p.text = header_cfg.company_name
             if header_cfg.company_address:
                 p.add_run(f"\n{header_cfg.company_address}")
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER if header_cfg.alignment == "center" else WD_ALIGN_PARAGRAPH.LEFT
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER if header_cfg.company_alignment == "center" else WD_ALIGN_PARAGRAPH.LEFT
             run = p.runs[0] if p.runs else None
             if run:
                 run.bold = True
@@ -1184,7 +1185,7 @@ class DocumentCenterService:
                     doc_id, req.generate_pdf, req.generate_docx,
                 )
                 gen_doc["email_sent"]  = False
-                gen_doc["email_error"] = "The generated file was not available to attach; email not sent."
+                gen_doc["email_error"] = "Generated document file not found."
             else:
                 try:
                     from app.services.email_service import send_email

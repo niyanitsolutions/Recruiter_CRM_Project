@@ -17,14 +17,43 @@ const STATUS_COLORS = {
   draft:     'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
 }
 
+// Saves a Blob to disk via a throwaway object URL — same pattern used by
+// ExportModal.jsx for authenticated file downloads elsewhere in the CRM.
+const saveBlob = (blob, filename) => {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.setAttribute('download', filename)
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+// axios responseType:'blob' means error bodies arrive as a Blob too (not
+// parsed JSON) — read it back as text to recover the backend's real detail
+// message (e.g. "Generated document file not found.") instead of a generic one.
+const blobErrorDetail = async (err, fallback) => {
+  const data = err?.response?.data
+  if (data instanceof Blob) {
+    try {
+      const json = JSON.parse(await data.text())
+      return json.detail || fallback
+    } catch {
+      return fallback
+    }
+  }
+  return data?.detail || fallback
+}
+
 function DocMenu({ doc, onRefresh }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState('')
   const [pos, setPos]   = useState({ top: 0, bottom: 'auto', right: 0 })
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const btnRef          = useRef(null)
   const id   = doc._id || doc.id
-  const pdf  = documentCenterService.downloadPDF(id)
-  const docx = documentCenterService.downloadDOCX(id)
+  const baseName = (doc.document_name || 'document').replace(/\s+/g, '_')
 
   useEffect(() => {
     if (!open) return
@@ -53,20 +82,70 @@ function DocMenu({ doc, onRefresh }) {
     setOpen(v => !v)
   }
 
+  const doDownloadPDF = async () => {
+    setOpen(false)
+    setBusy('pdf')
+    try {
+      const res = await documentCenterService.fetchGeneratedPDF(id)
+      saveBlob(res.data, `${baseName}.pdf`)
+    } catch (err) {
+      toast.error(await blobErrorDetail(err, 'Generated document file not found.'))
+    } finally { setBusy('') }
+  }
+
+  const doDownloadDOCX = async () => {
+    setOpen(false)
+    setBusy('docx')
+    try {
+      const res = await documentCenterService.fetchGeneratedDOCX(id)
+      saveBlob(res.data, `${baseName}.docx`)
+    } catch (err) {
+      toast.error(await blobErrorDetail(err, 'Generated document file not found.'))
+    } finally { setBusy('') }
+  }
+
+  const doPrint = async () => {
+    setOpen(false)
+    setBusy('print')
+    try {
+      const res = await documentCenterService.fetchGeneratedPDF(id)
+      const url = window.URL.createObjectURL(res.data)
+      const iframe = document.createElement('iframe')
+      Object.assign(iframe.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' })
+      iframe.src = url
+      iframe.onload = () => {
+        try { iframe.contentWindow.focus(); iframe.contentWindow.print() } catch (_) {}
+      }
+      document.body.appendChild(iframe)
+      // Leave the iframe mounted long enough for the browser's print dialog
+      // to actually use it before cleaning up.
+      setTimeout(() => { iframe.remove(); window.URL.revokeObjectURL(url) }, 60000)
+    } catch (err) {
+      toast.error(await blobErrorDetail(err, 'Generated document file not found.'))
+      setBusy('')
+      return
+    }
+    setBusy('')
+  }
+
   const doArchive = async () => {
     setOpen(false)
     setBusy('arc')
-    try { await documentCenterService.archiveGenerated(id); toast.success('Archived'); onRefresh() }
-    catch { toast.error('Failed') }
+    try { await documentCenterService.archiveGenerated(id); toast.success('Document archived'); onRefresh() }
+    catch { toast.error('Archive failed') }
     finally { setBusy('') }
   }
+
   const doDelete = async () => {
-    setOpen(false)
-    if (!confirm('Permanently delete this document?')) return
+    setConfirmDelete(false)
     setBusy('del')
-    try { await documentCenterService.deleteGenerated(id); toast.success('Deleted'); onRefresh() }
-    catch { toast.error('Failed') }
-    finally { setBusy('') }
+    try {
+      await documentCenterService.deleteGenerated(id)
+      toast.success('Document deleted successfully.')
+      onRefresh()
+    } catch {
+      toast.error('Delete failed')
+    } finally { setBusy('') }
   }
 
   return (
@@ -107,26 +186,26 @@ function DocMenu({ doc, onRefresh }) {
                 <ExternalLink className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} /> View PDF
               </a>
             )}
-            <a href={pdf}
-              className="flex items-center gap-2 px-3 py-2 text-sm"
+            <button
+              onClick={doDownloadPDF}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm"
               style={{ color: 'var(--text-primary)' }}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
               onMouseLeave={e => e.currentTarget.style.background = ''}
-              onClick={() => setOpen(false)}
             >
               <Download className="w-3.5 h-3.5" style={{ color: '#10b981' }} /> Download PDF
-            </a>
-            <a href={docx}
-              className="flex items-center gap-2 px-3 py-2 text-sm"
+            </button>
+            <button
+              onClick={doDownloadDOCX}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm"
               style={{ color: 'var(--text-primary)' }}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
               onMouseLeave={e => e.currentTarget.style.background = ''}
-              onClick={() => setOpen(false)}
             >
               <Download className="w-3.5 h-3.5" style={{ color: '#10b981' }} /> Download DOCX
-            </a>
+            </button>
             <button
-              onClick={() => { window.open(pdf, '_blank'); setOpen(false) }}
+              onClick={doPrint}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm"
               style={{ color: 'var(--text-primary)' }}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
@@ -145,7 +224,7 @@ function DocMenu({ doc, onRefresh }) {
               <Archive className="w-3.5 h-3.5" style={{ color: '#f59e0b' }} /> Archive
             </button>
             <button
-              onClick={doDelete}
+              onClick={() => { setOpen(false); setConfirmDelete(true) }}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm"
               style={{ color: '#ef4444' }}
               onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
@@ -155,6 +234,38 @@ function DocMenu({ doc, onRefresh }) {
             </button>
           </div>
         </>,
+        document.body
+      )}
+      {confirmDelete && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60">
+          <div className="rounded-2xl w-full max-w-sm shadow-2xl" style={{ background: 'var(--bg-card)' }}>
+            <div className="px-6 py-5">
+              <h3 className="font-semibold text-base mb-2" style={{ color: 'var(--text-heading)' }}>
+                Delete this document?
+              </h3>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                This will permanently delete "{doc.document_name}". This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-3 px-6 pb-6">
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="flex-1 px-4 py-2 rounded-lg text-sm border font-medium"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={doDelete}
+                disabled={busy === 'del'}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-700"
+              >
+                {busy === 'del' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>,
         document.body
       )}
     </>
@@ -643,11 +754,19 @@ export default function GeneratedDocuments() {
                           <Eye className="w-3 h-3" /> View
                         </a>
                       )}
-                      <a href={documentCenterService.downloadPDF(doc._id||doc.id)}
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await documentCenterService.fetchGeneratedPDF(doc._id || doc.id)
+                            saveBlob(res.data, `${(doc.document_name || 'document').replace(/\s+/g, '_')}.pdf`)
+                          } catch (err) {
+                            toast.error(await blobErrorDetail(err, 'Generated document file not found.'))
+                          }
+                        }}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs border transition-colors hover:bg-violet-50 dark:hover:bg-violet-900/20"
                         style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>
                         <Download className="w-3 h-3" /> PDF
-                      </a>
+                      </button>
                       <DocMenu doc={doc} onRefresh={load} />
                     </div>
                   </td>

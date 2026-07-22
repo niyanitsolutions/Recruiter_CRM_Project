@@ -31,6 +31,12 @@ const archiveGenerated = (id)     => api.post(`${BASE}/generated/${id}/archive`)
 const deleteGenerated  = (id)     => api.delete(`${BASE}/generated/${id}`)
 const downloadPDF      = (id)     => `${api.defaults.baseURL}${BASE}/generate/${id}/pdf`
 const downloadDOCX     = (id)     => `${api.defaults.baseURL}${BASE}/generate/${id}/docx`
+// Authenticated blob fetches for the Generated Documents list — the two
+// builders above return a bare URL (used elsewhere via window.open) which
+// carries no Authorization header; these go through the shared `api` client
+// so the JWT is attached exactly like every other authenticated request.
+const fetchGeneratedPDF  = (id) => api.get(`${BASE}/generate/${id}/pdf`,  { responseType: 'blob' })
+const fetchGeneratedDOCX = (id) => api.get(`${BASE}/generate/${id}/docx`, { responseType: 'blob' })
 
 // ─── Approvals ────────────────────────────────────────────────────────────────
 const requestApproval = (data)        => api.post(`${BASE}/approvals`, data)
@@ -63,6 +69,7 @@ const documentCenterService = {
   listAllVersions,
   getGenerateContext,
   generateDocument, listGenerated, archiveGenerated, deleteGenerated, downloadPDF, downloadDOCX,
+  fetchGeneratedPDF, fetchGeneratedDOCX,
   requestApproval, listApprovals, reviewApproval,
   importDocument,
   getLibrary, createFromLibrary,
