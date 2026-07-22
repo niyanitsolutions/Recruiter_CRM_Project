@@ -7,6 +7,7 @@ import {
   FileText, Wand2, MoreVertical, ExternalLink, RefreshCw,
 } from 'lucide-react'
 import documentCenterService from '../../../services/documentCenterService'
+import hrmService from '../../../services/hrmService'
 
 const STATUS_COLORS = {
   generated: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
@@ -160,12 +161,27 @@ function DocMenu({ doc, onRefresh }) {
   )
 }
 
+const looksLikeRecruitment = (template) => {
+  const haystack = `${template?.name || ''} ${template?.category_name || ''}`.toLowerCase()
+  return ['offer', 'recruit', 'hiring', 'candidate'].some(kw => haystack.includes(kw))
+}
+
 function GenerateModal({ templateId, onClose, onDone }) {
   const [templates, setTemplates] = useState([])
   const [tmplId,    setTmplId]    = useState(templateId || '')
   const [docName,   setDocName]   = useState('')
+  const [recipientType, setRecipientType] = useState('employee')
+
   const [empId,     setEmpId]     = useState('')
   const [employees, setEmployees] = useState([])
+  const [empSearch, setEmpSearch] = useState('')
+  const [empLoading, setEmpLoading] = useState(false)
+
+  const [candId,     setCandId]     = useState('')
+  const [candidates, setCandidates] = useState([])
+  const [candSearch, setCandSearch] = useState('')
+  const [candLoading, setCandLoading] = useState(false)
+
   const [genPdf,    setGenPdf]    = useState(true)
   const [genDocx,   setGenDocx]   = useState(false)
   const [busy,      setBusy]      = useState(false)
@@ -177,16 +193,36 @@ function GenerateModal({ templateId, onClose, onDone }) {
         setTemplates(list)
         if (!templateId && list.length > 0) setTmplId(list[0]._id || list[0].id)
       }).catch(() => {})
-    import('../../../services/api').then(m => m.default.get('/employees', { params: { limit: 200 } })
-      .then(r => setEmployees(r.data?.data?.employees || r.data?.data || []))
-      .catch(() => {})
-    )
+
+    setEmpLoading(true)
+    hrmService.listEmployees({ page: 1, page_size: 200 })
+      .then(r => setEmployees(r.data?.items || []))
+      .catch(() => toast.error('Could not load employees'))
+      .finally(() => setEmpLoading(false))
+
+    setCandLoading(true)
+    hrmService.listHiringCandidates({ page: 1, page_size: 200 })
+      .then(r => setCandidates(r.data?.items || []))
+      .catch(() => toast.error('Could not load candidates'))
+      .finally(() => setCandLoading(false))
   }, [templateId])
 
   useEffect(() => {
     const t = templates.find(t => (t._id || t.id) === tmplId)
-    if (t) setDocName(`${t.name} - ${new Date().toLocaleDateString()}`)
+    if (t) {
+      setDocName(`${t.name} - ${new Date().toLocaleDateString()}`)
+      setRecipientType(looksLikeRecruitment(t) ? 'candidate' : 'employee')
+    }
   }, [tmplId, templates])
+
+  const filteredEmps = employees.filter(e =>
+    !empSearch || (e.full_name || '').toLowerCase().includes(empSearch.toLowerCase()) ||
+    (e.email || '').toLowerCase().includes(empSearch.toLowerCase())
+  )
+  const filteredCands = candidates.filter(c =>
+    !candSearch || (c.full_name || '').toLowerCase().includes(candSearch.toLowerCase()) ||
+    (c.email || '').toLowerCase().includes(candSearch.toLowerCase())
+  )
 
   const handleGenerate = async () => {
     if (!tmplId)         { toast.error('Select a template'); return }
@@ -195,7 +231,9 @@ function GenerateModal({ templateId, onClose, onDone }) {
     try {
       await documentCenterService.generateDocument({
         template_id: tmplId, document_name: docName,
-        employee_id: empId || null, field_values: {},
+        employee_id: recipientType === 'employee' ? (empId || null) : null,
+        candidate_id: recipientType === 'candidate' ? (candId || null) : null,
+        field_values: {},
         generate_pdf: genPdf, generate_docx: genDocx,
       })
       toast.success('Document generated!')
@@ -206,8 +244,8 @@ function GenerateModal({ templateId, onClose, onDone }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="rounded-2xl w-full max-w-md shadow-2xl" style={{ background: 'var(--bg-secondary)' }}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60">
+      <div className="rounded-2xl w-full max-w-md shadow-2xl" style={{ background: 'var(--bg-card)' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <h3 className="font-semibold" style={{ color: 'var(--text-heading)' }}>Generate Document</h3>
           <button onClick={onClose}><X className="w-4 h-4" style={{ color: 'var(--text-muted)' }} /></button>
@@ -217,7 +255,7 @@ function GenerateModal({ templateId, onClose, onDone }) {
             <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Template *</label>
             <select value={tmplId} onChange={e => setTmplId(e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500"
-              style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}>
+              style={{ background: 'var(--bg-card-alt)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}>
               <option value="">— Select Template —</option>
               {templates.map(t => <option key={t._id||t.id} value={t._id||t.id}>{t.name}</option>)}
             </select>
@@ -226,29 +264,117 @@ function GenerateModal({ templateId, onClose, onDone }) {
             <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Document Name *</label>
             <input value={docName} onChange={e => setDocName(e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500"
-              style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }} />
+              style={{ background: 'var(--bg-card-alt)', borderColor: 'var(--border)', color: 'var(--text-primary)' }} />
           </div>
+
           <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Employee (optional)</label>
-            <select value={empId} onChange={e => setEmpId(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500"
-              style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}>
-              <option value="">— No Employee —</option>
-              {employees.map(e => <option key={e._id||e.id} value={e._id||e.id}>{e.full_name}</option>)}
-            </select>
+            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Recipient</label>
+            <div className="flex gap-2 mb-2">
+              {[
+                { key: 'employee',  label: 'Employee' },
+                { key: 'candidate', label: 'Candidate' },
+              ].map(opt => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setRecipientType(opt.key)}
+                  className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                    recipientType === opt.key ? 'text-white' : ''
+                  }`}
+                  style={recipientType === opt.key
+                    ? { background: 'linear-gradient(135deg, #7c3aed, #4f46e5)', borderColor: '#7c3aed' }
+                    : { borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {recipientType === 'employee' ? (
+              <>
+                <input
+                  placeholder="Search employee by name or email..."
+                  value={empSearch}
+                  onChange={e => setEmpSearch(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500 mb-1.5"
+                  style={{ background: 'var(--bg-card-alt)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                />
+                <div className="border rounded-lg max-h-40 overflow-y-auto divide-y" style={{ borderColor: 'var(--border)' }}>
+                  {empLoading ? (
+                    <p className="text-xs text-center py-3" style={{ color: 'var(--text-muted)' }}>Loading employees…</p>
+                  ) : filteredEmps.length === 0 ? (
+                    <p className="text-xs text-center py-3" style={{ color: 'var(--text-muted)' }}>No employees found.</p>
+                  ) : (
+                    <>
+                      <label className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5">
+                        <input type="radio" name="emp-pick" checked={!empId} onChange={() => setEmpId('')} />
+                        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>— No Employee —</span>
+                      </label>
+                      {filteredEmps.map(e => (
+                        <label key={e._id || e.id}
+                          className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5">
+                          <input type="radio" name="emp-pick" checked={empId === (e._id || e.id)}
+                            onChange={() => setEmpId(e._id || e.id)} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm truncate" style={{ color: 'var(--text-primary)' }}>{e.full_name}</span>
+                            {e.email && <span className="block text-xs truncate" style={{ color: 'var(--text-muted)' }}>{e.email}</span>}
+                          </span>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <input
+                  placeholder="Search candidate by name or email..."
+                  value={candSearch}
+                  onChange={e => setCandSearch(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-violet-500 mb-1.5"
+                  style={{ background: 'var(--bg-card-alt)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                />
+                <div className="border rounded-lg max-h-40 overflow-y-auto divide-y" style={{ borderColor: 'var(--border)' }}>
+                  {candLoading ? (
+                    <p className="text-xs text-center py-3" style={{ color: 'var(--text-muted)' }}>Loading candidates…</p>
+                  ) : filteredCands.length === 0 ? (
+                    <p className="text-xs text-center py-3" style={{ color: 'var(--text-muted)' }}>No candidates found.</p>
+                  ) : (
+                    <>
+                      <label className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5">
+                        <input type="radio" name="cand-pick" checked={!candId} onChange={() => setCandId('')} />
+                        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>— No Candidate —</span>
+                      </label>
+                      {filteredCands.map(c => (
+                        <label key={c._id || c.id}
+                          className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5">
+                          <input type="radio" name="cand-pick" checked={candId === (c._id || c.id)}
+                            onChange={() => setCandId(c._id || c.id)} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm truncate" style={{ color: 'var(--text-primary)' }}>{c.full_name}</span>
+                            {c.email && <span className="block text-xs truncate" style={{ color: 'var(--text-muted)' }}>{c.email}</span>}
+                          </span>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </div>
+
           <div className="flex gap-4">
-            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-body)' }}>
+            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary)' }}>
               <input type="checkbox" checked={genPdf} onChange={e => setGenPdf(e.target.checked)} className="accent-violet-600" /> PDF
             </label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-body)' }}>
+            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary)' }}>
               <input type="checkbox" checked={genDocx} onChange={e => setGenDocx(e.target.checked)} className="accent-violet-600" /> DOCX
             </label>
           </div>
         </div>
         <div className="flex gap-3 px-6 pb-6">
           <button onClick={onClose} className="flex-1 px-4 py-2 rounded-lg text-sm border font-medium"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}>Cancel</button>
+            style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}>Cancel</button>
           <button onClick={handleGenerate} disabled={busy}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
             style={{ background: 'linear-gradient(135deg, #7c3aed, #4f46e5)' }}>

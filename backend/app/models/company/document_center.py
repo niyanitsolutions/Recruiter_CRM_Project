@@ -233,6 +233,7 @@ class DocGenerated(BaseModel):
     template_name:   str
     document_name:   str
     employee_id:     Optional[str]       = None
+    candidate_id:    Optional[str]       = None
     employee_name:   Optional[str]       = None
     employee_email:  Optional[str]       = None
     field_values:    Dict[str, str]      = {}
@@ -314,6 +315,7 @@ class DocGenerateRequest(BaseModel):
     template_id:   str
     document_name: str
     employee_id:   Optional[str]       = None
+    candidate_id:  Optional[str]       = None
     field_values:  Dict[str, str]      = {}
     generate_pdf:  bool                = True
     generate_docx: bool                = False
@@ -377,6 +379,7 @@ class DocGeneratedListItem(BaseModel):
     template_name:   str
     document_name:   str
     employee_id:     Optional[str]
+    candidate_id:    Optional[str] = None
     employee_name:   Optional[str]
     employee_email:  Optional[str]
     status:          DocStatus

@@ -528,6 +528,94 @@ def _resolve_fields(html: str, values: Dict[str, str]) -> str:
     return re.sub(r"\{\{(\w+)\}\}", replacer, html)
 
 
+def _prettify(value: Any) -> str:
+    """snake_case / enum value -> 'Title Case' for display in generated docs."""
+    if not value:
+        return ""
+    return str(value).replace("_", " ").title()
+
+
+def _fmt_date(value: Any) -> str:
+    if not value:
+        return ""
+    if hasattr(value, "strftime"):
+        return value.strftime("%d %b %Y")
+    return str(value)
+
+
+def _fmt_address(info: Optional[Dict[str, Any]]) -> str:
+    if not info:
+        return ""
+    parts = [info.get("street"), info.get("city"), info.get("state"), info.get("zip_code"), info.get("country")]
+    return ", ".join(p for p in parts if p)
+
+
+def _fmt_inr(value: Any) -> str:
+    """Format a number as Indian-grouped currency, e.g. 800000 -> '₹8,00,000'."""
+    try:
+        n = int(round(float(value)))
+    except (TypeError, ValueError):
+        return ""
+    neg = n < 0
+    n = abs(n)
+    s = str(n)
+    if len(s) <= 3:
+        grouped = s
+    else:
+        last3, rest = s[-3:], s[:-3]
+        parts = []
+        while len(rest) > 2:
+            parts.insert(0, rest[-2:])
+            rest = rest[:-2]
+        if rest:
+            parts.insert(0, rest)
+        grouped = ",".join(parts + [last3])
+    return f"{'-' if neg else ''}₹{grouped}"
+
+
+_ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+         "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+         "Seventeen", "Eighteen", "Nineteen"]
+_TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+
+
+def _two_digit_words(n: int) -> str:
+    if n < 20:
+        return _ONES[n]
+    tail = f" {_ONES[n % 10]}" if n % 10 else ""
+    return f"{_TENS[n // 10]}{tail}"
+
+
+def _three_digit_words(n: int) -> str:
+    if n >= 100:
+        rest = n % 100
+        tail = f" {_two_digit_words(rest)}" if rest else ""
+        return f"{_ONES[n // 100]} Hundred{tail}"
+    return _two_digit_words(n)
+
+
+def _num_to_words_inr(value: Any) -> str:
+    """Indian numbering (lakh/crore) currency-in-words, e.g. 800000 -> 'Eight Lakh Rupees Only'."""
+    try:
+        n = int(round(float(value)))
+    except (TypeError, ValueError):
+        return ""
+    if n == 0:
+        return "Zero Rupees Only"
+    neg, n = n < 0, abs(n)
+    crore, n    = divmod(n, 10_000_000)
+    lakh, n     = divmod(n, 100_000)
+    thousand, n = divmod(n, 1000)
+    hundred     = n
+    parts = []
+    if crore:    parts.append(f"{_three_digit_words(crore)} Crore")
+    if lakh:     parts.append(f"{_three_digit_words(lakh)} Lakh")
+    if thousand: parts.append(f"{_three_digit_words(thousand)} Thousand")
+    if hundred:  parts.append(_three_digit_words(hundred))
+    words = " ".join(parts) if parts else "Zero"
+    return f"{'Minus ' if neg else ''}{words} Rupees Only"
+
+
 async def _fetch_employee_fields(db: AsyncIOMotorDatabase, employee_id: str) -> Dict[str, str]:
     """Load employee data from DB and map to template field names."""
     fields: Dict[str, str] = {}
@@ -536,21 +624,80 @@ async def _fetch_employee_fields(db: AsyncIOMotorDatabase, employee_id: str) -> 
     emp = await db.hrm_employees.find_one({"_id": employee_id, "is_deleted": False})
     if not emp:
         return fields
-    now = datetime.now(timezone.utc)
+
+    salary = emp.get("salary") or {}
+    ctc = salary.get("ctc", 0)
     fields.update({
-        "employee_name":    emp.get("full_name", ""),
-        "employee_id":      emp.get("employee_id", emp.get("_id", "")),
-        "department":       emp.get("department", ""),
-        "designation":      emp.get("designation", ""),
-        "salary":           str(emp.get("salary", "")),
-        "joining_date":     str(emp.get("joining_date", "") or ""),
-        "exit_date":        str(emp.get("exit_date", "") or ""),
-        "manager_name":     emp.get("manager_name", ""),
-        "employee_email":   emp.get("email", ""),
-        "employee_address": emp.get("address", ""),
-        "employee_phone":   emp.get("phone", ""),
-        "current_date":     now.strftime("%B %d, %Y"),
-        "month_year":       now.strftime("%B %Y"),
+        "employee_name":      emp.get("full_name", ""),
+        "employee_id":        emp.get("employee_id", emp.get("_id", "")),
+        "employee_code":      emp.get("employee_id", ""),
+        "department":         emp.get("department_name", ""),
+        "designation":        emp.get("designation_name", ""),
+        "employment_type":    _prettify(emp.get("employment_type", "")),
+        "employee_status":    _prettify(emp.get("employment_status", "")),
+        "salary":             _fmt_inr(ctc),
+        "ctc":                _fmt_inr(ctc),
+        "joining_date":       _fmt_date(emp.get("date_of_joining")),
+        "exit_date":          _fmt_date(emp.get("date_of_leaving")),
+        "probation_end_date": _fmt_date(emp.get("probation_end_date")),
+        "manager_name":       emp.get("reporting_manager_name", ""),
+        "employee_email":     emp.get("email", ""),
+        "employee_phone":     emp.get("phone", ""),
+        "employee_address":   emp.get("address") or _fmt_address(emp.get("address_info")),
+        "employee_gender":    _prettify(emp.get("gender", "")),
+        "employee_dob":       _fmt_date(emp.get("date_of_birth")),
+        "work_location":      emp.get("work_location", ""),
+    })
+
+    # Payroll — prefer the latest payslip snapshot; fall back to the salary structure
+    # stored on the employee record itself when no payslip has been generated yet.
+    payslip = await db.hrm_payslips.find_one(
+        {"employee_id": employee_id}, sort=[("year", -1), ("month", -1)]
+    )
+    if payslip:
+        fields.update({
+            "basic":             _fmt_inr(payslip.get("basic", 0)),
+            "hra":               _fmt_inr(payslip.get("hra", 0)),
+            "special_allowance": _fmt_inr(payslip.get("special_allowance", 0)),
+            "bonus":             _fmt_inr(payslip.get("bonus", 0)),
+            "gross":             _fmt_inr(payslip.get("gross_earnings", 0)),
+            "pf":                _fmt_inr(payslip.get("pf_employee", 0)),
+            "pt":                _fmt_inr(payslip.get("professional_tax", 0)),
+            "tds":               _fmt_inr(payslip.get("tds", 0)),
+            "total_deductions":  _fmt_inr(payslip.get("total_deductions", 0)),
+            "net_salary":        _fmt_inr(payslip.get("net_salary", 0)),
+        })
+        fields["salary_in_words"] = _num_to_words_inr(payslip.get("net_salary", 0))
+    else:
+        fields.update({
+            "basic":             _fmt_inr(salary.get("basic", 0)),
+            "hra":               _fmt_inr(salary.get("hra", 0)),
+            "special_allowance": _fmt_inr(salary.get("special_allowance", 0)),
+            "gross":             _fmt_inr(salary.get("gross_salary", 0)),
+            "pf":                _fmt_inr(salary.get("pf_employee", 0)),
+            "pt":                _fmt_inr(salary.get("professional_tax", 0)),
+            "net_salary":        _fmt_inr(salary.get("net_salary", 0)),
+        })
+        fields["salary_in_words"] = _num_to_words_inr(salary.get("net_salary", 0))
+
+    return fields
+
+
+async def _fetch_candidate_fields(db: AsyncIOMotorDatabase, candidate_id: str) -> Dict[str, str]:
+    """Load a recruitment candidate (HRM hiring pipeline) and map onto the same
+    field names employee templates already use (offer letters etc. address the
+    recipient via {{employee_name}}/{{employee_email}}/{{designation}})."""
+    fields: Dict[str, str] = {}
+    if not candidate_id:
+        return fields
+    cand = await db.hrm_candidates.find_one({"_id": candidate_id, "is_deleted": {"$ne": True}})
+    if not cand:
+        return fields
+    fields.update({
+        "employee_name":    cand.get("full_name", ""),
+        "employee_email":   cand.get("email", ""),
+        "employee_phone":   cand.get("phone", ""),
+        "designation":      cand.get("current_designation") or cand.get("job_title", ""),
     })
     return fields
 
@@ -858,17 +1005,36 @@ class DocumentCenterService:
         if not tmpl:
             return False, "Template not found", None
 
-        # Build field values: employee DB → user-supplied overrides
-        resolved: Dict[str, str] = {"current_date": datetime.now().strftime("%B %d, %Y")}
-        if req.employee_id:
-            emp_fields = await _fetch_employee_fields(db, req.employee_id)
-            resolved.update(emp_fields)
+        # Date/time fields resolve regardless of recipient
+        now = datetime.now(timezone.utc)
+        resolved: Dict[str, str] = {
+            "current_date":  now.strftime("%B %d, %Y"),
+            "current_month": now.strftime("%B"),
+            "current_year":  str(now.year),
+            "month_year":    now.strftime("%B %Y"),
+            "generated_by":  user_name,
+        }
 
-        # Fetch company name from tenant settings if available
+        # Recipient data: employee DB → candidate DB (recruitment templates) → user overrides
+        candidate_id = req.candidate_id
+        if req.employee_id:
+            resolved.update(await _fetch_employee_fields(db, req.employee_id))
+        elif candidate_id:
+            resolved.update(await _fetch_candidate_fields(db, candidate_id))
+
+        # Company fields: per-template header (set in Quick Builder's Header/Company
+        # panel) take priority, falling back to tenant-wide company settings.
+        header = (tmpl.get("content") or {}).get("header") or {}
         settings = await db.company_settings.find_one({}) or {}
-        company_name = settings.get("company_name", "")
-        if company_name:
-            resolved["company_name"] = company_name
+        resolved.update({
+            "company_name":    header.get("company_name")    or settings.get("company_name", ""),
+            "company_address": header.get("company_address") or settings.get("address", ""),
+            "company_phone":   header.get("company_phone")   or settings.get("admin_phone", ""),
+            "company_email":   header.get("company_email")   or settings.get("support_email") or settings.get("admin_email", ""),
+            "company_website": header.get("company_website") or settings.get("website", ""),
+            "gst_number":      header.get("gst_number", ""),
+            "reg_number":      header.get("reg_number", ""),
+        })
 
         # User overrides last
         resolved.update(req.field_values)
@@ -918,7 +1084,7 @@ class DocumentCenterService:
             logger.error("Document persistence failed (doc not stored): %s", _store_err, exc_info=True)
             doc_id = str(uuid.uuid4())
 
-        # Fetch employee info
+        # Fetch recipient info (employee or candidate)
         emp_name  = resolved.get("employee_name", "")
         emp_email = resolved.get("employee_email", "")
         if req.employee_id and not emp_name:
@@ -931,6 +1097,7 @@ class DocumentCenterService:
             template_name=tmpl["name"],
             document_name=req.document_name,
             employee_id=req.employee_id,
+            candidate_id=candidate_id,
             employee_name=emp_name,
             employee_email=emp_email,
             field_values=resolved,

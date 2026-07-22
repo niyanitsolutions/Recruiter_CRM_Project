@@ -9,6 +9,7 @@ import {
   RotateCcw, CheckCircle, History,
 } from 'lucide-react'
 import documentCenterService from '../../../services/documentCenterService'
+import hrmService from '../../../services/hrmService'
 
 // ─── Prebuilt library list (mirrors backend TEMPLATE_LIBRARY) ─────────────────
 const PREBUILT = [
@@ -39,28 +40,54 @@ const TYPE_COLORS = {
 }
 const CATEGORY_COLORS = ['HR Letters', 'Legal', 'Payroll', 'Operations']
 
+// A template "looks like" a recruitment/hiring document when its name/category
+// hints at candidate-facing paperwork (offer letters etc.) — used only to pick
+// a sensible default tab; the user can always switch to the other recipient type.
+const looksLikeRecruitment = (template) => {
+  const haystack = `${template?.name || ''} ${template?.category_name || ''}`.toLowerCase()
+  return ['offer', 'recruit', 'hiring', 'candidate'].some(kw => haystack.includes(kw))
+}
+
 // ─── Generate Modal ────────────────────────────────────────────────────────────
 function GenerateModal({ template, onClose, onDone }) {
   const [docName, setDocName]   = useState(`${template.name} - ${new Date().toLocaleDateString()}`)
+  const [recipientType, setRecipientType] = useState(looksLikeRecruitment(template) ? 'candidate' : 'employee')
+
   const [empId, setEmpId]       = useState('')
   const [employees, setEmployees] = useState([])
   const [empSearch, setEmpSearch] = useState('')
+  const [empLoading, setEmpLoading] = useState(false)
+
+  const [candId, setCandId]         = useState('')
+  const [candidates, setCandidates] = useState([])
+  const [candSearch, setCandSearch] = useState('')
+  const [candLoading, setCandLoading] = useState(false)
+
   const [genPdf, setGenPdf]     = useState(true)
   const [genDocx, setGenDocx]   = useState(false)
   const [busy, setBusy]         = useState(false)
-  const [empLoading, setEmpLoading] = useState(false)
 
   useEffect(() => {
     setEmpLoading(true)
-    import('../../../services/api').then(m => m.default.get('/employees', { params: { limit: 200 } })
-      .then(r => setEmployees(r.data?.data?.employees || r.data?.data || []))
-      .catch(() => {})
+    hrmService.listEmployees({ page: 1, page_size: 200 })
+      .then(r => setEmployees(r.data?.items || []))
+      .catch(() => toast.error('Could not load employees'))
       .finally(() => setEmpLoading(false))
-    )
+
+    setCandLoading(true)
+    hrmService.listHiringCandidates({ page: 1, page_size: 200 })
+      .then(r => setCandidates(r.data?.items || []))
+      .catch(() => toast.error('Could not load candidates'))
+      .finally(() => setCandLoading(false))
   }, [])
 
   const filteredEmps = employees.filter(e =>
-    !empSearch || (e.full_name || '').toLowerCase().includes(empSearch.toLowerCase())
+    !empSearch || (e.full_name || '').toLowerCase().includes(empSearch.toLowerCase()) ||
+    (e.email || '').toLowerCase().includes(empSearch.toLowerCase())
+  )
+  const filteredCands = candidates.filter(c =>
+    !candSearch || (c.full_name || '').toLowerCase().includes(candSearch.toLowerCase()) ||
+    (c.email || '').toLowerCase().includes(candSearch.toLowerCase())
   )
 
   const handleGenerate = async () => {
@@ -70,7 +97,8 @@ function GenerateModal({ template, onClose, onDone }) {
       await documentCenterService.generateDocument({
         template_id: template._id || template.id,
         document_name: docName,
-        employee_id: empId || null,
+        employee_id: recipientType === 'employee' ? (empId || null) : null,
+        candidate_id: recipientType === 'candidate' ? (candId || null) : null,
         field_values: {},
         generate_pdf: genPdf,
         generate_docx: genDocx,
@@ -86,8 +114,8 @@ function GenerateModal({ template, onClose, onDone }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="rounded-2xl w-full max-w-md shadow-2xl" style={{ background: 'var(--bg-secondary)' }}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60">
+      <div className="rounded-2xl w-full max-w-md shadow-2xl" style={{ background: 'var(--bg-card)' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
           <h3 className="font-semibold text-base" style={{ color: 'var(--text-heading)' }}>
             Generate Document
@@ -105,45 +133,120 @@ function GenerateModal({ template, onClose, onDone }) {
               value={docName}
               onChange={e => setDocName(e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500"
-              style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
+              style={{ background: 'var(--bg-card-alt)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
             />
           </div>
+
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
-              Employee (optional)
+              Recipient
             </label>
-            <input
-              placeholder="Search employee..."
-              value={empSearch}
-              onChange={e => setEmpSearch(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500 mb-1"
-              style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
-            />
-            {empLoading ? (
-              <p className="text-xs text-center py-2" style={{ color: 'var(--text-muted)' }}>Loading...</p>
+            <div className="flex gap-2 mb-2">
+              {[
+                { key: 'employee',  label: 'Employee' },
+                { key: 'candidate', label: 'Candidate' },
+              ].map(opt => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setRecipientType(opt.key)}
+                  className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                    recipientType === opt.key ? 'text-white' : ''
+                  }`}
+                  style={recipientType === opt.key
+                    ? { background: 'linear-gradient(135deg, #167CFB, #0267F9)', borderColor: '#167CFB' }
+                    : { borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {recipientType === 'employee' ? (
+              <>
+                <input
+                  placeholder="Search employee by name or email..."
+                  value={empSearch}
+                  onChange={e => setEmpSearch(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500 mb-1.5"
+                  style={{ background: 'var(--bg-card-alt)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                />
+                <div className="border rounded-lg max-h-44 overflow-y-auto divide-y" style={{ borderColor: 'var(--border)' }}>
+                  {empLoading ? (
+                    <p className="text-xs text-center py-3" style={{ color: 'var(--text-muted)' }}>Loading employees…</p>
+                  ) : filteredEmps.length === 0 ? (
+                    <p className="text-xs text-center py-3" style={{ color: 'var(--text-muted)' }}>No employees found.</p>
+                  ) : (
+                    <>
+                      <label className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5">
+                        <input type="radio" name="emp-pick" checked={!empId} onChange={() => setEmpId('')} />
+                        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>— No Employee —</span>
+                      </label>
+                      {filteredEmps.map(e => (
+                        <label key={e._id || e.id}
+                          className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5">
+                          <input type="radio" name="emp-pick" checked={empId === (e._id || e.id)}
+                            onChange={() => setEmpId(e._id || e.id)} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm truncate" style={{ color: 'var(--text-primary)' }}>
+                              {e.full_name} {e.employee_id ? `(${e.employee_id})` : ''}
+                            </span>
+                            {e.email && (
+                              <span className="block text-xs truncate" style={{ color: 'var(--text-muted)' }}>{e.email}</span>
+                            )}
+                          </span>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </>
             ) : (
-              <select
-                value={empId}
-                onChange={e => setEmpId(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500"
-                style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-body)' }}
-                size={Math.min(filteredEmps.length + 1, 5)}
-              >
-                <option value="">— No Employee —</option>
-                {filteredEmps.map(e => (
-                  <option key={e._id || e.id} value={e._id || e.id}>
-                    {e.full_name} {e.employee_id ? `(${e.employee_id})` : ''}
-                  </option>
-                ))}
-              </select>
+              <>
+                <input
+                  placeholder="Search candidate by name or email..."
+                  value={candSearch}
+                  onChange={e => setCandSearch(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-accent-500 mb-1.5"
+                  style={{ background: 'var(--bg-card-alt)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                />
+                <div className="border rounded-lg max-h-44 overflow-y-auto divide-y" style={{ borderColor: 'var(--border)' }}>
+                  {candLoading ? (
+                    <p className="text-xs text-center py-3" style={{ color: 'var(--text-muted)' }}>Loading candidates…</p>
+                  ) : filteredCands.length === 0 ? (
+                    <p className="text-xs text-center py-3" style={{ color: 'var(--text-muted)' }}>No candidates found.</p>
+                  ) : (
+                    <>
+                      <label className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5">
+                        <input type="radio" name="cand-pick" checked={!candId} onChange={() => setCandId('')} />
+                        <span className="text-sm" style={{ color: 'var(--text-muted)' }}>— No Candidate —</span>
+                      </label>
+                      {filteredCands.map(c => (
+                        <label key={c._id || c.id}
+                          className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5">
+                          <input type="radio" name="cand-pick" checked={candId === (c._id || c.id)}
+                            onChange={() => setCandId(c._id || c.id)} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm truncate" style={{ color: 'var(--text-primary)' }}>{c.full_name}</span>
+                            {c.email && (
+                              <span className="block text-xs truncate" style={{ color: 'var(--text-muted)' }}>{c.email}</span>
+                            )}
+                          </span>
+                        </label>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </>
             )}
           </div>
+
           <div className="flex gap-4">
-            <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--text-body)' }}>
+            <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--text-primary)' }}>
               <input type="checkbox" checked={genPdf} onChange={e => setGenPdf(e.target.checked)} className="accent-[#167CFB]" />
               Generate PDF
             </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--text-body)' }}>
+            <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--text-primary)' }}>
               <input type="checkbox" checked={genDocx} onChange={e => setGenDocx(e.target.checked)} className="accent-[#167CFB]" />
               Generate DOCX
             </label>
@@ -153,7 +256,7 @@ function GenerateModal({ template, onClose, onDone }) {
           <button
             onClick={onClose}
             className="flex-1 px-4 py-2 rounded-lg text-sm border font-medium"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-body)' }}
+            style={{ borderColor: 'var(--border)', color: 'var(--text-primary)' }}
           >
             Cancel
           </button>
