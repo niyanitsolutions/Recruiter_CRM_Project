@@ -115,19 +115,26 @@ def _do_send(cfg: dict, to_email: str, subject: str,
 
     attachments: optional list of {"filename": str, "content": bytes, "mimetype": str}.
     Omitted/empty preserves the exact prior message structure for all existing callers.
+    Entries with empty/missing content are dropped — an empty file is never a
+    valid attachment (guards against silently mailing a corrupt/placeholder file).
     """
     import email.utils as _eu
 
-    if attachments:
+    valid_attachments = [a for a in (attachments or []) if a.get("content")]
+
+    if valid_attachments:
         msg = MIMEMultipart("mixed")
         body = MIMEMultipart("alternative")
         if text_body:
             body.attach(MIMEText(text_body, "plain", "utf-8"))
         body.attach(MIMEText(html_body, "html", "utf-8"))
         msg.attach(body)
-        for att in attachments:
-            part = MIMEApplication(att["content"], Name=att["filename"])
-            part["Content-Disposition"] = f'attachment; filename="{att["filename"]}"'
+        for att in valid_attachments:
+            filename = att["filename"]
+            mimetype = att.get("mimetype") or "application/octet-stream"
+            subtype = mimetype.split("/", 1)[1] if "/" in mimetype else "octet-stream"
+            part = MIMEApplication(att["content"], _subtype=subtype, Name=filename)
+            part.add_header("Content-Disposition", "attachment", filename=filename)
             msg.attach(part)
     else:
         msg = MIMEMultipart("alternative")

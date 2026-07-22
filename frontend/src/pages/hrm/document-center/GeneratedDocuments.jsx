@@ -288,7 +288,7 @@ function GenerateModal({ templateId, onClose, onDone }) {
     if (sendEmail && !emailTo.trim()) { toast.error('Recipient email is required to send by email'); return }
     setBusy(true)
     try {
-      await documentCenterService.generateDocument({
+      const res = await documentCenterService.generateDocument({
         template_id: tmplId, document_name: docName,
         employee_id: recipientType === 'employee' ? (empId || null) : null,
         candidate_id: recipientType === 'candidate' ? (candId || null) : null,
@@ -299,7 +299,17 @@ function GenerateModal({ templateId, onClose, onDone }) {
         email_subject: sendEmail ? emailSubject : null,
         email_message: sendEmail ? emailMessage : null,
       })
-      toast.success(sendEmail ? 'Document generated and emailed!' : 'Document generated!')
+      const doc = res.data?.data || {}
+      if (sendEmail) {
+        if (doc.email_sent) {
+          toast.success(`Document generated. Emailed with attachment: ${(doc.attachments_sent || []).join(', ')}`)
+        } else {
+          toast.success('Document generated successfully.')
+          toast.error(doc.email_error || 'Email sending failed. The generated document has been saved.')
+        }
+      } else {
+        toast.success('Document generated!')
+      }
       onDone?.(); onClose()
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Generation failed')

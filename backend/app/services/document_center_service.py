@@ -1150,7 +1150,42 @@ class DocumentCenterService:
         # document is already saved above regardless of send outcome.
         if req.send_email and (req.recipient_email or emp_email):
             to_email = (req.recipient_email or emp_email or "").strip()
-            if to_email:
+
+            # Build attachments strictly from the SAME bytes already generated
+            # above — never regenerated, never re-fetched. Only a format the HR
+            # user actually selected AND that produced real, non-empty content
+            # is attached, so a silent generation failure never mails an empty
+            # or placeholder file.
+            attachments = []
+            if req.generate_pdf and pdf_bytes:
+                attachments.append({
+                    "filename": f"{req.document_name}.pdf",
+                    "content": pdf_bytes,
+                    "mimetype": "application/pdf",
+                })
+            if req.generate_docx and docx_bytes:
+                attachments.append({
+                    "filename": f"{req.document_name}.docx",
+                    "content": docx_bytes,
+                    "mimetype": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                })
+            missing_attachment = (req.generate_pdf or req.generate_docx) and not attachments
+
+            if not to_email:
+                gen_doc["email_sent"]  = False
+                gen_doc["email_error"] = "Recipient email is missing; email not sent."
+            elif missing_attachment:
+                # The document itself failed to generate (see PDF/DOCX generation
+                # try/except above) — do not send an attachment-less email; the
+                # already-saved document record is left exactly as-is.
+                logger.error(
+                    "Document email skipped: requested format(s) produced no file. "
+                    "doc_id=%s generate_pdf=%s generate_docx=%s",
+                    doc_id, req.generate_pdf, req.generate_docx,
+                )
+                gen_doc["email_sent"]  = False
+                gen_doc["email_error"] = "The generated file was not available to attach; email not sent."
+            else:
                 try:
                     from app.services.email_service import send_email
                     subject = _resolve_fields(req.email_subject or tmpl["name"], resolved)
@@ -1160,19 +1195,6 @@ class DocumentCenterService:
                         "color:#1f2937;white-space:pre-wrap;line-height:1.6;\">"
                         f"{message}</div>"
                     )
-                    attachments = []
-                    if pdf_bytes:
-                        attachments.append({
-                            "filename": f"{req.document_name}.pdf",
-                            "content": pdf_bytes,
-                            "mimetype": "application/pdf",
-                        })
-                    if docx_bytes:
-                        attachments.append({
-                            "filename": f"{req.document_name}.docx",
-                            "content": docx_bytes,
-                            "mimetype": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        })
                     email_sent = await send_email(
                         to=to_email,
                         subject=subject,
@@ -1180,7 +1202,7 @@ class DocumentCenterService:
                         text_body=message,
                         event_type="doc_center_generated",
                         company_id=company_id,
-                        attachments=attachments or None,
+                        attachments=attachments,
                     )
                     await db.doc_generated.update_one(
                         {"_id": doc_id},
@@ -1190,9 +1212,14 @@ class DocumentCenterService:
                         }},
                     )
                     gen_doc["email_sent"] = email_sent
+                    if email_sent:
+                        gen_doc["attachments_sent"] = [a["filename"] for a in attachments]
+                    else:
+                        gen_doc["email_error"] = "Email sending failed. The generated document has been saved."
                 except Exception as _email_err:
                     logger.error("Document email delivery failed: %s", _email_err, exc_info=True)
-                    gen_doc["email_sent"] = False
+                    gen_doc["email_sent"]  = False
+                    gen_doc["email_error"] = "Email sending failed. The generated document has been saved."
 
         # Attach bytes for inline download response
         gen_doc["_pdf_bytes"]  = pdf_bytes
