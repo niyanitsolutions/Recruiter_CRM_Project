@@ -28,7 +28,8 @@ import logging
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Optional
+from email.mime.application import MIMEApplication
+from typing import Optional, List, Dict, Any
 
 from app.core.config import settings
 from app.core.database import get_master_db, get_company_db
@@ -103,25 +104,42 @@ def decrypt_password(encrypted: str) -> str:
 # ── Low-level synchronous SMTP send ───────────────────────────────────────────
 
 def _do_send(cfg: dict, to_email: str, subject: str,
-             html_body: str, text_body: str = "") -> None:
+             html_body: str, text_body: str = "",
+             attachments: Optional[List[Dict[str, Any]]] = None) -> None:
     """
     Synchronous SMTP send — auto-selects SSL mode based on port:
       port 465 → SMTP_SSL (implicit SSL / SMTPS)
       port 587 → SMTP + STARTTLS (explicit TLS)
     Raises on any failure — callers decide how to handle.
     NOTE: SMTP password is NEVER included in log output.
+
+    attachments: optional list of {"filename": str, "content": bytes, "mimetype": str}.
+    Omitted/empty preserves the exact prior message structure for all existing callers.
     """
     import email.utils as _eu
-    msg = MIMEMultipart("alternative")
+
+    if attachments:
+        msg = MIMEMultipart("mixed")
+        body = MIMEMultipart("alternative")
+        if text_body:
+            body.attach(MIMEText(text_body, "plain", "utf-8"))
+        body.attach(MIMEText(html_body, "html", "utf-8"))
+        msg.attach(body)
+        for att in attachments:
+            part = MIMEApplication(att["content"], Name=att["filename"])
+            part["Content-Disposition"] = f'attachment; filename="{att["filename"]}"'
+            msg.attach(part)
+    else:
+        msg = MIMEMultipart("alternative")
+        if text_body:
+            msg.attach(MIMEText(text_body, "plain", "utf-8"))
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
     msg["Subject"] = subject
     msg["From"] = f"{cfg['from_name']} <{cfg['from_email']}>"
     msg["To"] = to_email
     msg["Message-ID"] = _eu.make_msgid(domain=cfg["from_email"].split("@")[-1])
     msg["Date"] = _eu.formatdate(localtime=True)
-
-    if text_body:
-        msg.attach(MIMEText(text_body, "plain", "utf-8"))
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     host    = cfg["host"]
     port    = int(cfg.get("port", settings.SMTP_PORT))
@@ -281,6 +299,7 @@ async def send_email(
     *,
     company_id: str = "",
     force_system: bool = False,
+    attachments: Optional[List[Dict[str, Any]]] = None,
 ) -> bool:
     """
     Send an email.  Returns True on success, False on any failure.
@@ -351,7 +370,7 @@ async def send_email(
             )
             try:
                 await asyncio.to_thread(
-                    _do_send, tenant_cfg, to, subject, html_body, text_body
+                    _do_send, tenant_cfg, to, subject, html_body, text_body, attachments
                 )
                 logger.info("[EMAIL SENT via tenant SMTP] event=%s to=%s", event_type, to)
                 await _log_email(to, subject, event_type, "tenant", True, "", company_id)
@@ -384,7 +403,7 @@ async def send_email(
 
     for _attempt in range(1, _MAX_RETRIES + 1):
         try:
-            await asyncio.to_thread(_do_send, sys_cfg, to, subject, html_body, text_body)
+            await asyncio.to_thread(_do_send, sys_cfg, to, subject, html_body, text_body, attachments)
             logger.info(
                 "[EMAIL SENT via system SMTP] event=%s to=%s attempts=%d",
                 event_type, to, _attempt,

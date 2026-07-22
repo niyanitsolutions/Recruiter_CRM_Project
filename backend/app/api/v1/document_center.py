@@ -259,12 +259,32 @@ async def generate_document(
         db, req,
         user["id"],
         user.get("full_name", user.get("username", "")),
+        user.get("company_id", ""),
     )
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     doc.pop("_pdf_bytes",  None)
     doc.pop("_docx_bytes", None)
     return {"success": True, "message": msg, "data": doc}
+
+
+@router.get("/templates/{template_id}/generate-context")
+async def get_generate_context(
+    template_id: str,
+    employee_id:  Optional[str] = Query(None),
+    candidate_id: Optional[str] = Query(None),
+    db   = Depends(get_company_db),
+    user = Depends(PERM_GENERATE),
+):
+    """Detects the placeholders used by a template and resolves the best-known
+    value for each (recipient data once employee/candidate is picked, plus
+    dates/company fields) — powers the Generate dialog's dynamic form."""
+    ok, msg, data = await document_center_service.get_generate_context(
+        db, template_id, employee_id, candidate_id,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail=msg)
+    return {"success": True, "data": data}
 
 
 @router.get("/generate/{doc_id}/pdf")

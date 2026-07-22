@@ -23,6 +23,8 @@ const restoreVersion = (templateId, versionId)  => api.post(`${BASE}/templates/$
 const deleteVersion  = (templateId, versionId)  => api.delete(`${BASE}/templates/${templateId}/versions/${versionId}`)
 
 // ─── Document Generation ──────────────────────────────────────────────────────
+const getGenerateContext = (templateId, params = {}) =>
+  api.get(`${BASE}/templates/${templateId}/generate-context`, { params })
 const generateDocument = (data)   => api.post(`${BASE}/generate`, data)
 const listGenerated    = (params) => api.get(`${BASE}/generated`, { params })
 const archiveGenerated = (id)     => api.post(`${BASE}/generated/${id}/archive`)
@@ -59,6 +61,7 @@ const documentCenterService = {
   toggleFavorite, duplicateTemplate,
   listVersions, restoreVersion, deleteVersion,
   listAllVersions,
+  getGenerateContext,
   generateDocument, listGenerated, archiveGenerated, deleteGenerated, downloadPDF, downloadDOCX,
   requestApproval, listApprovals, reviewApproval,
   importDocument,

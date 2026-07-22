@@ -702,6 +702,59 @@ async def _fetch_candidate_fields(db: AsyncIOMotorDatabase, candidate_id: str) -
     return fields
 
 
+def _extract_placeholders(html: str) -> List[str]:
+    """Ordered, de-duplicated list of {{tokens}} referenced in a template body —
+    drives the Generate dialog's dynamic form (only fields actually used show up)."""
+    seen: List[str] = []
+    for m in re.finditer(r"\{\{(\w+)\}\}", html or ""):
+        key = m.group(1).strip()
+        if key not in seen:
+            seen.append(key)
+    return seen
+
+
+async def _build_auto_fields(
+    db: AsyncIOMotorDatabase,
+    tmpl: Dict[str, Any],
+    employee_id: Optional[str],
+    candidate_id: Optional[str],
+    user_name: str = "",
+) -> Dict[str, str]:
+    """Every field value the system can resolve on its own (dates, recipient,
+    company) — computed once and shared by the live Generate-dialog prefill
+    endpoint and the actual generate_document() call so both agree exactly.
+    Caller applies any user field_values overrides on top of this."""
+    now = datetime.now(timezone.utc)
+    resolved: Dict[str, str] = {
+        "current_date":  now.strftime("%B %d, %Y"),
+        "current_month": now.strftime("%B"),
+        "current_year":  str(now.year),
+        "month_year":    now.strftime("%B %Y"),
+        "generated_by":  user_name,
+    }
+
+    # Recipient data: employee DB → candidate DB (recruitment templates)
+    if employee_id:
+        resolved.update(await _fetch_employee_fields(db, employee_id))
+    elif candidate_id:
+        resolved.update(await _fetch_candidate_fields(db, candidate_id))
+
+    # Company fields: per-template header (set in Quick Builder's Header/Company
+    # panel) take priority, falling back to tenant-wide company settings.
+    header = (tmpl.get("content") or {}).get("header") or {}
+    settings = await db.company_settings.find_one({}) or {}
+    resolved.update({
+        "company_name":    header.get("company_name")    or settings.get("company_name", ""),
+        "company_address": header.get("company_address") or settings.get("address", ""),
+        "company_phone":   header.get("company_phone")   or settings.get("admin_phone", ""),
+        "company_email":   header.get("company_email")   or settings.get("support_email") or settings.get("admin_email", ""),
+        "company_website": header.get("company_website") or settings.get("website", ""),
+        "gst_number":      header.get("gst_number", ""),
+        "reg_number":      header.get("reg_number", ""),
+    })
+    return resolved
+
+
 # ─── Service Class ─────────────────────────────────────────────────────────────
 
 class DocumentCenterService:
@@ -1000,43 +1053,17 @@ class DocumentCenterService:
         req: DocGenerateRequest,
         user_id: str,
         user_name: str,
+        company_id: str = "",
     ) -> Tuple[bool, str, Optional[Dict]]:
         tmpl = await db.doc_templates.find_one({"_id": req.template_id, "is_deleted": False})
         if not tmpl:
             return False, "Template not found", None
 
-        # Date/time fields resolve regardless of recipient
-        now = datetime.now(timezone.utc)
-        resolved: Dict[str, str] = {
-            "current_date":  now.strftime("%B %d, %Y"),
-            "current_month": now.strftime("%B"),
-            "current_year":  str(now.year),
-            "month_year":    now.strftime("%B %Y"),
-            "generated_by":  user_name,
-        }
-
-        # Recipient data: employee DB → candidate DB (recruitment templates) → user overrides
         candidate_id = req.candidate_id
-        if req.employee_id:
-            resolved.update(await _fetch_employee_fields(db, req.employee_id))
-        elif candidate_id:
-            resolved.update(await _fetch_candidate_fields(db, candidate_id))
+        resolved = await _build_auto_fields(db, tmpl, req.employee_id, candidate_id, user_name)
 
-        # Company fields: per-template header (set in Quick Builder's Header/Company
-        # panel) take priority, falling back to tenant-wide company settings.
-        header = (tmpl.get("content") or {}).get("header") or {}
-        settings = await db.company_settings.find_one({}) or {}
-        resolved.update({
-            "company_name":    header.get("company_name")    or settings.get("company_name", ""),
-            "company_address": header.get("company_address") or settings.get("address", ""),
-            "company_phone":   header.get("company_phone")   or settings.get("admin_phone", ""),
-            "company_email":   header.get("company_email")   or settings.get("support_email") or settings.get("admin_email", ""),
-            "company_website": header.get("company_website") or settings.get("website", ""),
-            "gst_number":      header.get("gst_number", ""),
-            "reg_number":      header.get("reg_number", ""),
-        })
-
-        # User overrides last
+        # User overrides last — this is exactly what the Generate dialog's dynamic
+        # form sends back (auto-filled values the user may have edited).
         resolved.update(req.field_values)
 
         # Build rendered HTML
@@ -1118,11 +1145,85 @@ class DocumentCenterService:
             {"$inc": {"generate_count": 1}, "$set": {"updated_at": datetime.now(timezone.utc)}},
         )
 
+        # Optional email delivery — reuses the existing email infrastructure
+        # (app.services.email_service). Never blocks/fails generation: the
+        # document is already saved above regardless of send outcome.
+        if req.send_email and (req.recipient_email or emp_email):
+            to_email = (req.recipient_email or emp_email or "").strip()
+            if to_email:
+                try:
+                    from app.services.email_service import send_email
+                    subject = _resolve_fields(req.email_subject or tmpl["name"], resolved)
+                    message = _resolve_fields(req.email_message or "", resolved)
+                    html_body = (
+                        "<div style=\"font-family:Arial,sans-serif;font-size:14px;"
+                        "color:#1f2937;white-space:pre-wrap;line-height:1.6;\">"
+                        f"{message}</div>"
+                    )
+                    attachments = []
+                    if pdf_bytes:
+                        attachments.append({
+                            "filename": f"{req.document_name}.pdf",
+                            "content": pdf_bytes,
+                            "mimetype": "application/pdf",
+                        })
+                    if docx_bytes:
+                        attachments.append({
+                            "filename": f"{req.document_name}.docx",
+                            "content": docx_bytes,
+                            "mimetype": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        })
+                    email_sent = await send_email(
+                        to=to_email,
+                        subject=subject,
+                        html_body=html_body,
+                        text_body=message,
+                        event_type="doc_center_generated",
+                        company_id=company_id,
+                        attachments=attachments or None,
+                    )
+                    await db.doc_generated.update_one(
+                        {"_id": doc_id},
+                        {"$set": {
+                            "sent_at": datetime.now(timezone.utc) if email_sent else None,
+                            "status": DocStatus.SENT if email_sent else DocStatus.GENERATED,
+                        }},
+                    )
+                    gen_doc["email_sent"] = email_sent
+                except Exception as _email_err:
+                    logger.error("Document email delivery failed: %s", _email_err, exc_info=True)
+                    gen_doc["email_sent"] = False
+
         # Attach bytes for inline download response
         gen_doc["_pdf_bytes"]  = pdf_bytes
         gen_doc["_docx_bytes"] = docx_bytes
 
         return True, "Document generated", gen_doc
+
+    async def get_generate_context(
+        self,
+        db: AsyncIOMotorDatabase,
+        template_id: str,
+        employee_id: Optional[str] = None,
+        candidate_id: Optional[str] = None,
+    ) -> Tuple[bool, str, Optional[Dict]]:
+        """Powers the Generate dialog's dynamic form: which placeholders this
+        template actually uses, plus the best-known value for each (recipient
+        data once selected, dates/company fields always). The dialog renders one
+        editable input per placeholder returned here — nothing hardcoded."""
+        tmpl = await db.doc_templates.find_one({"_id": template_id, "is_deleted": False})
+        if not tmpl:
+            return False, "Template not found", None
+
+        body_html = tmpl.get("content", {}).get("body_html", "")
+        placeholders = _extract_placeholders(body_html)
+        values = await _build_auto_fields(db, tmpl, employee_id, candidate_id)
+
+        return True, "OK", {
+            "placeholders": placeholders,
+            "values": {k: values.get(k, "") for k in placeholders},
+            "recipient_email": values.get("employee_email", ""),
+        }
 
     async def list_generated(
         self,

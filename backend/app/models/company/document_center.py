@@ -321,6 +321,8 @@ class DocGenerateRequest(BaseModel):
     generate_docx: bool                = False
     send_email:    bool                = False
     recipient_email: Optional[str]     = None
+    email_subject: Optional[str]       = None
+    email_message: Optional[str]       = None
 
 
 class DocSendRequest(BaseModel):
