@@ -6,6 +6,7 @@ import hrmService from '../../../services/hrmService'
 import ModalPortal from '../../../components/common/ModalPortal'
 import TableScroll from '../../../components/common/TableScroll'
 import ActionMenu, { ActionMenuItem } from '../../../components/common/ActionMenu'
+import CallButton from '../../../components/telephony/CallButton'
 
 const STAGE_COLORS = {
   applied:    'bg-gray-100 text-gray-600',
@@ -473,6 +474,9 @@ export default function HRCandidates() {
                   <div key={k}>
                     <div className="text-xs text-gray-400">{k}</div>
                     <div className="text-gray-800">{v || '—'}</div>
+                    {k === 'Mobile' && v && (
+                      <div className="mt-1"><CallButton phone={v} candidateId={viewModal.id} /></div>
+                    )}
                   </div>
                 ))}
                 <div className="col-span-2">
@@ -555,6 +559,7 @@ export default function HRCandidates() {
                 <td className="px-4 py-3 text-gray-600">
                   <div className="text-xs">{c.email}</div>
                   <div className="text-xs text-gray-400">{c.phone}</div>
+                  <div className="mt-1"><CallButton phone={c.phone} candidateId={c.id} /></div>
                 </td>
                 <td className="px-4 py-3 text-gray-600">{c.current_designation || '—'}</td>
                 <td className="px-4 py-3 text-gray-600">{c.total_experience_years != null ? `${c.total_experience_years}y` : '—'}</td>

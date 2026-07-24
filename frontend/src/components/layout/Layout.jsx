@@ -1,14 +1,25 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { Outlet } from 'react-router-dom'
 import { clsx } from 'clsx'
 import { useSelector } from 'react-redux'
-import { selectIsSuperAdmin, selectIsSeller } from '../../store/authSlice'
+import { selectIsSuperAdmin, selectIsSeller, selectTelephonyEnabled } from '../../store/authSlice'
+import { usePermissions } from '../../hooks/usePermissions'
 import SideNav from './SideNav'
 import TopBar from './TopBar'
 import GlobalSearch from '../common/GlobalSearch'
 import AnnouncementPopup from '../hrm/AnnouncementPopup'
 import SuperAnnouncementPopup from '../announcements/AnnouncementPopup'
 import AnnouncementMarquee from '../announcements/AnnouncementMarquee'
+// Small (state + fetch only, no heavy UI deps) — imported eagerly so it can
+// wrap TopBar + Outlet + the floating widgets in one tree. Its own effects
+// (capability/favorites/active-call fetch) only run once actually mounted,
+// which only happens when `showTelephony` is true below.
+import { TelephonyProvider } from '../../context/TelephonyContext'
+
+// Lazy-loaded (heavier UI) so the telephony component bundle is never
+// fetched for a tenant that doesn't have it enabled.
+const SoftphoneWidget = lazy(() => import('../telephony/Softphone/SoftphoneWidget'))
+const IncomingCallPopup = lazy(() => import('../telephony/IncomingCallPopup'))
 
 const Layout = ({ title, subtitle, actions }) => {
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -16,8 +27,14 @@ const Layout = ({ title, subtitle, actions }) => {
   const [searchOpen, setSearchOpen] = useState(false)
   const isSuperAdmin = useSelector(selectIsSuperAdmin)
   const isSeller     = useSelector(selectIsSeller)
+  const telephonyEnabled = useSelector(selectTelephonyEnabled)
+  const { has } = usePermissions()
   // Super-admin announcements only display for tenant company users
   const isTenantUser = !isSuperAdmin && !isSeller
+  // Telephony UI (softphone/incoming popup) only for tenants with it enabled
+  // AND a user permitted to view it — never for a disabled tenant or an
+  // unpermitted user (no DOM, no network, no bundle fetch).
+  const showTelephony = isTenantUser && telephonyEnabled && has('telephony:view')
   // Global Ctrl+K / Cmd+K shortcut
   useEffect(() => {
     const handler = (e) => {
@@ -30,7 +47,7 @@ const Layout = ({ title, subtitle, actions }) => {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  return (
+  const body = (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-app)', minHeight: '100vh' }}>
       {/* Mobile overlay backdrop */}
       {mobileOpen && (
@@ -81,8 +98,26 @@ const Layout = ({ title, subtitle, actions }) => {
 
       {/* Super-admin broadcast popup — shown for active popup-type announcements (tenant users only) */}
       {isTenantUser && <SuperAnnouncementPopup />}
+
+      {/* Telephony Phase 2 floating UI — softphone + incoming-call popup.
+          Lazy-loaded; TelephonyProvider (wrapping this whole tree, see
+          below) is what actually gates whether these ever fetch/subscribe. */}
+      {showTelephony && (
+        <Suspense fallback={null}>
+          <SoftphoneWidget />
+          <IncomingCallPopup />
+        </Suspense>
+      )}
     </div>
   )
+
+  // TelephonyProvider must wrap TopBar + <Outlet/> too (not just the floating
+  // widgets) so CallStatusWidget (in TopBar) and any telephony page rendered
+  // via <Outlet/> (e.g. /telephony) share the same capability/active-call
+  // state instead of each re-fetching independently. Only mounted at all
+  // when showTelephony is true — a disabled tenant renders `body` directly,
+  // with zero telephony network calls, subscriptions, or DOM.
+  return showTelephony ? <TelephonyProvider>{body}</TelephonyProvider> : body
 }
 
 export default Layout

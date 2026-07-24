@@ -14,6 +14,7 @@ import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 import ModalPortal from '../../components/common/ModalPortal'
 import SeatLimitModal from '../../components/subscription/SeatLimitModal'
 import UpgradeSeatsModal from '../../components/subscription/UpgradeSeatsModal'
+import CallButton from '../../components/telephony/CallButton'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -579,6 +580,14 @@ export default function Employees() {
                               {emp.email}
                             </p>
                           )}
+                          {emp.phone && (
+                            <p className="text-xs truncate max-w-[180px]" style={{ color: 'var(--text-muted)' }}>
+                              {emp.phone}
+                            </p>
+                          )}
+                          <div className="mt-1">
+                            <CallButton phone={emp.phone} employeeId={emp.id} />
+                          </div>
                         </div>
                       </div>
                     </td>

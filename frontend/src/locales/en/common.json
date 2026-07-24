@@ -34,6 +34,8 @@
     "ai_provider": "AI Provider",
     "payment_provider": "Payment Provider",
     "communication": "Communication",
+    "telephony_provider": "Telephony Integrations",
+    "telephony": "Telephony",
     "commissions": "Commissions",
     "notifications": "Notifications",
     "my_profile": "My Profile",
@@ -54,7 +56,8 @@
       "internal_hiring": "Internal Hiring",
       "info": "Info",
       "my_work": "My Work",
-      "earnings": "Earnings"
+      "earnings": "Earnings",
+      "telephony": "Telephony"
     }
   },
   "topbar": {

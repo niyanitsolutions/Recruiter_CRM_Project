@@ -1258,6 +1258,71 @@ class NotificationService:
         }
         await self.notifications_collection.insert_one(doc)
 
+    # ── Telephony (Phase 3 productivity layer) ────────────────────────────────
+    # Same fire-and-forget, in-app-only pattern as notify_task_assigned above.
+    # Callers in app/telephony/services/telephony_service.py always wrap these
+    # in try/except so a notification failure never blocks a call operation.
+
+    async def notify_incoming_call(self, company_id: str, user_id: str, caller: str, provider: str) -> None:
+        now = datetime.now(timezone.utc)
+        await self.notifications_collection.insert_one({
+            "_id": str(ObjectId()), "id": str(ObjectId()), "company_id": company_id,
+            "user_id": user_id, "user_type": "user", "type": "telephony_incoming_call",
+            "title": "Incoming Call", "message": f"Incoming call from {caller} via {provider}",
+            "channels": ["in_app"], "channel_status": {"in_app": "delivered"},
+            "is_read": False, "priority": "high", "action_url": "/telephony",
+            "data": {"caller": caller, "provider": provider},
+            "created_at": now, "updated_at": now, "is_deleted": False,
+        })
+
+    async def notify_missed_call(self, company_id: str, user_id: str, caller: str) -> None:
+        now = datetime.now(timezone.utc)
+        await self.notifications_collection.insert_one({
+            "_id": str(ObjectId()), "id": str(ObjectId()), "company_id": company_id,
+            "user_id": user_id, "user_type": "user", "type": "telephony_missed_call",
+            "title": "Missed Call", "message": f"You missed a call from {caller}",
+            "channels": ["in_app"], "channel_status": {"in_app": "delivered"},
+            "is_read": False, "priority": "high", "action_url": "/telephony",
+            "data": {"caller": caller},
+            "created_at": now, "updated_at": now, "is_deleted": False,
+        })
+
+    async def notify_recording_ready(self, company_id: str, user_id: str, call_id: str) -> None:
+        now = datetime.now(timezone.utc)
+        await self.notifications_collection.insert_one({
+            "_id": str(ObjectId()), "id": str(ObjectId()), "company_id": company_id,
+            "user_id": user_id, "user_type": "user", "type": "telephony_recording_ready",
+            "title": "Call Recording Ready", "message": "A recording is now available for your recent call.",
+            "channels": ["in_app"], "channel_status": {"in_app": "delivered"},
+            "is_read": False, "priority": "low", "action_url": "/telephony",
+            "data": {"call_id": call_id},
+            "created_at": now, "updated_at": now, "is_deleted": False,
+        })
+
+    async def notify_webhook_failure(self, company_id: str, user_id: str, provider: str, reason: str) -> None:
+        now = datetime.now(timezone.utc)
+        await self.notifications_collection.insert_one({
+            "_id": str(ObjectId()), "id": str(ObjectId()), "company_id": company_id,
+            "user_id": user_id, "user_type": "user", "type": "telephony_webhook_failure",
+            "title": "Telephony Webhook Verification Failed", "message": f"A webhook from {provider} failed verification: {reason}",
+            "channels": ["in_app"], "channel_status": {"in_app": "delivered"},
+            "is_read": False, "priority": "high", "action_url": "/telephony",
+            "data": {"provider": provider, "reason": reason},
+            "created_at": now, "updated_at": now, "is_deleted": False,
+        })
+
+    async def notify_provider_offline(self, company_id: str, user_id: str, provider: str, message: str) -> None:
+        now = datetime.now(timezone.utc)
+        await self.notifications_collection.insert_one({
+            "_id": str(ObjectId()), "id": str(ObjectId()), "company_id": company_id,
+            "user_id": user_id, "user_type": "user", "type": "telephony_provider_offline",
+            "title": "Telephony Provider Unreachable", "message": message,
+            "channels": ["in_app"], "channel_status": {"in_app": "delivered"},
+            "is_read": False, "priority": "urgent", "action_url": "/telephony",
+            "data": {"provider": provider},
+            "created_at": now, "updated_at": now, "is_deleted": False,
+        })
+
     async def notify_task_status_changed(
         self,
         company_id: str,

@@ -55,6 +55,8 @@ const _userFromPayload = (payload) => {
     crmEnabled:    payload.crm_enabled   !== false,
     hrmEnabled:    payload.hrm_enabled   || false,
     hrmEmployeeId: payload.hrm_employee_id || null,
+    telephonyEnabled:  payload.telephony_enabled || false,
+    telephonyProvider: payload.telephony_provider || null,
   }
 }
 
@@ -482,6 +484,8 @@ const authSlice = createSlice({
           crmEnabled:    action.payload.crm_enabled  !== false,
           hrmEnabled:    action.payload.hrm_enabled  || false,
           hrmEmployeeId: action.payload.hrm_employee_id || null,
+          telephonyEnabled:  action.payload.telephony_enabled || false,
+          telephonyProvider: action.payload.telephony_provider || null,
         }
         setRememberMe(remember)
         setToken(action.payload.access_token, remember)
@@ -540,6 +544,8 @@ const authSlice = createSlice({
           crmEnabled:    action.payload.crm_enabled  !== false,
           hrmEnabled:    action.payload.hrm_enabled  || false,
           hrmEmployeeId: action.payload.hrm_employee_id || null,
+          telephonyEnabled:  action.payload.telephony_enabled || false,
+          telephonyProvider: action.payload.telephony_provider || null,
         }
         setRememberMe(remember)
         setToken(action.payload.access_token, remember)
@@ -629,6 +635,8 @@ export const selectUserType           = (state) => state.auth.user?.userType    
 export const selectUserPermissions    = (state) => state.auth.user?.permissions   || []
 export const selectCrmEnabled         = (state) => state.auth.user?.crmEnabled    !== false
 export const selectHrmEnabled         = (state) => state.auth.user?.hrmEnabled    || false
+export const selectTelephonyEnabled   = (state) => state.auth.user?.telephonyEnabled  || false
+export const selectTelephonyProvider  = (state) => state.auth.user?.telephonyProvider || null
 export const selectSubscriptionExpired  = (state) => state.auth.subscriptionExpired  || null
 export const selectForcePasswordChange  = (state) => state.auth.forcePasswordChange  || false
 export const selectProfileCompleted     = (state) => state.auth.profileCompleted

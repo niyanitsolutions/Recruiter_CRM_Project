@@ -4,6 +4,7 @@ import {
   Bell, Check, CheckCheck, X,
   UserPlus, DollarSign, FileText,
   Clock, AlertCircle, Calendar, Users2, RefreshCw, CreditCard, Megaphone, CheckCircle,
+  PhoneIncoming, PhoneMissed, Music4, Webhook, WifiOff,
 } from 'lucide-react'
 import { notificationService } from '../../services'
 import { subscribe, LIVE_TOPICS } from '../../utils/liveUpdateBus'
@@ -37,6 +38,12 @@ const TYPE_ICONS = {
   seat_limit_reached:   Users2,
   // Announcements
   announcement:         Megaphone,
+  // Telephony (Phase 3)
+  telephony_incoming_call:    PhoneIncoming,
+  telephony_missed_call:      PhoneMissed,
+  telephony_recording_ready:  Music4,
+  telephony_webhook_failure:  Webhook,
+  telephony_provider_offline: WifiOff,
 }
 
 const TYPE_COLORS = {
@@ -68,6 +75,12 @@ const TYPE_COLORS = {
   seat_limit_reached:   { bg: 'rgba(255,71,87,0.15)',   color: '#FF4757' },
   // Announcements
   announcement:         { bg: 'rgba(245,158,11,0.15)',  color: '#F59E0B' },
+  // Telephony (Phase 3)
+  telephony_incoming_call:    { bg: 'rgba(67,233,123,0.15)', color: '#43E97B' },
+  telephony_missed_call:      { bg: 'rgba(255,71,87,0.15)',  color: '#FF4757' },
+  telephony_recording_ready:  { bg: 'rgba(79,172,254,0.15)', color: '#4FACFE' },
+  telephony_webhook_failure:  { bg: 'rgba(245,158,11,0.15)', color: '#F59E0B' },
+  telephony_provider_offline: { bg: 'rgba(255,71,87,0.15)',  color: '#FF4757' },
   default:              { bg: 'rgba(139,143,168,0.15)', color: '#8B8FA8' },
 }
 

@@ -75,6 +75,9 @@ async def get_current_user(
         # Module flags (default to backward-compatible values if absent from old JWTs)
         "crm_enabled": payload.get("crm_enabled", True),
         "hrm_enabled": True,  # HRM always enabled for all tenants
+        # Telephony plugin — per-tenant, disabled unless Super Admin enables it
+        "telephony_enabled": payload.get("telephony_enabled", False),
+        "telephony_provider": payload.get("telephony_provider"),
         # HRM employee link — used as fallback in attendance API if frontend omits employee_id
         "hrm_employee_id": payload.get("hrm_employee_id"),
     }

@@ -120,6 +120,13 @@ class TenantModel(BaseModel):
     crm_enabled: bool = Field(default=True)   # Recruitment / CRM module
     hrm_enabled: bool = Field(default=True)   # HR Management module — always enabled
 
+    # ── Telephony Integration Plugin (additive, optional) ──────────────────────
+    # Disabled by default for every tenant — existing and new. Only a Super
+    # Admin can flip this on, after configuring a provider in
+    # master_db.telephony_settings (see app/telephony/).
+    telephony_enabled: bool = Field(default=False)
+    telephony_provider: Optional[str] = None
+
     # Soft Delete / Deletion Lifecycle
     is_deleted: bool = Field(default=False)
     deleted_at: Optional[datetime] = None

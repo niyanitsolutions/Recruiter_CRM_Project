@@ -491,6 +491,95 @@ async def export_users(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# TELEPHONY EXPORTS  (Phase 4 — additive; reuses the same helpers/permission
+# as every export above. Excel is served separately by the telephony router
+# since this module has no Excel writer today.)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/telephony/calls")
+async def export_telephony_calls(
+    format: str = Query("csv", pattern="^(csv|pdf)$"),
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    current_user: dict = Depends(require_permissions(["exports:create"])),
+    db=Depends(get_company_db),
+):
+    """Export telephony call logs as CSV or PDF (tenant-isolated)."""
+    query: dict = {"company_id": current_user["company_id"]}
+    visible_ids = await UserService(db).get_visible_user_ids(current_user, module_name="telephony")
+    if visible_ids is not None:
+        query["initiated_by"] = {"$in": visible_ids}
+    dq = _date_query(from_date, to_date)
+    if dq:
+        query["created_at"] = dq
+    if status:
+        query["status"] = status
+    if search:
+        query["$or"] = [
+            {"caller":   {"$regex": search, "$options": "i"}},
+            {"receiver": {"$regex": search, "$options": "i"}},
+            {"notes":    {"$regex": search, "$options": "i"}},
+        ]
+
+    agent_names = {u["_id"]: u.get("full_name") or u.get("username") async for u in db.users.find({}, {"full_name": 1, "username": 1})}
+
+    headers = [
+        "Caller", "Receiver", "Direction", "Status", "Duration (sec)",
+        "Disposition", "Agent", "Has Recording", "Notes", "Created Date",
+    ]
+    rows = []
+    async for doc in db.telephony_call_logs.find(query).sort("created_at", -1).limit(5000):
+        rows.append([
+            _fmt(doc.get("caller")),
+            _fmt(doc.get("receiver")),
+            _fmt(doc.get("direction")),
+            _fmt(doc.get("status")),
+            _fmt(doc.get("duration", 0)),
+            _fmt(doc.get("disposition")),
+            agent_names.get(doc.get("initiated_by"), _fmt(doc.get("initiated_by"))),
+            "Yes" if doc.get("recording_url") else "No",
+            _fmt(doc.get("notes")),
+            _fmt(doc.get("created_at")),
+        ])
+
+    return _respond(format, "Telephony Call Logs", headers, rows, "telephony_calls")
+
+
+@router.get("/telephony/agent-performance")
+async def export_telephony_agent_performance(
+    format: str = Query("csv", pattern="^(csv|pdf)$"),
+    current_user: dict = Depends(require_permissions(["exports:create"])),
+    db=Depends(get_company_db),
+):
+    """Export telephony agent performance as CSV or PDF (tenant-isolated)."""
+    from app.telephony.services.telephony_service import TelephonyService
+
+    agents = await TelephonyService.get_agent_performance(db, current_user["company_id"])
+    agent_names = {u["_id"]: u.get("full_name") or u.get("username") async for u in db.users.find({}, {"full_name": 1, "username": 1})}
+
+    headers = [
+        "Agent", "Total Calls", "Answered", "Missed",
+        "Success Rate (%)", "Total Talk Time (sec)", "Avg Duration (sec)", "Last Active",
+    ]
+    rows = []
+    for a in agents:
+        rows.append([
+            agent_names.get(a.get("user_id"), _fmt(a.get("user_id"))),
+            _fmt(a.get("total_calls", 0)),
+            _fmt(a.get("answered", 0)),
+            _fmt(a.get("missed", 0)),
+            _fmt(a.get("success_rate", 0)),
+            _fmt(a.get("total_talk_time", 0)),
+            _fmt(round(a["avg_duration"], 1) if a.get("avg_duration") else 0),
+            _fmt(a.get("last_active")),
+        ])
+
+    return _respond(format, "Telephony Agent Performance", headers, rows, "telephony_agent_performance")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # SUPER ADMIN EXPORTS  (master_db — cross-tenant data)
 # ══════════════════════════════════════════════════════════════════════════════
 

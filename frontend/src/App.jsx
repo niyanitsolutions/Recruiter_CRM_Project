@@ -55,6 +55,7 @@ const Discounts            = lazy(() => import('./pages/super-admin').then(m => 
 const AIProviderManagement      = lazy(() => import('./pages/super-admin').then(m => ({ default: m.AIProviderManagement })))
 const PaymentProviderManagement = lazy(() => import('./pages/super-admin').then(m => ({ default: m.PaymentProviderManagement })))
 const CommunicationCenter       = lazy(() => import('./pages/super-admin').then(m => ({ default: m.CommunicationCenter })))
+const TelephonyProviderManagement = lazy(() => import('./pages/super-admin').then(m => ({ default: m.TelephonyProviderManagement })))
 
 // Seller Portal
 const SellerDashboard      = lazy(() => import('./pages/seller').then(m => ({ default: m.SellerDashboard })))
@@ -68,6 +69,8 @@ const SellerProfile        = lazy(() => import('./pages/seller').then(m => ({ de
 
 // Company Admin
 const AdminDashboard    = lazy(() => import('./pages/admin').then(m => ({ default: m.AdminDashboard })))
+const TelephonyLayout = lazy(() => import('./pages/telephony/TelephonyLayout'))
+const TelephonyWallboard = lazy(() => import('./pages/telephony/TelephonyWallboard'))
 const Users             = lazy(() => import('./pages/admin').then(m => ({ default: m.Users })))
 const InactiveUsers     = lazy(() => import('./pages/admin').then(m => ({ default: m.InactiveUsers })))
 const UserForm          = lazy(() => import('./pages/admin').then(m => ({ default: m.UserForm })))
@@ -1250,6 +1253,7 @@ function App() {
         <Route path="/super-admin/ai-provider"           element={<AIProviderManagement />} />
         <Route path="/super-admin/payment-provider"    element={<PaymentProviderManagement />} />
         <Route path="/super-admin/communication"       element={<CommunicationCenter />} />
+        <Route path="/super-admin/telephony-provider"  element={<TelephonyProviderManagement />} />
       </Route>
 
       {/* SELLER PORTAL */}
@@ -1299,6 +1303,12 @@ function App() {
         <Route
           path="/dashboard"
           element={<PermissionRoute permission="dashboard:view"><AdminDashboard /></PermissionRoute>}
+        />
+
+        {/* ── Telephony (additive plugin — hidden entirely unless tenant enabled) ── */}
+        <Route
+          path="/telephony"
+          element={<PermissionRoute permission="telephony:view"><TelephonyLayout /></PermissionRoute>}
         />
 
         {/* ── Recruitment ── */}
@@ -1509,6 +1519,13 @@ function App() {
         <Route path="/hrm/doc-center/*"
           element={<PermissionRoute anyPermission={['docs:view', 'docs:create', 'docs:manage']} showUnauthorized><DocumentCenter /></PermissionRoute>} />
       </Route>
+
+      {/* ── Telephony Live Wallboard — standalone fullscreen route, intentionally
+          OUTSIDE Layout.jsx (no sidebar/topbar chrome) ── */}
+      <Route
+        path="/telephony/wallboard"
+        element={<PermissionRoute permission="telephony:supervisor"><TelephonyWallboard /></PermissionRoute>}
+      />
 
       {/* DEFAULT */}
       <Route path="/" element={<Navigate to="/login" replace />} />

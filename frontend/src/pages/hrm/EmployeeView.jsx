@@ -9,6 +9,8 @@ import hrmService from '../../services/hrmService'
 import userService from '../../services/userService'
 import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 import { formatDate } from '../../utils/format'
+import CallButton from '../../components/telephony/CallButton'
+import telephonyService from '../../services/telephonyService'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -20,7 +22,7 @@ const STATUS_STYLE = {
   resigned:   { bg: '#f1f5f9', color: '#64748b', label: 'Resigned' },
 }
 
-const TABS = ['Overview', 'Personal', 'Employment', 'Bank', 'Emergency', 'Documents']
+const TABS = ['Overview', 'Personal', 'Employment', 'Bank', 'Emergency', 'Documents', 'Timeline']
 
 // ── Profile completion ───────────────────────────────────────────────────────
 
@@ -423,6 +425,57 @@ function DocumentsTab({ emp }) {
   )
 }
 
+// ── Timeline Tab (Phase 3 — telephony call events only, read-only) ────────────
+// Employees had no timeline/activity concept before this — this is a new
+// tab, additive; the other five tabs above are untouched. Follows the exact
+// same rendering pattern as the Candidate Activity Timeline.
+
+function TimelineTab({ employeeId }) {
+  const [calls, setCalls] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!employeeId) return
+    telephonyService.listCalls({ employeeId, limit: 20 })
+      .then(res => setCalls(res.data?.logs || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [employeeId])
+
+  const events = calls
+    .map(log => ({
+      dot: log.status === 'answered' ? 'bg-emerald-400' : ['missed', 'no-answer', 'failed', 'busy'].includes(log.status) ? 'bg-red-400' : 'bg-orange-400',
+      date: log.created_at,
+      title: `${log.direction === 'inbound' ? 'Incoming' : 'Outbound'} Call — ${(log.status || '').replace(/_/g, ' ')}`,
+      desc: [log.duration ? `Duration: ${Math.floor(log.duration / 60)}:${String(log.duration % 60).padStart(2, '0')}` : null, log.recording_url ? 'Recording available' : null].filter(Boolean).join(' · ') || undefined,
+    }))
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+
+  if (loading) return <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--accent)' }} /></div>
+
+  return (
+    <div className="rounded-xl p-5" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}>
+      {events.length === 0 ? (
+        <p className="text-sm text-center py-8" style={{ color: 'var(--text-muted)' }}>No call activity recorded.</p>
+      ) : (
+        <div className="relative pl-7">
+          <div className="absolute left-3 top-2 bottom-2 w-px" style={{ background: 'var(--border-subtle)' }} />
+          <div className="space-y-6">
+            {events.map((ev, i) => (
+              <div key={i} className="relative">
+                <div className={`absolute -left-7 top-1.5 w-3 h-3 rounded-full ${ev.dot} border-2 border-white shadow`} />
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-heading)' }}>{ev.title}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{formatDate(ev.date)}</p>
+                {ev.desc && <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{ev.desc}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function EmployeeView() {
@@ -563,6 +616,7 @@ export default function EmployeeView() {
                 {emp.phone}
               </a>
             )}
+            <CallButton phone={emp.phone} employeeId={id} />
           </div>
 
           {/* Profile completion */}
@@ -617,6 +671,7 @@ export default function EmployeeView() {
       {tab === 'Bank'        && <BankTab emp={emp} />}
       {tab === 'Emergency'   && <EmergencyTab emp={emp} />}
       {tab === 'Documents'   && <DocumentsTab emp={emp} />}
+      {tab === 'Timeline'    && <TimelineTab employeeId={id} />}
 
       {/* ── Bottom actions ── */}
       <div className="flex justify-end gap-3 pt-2">

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsOwner, selectIsSeller } from '../../store/authSlice'
 import NotificationBell from '../notifications/NotificationBell'
+import CallStatusWidget from '../telephony/CallStatusWidget'
 import AttendanceBanner from '../hrm/AttendanceBanner'
 import { useTheme } from '../../contexts/ThemeContext'
 import EmployeeAvatar from '../common/EmployeeAvatar'
@@ -200,6 +201,9 @@ const TopBar = ({ title, subtitle, actions, onMobileToggle, onSearchOpen }) => {
             </div>
           )}
         </div>
+
+        {/* Telephony call status (renders nothing when no active call / telephony disabled) */}
+        <CallStatusWidget />
 
         {/* Notifications */}
         <NotificationBell />

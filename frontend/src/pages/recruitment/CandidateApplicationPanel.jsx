@@ -10,6 +10,7 @@ import applicationService from '../../services/applicationService'
 import candidateService from '../../services/candidateService'
 import { formatDate, formatDateTime } from '../../utils/format'
 import EmployeeAvatar from '../../components/common/EmployeeAvatar'
+import CallButton from '../../components/telephony/CallButton'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -388,6 +389,11 @@ const CandidateApplicationPanel = ({ candidateId, onClose }) => {
       <div>
         <ProfileField icon={Mail}        label="Email"       value={candidate.email} />
         <ProfileField icon={Phone}       label="Mobile"      value={candidate.mobile} />
+        {candidate.mobile && (
+          <div style={{ marginTop: -8, marginBottom: 16, marginLeft: 26 }}>
+            <CallButton phone={candidate.mobile} candidateId={candidate.id} />
+          </div>
+        )}
         <ProfileField icon={MapPin}      label="Location"    value={[candidate.current_city, candidate.current_state].filter(Boolean).join(', ')} />
         <ProfileField icon={Briefcase}   label="Current Role" value={candidate.current_designation} />
         <ProfileField icon={Building2}   label="Current Company" value={candidate.current_company} />

@@ -40,6 +40,7 @@ import {
   BookOpen,
   Brain,
   Megaphone,
+  PhoneCall,
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType } from '../../store/authSlice'
@@ -118,6 +119,11 @@ const PERMISSION_NAV_MAP = [
   // Document Center
   { permissions: ['docs:view', 'docs:create', 'docs:manage'],
     path: '/hrm/doc-center',           icon: BookOpen,        label: 'nav.document_center', section: 'nav.section.hrm', hrmOnly: true },
+  // Telephony — additive plugin, shown only when Super Admin has enabled a
+  // provider for this tenant (telephonyOnly, checked in buildPermissionMenu
+  // in addition to the normal permission check).
+  { permissions: ['telephony:view'],
+    path: '/telephony',                icon: PhoneCall,       label: 'nav.telephony',       section: 'nav.section.telephony', telephonyOnly: true },
 ]
 
 /**
@@ -125,7 +131,7 @@ const PERMISSION_NAV_MAP = [
  * A nav item is shown when the user has ANY permission in its `permissions` list.
  * Pass isOwner=true to bypass filtering (company-level superuser only).
  */
-const buildPermissionMenu = (permissions, isOwner = false, isAdmin = false, userRole = '', userType = '') => {
+const buildPermissionMenu = (permissions, isOwner = false, isAdmin = false, userRole = '', userType = '', telephonyEnabled = false) => {
   const perms = new Set(permissions || [])
   const sectionMap = {}
 
@@ -134,6 +140,11 @@ const buildPermissionMenu = (permissions, isOwner = false, isAdmin = false, user
     if (item.path === '/hrm/ess') {
       if (!MY_PORTAL_ALLOWED_ROLES.includes(userRole) || userType === 'partner') continue
     } else if (!isOwner && !isAdmin && !item.permissions.some(p => perms.has(p))) continue
+
+    // Telephony nav item requires the tenant to actually have a provider
+    // enabled — having the permission alone isn't enough (permission is
+    // granted by role defaults; the tenant-level flag is Super Admin-controlled).
+    if (item.telephonyOnly && !telephonyEnabled) continue
 
     if (!sectionMap[item.section]) sectionMap[item.section] = []
     const isDuplicate = sectionMap[item.section].some(
@@ -246,6 +257,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
           { path: '/super-admin/ai-provider',      icon: Brain,      label: 'nav.ai_provider' },
           { path: '/super-admin/payment-provider', icon: CreditCard, label: 'nav.payment_provider' },
           { path: '/super-admin/communication',    icon: Megaphone,  label: 'nav.communication' },
+          { path: '/super-admin/telephony-provider', icon: PhoneCall, label: 'nav.telephony_provider' },
           { path: '/super-admin/settings',         icon: Settings,   label: 'nav.settings' },
         ],
         sections: [],
@@ -291,7 +303,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
     // Only Owners bypass the filter (company-level superuser).
     // Admin role goes through the same permission check as all other roles —
     // it simply has a different (smaller) default permission set.
-    const sections = buildPermissionMenu(user?.permissions, !!user?.isOwner, false, userRole || '', userType || '')
+    const sections = buildPermissionMenu(user?.permissions, !!user?.isOwner, false, userRole || '', userType || '', !!user?.telephonyEnabled)
     return {
       flat: [],
       sections: sections.length > 0

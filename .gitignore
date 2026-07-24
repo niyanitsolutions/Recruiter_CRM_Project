@@ -50,6 +50,9 @@ frontend/build/
 backend/uploads/
 uploads/
 
+# ── DB backups (contain PII/secrets — never in Git) ─────────────────────────
+backups/
+
 # ── Docker ───────────────────────────────────────────────────────────────────
 # Docker volumes managed by Docker, not Git
 

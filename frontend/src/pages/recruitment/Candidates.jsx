@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   Users, Plus, Search, Filter, Eye, Edit, Trash2,
   Mail, MapPin, FileText, Sparkles, Briefcase, X, Download, Link2, Send, ArrowUpFromLine, ArrowDownToLine, QrCode,
-  LayoutGrid, List, Clock, Building2, CheckSquare, Square, AlertTriangle,
+  LayoutGrid, List, Clock, Building2, CheckSquare, Square, AlertTriangle, Phone,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { useSelector } from 'react-redux'
@@ -21,6 +21,7 @@ import TableScroll from '../../components/common/TableScroll'
 import EmployeeAvatar from '../../components/common/EmployeeAvatar'
 import ActionMenu, { ActionMenuItem } from '../../components/common/ActionMenu'
 import PublicFormModal from '../../components/recruitment/PublicFormModal'
+import CallButton from '../../components/telephony/CallButton'
 import { publish, LIVE_TOPICS } from '../../utils/liveUpdateBus'
 
 // Module-level cache — survives navigation, resets only on hard reload.
@@ -955,6 +956,15 @@ const Candidates = () => {
                               {candidate.current_city}
                             </span>
                           )}
+                          {candidate.mobile && (
+                            <span className="flex items-center gap-1 text-xs flex-shrink-0">
+                              <Phone className="w-3 h-3" />
+                              {candidate.mobile}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1">
+                          <CallButton phone={candidate.mobile} candidateId={candidate.id} />
                         </div>
                       </div>
                     </div>

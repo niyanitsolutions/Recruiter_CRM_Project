@@ -209,6 +209,19 @@ class Permission(str, Enum):
     PROFILE_VIEW          = "profile:view"
     PROFILE_EDIT_SELF     = "profile:edit_self"
 
+    # ── Telephony Integration Plugin (additive, optional per tenant) ──────────
+    TELEPHONY_VIEW        = "telephony:view"
+    TELEPHONY_CALL        = "telephony:call"
+    TELEPHONY_CALL_LOGS   = "telephony:call_logs"
+    TELEPHONY_RECORDINGS  = "telephony:recordings"
+    TELEPHONY_ANALYTICS   = "telephony:analytics"
+    TELEPHONY_SETTINGS    = "telephony:settings"
+
+    # ── Telephony Phase 4 — Contact Center Operations (additive) ─────────────
+    TELEPHONY_SUPERVISOR     = "telephony:supervisor"
+    TELEPHONY_QUEUE_MANAGE   = "telephony:queue_manage"
+    TELEPHONY_MONITOR        = "telephony:monitor"
+
 
 # ── Convenience sets ──────────────────────────────────────────────────────────
 
@@ -284,6 +297,27 @@ _HRM_ESS_MINIMUM = [
     Permission.HRM_PERFORMANCE_SELF,
     Permission.HRM_ANNOUNCEMENTS_VIEW,
     Permission.NOTIFICATIONS_VIEW,
+]
+
+# Telephony plugin — full access (OWNER, includes settings management)
+_TELEPHONY_FULL = [
+    Permission.TELEPHONY_VIEW,
+    Permission.TELEPHONY_CALL,
+    Permission.TELEPHONY_CALL_LOGS,
+    Permission.TELEPHONY_RECORDINGS,
+    Permission.TELEPHONY_ANALYTICS,
+    Permission.TELEPHONY_SETTINGS,
+    Permission.TELEPHONY_SUPERVISOR,
+    Permission.TELEPHONY_QUEUE_MANAGE,
+    Permission.TELEPHONY_MONITOR,
+]
+
+# Telephony plugin — day-to-day calling access (no settings management)
+_TELEPHONY_BASIC = [
+    Permission.TELEPHONY_VIEW,
+    Permission.TELEPHONY_CALL,
+    Permission.TELEPHONY_CALL_LOGS,
+    Permission.TELEPHONY_RECORDINGS,
 ]
 
 
@@ -367,12 +401,12 @@ ROLE_DEFAULT_PERMISSIONS = {
     # ── OWNER: Company owner — full CRM + full HRM (within subscription limits).
     # Module guards in middleware enforce subscription boundaries; this role
     # simply grants all permissions so nothing is blocked inside enabled modules.
-    SystemRole.OWNER: _CRM_ADMIN_BASE + _HRM_FULL,
+    SystemRole.OWNER: _CRM_ADMIN_BASE + _HRM_FULL + _TELEPHONY_FULL,
 
     # ── ADMIN: Platform administration only — no recruitment, client, HR
     # business data, or accounts/finance access by default. Grant individual
     # modules via per-user permission override when a specific admin needs them.
-    SystemRole.ADMIN: _ADMIN_BASE,
+    SystemRole.ADMIN: _ADMIN_BASE + _TELEPHONY_FULL,
 
     # ── CRM specialist roles ──────────────────────────────────────────────────
 
@@ -388,6 +422,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.REPORTS_VIEW,
         Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
         Permission.TARGETS_VIEW,
+        *_TELEPHONY_BASIC,
         *_HRM_ESS_MINIMUM,
     ],
 
@@ -404,6 +439,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.REPORTS_VIEW,
         Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
         Permission.TARGETS_VIEW,
+        *_TELEPHONY_BASIC,
         *_HRM_ESS_MINIMUM,
     ],
 
@@ -419,6 +455,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         Permission.REPORTS_VIEW,
         Permission.TASKS_VIEW, Permission.TASKS_CREATE, Permission.TASKS_EDIT,
         Permission.TARGETS_VIEW,
+        *_TELEPHONY_BASIC,
         *_HRM_ESS_MINIMUM,
     ],
 
@@ -479,6 +516,7 @@ ROLE_DEFAULT_PERMISSIONS = {
         # Profile
         Permission.PROFILE_VIEW,
         Permission.PROFILE_EDIT_SELF,
+        *_TELEPHONY_BASIC,
     ],
 
     SystemRole.ACCOUNTS: [

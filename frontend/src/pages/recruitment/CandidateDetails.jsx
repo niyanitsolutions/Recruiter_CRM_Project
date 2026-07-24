@@ -13,6 +13,8 @@ import applicationService from '../../services/applicationService'
 import { selectUserType } from '../../store/authSlice'
 import { formatDate, formatDateTime, getInitials } from '../../utils/format'
 import EmployeeAvatar from '../../components/common/EmployeeAvatar'
+import CallButton from '../../components/telephony/CallButton'
+import telephonyService from '../../services/telephonyService'
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const CANDIDATE_STATUS = {
@@ -123,6 +125,7 @@ const CandidateDetails = () => {
   const [candidate, setCandidate] = useState(null)
   const [applications, setApplications] = useState([])
   const [activeTab, setActiveTab] = useState('overview')
+  const [telephonyCalls, setTelephonyCalls] = useState([])
 
   useEffect(() => { load() }, [id])
 
@@ -141,6 +144,12 @@ const CandidateDetails = () => {
     } finally {
       setLoading(false)
     }
+    // Best-effort, separate from the load above — telephony may be disabled
+    // for this tenant, in which case this 400s harmlessly and the timeline
+    // simply shows no call events (no impact on the rest of the page).
+    telephonyService.listCalls({ candidateId: id, limit: 20 })
+      .then(res => setTelephonyCalls(res.data?.logs || []))
+      .catch(() => {})
   }
 
   if (loading) return <Skeleton />
@@ -382,6 +391,14 @@ const CandidateDetails = () => {
         desc: app.client_name,
         badge: app.status,
       })),
+      // Telephony call events — read-only, additive; sourced from the
+      // existing telephony_call_logs (Phase 1/2), never candidate/application data.
+      ...telephonyCalls.map(log => ({
+        dot: log.status === 'answered' ? 'bg-emerald-400' : ['missed', 'no-answer', 'failed', 'busy'].includes(log.status) ? 'bg-red-400' : 'bg-orange-400',
+        date: log.created_at,
+        title: `${log.direction === 'inbound' ? 'Incoming' : 'Outbound'} Call — ${(log.status || '').replace(/_/g, ' ')}`,
+        desc: [log.duration ? `Duration: ${Math.floor(log.duration / 60)}:${String(log.duration % 60).padStart(2, '0')}` : null, log.recording_url ? 'Recording available' : null].filter(Boolean).join(' · ') || undefined,
+      })),
     ].sort((a, b) => new Date(b.date) - new Date(a.date))
 
     return (
@@ -497,7 +514,10 @@ const CandidateDetails = () => {
             {/* Contact fields */}
             <div className="space-y-3">
               <SidebarField icon={Mail}        label="Email"    value={candidate.email}  href={`mailto:${candidate.email}`}  iconColor="text-accent-500" />
-              <SidebarField icon={Phone}       label="Mobile"   value={candidate.mobile} href={`tel:${candidate.mobile}`}    iconColor="text-success-500" />
+              <div className="flex items-center gap-2">
+                <SidebarField icon={Phone}       label="Mobile"   value={candidate.mobile} href={`tel:${candidate.mobile}`}    iconColor="text-success-500" />
+                <CallButton phone={candidate.mobile} candidateId={id} />
+              </div>
               <SidebarField icon={MapPin}      label="Location" value={location}                                              iconColor="text-sky-600" />
               {candidate.linkedin_url && (
                 <SidebarField icon={ExternalLink} label="LinkedIn" value="View Profile" href={candidate.linkedin_url} iconColor="text-blue-500" />

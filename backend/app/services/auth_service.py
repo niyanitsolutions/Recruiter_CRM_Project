@@ -756,6 +756,9 @@ class AuthService:
             # Module flags — CRM + HRM always active for all tenants
             "crm_enabled":  True,
             "hrm_enabled":  True,
+            # Telephony plugin — per-tenant, disabled unless Super Admin enables it
+            "telephony_enabled": tenant.get("telephony_enabled", False),
+            "telephony_provider": tenant.get("telephony_provider"),
         }
         session_id = await AuthService._create_session(
             user_id, "company_user", company_id,
@@ -846,6 +849,9 @@ class AuthService:
             # Module flags — CRM + HRM always active for all tenants
             "crm_enabled": True,
             "hrm_enabled": True,
+            # Telephony plugin — per-tenant, disabled unless Super Admin enables it
+            "telephony_enabled": tenant.get("telephony_enabled", False),
+            "telephony_provider": tenant.get("telephony_provider"),
         }, ""
 
     @staticmethod
@@ -1571,6 +1577,12 @@ class AuthService:
                 "department_id": user.get("department_id"),
                 "reporting_to": user.get("reporting_to"),
                 "hrm_employee_id": hrm_employee_id,
+                # Telephony plugin — per-tenant; must be re-read from `tenant` on every
+                # refresh (unlike crm/hrm it defaults to False, not True, so it cannot
+                # rely on a frontend fallback — omitting it here would silently disable
+                # telephony for an enabled tenant on the very next page reload).
+                "telephony_enabled": tenant.get("telephony_enabled", False),
+                "telephony_provider": tenant.get("telephony_provider"),
             }
 
         access_token = create_access_token(token_data)
