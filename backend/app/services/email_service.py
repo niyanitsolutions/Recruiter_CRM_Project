@@ -2514,6 +2514,208 @@ async def send_subscription_cancelled_notification(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  Super Admin — Tenant Activity Monitoring & Business Notifications
+#  (additive — sent to Super Admin recipients only, never to tenants)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _send_to_super_admins(to_emails: List[str], subject: str, html: str, text: str, event_type: str) -> bool:
+    """Send the same super-admin alert to every recipient. Returns True if at least one send succeeded."""
+    if not to_emails:
+        logger.warning("[EMAIL] %s: no Super Admin recipients configured — skipping send", event_type)
+        return False
+    ok_any = False
+    for addr in to_emails:
+        sent = await send_email(addr, subject, html, text, event_type, force_system=True)
+        ok_any = ok_any or sent
+    return ok_any
+
+
+async def send_super_admin_new_tenant_email(
+    to_emails: List[str],
+    company_name: str,
+    owner_name: str,
+    owner_email: str,
+    plan_label: str,
+    registered_at,
+) -> bool:
+    registered_str = registered_at.strftime("%d-%b-%Y") if registered_at else "N/A"
+    subject = f"New Tenant Registered — {company_name}"
+    html = _wrap(f"""
+      <div style="background:#EFF6FF;border-left:4px solid #3B82F6;padding:16px;
+                  border-radius:4px;margin-bottom:24px">
+        <strong style="color:#1D4ED8">New Tenant Registered</strong>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:14px">
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280;width:35%">Company</td>
+          <td style="padding:10px 0;font-weight:600">{company_name}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280">Owner</td>
+          <td style="padding:10px 0;font-weight:600">{owner_name}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280">Email</td>
+          <td style="padding:10px 0">{owner_email}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280">Plan</td>
+          <td style="padding:10px 0;font-weight:600">{plan_label}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 0;color:#6B7280">Registered</td>
+          <td style="padding:10px 0">{registered_str}</td>
+        </tr>
+      </table>""")
+    text = (
+        f"New Tenant Registered\n\nCompany: {company_name}\nOwner: {owner_name}\n"
+        f"Email: {owner_email}\nPlan: {plan_label}\nRegistered: {registered_str}"
+    )
+    return await _send_to_super_admins(to_emails, subject, html, text, "super_admin_tenant_registered")
+
+
+async def send_super_admin_subscription_purchased_email(
+    to_emails: List[str],
+    company_name: str,
+    plan_name: str,
+    users: int,
+    amount: float,
+    currency: str,
+    period_label: str,
+    purchase_date,
+) -> bool:
+    purchase_str = purchase_date.strftime("%d-%b-%Y") if purchase_date else "N/A"
+    subject = f"Subscription Purchased — {company_name}"
+    html = _wrap(f"""
+      <div style="background:#F0FDF4;border-left:4px solid #22C55E;padding:16px;
+                  border-radius:4px;margin-bottom:24px">
+        <strong style="color:#15803D">Subscription Purchased</strong>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:14px">
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280;width:35%">Company</td>
+          <td style="padding:10px 0;font-weight:600">{company_name}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280">Plan</td>
+          <td style="padding:10px 0;font-weight:600">{plan_name}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280">Users</td>
+          <td style="padding:10px 0">{users}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280">Amount</td>
+          <td style="padding:10px 0;font-weight:600">{currency} {amount:,.2f}</td>
+        </tr>
+        <tr style="border-bottom:1px solid #E5E7EB">
+          <td style="padding:10px 0;color:#6B7280">Subscription Period</td>
+          <td style="padding:10px 0">{period_label}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 0;color:#6B7280">Purchase Date</td>
+          <td style="padding:10px 0">{purchase_str}</td>
+        </tr>
+      </table>""")
+    text = (
+        f"Subscription Purchased\n\nCompany: {company_name}\nPlan: {plan_name}\nUsers: {users}\n"
+        f"Amount: {currency} {amount:,.2f}\nPeriod: {period_label}\nPurchase Date: {purchase_str}"
+    )
+    return await _send_to_super_admins(to_emails, subject, html, text, "super_admin_subscription_purchased")
+
+
+async def send_super_admin_subscription_renewed_email(
+    to_emails: List[str],
+    company_name: str,
+    plan_name: str,
+    amount: float,
+    currency: str,
+    new_expiry,
+) -> bool:
+    expiry_str = new_expiry.strftime("%d-%b-%Y") if new_expiry else "N/A"
+    subject = f"Subscription Renewed — {company_name}"
+    html = _wrap(f"""
+      <div style="background:#F0FDF4;border-left:4px solid #22C55E;padding:16px;
+                  border-radius:4px;margin-bottom:24px">
+        <strong style="color:#15803D">Subscription Renewed</strong>
+      </div>
+      <p><strong>{company_name}</strong> renewed the <strong>{plan_name}</strong> plan
+         for <strong>{currency} {amount:,.2f}</strong>. New expiry: <strong>{expiry_str}</strong>.</p>""")
+    text = (
+        f"Subscription Renewed — {company_name}\nPlan: {plan_name}\n"
+        f"Amount: {currency} {amount:,.2f}\nNew Expiry: {expiry_str}"
+    )
+    return await _send_to_super_admins(to_emails, subject, html, text, "super_admin_subscription_renewed")
+
+
+async def send_super_admin_trial_expired_email(
+    to_emails: List[str],
+    company_name: str,
+    owner_email: str,
+    trial_started,
+    trial_expired_on,
+) -> bool:
+    started_str = trial_started.strftime("%d-%b-%Y") if trial_started else "N/A"
+    expired_str = trial_expired_on.strftime("%d-%b-%Y") if trial_expired_on else "N/A"
+    subject = f"Trial Expired — {company_name}"
+    html = _wrap(f"""
+      <div style="background:#FFFBEB;border-left:4px solid #F59E0B;padding:16px;
+                  border-radius:4px;margin-bottom:24px">
+        <strong style="color:#B45309">Trial Expired</strong>
+      </div>
+      <p>The free trial for <strong>{company_name}</strong> ({owner_email}) has expired.</p>
+      <p style="color:#6B7280;font-size:13px">Trial started: {started_str} &nbsp;|&nbsp; Expired: {expired_str}</p>""")
+    text = f"Trial Expired — {company_name} ({owner_email})\nStarted: {started_str}\nExpired: {expired_str}"
+    return await _send_to_super_admins(to_emails, subject, html, text, "super_admin_trial_expired")
+
+
+async def send_super_admin_payment_failed_email(
+    to_emails: List[str],
+    company_name: str,
+    amount: float,
+    currency: str,
+    reason: Optional[str],
+) -> bool:
+    subject = f"Payment Failed — {company_name}"
+    html = _wrap(f"""
+      <div style="background:#FEF2F2;border-left:4px solid #EF4444;padding:16px;
+                  border-radius:4px;margin-bottom:24px">
+        <strong style="color:#991B1B">Payment Failed</strong>
+      </div>
+      <p>A payment of <strong>{currency} {amount:,.2f}</strong> for <strong>{company_name}</strong> failed.</p>
+      {f"<p style='color:#6B7280;font-size:13px'>Reason: {reason}</p>" if reason else ""}""")
+    text = (
+        f"Payment Failed — {company_name}\nAmount: {currency} {amount:,.2f}"
+        + (f"\nReason: {reason}" if reason else "")
+    )
+    return await _send_to_super_admins(to_emails, subject, html, text, "super_admin_payment_failed")
+
+
+async def send_super_admin_tenant_inactive_email(
+    to_emails: List[str],
+    company_name: str,
+    owner_email: str,
+    inactive_days: int,
+    last_activity_at,
+) -> bool:
+    last_activity_str = last_activity_at.strftime("%d-%b-%Y") if last_activity_at else "Never"
+    subject = f"Tenant Inactive — {company_name}"
+    html = _wrap(f"""
+      <div style="background:#FEF2F2;border-left:4px solid #EF4444;padding:16px;
+                  border-radius:4px;margin-bottom:24px">
+        <strong style="color:#991B1B">Tenant Inactive ({inactive_days}+ Days)</strong>
+      </div>
+      <p>No user of <strong>{company_name}</strong> ({owner_email}) has performed any
+         authenticated activity for <strong>{inactive_days}+ days</strong>.</p>
+      <p style="color:#6B7280;font-size:13px">Last activity: {last_activity_str}</p>""")
+    text = (
+        f"Tenant Inactive — {company_name} ({owner_email})\n"
+        f"No activity for {inactive_days}+ days. Last activity: {last_activity_str}"
+    )
+    return await _send_to_super_admins(to_emails, subject, html, text, "super_admin_tenant_inactive")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  Backwards-compatibility wrapper
 # ─────────────────────────────────────────────────────────────────────────────
 

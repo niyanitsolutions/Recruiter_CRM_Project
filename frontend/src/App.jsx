@@ -44,6 +44,7 @@ const VerificationPending   = lazy(() => import('./pages/auth').then(m => ({ def
 // Super Admin
 const SuperAdminDashboard  = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Dashboard })))
 const Tenants              = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Tenants })))
+const ActivityMonitor      = lazy(() => import('./pages/super-admin').then(m => ({ default: m.ActivityMonitor })))
 const Payments             = lazy(() => import('./pages/super-admin').then(m => ({ default: m.Payments })))
 const SuperAdminProfile    = lazy(() => import('./pages/super-admin').then(m => ({ default: m.SuperAdminProfile })))
 const SuperAdminSettings   = lazy(() => import('./pages/super-admin').then(m => ({ default: m.SuperAdminSettings })))
@@ -1242,6 +1243,7 @@ function App() {
       <Route element={<ProtectedRoute requireSuperAdmin><Layout title="Super Admin" /></ProtectedRoute>}>
         <Route path="/super-admin"                   element={<SuperAdminDashboard />} />
         <Route path="/super-admin/tenants"           element={<Tenants />} />
+        <Route path="/super-admin/activity-monitor"  element={<ActivityMonitor />} />
         <Route path="/super-admin/sellers"           element={<Sellers />} />
         <Route path="/super-admin/plans"             element={<Plans />} />
         <Route path="/super-admin/discounts"         element={<Discounts />} />

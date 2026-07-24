@@ -41,6 +41,7 @@ import {
   Brain,
   Megaphone,
   PhoneCall,
+  Activity,
 } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
 import { logoutUser, selectUser, selectIsSuperAdmin, selectIsSeller, selectUserRole, selectUserType } from '../../store/authSlice'
@@ -248,6 +249,7 @@ const SideNav = ({ isCollapsed, onToggle, mobileOpen, onMobileClose }) => {
         flat: [
           { path: '/super-admin',               icon: LayoutDashboard, label: 'nav.dashboard',     exact: true },
           { path: '/super-admin/tenants',       icon: Building2,       label: 'nav.tenants' },
+          { path: '/super-admin/activity-monitor', icon: Activity,     label: 'nav.activity_monitor' },
           { path: '/super-admin/sellers',       icon: Users,           label: 'nav.sellers' },
           { path: '/super-admin/plans',         icon: CreditCard,      label: 'nav.plans' },
           { path: '/super-admin/discounts',     icon: Tag,             label: 'nav.discounts' },

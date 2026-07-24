@@ -760,6 +760,35 @@ class PaymentService:
                     exc_info=True,
                 )
 
+            # Super Admin Tenant Activity Monitoring — additive, isolated try/except.
+            # Only "new_subscription" (purchased) and "renewal" (renewed) are
+            # reported; seat upgrades / duration extensions / queued plan
+            # changes are not "purchase" or "renewal" events per spec.
+            try:
+                if payment_type in ("new_subscription", "renewal"):
+                    from app.services.tenant_monitoring_service import (
+                        fire_subscription_purchased_event,
+                        fire_subscription_renewed_event,
+                    )
+                    monitor_company_id = (current_tenant or {}).get("company_id")
+                    monitor_company_name = payment.get("company_name", "")
+                    monitor_plan_label = payment.get("plan_display_name") or payment.get("plan_name", "")
+                    monitor_amount = int(payment.get("total_amount", 0)) / 100
+                    monitor_currency = payment.get("currency", "INR")
+                    if payment_type == "new_subscription":
+                        await fire_subscription_purchased_event(
+                            monitor_company_id, monitor_company_name, monitor_plan_label,
+                            new_total_seats, monitor_amount, monitor_currency,
+                            billing_cycle, payment_time,
+                        )
+                    else:
+                        await fire_subscription_renewed_event(
+                            monitor_company_id, monitor_company_name, monitor_plan_label,
+                            monitor_amount, monitor_currency, new_subscription_end,
+                        )
+            except Exception as _monitor_exc:
+                logger.warning(f"Tenant activity monitoring hook failed (payment activation unaffected): {_monitor_exc}")
+
         except Exception as _sec_exc:
             _secondary_error = str(_sec_exc)
             logger.error(
@@ -963,6 +992,21 @@ class PaymentService:
         logger.warning(f"Payment marked failed: {payment.get('transaction_id')} — {failure_reason}")
         if event_key:
             await PaymentService._update_webhook_event(event_key, status="processed", result=result_msg)
+
+        # Super Admin Tenant Activity Monitoring — additive, isolated try/except.
+        try:
+            from app.services.tenant_monitoring_service import fire_payment_failed_event
+            _tenant = await master_db.tenants.find_one({"_id": payment.get("tenant_id")}, {"company_id": 1})
+            await fire_payment_failed_event(
+                (_tenant or {}).get("company_id") or payment.get("company_id"),
+                payment.get("company_name", ""),
+                int(payment.get("total_amount", 0)) / 100,
+                payment.get("currency", "INR"),
+                failure_reason,
+            )
+        except Exception as _monitor_exc:
+            logger.warning(f"Tenant activity monitoring hook failed (payment-failure handling unaffected): {_monitor_exc}")
+
         return True, "Payment marked as failed"
 
     @staticmethod

@@ -349,6 +349,14 @@ class TenantService:
         
         logger.info(f"✅ Company registered: {company_name} (ID: {company_id})")
 
+        # Super Admin Tenant Activity Monitoring — additive, isolated try/except
+        # so a monitoring/email failure can never break tenant registration.
+        try:
+            from app.services.tenant_monitoring_service import fire_tenant_registered_event
+            await fire_tenant_registered_event(tenant_data)
+        except Exception as _monitor_exc:
+            logger.warning(f"Tenant activity monitoring hook failed (registration unaffected): {_monitor_exc}")
+
         # TEMPORARY: Email verification disabled until SMTP is configured.
         # To re-enable: uncomment the block below and set email_verified=False above.
         #
@@ -737,6 +745,13 @@ class TenantService:
                 "created_at": now,
             })
 
+            # Super Admin Tenant Activity Monitoring — additive, isolated try/except.
+            try:
+                from app.services.tenant_monitoring_service import fire_tenant_registered_event
+                await fire_tenant_registered_event(tenant_data)
+            except Exception as _monitor_exc:
+                logger.warning(f"Tenant activity monitoring hook failed (registration unaffected): {_monitor_exc}")
+
         except Exception as exc:
             logger.error(
                 "Trial provisioning failed after verification | company=%s | error=%s",
@@ -994,6 +1009,13 @@ class TenantService:
                 "description": f"Trial account created — designation: {designation}",
                 "created_at": now,
             })
+
+            # Super Admin Tenant Activity Monitoring — additive, isolated try/except.
+            try:
+                from app.services.tenant_monitoring_service import fire_tenant_registered_event
+                await fire_tenant_registered_event(tenant_data)
+            except Exception as _monitor_exc:
+                logger.warning(f"Tenant activity monitoring hook failed (registration unaffected): {_monitor_exc}")
 
         except Exception as exc:
             # Rollback: remove the tenant record so the same email/username can retry
@@ -1714,6 +1736,13 @@ class TenantService:
                 pass  # Email failure must not block account creation
 
         logger.info(f"✅ Admin created tenant: {data.company_name} (ID: {company_id})")
+
+        # Super Admin Tenant Activity Monitoring — additive, isolated try/except.
+        try:
+            from app.services.tenant_monitoring_service import fire_tenant_registered_event
+            await fire_tenant_registered_event(tenant_data)
+        except Exception as _monitor_exc:
+            logger.warning(f"Tenant activity monitoring hook failed (registration unaffected): {_monitor_exc}")
 
         return {
             "success": True,

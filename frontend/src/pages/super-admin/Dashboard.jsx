@@ -15,6 +15,7 @@ import {
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { Card, Button, Badge, StatsSkeleton, CardSkeleton } from '../../components/common'
 import superAdminService from '../../services/superAdminService'
+import tenantActivityService from '../../services/tenantActivityService'
 import { formatCurrency, formatNumber, formatRelativeTime } from '../../utils/format'
 import toast from 'react-hot-toast'
 
@@ -56,6 +57,9 @@ const SuperAdminDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [revenueChartData, setRevenueChartData] = useState([])
+  // Tenant Activity Monitoring — additive, fetched separately from the
+  // existing dashboard payload so /super-admin/dashboard stays untouched.
+  const [inactiveTenantCount, setInactiveTenantCount] = useState(0)
 
   const fetchDashboard = async () => {
     try {
@@ -71,6 +75,14 @@ const SuperAdminDashboard = () => {
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
+    }
+
+    // Best-effort — the main dashboard must render even if this fails.
+    try {
+      const activityRes = await tenantActivityService.getDashboard()
+      setInactiveTenantCount(activityRes.data?.inactive_tenants || 0)
+    } catch {
+      // silently ignore — inactive tenant card just shows 0
     }
   }
 
@@ -172,6 +184,13 @@ const SuperAdminDashboard = () => {
           icon={AlertCircle}
           color="bg-gradient-to-br from-warning-500 to-warning-600"
           link="/super-admin/subscriptions?status=expiring"
+        />
+        <StatCard
+          title="Inactive Tenants (7+ Days)"
+          value={formatNumber(inactiveTenantCount)}
+          icon={AlertCircle}
+          color="bg-gradient-to-br from-red-500 to-red-700"
+          link="/super-admin/activity-monitor?filter=inactive"
         />
       </div>
 

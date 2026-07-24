@@ -374,6 +374,22 @@ async def ensure_master_indexes(master_db) -> None:
                    name="subq_status_date"),
     ])
 
+    # ── tenant_activity_status (Tenant Activity Monitoring, additive) ─────────
+    # One doc per tenant; the daily inactivity scan and activity-tracking
+    # middleware both key on company_id, and the scan filters on last_activity_at.
+    await master_db["tenant_activity_status"].create_indexes([
+        IndexModel([("company_id", ASCENDING)], name="tas_company_id", unique=True),
+        IndexModel([("last_activity_at", ASCENDING)], name="tas_last_activity_at"),
+    ])
+
+    # ── super_admin_notifications (Tenant Activity Monitoring, additive) ──────
+    await master_db["super_admin_notifications"].create_indexes([
+        IndexModel([("created_at", DESCENDING)], name="san_created_at"),
+        IndexModel([("type", ASCENDING), ("created_at", DESCENDING)], name="san_type_created_at"),
+        IndexModel([("is_read", ASCENDING)], name="san_is_read"),
+        IndexModel([("company_id", ASCENDING)], name="san_company_id"),
+    ])
+
 
 async def init_all_indexes(app_db_factory, master_db) -> None:
     """

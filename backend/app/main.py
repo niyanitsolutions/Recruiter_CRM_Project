@@ -61,6 +61,7 @@ from app.api.v1 import sellers, seller_portal
 # ============== Super Admin Extensions ==============
 from app.api.v1 import discounts, platform_settings, super_admin_ai
 from app.api.v1 import super_admin_payment_provider, super_admin_communication, tenant_communication
+from app.api.v1 import super_admin_activity_monitor
 
 # ============== Telephony Integration Plugin (additive, optional) ==============
 from app.telephony.api import super_admin_telephony, telephony as telephony_tenant
@@ -260,6 +261,7 @@ async def lifespan(app: FastAPI):
     # cleanup sweeps. The one-shot recovery sweep rides the same election so a
     # large tenant count never delays app readiness and never runs twice.
     from app.services.subscription_queue_service import subscription_queue_loop
+    from app.services.tenant_monitoring_service import tenant_activity_monitor_loop
     from app.core.scheduler_lock import SchedulerLeader
     _scheduler_leader = SchedulerLeader(
         loops=[
@@ -268,13 +270,14 @@ async def lifespan(app: FastAPI):
             ("hrm_auto_checkout",     hrm_auto_checkout_loop),
             ("tenant_cleanup",        tenant_cleanup_loop),
             ("subscription_queue",    subscription_queue_loop),
+            ("tenant_activity_monitor", tenant_activity_monitor_loop),
         ],
         one_shots=[
             ("hrm_startup_recovery",  run_startup_recovery),
         ],
     )
     scheduler_manager_task = asyncio.create_task(_scheduler_leader.run())
-    print(" Scheduler leader election started (5 loops + recovery sweep, single-worker)")
+    print(" Scheduler leader election started (6 loops + recovery sweep, single-worker)")
 
     # Ensure sessions TTL index exists (idempotent)
     try:
@@ -391,6 +394,12 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 from app.middleware.observability import ObservabilityMiddleware
 app.add_middleware(ObservabilityMiddleware)
 
+# Tenant Activity Monitoring — debounced last-activity tracking per tenant,
+# feeds the Super Admin Tenant Activity Monitoring dashboard. Additive only;
+# never blocks or alters any response (see app/middleware/tenant_activity_tracker.py).
+from app.middleware.tenant_activity_tracker import TenantActivityTrackerMiddleware
+app.add_middleware(TenantActivityTrackerMiddleware)
+
 # GZip — compress any response ≥ 512 B; most list/dashboard JSON payloads
 # are 2–20 kB and compress 60–80%, which matters on slow mobile connections.
 app.add_middleware(GZipMiddleware, minimum_size=512)
@@ -413,6 +422,7 @@ app.include_router(super_admin.router, prefix=f"{API_V1_PREFIX}/super-admin", ta
 app.include_router(super_admin_ai.router, prefix=f"{API_V1_PREFIX}/super-admin", tags=["Super Admin - AI Provider"])
 app.include_router(super_admin_payment_provider.router, prefix=f"{API_V1_PREFIX}/super-admin", tags=["Super Admin - Payment Provider"])
 app.include_router(super_admin_communication.router, prefix=f"{API_V1_PREFIX}/super-admin", tags=["Super Admin - Communication Center"])
+app.include_router(super_admin_activity_monitor.router, prefix=f"{API_V1_PREFIX}/super-admin", tags=["Super Admin - Activity Monitor"])
 app.include_router(super_admin_telephony.router, prefix=f"{API_V1_PREFIX}/super-admin", tags=["Super Admin - Telephony"])
 app.include_router(telephony_tenant.router, prefix=API_V1_PREFIX, tags=["Telephony"])
 app.include_router(tenant_communication.router, prefix=API_V1_PREFIX, tags=["Tenant - Announcements"])

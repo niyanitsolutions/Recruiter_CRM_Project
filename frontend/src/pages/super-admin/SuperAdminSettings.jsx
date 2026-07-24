@@ -90,7 +90,10 @@ const deepMerge = (base, override) => {
 // ─── Default structure (mirrors backend DEFAULT_SETTINGS) ─────────────────────
 const DEFAULTS = {
   platform: { name: 'CRM SaaS Platform', tagline: 'Recruitment & Partner Platform', support_email: 'support@crm.com', timezone: 'Asia/Kolkata', date_format: 'DD/MM/YYYY' },
-  notifications: { new_tenant: true, payment_received: true, trial_expiring: true, plan_expired: false, seller_registered: true },
+  notifications: {
+    new_tenant: true, payment_received: true, trial_expiring: true, plan_expired: false, seller_registered: true,
+    subscription_renewed: true, payment_failed: true, tenant_inactive: true,
+  },
   security: { session_timeout_hours: 24, max_login_attempts: 5, lockout_duration_minutes: 30, require_2fa_super_admin: false, password_min_length: 8 },
   platform_controls: { allow_self_registration: true, trial_days: 14, max_tenants_per_seller: 50, maintenance_mode: false },
   billing: { currency: 'INR', tax_rate_percent: 18, invoice_prefix: 'INV', invoice_due_days: 15 },
@@ -103,6 +106,8 @@ const DEFAULTS = {
   },
   storage: { max_resume_size_mb: 10, allowed_resume_types: 'pdf,doc,docx', max_storage_per_tenant_gb: 5 },
   maintenance: { maintenance_mode: false, maintenance_message: 'We are performing scheduled maintenance. Please try again later.', allow_super_admin_access: true },
+  // Tenant Activity Monitoring — additive (Super Admin Tenant Monitoring feature)
+  tenant_activity_monitoring: { enabled: true, inactivity_days: 7 },
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -194,6 +199,7 @@ const SuperAdminSettings = () => {
   const em = settings.email
   const st = settings.storage
   const m  = settings.maintenance
+  const tam = settings.tenant_activity_monitoring
 
   const sp  = set('platform')
   const sn  = set('notifications')
@@ -203,6 +209,7 @@ const SuperAdminSettings = () => {
   const sem = set('email')
   const sst = set('storage')
   const sm  = set('maintenance')
+  const stam = set('tenant_activity_monitoring')
 
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl">
@@ -246,9 +253,12 @@ const SuperAdminSettings = () => {
       <Section icon={Bell} title="Notifications" desc="Email alert triggers for super-admin">
         {[
           { key: 'new_tenant',        label: 'New tenant registered',  desc: 'When a company signs up' },
-          { key: 'payment_received',  label: 'Payment received',       desc: 'When a payment is completed' },
-          { key: 'trial_expiring',    label: 'Trial expiring',         desc: 'When a trial is about to expire' },
+          { key: 'payment_received',  label: 'Subscription purchased', desc: 'When a payment is completed' },
+          { key: 'subscription_renewed', label: 'Subscription renewed', desc: 'When a tenant renews their subscription' },
+          { key: 'trial_expiring',    label: 'Trial expired',          desc: 'When a free trial expires' },
           { key: 'plan_expired',      label: 'Plan expired',           desc: 'When a subscription plan expires' },
+          { key: 'payment_failed',    label: 'Payment failed',         desc: 'When a subscription payment fails' },
+          { key: 'tenant_inactive',   label: 'Tenant inactive',        desc: 'When a tenant has no activity for the configured threshold' },
           { key: 'seller_registered', label: 'Seller registered',      desc: 'When a new seller account is created' },
         ].map(({ key, label, desc }) => (
           <Field key={key} label={label} desc={desc}>
@@ -422,6 +432,16 @@ const SuperAdminSettings = () => {
         )}
         <Field label="Allow Super Admin Access" desc="Super admins can still log in during maintenance">
           <Toggle checked={m.allow_super_admin_access} onChange={sm('allow_super_admin_access')} />
+        </Field>
+      </Section>
+
+      {/* 9. Tenant Activity Monitoring */}
+      <Section icon={AlertTriangle} title="Tenant Activity Monitoring" desc="Flag tenants with no authenticated user activity">
+        <Field label="Enable Monitoring" desc="Track tenant activity and alert on inactivity">
+          <Toggle checked={tam.enabled} onChange={stam('enabled')} />
+        </Field>
+        <Field label="Inactivity Threshold (days)" desc="Flag a tenant inactive after this many days with no activity from any user">
+          <NumberInput value={tam.inactivity_days} onChange={stam('inactivity_days')} min={1} max={90} />
         </Field>
       </Section>
 

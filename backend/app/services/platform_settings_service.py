@@ -41,6 +41,10 @@ DEFAULT_SETTINGS: dict = {
         "trial_expiring": True,
         "plan_expired": False,
         "seller_registered": True,
+        # ── Tenant Activity Monitoring event toggles (additive) ────────────────
+        "subscription_renewed": True,
+        "payment_failed": True,
+        "tenant_inactive": True,
     },
     "security": {
         "session_timeout_hours": 24,
@@ -83,6 +87,15 @@ DEFAULT_SETTINGS: dict = {
         "maintenance_mode": False,
         "maintenance_message": "We are performing scheduled maintenance. Please try again later.",
         "allow_super_admin_access": True,
+    },
+    # ── Tenant Activity Monitoring (additive) ──────────────────────────────────
+    # Controls the Super Admin Tenant Activity Monitoring & Business
+    # Notification feature. `inactivity_days` is the number of days with no
+    # authenticated activity from ANY user of a tenant before it is flagged
+    # inactive to the Super Admin.
+    "tenant_activity_monitoring": {
+        "enabled": True,
+        "inactivity_days": 7,
     },
 }
 
@@ -192,6 +205,11 @@ async def get_platform_info() -> dict:
     return s.get("platform") or DEFAULT_SETTINGS["platform"]
 
 
+async def get_tenant_activity_monitoring_settings() -> dict:
+    s = await get_platform_settings()
+    return s.get("tenant_activity_monitoring") or DEFAULT_SETTINGS["tenant_activity_monitoring"]
+
+
 # ── Convenience single-value getters ──────────────────────────────────────────
 
 async def get_platform_name() -> str:
@@ -252,6 +270,20 @@ async def get_trial_days() -> int:
         return max(1, int(val))
     except (TypeError, ValueError):
         return 14
+
+
+async def get_inactivity_days() -> int:
+    tam = await get_tenant_activity_monitoring_settings()
+    val = tam.get("inactivity_days", 7)
+    try:
+        return max(1, int(val))
+    except (TypeError, ValueError):
+        return 7
+
+
+async def is_tenant_activity_monitoring_enabled() -> bool:
+    tam = await get_tenant_activity_monitoring_settings()
+    return bool(tam.get("enabled", True))
 
 
 async def get_max_tenants_per_seller() -> int:
