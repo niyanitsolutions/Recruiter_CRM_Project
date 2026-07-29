@@ -295,34 +295,11 @@ function SettingsTab() {
         </div>
       </div>
 
-      {/* IP Restriction */}
-      <div className="rounded-xl border p-5 space-y-4"
-           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>Office IP Restriction</h3>
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input type="checkbox" checked={cfg.ip_restriction_enabled}
-            onChange={e => set('ip_restriction_enabled', e.target.checked)}
-            className="w-4 h-4 rounded" />
-          <span className="text-sm" style={{ color: 'var(--text-body)' }}>
-            Restrict office check-in to approved IP addresses
-          </span>
-        </label>
-        {cfg.ip_restriction_enabled && (
-          <label className="space-y-1">
-            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
-              Approved IPs (one per line, CIDR notation supported)
-            </span>
-            <textarea
-              rows={4}
-              value={(cfg.approved_ips || []).join('\n')}
-              onChange={e => set('approved_ips', e.target.value.split('\n').map(s => s.trim()).filter(Boolean))}
-              placeholder="192.168.1.0/24&#10;10.0.0.1"
-              className="w-full rounded-lg px-3 py-2 text-sm font-mono"
-              style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)', resize: 'vertical' }}
-            />
-          </label>
-        )}
-      </div>
+      {/* IP Restriction UI intentionally removed from frontend — see
+          hrm_attendance.py update_attendance_settings() for the reserved,
+          commented-out implementation. cfg.ip_restriction_enabled / cfg.approved_ips
+          are still loaded and passed through unchanged on save so any
+          previously configured values are preserved. */}
 
       {/* Working Days */}
       <div className="rounded-xl border p-5 space-y-4"
@@ -2438,9 +2415,6 @@ function GeoFenceTab() {
         toast.error('Radius must be a number between 10 and 10,000 metres.'); return
       }
     }
-    if (cfg.ip_restriction_enabled && (!cfg.approved_ips || cfg.approved_ips.length === 0)) {
-      toast.error('IP Restriction is enabled but no IP addresses were added. Add an IP or turn it off.'); return
-    }
     setSaving(true)
     try {
       // Coerce to real numbers only at save time — the inputs keep whatever
@@ -2510,32 +2484,11 @@ function GeoFenceTab() {
         )}
       </div>
 
-      {/* IP Restriction */}
-      <div className="rounded-xl border p-5 space-y-4"
-           style={{ background: 'var(--bg-card)', borderColor: 'var(--border-card)' }}>
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>IP Restriction</h3>
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input type="checkbox" checked={cfg.ip_restriction_enabled}
-                 onChange={e => set('ip_restriction_enabled', e.target.checked)} className="w-4 h-4 rounded" />
-          <span className="text-sm" style={{ color: 'var(--text-body)' }}>
-            Restrict office check-in to approved IP addresses
-          </span>
-        </label>
-        {cfg.ip_restriction_enabled && (
-          <label className="space-y-1">
-            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
-              Approved IPs (one per line, CIDR notation supported)
-            </span>
-            <textarea rows={4}
-              value={(cfg.approved_ips || []).join('\n')}
-              onChange={e => set('approved_ips', e.target.value.split('\n').map(s => s.trim()).filter(Boolean))}
-              placeholder="192.168.1.0/24&#10;10.0.0.1"
-              className="w-full rounded-lg px-3 py-2 text-sm font-mono"
-              style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-body)', resize: 'vertical' }}
-            />
-          </label>
-        )}
-      </div>
+      {/* IP Restriction UI intentionally removed from frontend — see
+          hrm_attendance.py update_attendance_settings() for the reserved,
+          commented-out implementation. cfg.ip_restriction_enabled / cfg.approved_ips
+          are still loaded and passed through unchanged on save so any
+          previously configured values are preserved. */}
 
       <button onClick={save} disabled={saving}
         className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60"

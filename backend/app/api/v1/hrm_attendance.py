@@ -41,6 +41,9 @@ class AttendanceSettingsUpdate(BaseModel):
     geo_fence_radius_meters: int  = Field(100,  ge=10,  le=10000)
     geo_fence_latitude:     Optional[float] = Field(None, ge=-90,  le=90)
     geo_fence_longitude:    Optional[float] = Field(None, ge=-180, le=180)
+    # Reserved for future use. Frontend support intentionally disabled — still
+    # accepted here so older frontend builds don't 422, but no longer written
+    # to the DB. See update_attendance_settings() below.
     ip_restriction_enabled: bool  = False
     approved_ips:           List[str] = Field(default_factory=list)
     # Working days: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
@@ -802,8 +805,12 @@ async def update_attendance_settings(
             "attendance_geo_fence_radius_meters": data.geo_fence_radius_meters,
             "attendance_geo_fence_latitude":     data.geo_fence_latitude,
             "attendance_geo_fence_longitude":    data.geo_fence_longitude,
-            "attendance_ip_restriction_enabled": data.ip_restriction_enabled,
-            "approved_office_ips":               data.approved_ips,
+            # Reserved for future use. Frontend support intentionally disabled —
+            # IP restriction is no longer editable via this endpoint, so existing
+            # attendance_ip_restriction_enabled / approved_office_ips values are
+            # left untouched.
+            # "attendance_ip_restriction_enabled": data.ip_restriction_enabled,
+            # "approved_office_ips":               data.approved_ips,
             "attendance_working_days":           data.working_days,
             "updated_at": datetime.now(timezone.utc),
             "updated_by": cu["id"],

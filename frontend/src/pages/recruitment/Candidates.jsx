@@ -881,7 +881,7 @@ const Candidates = () => {
           <table className="w-full">
             <thead style={{ background: 'var(--bg-card-alt)', borderBottom: '2px solid var(--border)' }}>
               <tr>
-                <th className="px-4 py-3" style={{ width: '40px' }}>
+                <th className="px-3 py-2.5" style={{ width: '36px' }}>
                   <button
                     onClick={toggleSelectAll}
                     className="flex items-center justify-center w-5 h-5 rounded transition-colors"
@@ -896,14 +896,14 @@ const Candidates = () => {
                     }
                   </button>
                 </th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '22%' }}>Candidate</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '11%' }}>Experience</th>
-                <th className="hidden md:table-cell text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '14%' }}>Skills</th>
-                <th className="hidden lg:table-cell text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '12%' }}>Added By</th>
-                <th className="hidden lg:table-cell text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '13%' }}>Applied Jobs</th>
-                <th className="hidden md:table-cell text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '10%' }}>Notice Period</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '9%' }}>Status</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '9%' }}>Actions</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '27%' }}>Candidate</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '9%' }}>Experience</th>
+                <th className="hidden md:table-cell text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '13%' }}>Skills</th>
+                <th className="hidden lg:table-cell text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '10%' }}>Added By</th>
+                <th className="hidden lg:table-cell text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '11%' }}>Applied Jobs</th>
+                <th className="hidden md:table-cell text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '9%' }}>Notice Period</th>
+                <th className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '8%' }}>Status</th>
+                <th className="text-right px-3 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '8%' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -919,7 +919,7 @@ const Candidates = () => {
                   onMouseLeave={e => { if (!selectedIds.has(candidate.id)) e.currentTarget.style.background = '' }}
                 >
                   {/* Checkbox */}
-                  <td className="px-4 py-3.5">
+                  <td className="px-3 py-2.5">
                     <button
                       onClick={() => toggleSelect(candidate.id)}
                       className="flex items-center justify-center w-5 h-5 rounded transition-colors"
@@ -933,10 +933,10 @@ const Candidates = () => {
                   </td>
 
                   {/* Candidate */}
-                  <td className="px-4 py-3.5">
+                  <td className="px-3 py-2.5">
                     <div className="flex items-center gap-3">
                       <EmployeeAvatar name={candidate.full_name} photoUrl={candidate.photo_url} size={40} />
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold leading-tight truncate" style={{ color: 'var(--text-primary)' }}>
                           {candidate.full_name}
                         </p>
@@ -945,8 +945,8 @@ const Candidates = () => {
                             {candidate.current_designation}
                           </p>
                         )}
-                        <div className="flex items-center gap-2 mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                          <span className="flex items-center gap-1 text-xs" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div className="flex items-center gap-2 mt-0.5 min-w-0" style={{ color: 'var(--text-muted)' }}>
+                          <span className="flex items-center gap-1 text-xs min-w-0 flex-1" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             <Mail className="w-3 h-3 flex-shrink-0" />
                             {candidate.email}
                           </span>
@@ -971,7 +971,7 @@ const Candidates = () => {
                   </td>
 
                   {/* Experience */}
-                  <td className="px-4 py-3.5">
+                  <td className="px-3 py-2.5">
                     <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                       {candidate.total_experience_years
                         ? `${candidate.total_experience_years} Yr${candidate.total_experience_years !== 1 ? 's' : ''}`
@@ -985,7 +985,7 @@ const Candidates = () => {
                   </td>
 
                   {/* Skills */}
-                  <td className="hidden md:table-cell px-4 py-3.5">
+                  <td className="hidden md:table-cell px-3 py-2.5">
                     <div className="flex flex-wrap gap-1">
                       {(candidate.skill_tags || []).slice(0, 3).map((skill, i) => (
                         <span
@@ -1011,7 +1011,7 @@ const Candidates = () => {
                   </td>
 
                   {/* Added By */}
-                  <td className="hidden lg:table-cell px-4 py-3.5">
+                  <td className="hidden lg:table-cell px-3 py-2.5">
                     {candidate.partner_id ? (
                       <div>
                         <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -1038,7 +1038,7 @@ const Candidates = () => {
                   </td>
 
                   {/* Applied Jobs */}
-                  <td className="hidden lg:table-cell px-4 py-3.5">
+                  <td className="hidden lg:table-cell px-3 py-2.5">
                     {candidate.total_applications > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {candidate.current_job_title && (
@@ -1079,7 +1079,7 @@ const Candidates = () => {
                   </td>
 
                   {/* Notice Period */}
-                  <td className="hidden md:table-cell px-4 py-3.5">
+                  <td className="hidden md:table-cell px-3 py-2.5">
                     <span
                       className="text-xs font-medium px-2.5 py-1 rounded-full"
                       style={{
@@ -1094,7 +1094,7 @@ const Candidates = () => {
                   </td>
 
                   {/* Status */}
-                  <td className="px-4 py-3.5">
+                  <td className="px-3 py-2.5">
                     <select
                       value={candidate.status}
                       onChange={(e) => handleStatusChange(candidate, e.target.value)}
@@ -1113,7 +1113,7 @@ const Candidates = () => {
                   </td>
 
                   {/* Actions */}
-                  <td className="px-4 py-3.5">
+                  <td className="px-3 py-2.5">
                     <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => navigate(`/candidates/${candidate.id}`)}
