@@ -33,9 +33,11 @@ async def create_exception(
             reason=data.reason,
             from_datetime=data.from_datetime,
             to_datetime=data.to_datetime,
-            allow_login=data.allow_login,
-            bypass_geo_fence=data.bypass_geo_fence,
-            bypass_ip_restriction=data.bypass_ip_restriction,
+            # Exception form no longer exposes these toggles — every exception
+            # created always grants full access for its window.
+            allow_login=True,
+            bypass_geo_fence=True,
+            bypass_ip_restriction=True,
             created_by=cu["id"],
             created_by_name=creator_name,
         )

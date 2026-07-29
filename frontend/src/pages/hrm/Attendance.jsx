@@ -2260,9 +2260,6 @@ function ExceptionModal({ item, employees, onClose, onSuccess }) {
     reason:                item?.reason                ?? '',
     from_datetime:         toLocalDatetimeInput(item?.from_datetime),
     to_datetime:           toLocalDatetimeInput(item?.to_datetime),
-    allow_login:           item?.allow_login           ?? true,
-    bypass_geo_fence:      item?.bypass_geo_fence      ?? false,
-    bypass_ip_restriction: item?.bypass_ip_restriction ?? false,
   })
   const [saving, setSaving] = useState(false)
   const [err, setErr]       = useState('')
@@ -2383,24 +2380,6 @@ function ExceptionModal({ item, employees, onClose, onSuccess }) {
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>To *</span>
             <input type="datetime-local" className="input" style={{ width: '100%', fontSize: 14 }} value={form.to_datetime}
               onChange={e => set('to_datetime', e.target.value)} />
-          </label>
-
-          <label style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', paddingTop: 4 }}>
-            <input type="checkbox" style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} checked={form.allow_login}
-              onChange={e => set('allow_login', e.target.checked)} />
-            <span style={{ fontSize: 14, color: 'var(--text-body)' }}>Allow login during this window</span>
-          </label>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-            <input type="checkbox" style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} checked={form.bypass_geo_fence}
-              onChange={e => set('bypass_geo_fence', e.target.checked)} />
-            <span style={{ fontSize: 14, color: 'var(--text-body)' }}>Bypass Geo Fence</span>
-          </label>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-            <input type="checkbox" style={{ width: 16, height: 16, accentColor: 'var(--accent)' }} checked={form.bypass_ip_restriction}
-              onChange={e => set('bypass_ip_restriction', e.target.checked)} />
-            <span style={{ fontSize: 14, color: 'var(--text-body)' }}>Bypass IP Restriction</span>
           </label>
         </div>
 

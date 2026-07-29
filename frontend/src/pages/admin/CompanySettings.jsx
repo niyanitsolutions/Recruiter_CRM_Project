@@ -153,12 +153,6 @@ const getErrorMessage = (e, fallback) => {
   return fallback
 }
 
-// ── IP address validation (Phase 4 / 8) ────────────────────────────────────
-const IPV4_RE = /^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/
-const IPV6_RE = /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|:((:[0-9a-fA-F]{1,4}){1,7}|:)|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6}))$/
-
-const isValidIp = (ip) => IPV4_RE.test(ip) || IPV6_RE.test(ip)
-
 // Client-side mirror of the server's -90..90 / -180..180 / positive-radius
 // rules so the user gets an inline message instead of waiting on a 422.
 const validateGeoFence = (g) => {
@@ -225,12 +219,6 @@ const CompanySettings = () => {
   const [subscription, setSubscription] = useState(null)
   const [subLoading,   setSubLoading]   = useState(false)
   const [loadError,    setLoadError]    = useState('')
-
-  // IP restriction — add/edit inputs
-  const [ipInput,       setIpInput]       = useState('')
-  const [ipError,       setIpError]       = useState('')
-  const [editingIpIdx,  setEditingIpIdx]  = useState(-1)
-  const [editingIpValue, setEditingIpValue] = useState('')
 
   // ── Load all settings ──────────────────────────────────────────────────
   const loadSettings = useCallback(async () => {
@@ -432,56 +420,6 @@ const CompanySettings = () => {
   const removeLocation = (idx) => {
     setGeo(g => ({ ...g, geo_fence_locations: g.geo_fence_locations.filter((_, i) => i !== idx) }))
   }
-
-  // ── IP restriction helpers (Phase 4) ───────────────────────────────────
-
-  const handleAddIp = () => {
-    const ip = ipInput.trim()
-    if (!ip) return
-    if (!isValidIp(ip)) {
-      setIpError('Enter a valid IPv4 or IPv6 address.')
-      return
-    }
-    if (geo.approved_ips.includes(ip)) {
-      setIpError('This IP address has already been added.')
-      return
-    }
-    setGeo(g => ({ ...g, approved_ips: [...g.approved_ips, ip] }))
-    setIpInput('')
-    setIpError('')
-  }
-
-  const removeIp = (idx) => {
-    setGeo(g => ({ ...g, approved_ips: g.approved_ips.filter((_, i) => i !== idx) }))
-    if (editingIpIdx === idx) setEditingIpIdx(-1)
-  }
-
-  const startEditIp = (idx) => {
-    setEditingIpIdx(idx)
-    setEditingIpValue(geo.approved_ips[idx])
-    setIpError('')
-  }
-
-  const commitEditIp = (idx) => {
-    const ip = editingIpValue.trim()
-    if (!ip) { setEditingIpIdx(-1); return }
-    if (!isValidIp(ip)) {
-      setIpError('Enter a valid IPv4 or IPv6 address.')
-      return
-    }
-    if (geo.approved_ips.some((existing, i) => existing === ip && i !== idx)) {
-      setIpError('This IP address has already been added.')
-      return
-    }
-    setGeo(g => {
-      const ips = [...g.approved_ips]
-      ips[idx] = ip
-      return { ...g, approved_ips: ips }
-    })
-    setEditingIpIdx(-1)
-    setIpError('')
-  }
-
 
   if (loading) {
     return (
@@ -885,82 +823,11 @@ const CompanySettings = () => {
               </div>
             )}
 
-            {/* IP Restriction — independent of Geo Fence; both can be on at once */}
-            <div className="border border-surface-200 rounded-xl p-4 space-y-1">
-              <Toggle
-                checked={geo.ip_restriction_enabled}
-                onChange={v => setGeo(g => ({ ...g, ip_restriction_enabled: v }))}
-                label="Enable IP Address Restriction"
-                description="When enabled, all users must log in from an allowed IP address. Can be combined with Geo Fence — if both are on, both rules must be satisfied."
-              />
-            </div>
-
-            {geo.ip_restriction_enabled && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-surface-800 flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-accent-500" />
-                  Allowed IP Addresses
-                </h3>
-
-                <div className="flex gap-2">
-                  <Input
-                    value={ipInput}
-                    onChange={e => { setIpInput(e.target.value); setIpError('') }}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddIp() } }}
-                    placeholder="192.168.1.10"
-                  />
-                  <button
-                    onClick={handleAddIp}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium
-                               bg-accent-50 text-accent-700 rounded-lg hover:bg-accent-100 transition-colors whitespace-nowrap"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add IP
-                  </button>
-                </div>
-                {ipError && <p className="text-xs text-danger-500">{ipError}</p>}
-
-                {geo.approved_ips.length === 0 ? (
-                  <p className="text-sm text-surface-400 text-center py-4 border border-dashed border-surface-200 rounded-xl">
-                    No IP addresses added yet.
-                  </p>
-                ) : (
-                  <ul className="space-y-2">
-                    {geo.approved_ips.map((ip, idx) => (
-                      <li key={`${ip}-${idx}`} className="flex items-center justify-between border border-surface-200 rounded-lg px-3 py-2 gap-2">
-                        {editingIpIdx === idx ? (
-                          <Input
-                            autoFocus
-                            value={editingIpValue}
-                            onChange={e => setEditingIpValue(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commitEditIp(idx) } }}
-                          />
-                        ) : (
-                          <span className="text-sm font-mono text-surface-700 break-all">{ip}</span>
-                        )}
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          {editingIpIdx === idx ? (
-                            <button onClick={() => commitEditIp(idx)} className="px-2 py-1 text-xs font-medium text-accent-600 hover:underline">
-                              Save
-                            </button>
-                          ) : (
-                            <button onClick={() => startEditIp(idx)} className="px-2 py-1 text-xs font-medium text-surface-500 hover:text-surface-800">
-                              Edit
-                            </button>
-                          )}
-                          <button
-                            onClick={() => removeIp(idx)}
-                            className="p-1 text-danger-500 hover:bg-danger-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
+            {/* IP Restriction UI intentionally removed from frontend — see
+                backend company_settings.py / settings.py for the reserved,
+                commented-out implementation. geo.ip_restriction_enabled and
+                geo.approved_ips are still loaded/saved unchanged so any
+                previously configured values are preserved. */}
 
             <div className="flex justify-end pt-2">
               <SaveBtn saving={saving} onClick={saveSecurity} label="Save Security Settings" />

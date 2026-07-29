@@ -140,12 +140,12 @@ const PublicFormModal = ({ isOpen, onClose }) => {
         onClick={onClose}
       >
         <div
-          className="rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
-          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)' }}
+          className="rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden flex flex-col"
+          style={{ background: 'var(--bg-card)', border: '1px solid var(--border-card)', maxHeight: '90vh' }}
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
+          <div className="flex items-center justify-between px-6 py-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
             <div className="flex items-center gap-2">
               <QrCode className="w-5 h-5" style={{ color: 'var(--accent)' }} />
               <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>Public Application Form</h3>
@@ -161,7 +161,7 @@ const PublicFormModal = ({ isOpen, onClose }) => {
             </button>
           </div>
 
-          <div className="px-6 py-5 space-y-5">
+          <div className="px-6 py-5 space-y-5 overflow-y-auto min-h-0">
             {loading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--accent)' }} />
@@ -263,7 +263,7 @@ const PublicFormModal = ({ isOpen, onClose }) => {
                 </div>
 
                 {/* QR actions */}
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={copyLink}
                     className="flex-1 btn-secondary flex items-center justify-center gap-1.5 text-xs py-2"

@@ -49,9 +49,12 @@ class GeoFenceUpdateRequest(BaseModel):
     geo_fence_enabled: bool
     geo_fence_locations: List[GeoFenceLocation] = []
     user_geo_fence: List[UserGeoFenceConfig] = []
+    # Reserved for future use. Frontend support intentionally disabled.
     # IP restriction shares storage with HRM Attendance Geo Fence
     # (CompanySettings.attendance_ip_restriction_enabled / approved_office_ips)
-    # so both screens read/write the same values.
+    # so both screens read/write the same values. Still accepted here so
+    # older frontend builds don't 422, but no longer written to the DB —
+    # see update_security() below.
     ip_restriction_enabled: bool = False
     approved_ips: List[str] = []
 
@@ -218,8 +221,13 @@ async def update_security(
         geo_fence_enabled=data.geo_fence_enabled,
         geo_fence_locations=data.geo_fence_locations,
         user_geo_fence=data.user_geo_fence,
-        attendance_ip_restriction_enabled=data.ip_restriction_enabled,
-        approved_office_ips=data.approved_ips,
+        # Reserved for future use. Frontend support intentionally disabled —
+        # IP restriction is no longer editable via this endpoint, so existing
+        # attendance_ip_restriction_enabled / approved_office_ips values are
+        # left untouched (CompanySettingsUpdate omits them → unset → excluded
+        # by update_company_settings()'s exclude_unset/exclude_none dump).
+        # attendance_ip_restriction_enabled=data.ip_restriction_enabled,
+        # approved_office_ips=data.approved_ips,
     )
     updated = await SettingsService.update_company_settings(db, update, current_user["id"])
     return {"success": True, "message": "Security settings updated", "data": _settings_to_dict(updated)}

@@ -663,11 +663,11 @@ const Candidates = () => {
       {/* Bulk action toolbar — shown when items are selected */}
       {selectedIds.size > 0 && (
         <div
-          className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl mb-4"
+          className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl mb-4"
           style={{ background: 'var(--accent-light)', border: '1px solid var(--accent)', color: 'var(--accent)' }}
         >
-          <div className="flex items-center gap-3">
-            <CheckSquare className="w-5 h-5" />
+          <div className="flex flex-wrap items-center gap-3">
+            <CheckSquare className="w-5 h-5 flex-shrink-0" />
             <span className="font-semibold text-sm">
               {selectedIds.size} candidate{selectedIds.size !== 1 ? 's' : ''} selected
             </span>
@@ -681,7 +681,7 @@ const Candidates = () => {
           {has('candidates:delete') && (
             <button
               onClick={() => setBulkDeleteConfirm(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-opacity"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-opacity flex-shrink-0"
               style={{ background: 'rgba(255,71,87,0.15)', color: '#FF4757' }}
               onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
               onMouseLeave={e => e.currentTarget.style.opacity = '1'}
@@ -898,10 +898,10 @@ const Candidates = () => {
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '22%' }}>Candidate</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '11%' }}>Experience</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '14%' }}>Skills</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '12%' }}>Added By</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '13%' }}>Applied Jobs</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '10%' }}>Notice Period</th>
+                <th className="hidden md:table-cell text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '14%' }}>Skills</th>
+                <th className="hidden lg:table-cell text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '12%' }}>Added By</th>
+                <th className="hidden lg:table-cell text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '13%' }}>Applied Jobs</th>
+                <th className="hidden md:table-cell text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '10%' }}>Notice Period</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '9%' }}>Status</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)', width: '9%' }}>Actions</th>
               </tr>
@@ -985,7 +985,7 @@ const Candidates = () => {
                   </td>
 
                   {/* Skills */}
-                  <td className="px-4 py-3.5">
+                  <td className="hidden md:table-cell px-4 py-3.5">
                     <div className="flex flex-wrap gap-1">
                       {(candidate.skill_tags || []).slice(0, 3).map((skill, i) => (
                         <span
@@ -1011,7 +1011,7 @@ const Candidates = () => {
                   </td>
 
                   {/* Added By */}
-                  <td className="px-4 py-3.5">
+                  <td className="hidden lg:table-cell px-4 py-3.5">
                     {candidate.partner_id ? (
                       <div>
                         <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
@@ -1038,7 +1038,7 @@ const Candidates = () => {
                   </td>
 
                   {/* Applied Jobs */}
-                  <td className="px-4 py-3.5">
+                  <td className="hidden lg:table-cell px-4 py-3.5">
                     {candidate.total_applications > 0 ? (
                       <div className="flex flex-wrap gap-1">
                         {candidate.current_job_title && (
@@ -1079,7 +1079,7 @@ const Candidates = () => {
                   </td>
 
                   {/* Notice Period */}
-                  <td className="px-4 py-3.5">
+                  <td className="hidden md:table-cell px-4 py-3.5">
                     <span
                       className="text-xs font-medium px-2.5 py-1 rounded-full"
                       style={{
@@ -1177,7 +1177,7 @@ const Candidates = () => {
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (
-            <div className="px-4 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--border)' }}>
+            <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-2" style={{ borderTop: '1px solid var(--border)' }}>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                 Showing {candidates.length} of {pagination.total} candidates
               </p>
@@ -1204,7 +1204,7 @@ const Candidates = () => {
 
       {/* Card view pagination */}
       {!loading && viewMode === 'card' && pagination.totalPages > 1 && (
-        <div className="mt-6 flex items-center justify-between">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
             Showing {candidates.length} of {pagination.total} candidates
           </p>
