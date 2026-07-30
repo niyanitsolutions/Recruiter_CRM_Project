@@ -119,10 +119,14 @@
   }
   .nav-item-active {
     @apply nav-item;
-    color: var(--nav-text-active) !important;
-    background-color: var(--nav-bg-active) !important;
-    border-left: 3px solid var(--nav-border-active) !important;
-    font-weight: 500;
+    color: #FFFFFF !important;
+    background-color: #2563EB !important;
+    border-left: 3px solid #1D4ED8 !important;
+    border-radius: 0 12px 12px 0;
+    font-weight: 600;
+  }
+  .nav-item-active:hover {
+    background-color: #3B82F6 !important;
   }
 
   .stat-card  { @apply card p-6; }
